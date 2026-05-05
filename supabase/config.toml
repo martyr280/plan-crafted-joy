@@ -1,0 +1,7 @@
+project_id = "qvkiheecfatnfjnfwcau"
+
+[functions.parse-po]
+verify_jwt = true
+
+[functions.generate-collection-email]
+verify_jwt = true
