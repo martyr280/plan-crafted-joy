@@ -19,6 +19,7 @@ import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
 import { Route as AppDamageRouteImport } from './routes/_app.damage'
+import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppArRouteImport } from './routes/_app.ar'
 
 const AuthRoute = AuthRouteImport.update({
@@ -70,6 +71,11 @@ const AppDamageRoute = AppDamageRouteImport.update({
   path: '/damage',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAuditRoute = AppAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppArRoute = AppArRouteImport.update({
   id: '/ar',
   path: '/ar',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/auth': typeof AuthRoute
   '/ar': typeof AppArRoute
+  '/audit': typeof AppAuditRoute
   '/damage': typeof AppDamageRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
@@ -91,6 +98,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/ar': typeof AppArRoute
+  '/audit': typeof AppAuditRoute
   '/damage': typeof AppDamageRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/_app/ar': typeof AppArRoute
+  '/_app/audit': typeof AppAuditRoute
   '/_app/damage': typeof AppDamageRoute
   '/_app/logistics': typeof AppLogisticsRoute
   '/_app/orders': typeof AppOrdersRoute
@@ -120,6 +129,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/ar'
+    | '/audit'
     | '/damage'
     | '/logistics'
     | '/orders'
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/ar'
+    | '/audit'
     | '/damage'
     | '/logistics'
     | '/orders'
@@ -144,6 +155,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/auth'
     | '/_app/ar'
+    | '/_app/audit'
     | '/_app/damage'
     | '/_app/logistics'
     | '/_app/orders'
@@ -231,6 +243,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDamageRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/audit': {
+      id: '/_app/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/ar': {
       id: '/_app/ar'
       path: '/ar'
@@ -243,6 +262,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppArRoute: typeof AppArRoute
+  AppAuditRoute: typeof AppAuditRoute
   AppDamageRoute: typeof AppDamageRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
   AppOrdersRoute: typeof AppOrdersRoute
@@ -255,6 +275,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppArRoute: AppArRoute,
+  AppAuditRoute: AppAuditRoute,
   AppDamageRoute: AppDamageRoute,
   AppLogisticsRoute: AppLogisticsRoute,
   AppOrdersRoute: AppOrdersRoute,
