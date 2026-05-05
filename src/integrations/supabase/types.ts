@@ -430,7 +430,11 @@ export type Database = {
       report_schedules: {
         Row: {
           active: boolean
+          audience_roles: Json
           created_at: string
+          date_range: string
+          filters: Json
+          format: string
           id: string
           last_run_at: string | null
           last_status: string | null
@@ -442,7 +446,11 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          audience_roles?: Json
           created_at?: string
+          date_range?: string
+          filters?: Json
+          format?: string
           id?: string
           last_run_at?: string | null
           last_status?: string | null
@@ -454,7 +462,11 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          audience_roles?: Json
           created_at?: string
+          date_range?: string
+          filters?: Json
+          format?: string
           id?: string
           last_run_at?: string | null
           last_status?: string | null
