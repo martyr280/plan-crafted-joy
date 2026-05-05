@@ -16,6 +16,7 @@ import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/lib/auth";
+import { submitOrderToP21 } from "@/server/p21.functions";
 
 export const Route = createFileRoute("/_app/orders")({ component: OrdersPage });
 
@@ -91,25 +92,14 @@ function OrdersPage() {
   }
 
   async function approve(o: any) {
-    const fakeP21 = `P21-${Math.floor(Math.random() * 900000 + 100000)}`;
-    await supabase.from("orders").update({
-      status: "submitted_to_p21",
-      p21_order_id: fakeP21,
-      reviewed_by: user?.id,
-      reviewed_at: new Date().toISOString(),
-      p21_submitted_at: new Date().toISOString(),
-    }).eq("id", o.id);
-    await supabase.from("order_acknowledgements").insert({
-      order_id: o.id,
-      content: `Order ${fakeP21} acknowledged for ${o.customer_name}.`,
-    });
-    await supabase.from("activity_events").insert({
-      event_type: "order.submitted", entity_type: "order", entity_id: fakeP21,
-      actor_id: user?.id, actor_name: user?.email ?? "system",
-      message: `Order ${fakeP21} submitted to P21 (${o.customer_name})`,
-    });
-    toast.success(`Submitted as ${fakeP21}`);
-    setSelected(null); load();
+    try {
+      const res = await submitOrderToP21({ data: { orderId: o.id } });
+      toast.success(`Submitted as ${(res as any).p21OrderId}`);
+      setSelected(null);
+      load();
+    } catch (e: any) {
+      toast.error(e.message ?? "P21 submit failed — is the bridge agent running?");
+    }
   }
 
   async function reject(o: any) {
