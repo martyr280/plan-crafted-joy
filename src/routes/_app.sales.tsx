@@ -7,18 +7,32 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Download } from "lucide-react";
+import { Download, RefreshCw, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { fetchSalesData } from "@/server/p21.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/sales")({ component: SalesPage });
 
 function seedRandom(seed: number) { return () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }; }
+
+function dateRangeFor(period: "daily" | "weekly" | "monthly") {
+  const to = new Date();
+  const from = new Date();
+  if (period === "daily") from.setDate(to.getDate() - 14);
+  else if (period === "weekly") from.setDate(to.getDate() - 7 * 12);
+  else from.setMonth(to.getMonth() - 12);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { dateFrom: fmt(from), dateTo: fmt(to) };
+}
 
 function SalesPage() {
   const { user, hasRole } = useAuth();
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("daily");
   const [rep, setRep] = useState<string>("ALL");
   const [profile, setProfile] = useState<any>(null);
+  const [live, setLive] = useState<{ rows: any[]; totals: { net: number; orders: number } } | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (user) supabase.from("profiles").select("*").eq("id", user.id).single().then(({ data }) => setProfile(data));
@@ -27,7 +41,27 @@ function SalesPage() {
   const isSalesRepOnly = hasRole("sales_rep") && !hasRole("admin");
   const effectiveRep = isSalesRepOnly ? (profile?.sales_rep_code ?? "REP-101") : rep;
 
-  const { trend, kpi, top, products } = useMemo(() => {
+  async function loadLive() {
+    if (!hasRole("admin")) {
+      toast.error("Live P21 data requires admin role");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { dateFrom, dateTo } = dateRangeFor(period);
+      const res = await fetchSalesData({
+        data: { repCode: effectiveRep === "ALL" ? null : effectiveRep, dateFrom, dateTo },
+      });
+      setLive({ rows: (res as any).rows, totals: (res as any).totals });
+      toast.success(`Loaded ${(res as any).rows.length} rows from P21`);
+    } catch (e: any) {
+      toast.error(e.message ?? "P21 query failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const stub = useMemo(() => {
     const days = period === "daily" ? 14 : period === "weekly" ? 12 : 12;
     const rng = seedRandom(effectiveRep === "ALL" ? 42 : effectiveRep.charCodeAt(4));
     const trend = Array.from({ length: days }).map((_, i) => ({ label: `${period === "monthly" ? "M" : period === "weekly" ? "W" : "D"}-${i + 1}`, net: Math.round(8000 + rng() * 12000) }));
@@ -38,6 +72,13 @@ function SalesPage() {
     return { trend, kpi, top, products };
   }, [period, effectiveRep]);
 
+  const top = live
+    ? live.rows.slice(0, 10).map((r: any) => ({ name: r.customer_name, orders: Number(r.order_count), net: Number(r.net_sales), pct: 0 }))
+    : stub.top;
+  const kpi = live ? { net: live.totals.net, orders: live.totals.orders, newCust: 0, returns: 0 } : stub.kpi;
+  const trend = stub.trend;
+  const products = stub.products;
+
   function exportCsv() {
     const csv = ["Customer,Orders,Net,Pct vs prior", ...top.map((t) => `${t.name},${t.orders},${t.net},${t.pct}`)].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -46,8 +87,16 @@ function SalesPage() {
 
   return (
     <div>
-      <ModuleHeader title="Sales Dashboard" description={`Source-of-truth view from P21 — net sales include returns. ${isSalesRepOnly ? "Showing your data only." : ""}`}
-        actions={<Button variant="outline" onClick={exportCsv}><Download className="w-4 h-4 mr-2" /> Export CSV</Button>} />
+      <ModuleHeader title="Sales Dashboard" description={`${live ? "Live from P21 via bridge." : "Showing seed data — click \"Sync from P21\" to fetch live."} ${isSalesRepOnly ? "Showing your data only." : ""}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={loadLive} disabled={loading}>
+              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              Sync from P21
+            </Button>
+            <Button variant="outline" onClick={exportCsv}><Download className="w-4 h-4 mr-2" /> Export CSV</Button>
+          </>
+        } />
 
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <Tabs value={period} onValueChange={(v) => setPeriod(v as any)}>
@@ -80,9 +129,9 @@ function SalesPage() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
-          <div className="p-4 font-semibold border-b">Top customers</div>
+          <div className="p-4 font-semibold border-b">Top customers {live && <span className="text-xs text-success ml-2">live</span>}</div>
           <Table><TableHeader><TableRow><TableHead>Customer</TableHead><TableHead>Orders</TableHead><TableHead>Net</TableHead><TableHead>vs prior</TableHead></TableRow></TableHeader>
-            <TableBody>{top.map((t) => <TableRow key={t.name}><TableCell>{t.name}</TableCell><TableCell>{t.orders}</TableCell><TableCell>${t.net.toLocaleString()}</TableCell><TableCell className={t.pct >= 0 ? "text-success" : "text-destructive"}>{t.pct}%</TableCell></TableRow>)}</TableBody>
+            <TableBody>{top.map((t) => <TableRow key={t.name}><TableCell>{t.name}</TableCell><TableCell>{t.orders}</TableCell><TableCell>${Number(t.net).toLocaleString()}</TableCell><TableCell className={t.pct >= 0 ? "text-success" : "text-destructive"}>{t.pct}%</TableCell></TableRow>)}</TableBody>
           </Table>
         </Card>
         <Card>
@@ -92,7 +141,6 @@ function SalesPage() {
           </Table>
         </Card>
       </div>
-      <p className="text-xs text-muted-foreground mt-4">Note: P21 SQL connection is stubbed — values are deterministic seed data. Wire up <code>fetchSalesData</code> server function once VPN access is configured.</p>
     </div>
   );
 }
