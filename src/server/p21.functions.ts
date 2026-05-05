@@ -55,16 +55,50 @@ export const getBridgeStatus = createServerFn({ method: "GET" })
       .from("p21_bridge_agents")
       .select("*")
       .order("last_seen_at", { ascending: false });
-    const { data: pending } = await supabaseAdmin
-      .from("p21_bridge_jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending");
     const { data: recent } = await supabaseAdmin
       .from("p21_bridge_jobs")
-      .select("id, kind, status, created_at, completed_at, error")
+      .select("id, kind, status, created_at, claimed_at, completed_at, error, payload, result")
       .order("created_at", { ascending: false })
-      .limit(20);
-    return { agents: agents ?? [], pendingCount: (pending as any)?.length ?? 0, recent: recent ?? [] };
+      .limit(50);
+
+    const counts = { pending: 0, claimed: 0, done: 0, error: 0 };
+    for (const j of recent ?? []) {
+      if (j.status in counts) (counts as any)[j.status]++;
+    }
+
+    // Accurate pending/failed counts across all jobs (not just last 50)
+    const [{ count: pendingCount }, { count: failedCount }] = await Promise.all([
+      supabaseAdmin.from("p21_bridge_jobs").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      supabaseAdmin.from("p21_bridge_jobs").select("id", { count: "exact", head: true }).eq("status", "error"),
+    ]);
+
+    return {
+      agents: agents ?? [],
+      pendingCount: pendingCount ?? 0,
+      failedCount: failedCount ?? 0,
+      recent: recent ?? [],
+      counts,
+    };
+  });
+
+export const retryBridgeJob = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ jobId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { data: orig, error } = await supabaseAdmin
+      .from("p21_bridge_jobs")
+      .select("kind, payload")
+      .eq("id", data.jobId)
+      .single();
+    if (error || !orig) throw new Error("Job not found");
+    const { data: created, error: insErr } = await supabaseAdmin
+      .from("p21_bridge_jobs")
+      .insert({ kind: orig.kind, payload: orig.payload ?? {} })
+      .select("id")
+      .single();
+    if (insErr || !created) throw new Error(insErr?.message ?? "Failed to requeue");
+    return { jobId: created.id };
   });
 
 // ─── Predefined job kinds ─────────────────────────────────────────────────────
