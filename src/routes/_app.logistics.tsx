@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
+import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
 import { Truck } from "lucide-react";
 
 export const Route = createFileRoute("/_app/logistics")({ component: LogisticsPage });
@@ -21,16 +22,21 @@ function LogisticsPage() {
   const [damage, setDamage] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
 
-  useEffect(() => {
+  function load() {
     supabase.from("fleet_loads").select("*").order("departure_date").then(({ data }) => setLoads(data ?? []));
     supabase.from("damage_reports").select("*").order("created_at", { ascending: false }).then(({ data }) => setDamage(data ?? []));
-  }, []);
+  }
+  useEffect(() => { load(); }, []);
 
   const active = loads.filter((l) => l.status === "loading" || l.status === "departed");
 
   return (
     <div>
-      <ModuleHeader title="Logistics" description="Live fleet capacity, route manifests, and damage log." />
+      <ModuleHeader
+        title="Logistics"
+        description="Live fleet capacity, route manifests, and damage log."
+        actions={<SifXmlImporter scope="loads" onImported={load} triggerLabel="Import Loads SIF/XML" />}
+      />
 
       <Tabs defaultValue="loads">
         <TabsList><TabsTrigger value="loads">Active Loads</TabsTrigger><TabsTrigger value="damage">Damage Log</TabsTrigger><TabsTrigger value="photos">Samsara Photos</TabsTrigger></TabsList>

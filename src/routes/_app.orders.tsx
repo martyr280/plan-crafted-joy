@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Plus, Upload, Sparkles, CheckCircle2, X, AlertCircle } from "lucide-react";
+import { Plus, Sparkles, CheckCircle2, X, AlertCircle } from "lucide-react";
+import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/lib/auth";
@@ -138,7 +139,7 @@ function OrdersPage() {
                 </div>
               </DialogContent>
             </Dialog>
-            <Button variant="outline"><Upload className="w-4 h-4 mr-2" /> Import SIF/XML</Button>
+            <SifXmlImporter scope="orders" onImported={load} />
             <Button variant="outline"><Plus className="w-4 h-4 mr-2" /> New Order</Button>
           </>
         }
