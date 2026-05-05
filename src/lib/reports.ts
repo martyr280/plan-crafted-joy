@@ -86,14 +86,14 @@ const SPECS: Record<ReportType, DatasetSpec> = {
 export async function fetchReportRows(type: ReportType, preset: DateRangePreset, filters: Record<string, any> = {}) {
   const spec = SPECS[type];
   const { from, to } = resolveRange(preset);
-  let q = supabase.from(spec.table).select("*").order(spec.dateColumn, { ascending: false }).limit(5000);
+  let q: any = supabase.from(spec.table as any).select("*").order(spec.dateColumn, { ascending: false }).limit(5000);
   if (from) q = q.gte(spec.dateColumn, from.toISOString());
   q = q.lte(spec.dateColumn, to.toISOString());
   if (filters.status) q = q.eq("status", filters.status);
   if (filters.bucket && type === "ar_aging") q = q.eq("bucket", filters.bucket);
   const { data, error } = await q;
   if (error) throw error;
-  return { rows: data ?? [], spec, from, to };
+  return { rows: (data ?? []) as any[], spec, from, to };
 }
 
 function fmtCell(v: any) {
