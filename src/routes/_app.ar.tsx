@@ -9,9 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Mail, AlertOctagon } from "lucide-react";
+import { Mail, AlertOctagon, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
+import { syncArAging } from "@/server/p21.functions";
 
 export const Route = createFileRoute("/_app/ar")({ component: ArPage });
 
@@ -24,11 +25,26 @@ const BUCKETS = [
 ];
 
 function ArPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [bucket, setBucket] = useState<string>("all");
   const [automation, setAutomation] = useState(true);
   const [template, setTemplate] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncFromP21() {
+    if (!hasRole("admin")) { toast.error("Admin role required"); return; }
+    setSyncing(true);
+    try {
+      const res = await syncArAging({ data: undefined as any });
+      toast.success(`Synced ${(res as any).imported} invoices from P21`);
+      load();
+    } catch (e: any) {
+      toast.error(e.message ?? "P21 sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function load() {
     const { data } = await supabase.from("ar_aging").select("*").order("days_past_due", { ascending: false });
@@ -70,7 +86,13 @@ function ArPage() {
 
   return (
     <div>
-      <ModuleHeader title="AR & Collections" description="Aging buckets, automated reminders for 31–60 day accounts, manual escalation for 60+." />
+      <ModuleHeader title="AR & Collections" description="Aging buckets, automated reminders for 31–60 day accounts, manual escalation for 60+."
+        actions={
+          <Button variant="outline" onClick={syncFromP21} disabled={syncing}>
+            {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Sync from P21
+          </Button>
+        } />
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {totals.map((b) => (
