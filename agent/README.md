@@ -37,15 +37,53 @@ This is a small Node program that runs **on a machine inside your network with t
 
 ## Run as a Windows service (so it survives reboots)
 
-```bash
-npm run install-service
-```
+> **Run an Administrator command prompt for these commands** — Windows requires elevation to install services.
 
-This registers it as **"NDI P21 Bridge Agent"** under Windows Services. To remove:
+1. Right-click **Command Prompt** (or **PowerShell**) → **Run as administrator**.
+2. `cd` into the `agent` folder.
+3. Install:
+
+   ```bash
+   npm run install-service
+   ```
+
+   This registers a service named **"NDI P21 Bridge Agent"** with these properties:
+   - **Startup type:** Automatic (starts on boot, before any user logs in)
+   - **Recovery:** auto-restart on crash (up to 10 retries with backoff)
+   - **Working directory:** the `agent/` folder, so `.env` and SQL config load correctly
+   - **Logs:** `agent/daemon/ndi-p21-bridge-agent.out.log` and `.err.log`
+
+4. Verify it's running:
+
+   ```bash
+   sc query "NDI P21 Bridge Agent"
+   ```
+
+   Or open **services.msc** and look for "NDI P21 Bridge Agent".
+
+5. The agent should appear as **online (green)** in **NDI Ops Hub → Settings → Integrations → P21 Bridge** within 5 seconds.
+
+### Updating or removing the service
+
+Stop and remove (also from an Administrator prompt):
 
 ```bash
 npm run uninstall-service
 ```
+
+After editing `.env` or pulling new agent code, restart the service:
+
+```bash
+sc stop "NDI P21 Bridge Agent"
+sc start "NDI P21 Bridge Agent"
+```
+
+### Notes about the FortiClient VPN
+
+The Windows service runs as **LocalSystem** by default, which starts before any user logs in. This means:
+
+- ✅ If FortiClient is configured to **auto-connect at system startup** (recommended), the agent will reach P21 right away.
+- ⚠️ If FortiClient only connects after a **user logs in interactively**, the agent will sit there retrying until you log in and FortiClient comes up. Configure FortiClient → Settings → "Always Up" / "Auto Connect" to avoid this.
 
 ## Adding new job kinds
 
