@@ -12,7 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
+import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppSalesRouteImport } from './routes/_app.sales'
+import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
+import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
+import { Route as AppDamageRouteImport } from './routes/_app.damage'
+import { Route as AppArRouteImport } from './routes/_app.ar'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -28,35 +35,123 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSpiffRoute = AppSpiffRouteImport.update({
+  id: '/spiff',
+  path: '/spiff',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSalesRoute = AppSalesRouteImport.update({
+  id: '/sales',
+  path: '/sales',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppOrdersRoute = AppOrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLogisticsRoute = AppLogisticsRouteImport.update({
+  id: '/logistics',
+  path: '/logistics',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDamageRoute = AppDamageRouteImport.update({
+  id: '/damage',
+  path: '/damage',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppArRoute = AppArRouteImport.update({
+  id: '/ar',
+  path: '/ar',
   getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/auth': typeof AuthRoute
+  '/ar': typeof AppArRoute
+  '/damage': typeof AppDamageRoute
+  '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
+  '/reports': typeof AppReportsRoute
+  '/sales': typeof AppSalesRoute
+  '/settings': typeof AppSettingsRoute
+  '/spiff': typeof AppSpiffRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/ar': typeof AppArRoute
+  '/damage': typeof AppDamageRoute
+  '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
+  '/reports': typeof AppReportsRoute
+  '/sales': typeof AppSalesRoute
+  '/settings': typeof AppSettingsRoute
+  '/spiff': typeof AppSpiffRoute
   '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_app/ar': typeof AppArRoute
+  '/_app/damage': typeof AppDamageRoute
+  '/_app/logistics': typeof AppLogisticsRoute
   '/_app/orders': typeof AppOrdersRoute
+  '/_app/reports': typeof AppReportsRoute
+  '/_app/sales': typeof AppSalesRoute
+  '/_app/settings': typeof AppSettingsRoute
+  '/_app/spiff': typeof AppSpiffRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/orders'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/ar'
+    | '/damage'
+    | '/logistics'
+    | '/orders'
+    | '/reports'
+    | '/sales'
+    | '/settings'
+    | '/spiff'
   fileRoutesByTo: FileRoutesByTo
-  to: '/auth' | '/orders' | '/'
-  id: '__root__' | '/_app' | '/auth' | '/_app/orders' | '/_app/'
+  to:
+    | '/auth'
+    | '/ar'
+    | '/damage'
+    | '/logistics'
+    | '/orders'
+    | '/reports'
+    | '/sales'
+    | '/settings'
+    | '/spiff'
+    | '/'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/auth'
+    | '/_app/ar'
+    | '/_app/damage'
+    | '/_app/logistics'
+    | '/_app/orders'
+    | '/_app/reports'
+    | '/_app/sales'
+    | '/_app/settings'
+    | '/_app/spiff'
+    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -87,6 +182,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/spiff': {
+      id: '/_app/spiff'
+      path: '/spiff'
+      fullPath: '/spiff'
+      preLoaderRoute: typeof AppSpiffRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sales': {
+      id: '/_app/sales'
+      path: '/sales'
+      fullPath: '/sales'
+      preLoaderRoute: typeof AppSalesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reports': {
+      id: '/_app/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/orders': {
       id: '/_app/orders'
       path: '/orders'
@@ -94,16 +217,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrdersRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/logistics': {
+      id: '/_app/logistics'
+      path: '/logistics'
+      fullPath: '/logistics'
+      preLoaderRoute: typeof AppLogisticsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/damage': {
+      id: '/_app/damage'
+      path: '/damage'
+      fullPath: '/damage'
+      preLoaderRoute: typeof AppDamageRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/ar': {
+      id: '/_app/ar'
+      path: '/ar'
+      fullPath: '/ar'
+      preLoaderRoute: typeof AppArRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppArRoute: typeof AppArRoute
+  AppDamageRoute: typeof AppDamageRoute
+  AppLogisticsRoute: typeof AppLogisticsRoute
   AppOrdersRoute: typeof AppOrdersRoute
+  AppReportsRoute: typeof AppReportsRoute
+  AppSalesRoute: typeof AppSalesRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppSpiffRoute: typeof AppSpiffRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppArRoute: AppArRoute,
+  AppDamageRoute: AppDamageRoute,
+  AppLogisticsRoute: AppLogisticsRoute,
   AppOrdersRoute: AppOrdersRoute,
+  AppReportsRoute: AppReportsRoute,
+  AppSalesRoute: AppSalesRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppSpiffRoute: AppSpiffRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
