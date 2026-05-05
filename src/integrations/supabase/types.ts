@@ -356,6 +356,83 @@ export type Database = {
         }
         Relationships: []
       }
+      p21_bridge_agents: {
+        Row: {
+          created_at: string
+          id: string
+          ip: string | null
+          last_seen_at: string | null
+          name: string
+          version: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip?: string | null
+          last_seen_at?: string | null
+          name: string
+          version?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip?: string | null
+          last_seen_at?: string | null
+          name?: string
+          version?: string | null
+        }
+        Relationships: []
+      }
+      p21_bridge_jobs: {
+        Row: {
+          agent_id: string | null
+          claimed_at: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          error: string | null
+          id: string
+          kind: string
+          payload: Json
+          result: Json | null
+          status: string
+        }
+        Insert: {
+          agent_id?: string | null
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          id?: string
+          kind: string
+          payload?: Json
+          result?: Json | null
+          status?: string
+        }
+        Update: {
+          agent_id?: string | null
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          id?: string
+          kind?: string
+          payload?: Json
+          result?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "p21_bridge_jobs_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "p21_bridge_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
