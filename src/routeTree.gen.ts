@@ -21,6 +21,7 @@ import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
 import { Route as AppDamageRouteImport } from './routes/_app.damage'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppArRouteImport } from './routes/_app.ar'
+import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-bridge'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -81,6 +82,11 @@ const AppArRoute = AppArRouteImport.update({
   path: '/ar',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicP21BridgeRoute = ApiPublicP21BridgeRouteImport.update({
+  id: '/api/public/p21-bridge',
+  path: '/api/public/p21-bridge',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
+  '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
   '/': typeof AppIndexRoute
+  '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/spiff': typeof AppSpiffRoute
   '/_app/': typeof AppIndexRoute
+  '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/spiff'
+    | '/api/public/p21-bridge'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/spiff'
     | '/'
+    | '/api/public/p21-bridge'
   id:
     | '__root__'
     | '/_app'
@@ -164,11 +175,13 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/spiff'
     | '/_app/'
+    | '/api/public/p21-bridge'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicP21BridgeRoute: typeof ApiPublicP21BridgeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -257,6 +270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/p21-bridge': {
+      id: '/api/public/p21-bridge'
+      path: '/api/public/p21-bridge'
+      fullPath: '/api/public/p21-bridge'
+      preLoaderRoute: typeof ApiPublicP21BridgeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -291,6 +311,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicP21BridgeRoute: ApiPublicP21BridgeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
