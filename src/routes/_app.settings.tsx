@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { CheckCircle2, AlertCircle, Shield, ShieldCheck, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { P21BridgePanel } from "@/components/shared/P21BridgePanel";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
@@ -36,7 +37,7 @@ function SettingsPage() {
   }, []);
 
   const integrations = [
-    { name: "P21 (Epicor)", status: "stub", note: "VPN connection pending. Stub returning seed data." },
+    { name: "P21 (Epicor)", status: "bridge", note: "Connect via the local bridge agent below." },
     { name: "Samsara", status: "stub", note: "API token not configured. Stub returning placeholder photos." },
     { name: "Lovable AI Gateway", status: "live", note: "PO parser and reminder generator active." },
   ];
@@ -50,7 +51,7 @@ function SettingsPage() {
           <TabsTrigger value="sku">SKU Cross-Reference</TabsTrigger>
           <TabsTrigger value="users">Users & Roles</TabsTrigger>
         </TabsList>
-        <TabsContent value="integrations">
+        <TabsContent value="integrations" className="space-y-6">
           <div className="grid md:grid-cols-3 gap-4">
             {integrations.map((i) => (
               <Card key={i.name} className="p-4">
@@ -58,6 +59,8 @@ function SettingsPage() {
                   <span className="font-semibold">{i.name}</span>
                   {i.status === "live" ? (
                     <Badge className="bg-success text-success-foreground"><CheckCircle2 className="w-3 h-3 mr-1" /> Live</Badge>
+                  ) : i.status === "bridge" ? (
+                    <Badge className="bg-primary text-primary-foreground">Bridge</Badge>
                   ) : (
                     <Badge variant="secondary"><AlertCircle className="w-3 h-3 mr-1" /> Stub</Badge>
                   )}
@@ -66,6 +69,7 @@ function SettingsPage() {
               </Card>
             ))}
           </div>
+          <P21BridgePanel />
         </TabsContent>
         <TabsContent value="sku">
           <Card>
