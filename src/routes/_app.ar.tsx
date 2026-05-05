@@ -25,11 +25,26 @@ const BUCKETS = [
 ];
 
 function ArPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [bucket, setBucket] = useState<string>("all");
   const [automation, setAutomation] = useState(true);
   const [template, setTemplate] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncFromP21() {
+    if (!hasRole("admin")) { toast.error("Admin role required"); return; }
+    setSyncing(true);
+    try {
+      const res = await syncArAging({ data: undefined as any });
+      toast.success(`Synced ${(res as any).imported} invoices from P21`);
+      load();
+    } catch (e: any) {
+      toast.error(e.message ?? "P21 sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function load() {
     const { data } = await supabase.from("ar_aging").select("*").order("days_past_due", { ascending: false });
