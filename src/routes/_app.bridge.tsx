@@ -128,10 +128,10 @@ function BridgeAdminPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Agents online" value={`${onlineAgents}/${agents.length}`} icon={Wifi} />
-        <KpiCard label="Pending jobs" value={String(pendingCount)} icon={Clock} />
-        <KpiCard label="Failed jobs" value={String(failedCount)} icon={AlertCircle} />
-        <KpiCard label="Done (recent)" value={String(recent.filter(j => j.status === "done").length)} icon={CheckCircle2} />
+        <KpiCard label="Agents online" value={`${onlineAgents}/${agents.length}`} icon={<Wifi className="w-5 h-5" />} />
+        <KpiCard label="Pending jobs" value={String(pendingCount)} icon={<Clock className="w-5 h-5" />} />
+        <KpiCard label="Failed jobs" value={String(failedCount)} icon={<AlertCircle className="w-5 h-5" />} />
+        <KpiCard label="Done (recent)" value={String(recent.filter(j => j.status === "done").length)} icon={<CheckCircle2 className="w-5 h-5" />} />
       </div>
 
       <Card className="p-4">
