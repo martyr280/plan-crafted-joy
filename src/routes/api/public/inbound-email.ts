@@ -80,8 +80,21 @@ export const Route = createFileRoute("/api/public/inbound-email")({
         let payload: any;
         try { payload = JSON.parse(bodyText); } catch { return new Response("bad json", { status: 400 }); }
 
-        // Only process inbound email events; ack others quietly.
+        // Only process inbound email events; log + ack others so they show up in the debugger.
         if (payload?.type && payload.type !== "email.received" && payload.type !== "inbound.email") {
+          const d = payload?.data ?? {};
+          await supabaseAdmin.from("inbound_emails").insert({
+            from_addr: (typeof d.from === "string" ? d.from : d?.from?.email) ?? "resend@webhook",
+            to_addr: Array.isArray(d.to) ? d.to[0] : d?.to ?? null,
+            subject: d?.subject ?? `[ignored event: ${payload.type}]`,
+            headers: {},
+            attachments: [],
+            raw_payload: payload,
+            status: "dismissed",
+            classification: "unknown",
+            error: `Ignored event type: ${payload.type}`,
+            processed_at: new Date().toISOString(),
+          });
           return Response.json({ ok: true, ignored: payload.type });
         }
 
