@@ -18,6 +18,7 @@ import { Route as AppSalesRouteImport } from './routes/_app.sales'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
+import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppDamageRouteImport } from './routes/_app.damage'
 import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
@@ -69,6 +70,11 @@ const AppLogisticsRoute = AppLogisticsRouteImport.update({
   path: '/logistics',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInboxRoute = AppInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDamageRoute = AppDamageRouteImport.update({
   id: '/damage',
   path: '/damage',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AppAuditRoute
   '/bridge': typeof AppBridgeRoute
   '/damage': typeof AppDamageRoute
+  '/inbox': typeof AppInboxRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
   '/reports': typeof AppReportsRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AppAuditRoute
   '/bridge': typeof AppBridgeRoute
   '/damage': typeof AppDamageRoute
+  '/inbox': typeof AppInboxRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
   '/reports': typeof AppReportsRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/_app/audit': typeof AppAuditRoute
   '/_app/bridge': typeof AppBridgeRoute
   '/_app/damage': typeof AppDamageRoute
+  '/_app/inbox': typeof AppInboxRoute
   '/_app/logistics': typeof AppLogisticsRoute
   '/_app/orders': typeof AppOrdersRoute
   '/_app/reports': typeof AppReportsRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/bridge'
     | '/damage'
+    | '/inbox'
     | '/logistics'
     | '/orders'
     | '/reports'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/bridge'
     | '/damage'
+    | '/inbox'
     | '/logistics'
     | '/orders'
     | '/reports'
@@ -191,6 +202,7 @@ export interface FileRouteTypes {
     | '/_app/audit'
     | '/_app/bridge'
     | '/_app/damage'
+    | '/_app/inbox'
     | '/_app/logistics'
     | '/_app/orders'
     | '/_app/reports'
@@ -274,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogisticsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/inbox': {
+      id: '/_app/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof AppInboxRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/damage': {
       id: '/_app/damage'
       path: '/damage'
@@ -324,6 +343,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppBridgeRoute: typeof AppBridgeRoute
   AppDamageRoute: typeof AppDamageRoute
+  AppInboxRoute: typeof AppInboxRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
   AppOrdersRoute: typeof AppOrdersRoute
   AppReportsRoute: typeof AppReportsRoute
@@ -338,6 +358,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppBridgeRoute: AppBridgeRoute,
   AppDamageRoute: AppDamageRoute,
+  AppInboxRoute: AppInboxRoute,
   AppLogisticsRoute: AppLogisticsRoute,
   AppOrdersRoute: AppOrdersRoute,
   AppReportsRoute: AppReportsRoute,
