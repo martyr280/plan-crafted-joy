@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader } from "@/components/ui/sidebar";
-import { Building2, LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox } from "lucide-react";
+import { Building2, LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook } from "lucide-react";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -14,6 +14,7 @@ const items = [
   { title: "Damage Tracker", url: "/damage", icon: AlertTriangle },
   { title: "Audit Log", url: "/audit", icon: ScrollText },
   { title: "P21 Bridge", url: "/bridge", icon: Network },
+  { title: "Webhook Debug", url: "/webhooks", icon: Webhook },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
