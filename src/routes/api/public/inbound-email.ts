@@ -1,43 +1,67 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createHmac, timingSafeEqual } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-// Provider-agnostic inbound email webhook.
-// Accepts the common shapes from SendGrid Inbound Parse, Postmark, and CloudMailin.
-// Auth: a shared bearer token in `Authorization: Bearer <token>` matching INBOUND_EMAIL_TOKEN.
-// Configure your provider to POST forwarded emails to:
+// Resend Inbound webhook receiver.
+// Configure in Resend dashboard → Webhooks → add endpoint:
 //   https://<your-app>/api/public/inbound-email
-// with the bearer header set.
+// subscribed to event "email.received". Resend gives you a signing secret
+// starting with `whsec_` — store it as RESEND_WEBHOOK_SECRET.
+
+const TOLERANCE_MS = 5 * 60 * 1000;
+
+// Svix-style signature verification (Resend uses this scheme).
+function verifySvix(body: string, headers: Headers, secret: string): boolean {
+  const id = headers.get("svix-id") ?? headers.get("webhook-id");
+  const timestamp = headers.get("svix-timestamp") ?? headers.get("webhook-timestamp");
+  const sigHeader = headers.get("svix-signature") ?? headers.get("webhook-signature");
+  if (!id || !timestamp || !sigHeader) return false;
+
+  const ts = Number(timestamp) * 1000;
+  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > TOLERANCE_MS) return false;
+
+  const secretBytes = secret.startsWith("whsec_")
+    ? Buffer.from(secret.slice(6), "base64")
+    : Buffer.from(secret, "utf8");
+
+  const signed = `${id}.${timestamp}.${body}`;
+  const expected = createHmac("sha256", secretBytes).update(signed).digest("base64");
+
+  // Header is space-delimited "v1,<sig> v1,<sig2>"
+  for (const part of sigHeader.split(" ")) {
+    const [version, sig] = part.split(",");
+    if (version !== "v1" || !sig) continue;
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length === b.length && timingSafeEqual(a, b)) return true;
+  }
+  return false;
+}
 
 function pickString(...vals: any[]): string | null {
-  for (const v of vals) {
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
+  for (const v of vals) if (typeof v === "string" && v.trim()) return v.trim();
   return null;
 }
 
 function normalize(payload: any) {
-  // SendGrid: from, to, subject, text, html, headers, attachments (multipart)
-  // Postmark: From, FromName, To, Subject, TextBody, HtmlBody, Headers[], Attachments[], MessageID
-  // CloudMailin: envelope.from, envelope.to, headers.From, headers.Subject, plain, html, attachments[]
+  // Resend inbound: { type: "email.received", data: { from, to, subject, text, html, headers, attachments } }
+  const d = payload?.data ?? payload;
   const from_addr =
     pickString(
-      payload?.From,
-      payload?.from,
-      payload?.envelope?.from,
-      payload?.headers?.From,
+      typeof d?.from === "string" ? d.from : d?.from?.email,
+      d?.From,
     ) ?? "unknown@unknown";
-  const from_name = pickString(payload?.FromName, payload?.from_name);
-  const to_addr = pickString(payload?.To, payload?.to, payload?.envelope?.to, payload?.headers?.To);
-  const subject = pickString(payload?.Subject, payload?.subject, payload?.headers?.Subject);
-  const body_text = pickString(payload?.TextBody, payload?.text, payload?.plain, payload?.["body-plain"]);
-  const body_html = pickString(payload?.HtmlBody, payload?.html, payload?.["body-html"]);
-  const message_id = pickString(payload?.MessageID, payload?.["Message-Id"], payload?.headers?.["Message-ID"]);
-  const headers = payload?.Headers ?? payload?.headers ?? {};
-  const attachments = Array.isArray(payload?.Attachments)
-    ? payload.Attachments
-    : Array.isArray(payload?.attachments)
-    ? payload.attachments
-    : [];
+  const from_name = pickString(typeof d?.from === "object" ? d.from?.name : null, d?.FromName);
+  const to_addr = pickString(
+    Array.isArray(d?.to) ? d.to[0] : d?.to,
+    d?.To,
+  );
+  const subject = pickString(d?.subject, d?.Subject);
+  const body_text = pickString(d?.text, d?.TextBody, d?.plain);
+  const body_html = pickString(d?.html, d?.HtmlBody);
+  const message_id = pickString(d?.message_id, d?.MessageID, d?.headers?.["message-id"]);
+  const headers = d?.headers ?? {};
+  const attachments = Array.isArray(d?.attachments) ? d.attachments : [];
   return { from_addr, from_name, to_addr, subject, body_text, body_html, message_id, headers, attachments };
 }
 
@@ -45,25 +69,20 @@ export const Route = createFileRoute("/api/public/inbound-email")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const token = process.env.INBOUND_EMAIL_TOKEN;
-        if (!token) return new Response("not configured", { status: 503 });
-        const auth = request.headers.get("authorization") ?? "";
-        if (auth !== `Bearer ${token}`) return new Response("unauthorized", { status: 401 });
+        const secret = process.env.RESEND_WEBHOOK_SECRET;
+        if (!secret) return new Response("not configured", { status: 503 });
+
+        const bodyText = await request.text();
+        if (!verifySvix(bodyText, request.headers, secret)) {
+          return new Response("invalid signature", { status: 401 });
+        }
 
         let payload: any;
-        const ctype = request.headers.get("content-type") ?? "";
-        try {
-          if (ctype.includes("application/json")) {
-            payload = await request.json();
-          } else if (ctype.includes("multipart/form-data") || ctype.includes("application/x-www-form-urlencoded")) {
-            const fd = await request.formData();
-            payload = {};
-            for (const [k, v] of fd.entries()) payload[k] = typeof v === "string" ? v : { filename: (v as File).name, size: (v as File).size };
-          } else {
-            payload = JSON.parse(await request.text());
-          }
-        } catch {
-          return new Response("bad payload", { status: 400 });
+        try { payload = JSON.parse(bodyText); } catch { return new Response("bad json", { status: 400 }); }
+
+        // Only process inbound email events; ack others quietly.
+        if (payload?.type && payload.type !== "email.received" && payload.type !== "inbound.email") {
+          return Response.json({ ok: true, ignored: payload.type });
         }
 
         const n = normalize(payload);
@@ -90,7 +109,7 @@ export const Route = createFileRoute("/api/public/inbound-email")({
           return new Response("insert failed", { status: 500 });
         }
 
-        // Fire-and-forget classification + routing (don't block the provider).
+        // Fire-and-forget classification + routing.
         const supaUrl = process.env.SUPABASE_URL;
         const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         if (supaUrl && supaKey) {
