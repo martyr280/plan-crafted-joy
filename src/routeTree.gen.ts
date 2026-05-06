@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppWebhooksRouteImport } from './routes/_app.webhooks'
 import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
@@ -38,6 +39,11 @@ const AppRoute = AppRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWebhooksRoute = AppWebhooksRouteImport.update({
+  id: '/webhooks',
+  path: '/webhooks',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSpiffRoute = AppSpiffRouteImport.update({
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
+  '/webhooks': typeof AppWebhooksRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
 }
@@ -136,6 +143,7 @@ export interface FileRoutesByTo {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
+  '/webhooks': typeof AppWebhooksRoute
   '/': typeof AppIndexRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
@@ -155,6 +163,7 @@ export interface FileRoutesById {
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/spiff': typeof AppSpiffRoute
+  '/_app/webhooks': typeof AppWebhooksRoute
   '/_app/': typeof AppIndexRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
@@ -175,6 +184,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/spiff'
+    | '/webhooks'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
   fileRoutesByTo: FileRoutesByTo
@@ -191,6 +201,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/spiff'
+    | '/webhooks'
     | '/'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
@@ -209,6 +220,7 @@ export interface FileRouteTypes {
     | '/_app/sales'
     | '/_app/settings'
     | '/_app/spiff'
+    | '/_app/webhooks'
     | '/_app/'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
@@ -242,6 +254,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/webhooks': {
+      id: '/_app/webhooks'
+      path: '/webhooks'
+      fullPath: '/webhooks'
+      preLoaderRoute: typeof AppWebhooksRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/spiff': {
@@ -350,6 +369,7 @@ interface AppRouteChildren {
   AppSalesRoute: typeof AppSalesRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSpiffRoute: typeof AppSpiffRoute
+  AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -365,6 +385,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSalesRoute: AppSalesRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSpiffRoute: AppSpiffRoute,
+  AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
@@ -379,12 +400,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
