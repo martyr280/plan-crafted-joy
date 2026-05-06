@@ -255,6 +255,87 @@ export type Database = {
         }
         Relationships: []
       }
+      inbound_emails: {
+        Row: {
+          ai_extracted: Json
+          ai_flags: Json
+          ai_summary: string | null
+          attachments: Json
+          body_html: string | null
+          body_text: string | null
+          classification: string
+          confidence: number | null
+          created_record_id: string | null
+          created_record_type: string | null
+          error: string | null
+          from_addr: string
+          from_name: string | null
+          headers: Json
+          id: string
+          message_id: string | null
+          processed_at: string | null
+          raw_payload: Json | null
+          received_at: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          subject: string | null
+          to_addr: string | null
+        }
+        Insert: {
+          ai_extracted?: Json
+          ai_flags?: Json
+          ai_summary?: string | null
+          attachments?: Json
+          body_html?: string | null
+          body_text?: string | null
+          classification?: string
+          confidence?: number | null
+          created_record_id?: string | null
+          created_record_type?: string | null
+          error?: string | null
+          from_addr: string
+          from_name?: string | null
+          headers?: Json
+          id?: string
+          message_id?: string | null
+          processed_at?: string | null
+          raw_payload?: Json | null
+          received_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          subject?: string | null
+          to_addr?: string | null
+        }
+        Update: {
+          ai_extracted?: Json
+          ai_flags?: Json
+          ai_summary?: string | null
+          attachments?: Json
+          body_html?: string | null
+          body_text?: string | null
+          classification?: string
+          confidence?: number | null
+          created_record_id?: string | null
+          created_record_type?: string | null
+          error?: string | null
+          from_addr?: string
+          from_name?: string | null
+          headers?: Json
+          id?: string
+          message_id?: string | null
+          processed_at?: string | null
+          raw_payload?: Json | null
+          received_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          subject?: string | null
+          to_addr?: string | null
+        }
+        Relationships: []
+      }
       order_acknowledgements: {
         Row: {
           content: string

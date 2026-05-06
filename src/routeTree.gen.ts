@@ -18,11 +18,13 @@ import { Route as AppSalesRouteImport } from './routes/_app.sales'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
+import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppDamageRouteImport } from './routes/_app.damage'
 import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppArRouteImport } from './routes/_app.ar'
 import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-bridge'
+import { Route as ApiPublicInboundEmailRouteImport } from './routes/api/public/inbound-email'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -68,6 +70,11 @@ const AppLogisticsRoute = AppLogisticsRouteImport.update({
   path: '/logistics',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInboxRoute = AppInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDamageRoute = AppDamageRouteImport.update({
   id: '/damage',
   path: '/damage',
@@ -93,6 +100,11 @@ const ApiPublicP21BridgeRoute = ApiPublicP21BridgeRouteImport.update({
   path: '/api/public/p21-bridge',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicInboundEmailRoute = ApiPublicInboundEmailRouteImport.update({
+  id: '/api/public/inbound-email',
+  path: '/api/public/inbound-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -101,12 +113,14 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AppAuditRoute
   '/bridge': typeof AppBridgeRoute
   '/damage': typeof AppDamageRoute
+  '/inbox': typeof AppInboxRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
   '/reports': typeof AppReportsRoute
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
+  '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
 }
 export interface FileRoutesByTo {
@@ -115,6 +129,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AppAuditRoute
   '/bridge': typeof AppBridgeRoute
   '/damage': typeof AppDamageRoute
+  '/inbox': typeof AppInboxRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
   '/reports': typeof AppReportsRoute
@@ -122,6 +137,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
   '/': typeof AppIndexRoute
+  '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
 }
 export interface FileRoutesById {
@@ -132,6 +148,7 @@ export interface FileRoutesById {
   '/_app/audit': typeof AppAuditRoute
   '/_app/bridge': typeof AppBridgeRoute
   '/_app/damage': typeof AppDamageRoute
+  '/_app/inbox': typeof AppInboxRoute
   '/_app/logistics': typeof AppLogisticsRoute
   '/_app/orders': typeof AppOrdersRoute
   '/_app/reports': typeof AppReportsRoute
@@ -139,6 +156,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/spiff': typeof AppSpiffRoute
   '/_app/': typeof AppIndexRoute
+  '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
 }
 export interface FileRouteTypes {
@@ -150,12 +168,14 @@ export interface FileRouteTypes {
     | '/audit'
     | '/bridge'
     | '/damage'
+    | '/inbox'
     | '/logistics'
     | '/orders'
     | '/reports'
     | '/sales'
     | '/settings'
     | '/spiff'
+    | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -164,6 +184,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/bridge'
     | '/damage'
+    | '/inbox'
     | '/logistics'
     | '/orders'
     | '/reports'
@@ -171,6 +192,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/spiff'
     | '/'
+    | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
   id:
     | '__root__'
@@ -180,6 +202,7 @@ export interface FileRouteTypes {
     | '/_app/audit'
     | '/_app/bridge'
     | '/_app/damage'
+    | '/_app/inbox'
     | '/_app/logistics'
     | '/_app/orders'
     | '/_app/reports'
@@ -187,12 +210,14 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/spiff'
     | '/_app/'
+    | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicInboundEmailRoute: typeof ApiPublicInboundEmailRoute
   ApiPublicP21BridgeRoute: typeof ApiPublicP21BridgeRoute
 }
 
@@ -261,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogisticsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/inbox': {
+      id: '/_app/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof AppInboxRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/damage': {
       id: '/_app/damage'
       path: '/damage'
@@ -296,6 +328,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicP21BridgeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/inbound-email': {
+      id: '/api/public/inbound-email'
+      path: '/api/public/inbound-email'
+      fullPath: '/api/public/inbound-email'
+      preLoaderRoute: typeof ApiPublicInboundEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -304,6 +343,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppBridgeRoute: typeof AppBridgeRoute
   AppDamageRoute: typeof AppDamageRoute
+  AppInboxRoute: typeof AppInboxRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
   AppOrdersRoute: typeof AppOrdersRoute
   AppReportsRoute: typeof AppReportsRoute
@@ -318,6 +358,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppBridgeRoute: AppBridgeRoute,
   AppDamageRoute: AppDamageRoute,
+  AppInboxRoute: AppInboxRoute,
   AppLogisticsRoute: AppLogisticsRoute,
   AppOrdersRoute: AppOrdersRoute,
   AppReportsRoute: AppReportsRoute,
@@ -332,17 +373,9 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicInboundEmailRoute: ApiPublicInboundEmailRoute,
   ApiPublicP21BridgeRoute: ApiPublicP21BridgeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
