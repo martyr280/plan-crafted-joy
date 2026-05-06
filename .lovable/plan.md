@@ -60,3 +60,29 @@ A small Node agent runs on your Windows machine (the one with FortiClient). It d
 
 ### After approval
 I'll create the migration, the bridge route, the server functions, the Settings panel, the `agent/` folder, and request the `P21_BRIDGE_SECRET` secret. Then you copy the secret + your P21 creds into `agent/.env`, run `node agent.js`, and the bridge goes live.
+
+---
+
+## Section H — Inbound Email Pipeline Fix
+
+**H.1 — Root cause**
+Resend does not support inbound email parsing. The current webhook is receiving outbound delivery events with no email content. `inbound_emails` table has 0 rows.
+
+**H.2 — Inbound provider**
+Use Postmark Inbound as the inbound email parser. It delivers a clean JSON webhook with From, Subject, TextBody, HtmlBody, Attachments, and Headers parsed out of the box.
+
+**H.3 — Build receive-inbound-email edge function**
+Create a Supabase edge function `receive-inbound-email` that accepts POST from Postmark, verifies via `POSTMARK_INBOUND_SECRET`, maps Postmark fields to our schema, inserts into `inbound_emails`, calls `classify-inbound-email`, and routes to downstream records (orders, ar_reply activity, damage_reports, fleet_loads) when confidence >= 0.75.
+
+**H.4 — Remove Resend inbound webhook**
+Remove/disable the Resend inbound webhook handler. Keep Resend for outbound sending only.
+
+**H.5 — Add webhook URL to admin UI**
+On the webhook debug page, show the Postmark inbound webhook URL `{SUPABASE_URL}/functions/v1/receive-inbound-email` and the `POSTMARK_INBOUND_SECRET` env var name.
+
+**H.6 — Execution order**
+1. Write plan ← done
+2. Build edge function (H.3)
+3. Wire auto-routing (H.3)
+4. Update webhook debug page (H.5)
+5. Remove Resend inbound (H.4)
