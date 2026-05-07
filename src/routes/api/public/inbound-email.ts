@@ -3,14 +3,12 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 // Resend Inbound webhook receiver.
-// Configure in Resend dashboard → Webhooks → add endpoint:
-//   https://<your-app>/api/public/inbound-email
-// subscribed to event "email.received". Resend gives you a signing secret
-// starting with `whsec_` — store it as RESEND_WEBHOOK_SECRET.
+// Resend sends an `email.received` event with { data: { email_id, from, to, subject } }.
+// The full email body is NOT in the webhook payload — fetch it from
+// https://api.resend.com/emails/receiving/{email_id} using RESEND_API_KEY.
 
 const TOLERANCE_MS = 5 * 60 * 1000;
 
-// Svix-style signature verification (Resend uses this scheme).
 function verifySvix(body: string, headers: Headers, secret: string): boolean {
   const id = headers.get("svix-id") ?? headers.get("webhook-id");
   const timestamp = headers.get("svix-timestamp") ?? headers.get("webhook-timestamp");
@@ -27,7 +25,6 @@ function verifySvix(body: string, headers: Headers, secret: string): boolean {
   const signed = `${id}.${timestamp}.${body}`;
   const expected = createHmac("sha256", secretBytes).update(signed).digest("base64");
 
-  // Header is space-delimited "v1,<sig> v1,<sig2>"
   for (const part of sigHeader.split(" ")) {
     const [version, sig] = part.split(",");
     if (version !== "v1" || !sig) continue;
@@ -38,31 +35,24 @@ function verifySvix(body: string, headers: Headers, secret: string): boolean {
   return false;
 }
 
-function pickString(...vals: any[]): string | null {
-  for (const v of vals) if (typeof v === "string" && v.trim()) return v.trim();
-  return null;
+function parseAddr(field: any): { email: string; name: string | null } {
+  if (!field) return { email: "unknown@unknown", name: null };
+  if (typeof field === "object") {
+    return { email: field.email ?? "unknown@unknown", name: field.name ?? null };
+  }
+  const s = String(field);
+  const m = s.match(/^\s*(.*?)\s*<(.+?)>\s*$/);
+  if (m) return { email: m[2], name: m[1] || null };
+  return { email: s.trim(), name: null };
 }
 
-function normalize(payload: any) {
-  // Resend inbound: { type: "email.received", data: { from, to, subject, text, html, headers, attachments } }
-  const d = payload?.data ?? payload;
-  const from_addr =
-    pickString(
-      typeof d?.from === "string" ? d.from : d?.from?.email,
-      d?.From,
-    ) ?? "unknown@unknown";
-  const from_name = pickString(typeof d?.from === "object" ? d.from?.name : null, d?.FromName);
-  const to_addr = pickString(
-    Array.isArray(d?.to) ? d.to[0] : d?.to,
-    d?.To,
-  );
-  const subject = pickString(d?.subject, d?.Subject);
-  const body_text = pickString(d?.text, d?.TextBody, d?.plain);
-  const body_html = pickString(d?.html, d?.HtmlBody);
-  const message_id = pickString(d?.message_id, d?.MessageID, d?.headers?.["message-id"]);
-  const headers = d?.headers ?? {};
-  const attachments = Array.isArray(d?.attachments) ? d.attachments : [];
-  return { from_addr, from_name, to_addr, subject, body_text, body_html, message_id, headers, attachments };
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export const Route = createFileRoute("/api/public/inbound-email")({
@@ -80,13 +70,11 @@ export const Route = createFileRoute("/api/public/inbound-email")({
         let payload: any;
         try { payload = JSON.parse(bodyText); } catch { return new Response("bad json", { status: 400 }); }
 
-        // Only process inbound email events; log + ack others so they show up in the debugger.
+        // Only process inbound. Log other events for visibility.
         if (payload?.type && payload.type !== "email.received" && payload.type !== "inbound.email") {
-          const d = payload?.data ?? {};
           await supabaseAdmin.from("inbound_emails").insert({
-            from_addr: (typeof d.from === "string" ? d.from : d?.from?.email) ?? "resend@webhook",
-            to_addr: Array.isArray(d.to) ? d.to[0] : d?.to ?? null,
-            subject: d?.subject ?? `[ignored event: ${payload.type}]`,
+            from_addr: "resend@webhook",
+            subject: `[ignored event: ${payload.type}]`,
             headers: {},
             attachments: [],
             raw_payload: payload,
@@ -98,22 +86,70 @@ export const Route = createFileRoute("/api/public/inbound-email")({
           return Response.json({ ok: true, ignored: payload.type });
         }
 
-        const n = normalize(payload);
+        const d = payload?.data ?? {};
+        const emailId: string | undefined = d.email_id ?? d.id;
+        const fromMeta = parseAddr(d.from);
+        const toMeta = Array.isArray(d.to) ? d.to[0] : d.to;
+        const toAddr = parseAddr(toMeta).email;
+
+        // Fetch full email content from Resend.
+        const resendKey = process.env.RESEND_API_KEY;
+        let body_text: string | null = null;
+        let body_html: string | null = null;
+        let headers: Record<string, any> = {};
+        let attachments: any[] = [];
+        let message_id: string | null = null;
+        let fetchedSubject: string | null = null;
+        let fetchError: string | null = null;
+        let fullEmail: any = null;
+
+        if (emailId && resendKey) {
+          try {
+            const r = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+              headers: { Authorization: `Bearer ${resendKey}` },
+            });
+            if (!r.ok) {
+              fetchError = `Resend GET ${r.status}: ${(await r.text()).slice(0, 300)}`;
+            } else {
+              fullEmail = await r.json();
+              body_text = fullEmail.text ?? null;
+              body_html = fullEmail.html ?? null;
+              if (!body_text && body_html) body_text = htmlToText(body_html);
+              fetchedSubject = fullEmail.subject ?? null;
+              message_id = fullEmail.message_id ?? fullEmail.headers?.["message-id"] ?? null;
+              if (Array.isArray(fullEmail.headers)) {
+                for (const h of fullEmail.headers) if (h?.name) headers[h.name] = h.value;
+              } else if (fullEmail.headers && typeof fullEmail.headers === "object") {
+                headers = fullEmail.headers;
+              }
+              attachments = Array.isArray(fullEmail.attachments) ? fullEmail.attachments : [];
+            }
+          } catch (e: any) {
+            fetchError = String(e?.message ?? e);
+          }
+        } else if (!resendKey) {
+          fetchError = "RESEND_API_KEY not configured";
+        } else if (!emailId) {
+          fetchError = "No email_id in webhook payload";
+        }
+
+        const subject = fetchedSubject ?? d.subject ?? null;
 
         const { data: row, error } = await supabaseAdmin
           .from("inbound_emails")
           .insert({
-            message_id: n.message_id,
-            from_addr: n.from_addr,
-            from_name: n.from_name,
-            to_addr: n.to_addr,
-            subject: n.subject,
-            body_text: n.body_text,
-            body_html: n.body_html,
-            headers: n.headers,
-            attachments: n.attachments,
-            raw_payload: payload,
-            status: "received",
+            message_id,
+            from_addr: fromMeta.email,
+            from_name: fromMeta.name,
+            to_addr: toAddr,
+            subject,
+            body_text,
+            body_html,
+            headers,
+            attachments,
+            raw_payload: { webhook: payload, fetched: fullEmail },
+            status: fetchError ? "error" : "received",
+            error: fetchError,
           })
           .select("id")
           .single();
@@ -121,6 +157,16 @@ export const Route = createFileRoute("/api/public/inbound-email")({
           console.error("inbound insert failed", error);
           return new Response("insert failed", { status: 500 });
         }
+
+        if (fetchError) return Response.json({ ok: false, id: row.id, error: fetchError });
+
+        const n = {
+          from_addr: fromMeta.email,
+          from_name: fromMeta.name,
+          to_addr: toAddr,
+          subject,
+          body_text,
+        };
 
         // Fire-and-forget classification + routing.
         const supaUrl = process.env.SUPABASE_URL;
@@ -150,7 +196,7 @@ export const Route = createFileRoute("/api/public/inbound-email")({
   },
 });
 
-async function routeEmail(id: string, n: ReturnType<typeof normalize>, c: any) {
+async function routeEmail(id: string, n: any, c: any) {
   const update: any = {
     classification: c.classification ?? "unknown",
     confidence: c.confidence ?? null,
@@ -160,11 +206,11 @@ async function routeEmail(id: string, n: ReturnType<typeof normalize>, c: any) {
     processed_at: new Date().toISOString(),
   };
 
-  const lowConfidence = (c.confidence ?? 0) < 0.7;
   const ext = c.extracted ?? {};
+  const conf = c.confidence ?? 0;
 
   try {
-    if (lowConfidence || c.classification === "unknown") {
+    if (conf < 0.75 || c.classification === "unknown") {
       update.status = "needs_review";
     } else if (c.classification === "purchase_order") {
       const { data: ord } = await supabaseAdmin
@@ -173,11 +219,11 @@ async function routeEmail(id: string, n: ReturnType<typeof normalize>, c: any) {
           customer_name: ext.customer_name ?? n.from_name ?? n.from_addr,
           customer_id: ext.customer_id ?? null,
           po_number: ext.po_number ?? null,
-          source: "email_forward",
+          source: "email_inbound",
           raw_input: `From: ${n.from_addr}\nSubject: ${n.subject ?? ""}\n\n${n.body_text ?? ""}`,
           status: "pending_review",
           line_items: Array.isArray(ext.line_items) ? ext.line_items : [],
-          ai_confidence: c.confidence ?? null,
+          ai_confidence: conf,
           ai_flags: c.flags ?? [],
         })
         .select("id")
@@ -185,29 +231,30 @@ async function routeEmail(id: string, n: ReturnType<typeof normalize>, c: any) {
       update.status = "routed";
       update.created_record_type = "order";
       update.created_record_id = ord?.id ?? null;
-    } else if (c.classification === "ar_reply" && ext.invoice_number) {
-      const { data: ar } = await supabaseAdmin
-        .from("ar_aging")
-        .select("id")
-        .eq("invoice_number", ext.invoice_number)
-        .maybeSingle();
-      if (ar) {
-        await supabaseAdmin.from("collection_emails").insert({
-          ar_aging_id: ar.id,
-          content: `Inbound reply from ${n.from_addr}\nSubject: ${n.subject ?? ""}\n\n${n.body_text ?? ""}`,
-          status: "received",
-          automated: false,
-        });
-        await supabaseAdmin
+    } else if (c.classification === "ar_reply") {
+      let arId: string | null = null;
+      if (ext.invoice_number) {
+        const { data: ar } = await supabaseAdmin
           .from("ar_aging")
-          .update({ last_contacted_at: new Date().toISOString(), collection_status: "customer_replied" })
-          .eq("id", ar.id);
-        update.status = "routed";
-        update.created_record_type = "collection_email";
-        update.created_record_id = ar.id;
-      } else {
-        update.status = "needs_review";
+          .select("id")
+          .eq("invoice_number", ext.invoice_number)
+          .maybeSingle();
+        arId = ar?.id ?? null;
+        if (arId) {
+          await supabaseAdmin.from("collection_emails").insert({
+            ar_aging_id: arId,
+            content: `Inbound reply from ${n.from_addr}\nSubject: ${n.subject ?? ""}\n\n${n.body_text ?? ""}`,
+            status: "received",
+            automated: false,
+          });
+          await supabaseAdmin
+            .from("ar_aging")
+            .update({ last_contacted_at: new Date().toISOString(), collection_status: "customer_replied" })
+            .eq("id", arId);
+        }
       }
+      update.status = arId ? "routed" : "needs_review";
+      if (arId) { update.created_record_type = "collection_email"; update.created_record_id = arId; }
     } else if (c.classification === "damage_report") {
       const { data: dmg } = await supabaseAdmin
         .from("damage_reports")
@@ -231,13 +278,8 @@ async function routeEmail(id: string, n: ReturnType<typeof normalize>, c: any) {
         .select("id")
         .eq("route_code", ext.route_code)
         .maybeSingle();
-      if (load) {
-        update.status = "routed";
-        update.created_record_type = "fleet_load";
-        update.created_record_id = load.id;
-      } else {
-        update.status = "needs_review";
-      }
+      update.status = load ? "routed" : "needs_review";
+      if (load) { update.created_record_type = "fleet_load"; update.created_record_id = load.id; }
     } else {
       update.status = "needs_review";
     }
@@ -254,6 +296,6 @@ async function routeEmail(id: string, n: ReturnType<typeof normalize>, c: any) {
     entity_id: id,
     actor_name: "system",
     message: `Inbound email from ${n.from_addr} → ${update.classification} (${update.status})`,
-    metadata: { confidence: update.confidence, created: update.created_record_type },
+    metadata: { confidence: update.confidence, created: update.created_record_type ?? null },
   });
 }
