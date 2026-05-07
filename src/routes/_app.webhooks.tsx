@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { listWebhookDeliveries } from "@/lib/webhook-debug.functions";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
-import { RefreshCw, Webhook, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { RefreshCw, Webhook, CheckCircle2, AlertCircle, Clock, Mail } from "lucide-react";
 
 export const Route = createFileRoute("/_app/webhooks")({ component: WebhooksPage });
 
@@ -59,6 +59,35 @@ function WebhooksPage() {
         <StatCard icon={<AlertCircle className="w-4 h-4 text-destructive" />} label="Errors" value={errors} />
       </div>
 
+      <Card className="mb-4">
+        <div className="p-4 border-b flex items-center gap-2">
+          <Mail className="w-4 h-4 text-muted-foreground" />
+          <h3 className="font-semibold text-sm">Latest inbound emails</h3>
+          <Badge variant="outline" className="ml-auto">{Math.min(rows.length, 5)} of {rows.length}</Badge>
+        </div>
+        {rows.length === 0 && !loading && (
+          <p className="p-6 text-sm text-muted-foreground text-center">No emails received yet.</p>
+        )}
+        <ul className="divide-y">
+          {rows.slice(0, 5).map((r) => {
+            const preview = (r.ai_summary || r.body_text || "").replace(/\s+/g, " ").trim().slice(0, 220);
+            return (
+              <li key={r.id} className="p-4 hover:bg-muted/30 cursor-pointer" onClick={() => setSelected(r)}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium text-sm truncate">{r.from_name ? `${r.from_name} <${r.from_addr}>` : r.from_addr}</span>
+                  <Badge className={STATUS_COLORS[r.status] ?? ""}>{r.status.replace(/_/g, " ")}</Badge>
+                  <Badge variant="outline">{r.classification}</Badge>
+                  <span className="ml-auto text-xs text-muted-foreground" suppressHydrationWarning>
+                    {formatDistanceToNow(new Date(r.received_at), { addSuffix: true })}
+                  </span>
+                </div>
+                <p className="text-sm font-medium truncate">{r.subject ?? "(no subject)"}</p>
+                {preview && <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{preview}</p>}
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
       <Card>
         <Table>
           <TableHeader>
@@ -121,6 +150,24 @@ function WebhooksPage() {
                     <p className="font-semibold text-xs mb-1">Error</p>
                     <pre className="text-xs whitespace-pre-wrap">{selected.error}</pre>
                   </Card>
+                )}
+
+                {selected.ai_summary && (
+                  <Section title="AI summary">
+                    <p className="text-sm">{selected.ai_summary}</p>
+                  </Section>
+                )}
+
+                <Section title="Body (text)">
+                  {selected.body_text
+                    ? <pre className="text-xs bg-muted/40 p-2 rounded overflow-x-auto max-h-96 whitespace-pre-wrap">{selected.body_text}</pre>
+                    : <p className="text-xs text-muted-foreground">No plain-text body</p>}
+                </Section>
+
+                {selected.body_html && (
+                  <Section title="Body (HTML preview)">
+                    <div className="text-sm bg-muted/40 p-3 rounded overflow-x-auto max-h-96 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: selected.body_html }} />
+                  </Section>
                 )}
 
                 <Section title="Headers">
