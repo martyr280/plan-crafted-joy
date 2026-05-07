@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { listInboundEmails, getInboundEmail, reclassifyInboundEmail, dismissInboundEmail } from "@/server/inbound-email.functions";
+import { listInboundEmails, getInboundEmail, reclassifyInboundEmail, dismissInboundEmail } from "@/lib/inbound-email.functions";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { RefreshCw, Inbox } from "lucide-react";
