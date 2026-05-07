@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { listWebhookDeliveries } from "@/lib/webhook-debug.functions";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
@@ -184,8 +185,45 @@ function WebhooksPage() {
                   ) : <p className="text-xs text-muted-foreground">None</p>}
                 </Section>
 
-                <Section title="Raw payload">
-                  <pre className="text-xs bg-muted/40 p-2 rounded overflow-x-auto max-h-96">{JSON.stringify(selected.raw_payload ?? {}, null, 2)}</pre>
+                <Section title="Webhook payload">
+                  <Tabs defaultValue="webhook">
+                    <TabsList>
+                      <TabsTrigger value="webhook">Raw webhook</TabsTrigger>
+                      <TabsTrigger value="fetched">Fetched email</TabsTrigger>
+                      <TabsTrigger value="parsed">Parsed</TabsTrigger>
+                      <TabsTrigger value="extracted">AI extracted</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="webhook">
+                      <p className="text-xs text-muted-foreground mb-1">Original POST body from Resend (svix-verified).</p>
+                      <pre className="text-xs bg-muted/40 p-2 rounded overflow-x-auto max-h-96">{JSON.stringify(selected.raw_payload?.webhook ?? selected.raw_payload ?? {}, null, 2)}</pre>
+                    </TabsContent>
+                    <TabsContent value="fetched">
+                      <p className="text-xs text-muted-foreground mb-1">Full email retrieved from Resend's <code>/emails/receiving/:id</code> endpoint.</p>
+                      {selected.raw_payload?.fetched
+                        ? <pre className="text-xs bg-muted/40 p-2 rounded overflow-x-auto max-h-96">{JSON.stringify(selected.raw_payload.fetched, null, 2)}</pre>
+                        : <p className="text-xs text-muted-foreground">No fetched email body (lookup may have failed — see Error above).</p>}
+                    </TabsContent>
+                    <TabsContent value="parsed">
+                      <p className="text-xs text-muted-foreground mb-1">Normalized fields stored on the inbound_email row.</p>
+                      <pre className="text-xs bg-muted/40 p-2 rounded overflow-x-auto max-h-96">{JSON.stringify({
+                        message_id: selected.message_id,
+                        from_addr: selected.from_addr,
+                        from_name: selected.from_name,
+                        to_addr: selected.to_addr,
+                        subject: selected.subject,
+                        status: selected.status,
+                        classification: selected.classification,
+                        confidence: selected.confidence,
+                        attachments_count: (selected.attachments as any[])?.length ?? 0,
+                        body_text_length: selected.body_text?.length ?? 0,
+                        body_html_length: selected.body_html?.length ?? 0,
+                      }, null, 2)}</pre>
+                    </TabsContent>
+                    <TabsContent value="extracted">
+                      <p className="text-xs text-muted-foreground mb-1">Structured data extracted by the AI classifier.</p>
+                      <pre className="text-xs bg-muted/40 p-2 rounded overflow-x-auto max-h-96">{JSON.stringify((selected as any).ai_extracted ?? {}, null, 2)}</pre>
+                    </TabsContent>
+                  </Tabs>
                 </Section>
               </div>
             </>
