@@ -1,72 +1,63 @@
-## Problem
+# Sync ndiof.com Inventory with Pricer & Catalog
 
-Order intake flags SKUs as "not in catalog" whenever they're missing from the `price_list` table. But `price_list` is just the 3,033-row pricer XLSX. The actual catalog PDFs (`2026 NDI WorkSimpli Catalog` ~25 MB, `2026 Clearance List` ~5 MB) live in the `catalogs` storage bucket and are **never parsed**. Result: every SKU that exists in the printed catalog but wasn't typed into the pricer comes back as "unknown."
+Connect Firecrawl, crawl every product page on ndiof.com, store SKU + description + image + stock status, then reconcile against `price_list` (pricer XLSX) and `catalog_items` (parsed catalog PDFs).
 
-To fix this we need to actually read the PDF text, pull out every `SKU + description (+ list price if present)` row, and use that as the source of truth for "is this a real NDI part?"
+## A. Firecrawl connection
+1. Use `standard_connectors--connect` with `connector_id: firecrawl`. Once linked, `FIRECRAWL_API_KEY` is available to server functions.
+2. Verify availability via `fetch_secrets`.
 
-## Plan
+## B. Database
+New table `website_items` (SKU-level snapshot of ndiof.com):
+- `sku` (PK with `crawl_id`), `family`, `name`, `description`, `image_url`, `detail_url`, `brand`, `category`, `in_stock` (bool), `stock_text`, `crawled_at`, `crawl_id`.
 
-### A. New table: `catalog_items`
+New table `website_crawls`:
+- `id`, `started_at`, `completed_at`, `status` (`running|completed|failed`), `pages_crawled`, `skus_found`, `error`, `triggered_by`.
 
+RLS: read for any authenticated ops role; write admin-only (matches existing catalog tables).
+
+## C. Edge function `crawl-website`
+- Background job pattern (job row + `EdgeRuntime.waitUntil`).
+- Step 1 — **map**: `firecrawl.map('https://www.ndiof.com', { limit: 5000, includeSubdomains: false })` to get every URL, then filter to `/itemdetail/...` (single SKU) and `/itemoptions/?familyName=...` (variant family) URLs. Also include `/catsearch/...` listing pages as a fallback to capture SKUs that aren't surfaced by map.
+- Step 2 — **batch scrape** in chunks of ~50 URLs using `firecrawl.batchScrape(urls, { formats: ['markdown'], onlyMainContent: true })`.
+- Step 3 — parse each result with a deterministic regex pass (SKU/brand/description follow a fixed pattern shown on listing pages: `## <name>` / `SKU: <sku>` / `Brand: <brand>` / in-stock label). For variant family pages, follow the embedded `/itemdetail/SKU` links.
+- Step 4 — upsert into `website_items` keyed on `sku`; update progress on `website_crawls` every batch.
+- **Skip JS-rendered prices** (per user choice). Stock label is in static HTML so we keep it.
+
+## D. Reconciliation view
+Server function `getInventoryReconciliation` joins three sources by normalized SKU (upper-trim, strip spaces/dashes optional alias):
+
+```text
+website_items   ─┐
+price_list      ─┼─► reconciliation rows
+catalog_items   ─┘
 ```
-catalog_id uuid (fk → catalogs.id)
-sku text                       -- normalized, upper-case, trimmed
-description text
-list_price numeric null
-page int null
-mfg text null                  -- inferred from section header when possible
-raw text                       -- raw line for debugging
-unique (catalog_id, sku)
-```
 
-Indexed on `sku` for fast `IN (...)` lookups.
+Categories surfaced:
+1. **On website but not in pricer/catalog** — needs pricing setup.
+2. **In pricer/catalog but not on website** — needs to be added/published on ndiof.com.
+3. **Mismatch** — same SKU, but description differs significantly (token Jaccard < 0.5) or brand mismatch. Price-mismatch row is reserved for a future pass when prices are scraped.
 
-### B. Ingestion edge function: `ingest-catalog`
+## E. UI — new route `/inventory-sync`
+- Header card: last crawl timestamp, totals (website / pricer / catalog), counts per discrepancy bucket.
+- "Run full crawl" button (admin only) + live progress bar polling `website_crawls`.
+- Tabbed table (TanStack Query, paginated, sortable, filterable per workspace rules):
+  - Tab 1 — Missing from pricer/catalog
+  - Tab 2 — Missing from website
+  - Tab 3 — Description mismatch
+- Each row links to the ndiof.com detail page and shows source data side-by-side.
+- CSV export per tab.
+- Add nav entry under Catalogs section.
 
-Called when an admin uploads a catalog (and once now, manually, to backfill the 2 existing PDFs).
-
-For each catalog:
-1. Download PDF from `catalogs` storage bucket (service role).
-2. Split into page batches (Gemini handles ~50 pages at a time reliably; 25 MB / ~hundreds of pages ⇒ chunked by page range using `pdf-lib` to slice the PDF into smaller PDFs).
-3. For each chunk, send to `google/gemini-2.5-flash` via Lovable AI gateway as a PDF `image_url` with a tool-call schema:
-   ```
-   extract_catalog_rows({ rows: [{ sku, description, list_price?, mfg?, page? }] })
-   ```
-   System prompt: "You are reading an NDI furniture catalog. Extract every product row — part number / SKU, description, list price if shown, and the section's manufacturer if there's a header. Skip headers, footers, page numbers, marketing copy."
-4. Upsert the rows into `catalog_items` (chunked inserts of ~500).
-5. Update `catalogs.pages` with the real page count and write an `activity_events` row with how many SKUs were extracted.
-
-Run as a background job (`EdgeRuntime.waitUntil`) since a 25 MB PDF will take minutes. Show progress on the Catalogs page (status: pending / parsing / ready / error + sku_count).
-
-### C. Hook into `parse-po` price verification
-
-Today `parse-po` only queries `price_list`. Update it to also query `catalog_items` for every SKU on the PO:
-
-- **In price_list AND catalog_items** → green, verify price as today.
-- **Only in catalog_items** → "Found in catalog (no contract price on file)" — informational flag, not an error. Still allow submission.
-- **Not in either** → keep current "SKU not found" hard flag.
-
-Drop the confidence-knockdown when the SKU is at least in the catalog.
-
-### D. UI updates
-
-- `/orders` review table: replace the binary `list $ / not in catalog` cell with three states: contract price / catalog only / unknown, with a tooltip showing which catalog and page.
-- `/catalogs`: show parsing status badge + "Re-parse" admin button.
-- `/inventory` or new `/products`: optional later — surface `catalog_items` as a searchable browse page so reps can look things up.
-
-### E. Backfill
-
-After deploy, manually trigger `ingest-catalog` once for the two existing PDFs (`2026 NDI WorkSimpli Catalog`, `2026 Clearance List`).
+## F. Scheduling (optional, admin toggle)
+`pg_cron` weekly job hitting `/api/public/hooks/crawl-website` (apikey auth) so the snapshot stays fresh without manual runs.
 
 ## Out of scope
-
-- OCR for purely scanned/image catalogs (Gemini handles embedded text + reasonable image text already; if a catalog is fully scanned and that fails, we add a Tesseract pass later).
-- Image extraction per SKU.
-- Auto-syncing catalog list_price into `price_list` (kept separate — pricer XLSX remains the source of truth for actual sell pricing).
+- Scraping JS-rendered prices (revisit later with `waitFor` + JS rendering).
+- Auto-pushing fixes back to ndiof.com.
+- Image diffing.
 
 ## Technical notes
-
-- PDF chunking: use `pdf-lib` (Worker-safe, pure JS) to copy page ranges into smaller PDF buffers before base64-encoding for Gemini. Keeps each request under the model's input cap.
-- Gemini call: `model: "google/gemini-2.5-flash"`, tool-choice forced to `extract_catalog_rows`.
-- Normalization: SKUs upper-cased, whitespace stripped, trailing punctuation removed before insert and before lookup. Same normalizer used in `parse-po`.
-- Worker time budget: ingestion runs as a background job that processes one chunk per invocation and re-enqueues itself via `p21_bridge_jobs`-style row, so a single Worker request never has to finish the whole 25 MB catalog.
+- Firecrawl SDK: `@mendable/firecrawl-js` (server-only, never expose key to client).
+- All Firecrawl calls happen in the edge function; frontend only reads `website_items` / `website_crawls` via TanStack Query hooks in `src/hooks/`.
+- Normalize SKU = `sku.trim().toUpperCase()` consistent with `parse-po`.
+- Crawl is idempotent: each run gets a new `crawl_id`; upsert by `sku` keeps the latest snapshot, and we retain prior crawl history in `website_crawls` for auditing.
