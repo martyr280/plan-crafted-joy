@@ -6,12 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Search, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 
 export const Route = createFileRoute("/_app/inventory")({ component: InventoryPage });
 
-const pageSize = 50;
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500];
 type SortKey = "item_id" | "item_desc" | "total_qty" | "e2g_price" | "birm_qty" | "dallas_qty" | "ocala_qty";
 
 function InventoryPage() {
