@@ -1120,6 +1120,93 @@ export type Database = {
         }
         Relationships: []
       }
+      website_crawls: {
+        Row: {
+          completed_at: string | null
+          error: string | null
+          id: string
+          notes: string | null
+          pages_crawled: number
+          skus_found: number
+          started_at: string
+          status: string
+          triggered_by: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          error?: string | null
+          id?: string
+          notes?: string | null
+          pages_crawled?: number
+          skus_found?: number
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          error?: string | null
+          id?: string
+          notes?: string | null
+          pages_crawled?: number
+          skus_found?: number
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
+      website_items: {
+        Row: {
+          brand: string | null
+          category: string | null
+          crawl_id: string | null
+          crawled_at: string
+          created_at: string
+          description: string | null
+          detail_url: string | null
+          family: string | null
+          id: string
+          image_url: string | null
+          in_stock: boolean | null
+          name: string | null
+          sku: string
+          stock_text: string | null
+        }
+        Insert: {
+          brand?: string | null
+          category?: string | null
+          crawl_id?: string | null
+          crawled_at?: string
+          created_at?: string
+          description?: string | null
+          detail_url?: string | null
+          family?: string | null
+          id?: string
+          image_url?: string | null
+          in_stock?: boolean | null
+          name?: string | null
+          sku: string
+          stock_text?: string | null
+        }
+        Update: {
+          brand?: string | null
+          category?: string | null
+          crawl_id?: string | null
+          crawled_at?: string
+          created_at?: string
+          description?: string | null
+          detail_url?: string | null
+          family?: string | null
+          id?: string
+          image_url?: string | null
+          in_stock?: boolean | null
+          name?: string | null
+          sku?: string
+          stock_text?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
