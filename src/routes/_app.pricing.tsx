@@ -120,9 +120,16 @@ function PricingPage() {
             ))}
           </TableBody>
         </Table>
-        <div className="flex items-center justify-between p-3 border-t">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-t">
           <span className="text-xs text-muted-foreground">{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} of {total.toLocaleString()} · Page {page + 1} of {pages}</span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Rows per page</span>
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+              <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Button size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft className="w-4 h-4" /></Button>
             <Button size="sm" variant="outline" disabled={page >= pages - 1 || loading} onClick={() => setPage((p) => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
           </div>
