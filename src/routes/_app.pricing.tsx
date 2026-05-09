@@ -21,6 +21,7 @@ function PricingPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "item", dir: "asc" });
 
   // Debounce the search input so we don't fire a query per keystroke.
