@@ -113,6 +113,50 @@ export type Database = {
         }
         Relationships: []
       }
+      catalog_items: {
+        Row: {
+          catalog_id: string
+          created_at: string
+          description: string | null
+          id: string
+          list_price: number | null
+          mfg: string | null
+          page: number | null
+          raw: string | null
+          sku: string
+        }
+        Insert: {
+          catalog_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          list_price?: number | null
+          mfg?: string | null
+          page?: number | null
+          raw?: string | null
+          sku: string
+        }
+        Update: {
+          catalog_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          list_price?: number | null
+          mfg?: string | null
+          page?: number | null
+          raw?: string | null
+          sku?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_items_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "catalogs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       catalogs: {
         Row: {
           created_at: string
@@ -121,8 +165,12 @@ export type Database = {
           kind: string
           name: string
           pages: number | null
+          parse_error: string | null
+          parse_status: string
+          parsed_at: string | null
           published_date: string | null
           size_bytes: number | null
+          sku_count: number
         }
         Insert: {
           created_at?: string
@@ -131,8 +179,12 @@ export type Database = {
           kind?: string
           name: string
           pages?: number | null
+          parse_error?: string | null
+          parse_status?: string
+          parsed_at?: string | null
           published_date?: string | null
           size_bytes?: number | null
+          sku_count?: number
         }
         Update: {
           created_at?: string
@@ -141,8 +193,12 @@ export type Database = {
           kind?: string
           name?: string
           pages?: number | null
+          parse_error?: string | null
+          parse_status?: string
+          parsed_at?: string | null
           published_date?: string | null
           size_bytes?: number | null
+          sku_count?: number
         }
         Relationships: []
       }
