@@ -113,6 +113,39 @@ export type Database = {
         }
         Relationships: []
       }
+      catalogs: {
+        Row: {
+          created_at: string
+          file_path: string
+          id: string
+          kind: string
+          name: string
+          pages: number | null
+          published_date: string | null
+          size_bytes: number | null
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          id?: string
+          kind?: string
+          name: string
+          pages?: number | null
+          published_date?: string | null
+          size_bytes?: number | null
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          id?: string
+          kind?: string
+          name?: string
+          pages?: number | null
+          published_date?: string | null
+          size_bytes?: number | null
+        }
+        Relationships: []
+      }
       collection_emails: {
         Row: {
           ar_aging_id: string
@@ -212,6 +245,92 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      design_quote_lines: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          line_no: number | null
+          list_price: number | null
+          options: Json
+          part_number: string | null
+          quantity: number | null
+          quote_id: string
+          room: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          line_no?: number | null
+          list_price?: number | null
+          options?: Json
+          part_number?: string | null
+          quantity?: number | null
+          quote_id: string
+          room?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          line_no?: number | null
+          list_price?: number | null
+          options?: Json
+          part_number?: string | null
+          quantity?: number | null
+          quote_id?: string
+          room?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "design_quote_lines_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "design_quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      design_quotes: {
+        Row: {
+          created_at: string
+          id: string
+          imported_by: string | null
+          line_count: number | null
+          quote_name: string
+          room_count: number | null
+          sif_date: string | null
+          source_file: string | null
+          total_list: number | null
+          total_sell: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          imported_by?: string | null
+          line_count?: number | null
+          quote_name: string
+          room_count?: number | null
+          sif_date?: string | null
+          source_file?: string | null
+          total_list?: number | null
+          total_sell?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          imported_by?: string | null
+          line_count?: number | null
+          quote_name?: string
+          room_count?: number | null
+          sif_date?: string | null
+          source_file?: string | null
+          total_list?: number | null
+          total_sell?: number | null
+        }
+        Relationships: []
       }
       fleet_loads: {
         Row: {
@@ -375,6 +494,63 @@ export type Database = {
           status?: string
           subject?: string | null
           to_addr?: string | null
+        }
+        Relationships: []
+      }
+      inventory_snapshots: {
+        Row: {
+          birm_qty: number | null
+          created_at: string
+          dallas_qty: number | null
+          e2g_price: number | null
+          id: string
+          is_kit: boolean | null
+          item_desc: string | null
+          item_id: string
+          net_weight: number | null
+          next_due_in: string | null
+          next_due_in_2: string | null
+          ocala_qty: number | null
+          snapshot_date: string
+          source: string
+          total_qty: number | null
+          weight: number | null
+        }
+        Insert: {
+          birm_qty?: number | null
+          created_at?: string
+          dallas_qty?: number | null
+          e2g_price?: number | null
+          id?: string
+          is_kit?: boolean | null
+          item_desc?: string | null
+          item_id: string
+          net_weight?: number | null
+          next_due_in?: string | null
+          next_due_in_2?: string | null
+          ocala_qty?: number | null
+          snapshot_date?: string
+          source?: string
+          total_qty?: number | null
+          weight?: number | null
+        }
+        Update: {
+          birm_qty?: number | null
+          created_at?: string
+          dallas_qty?: number | null
+          e2g_price?: number | null
+          id?: string
+          is_kit?: boolean | null
+          item_desc?: string | null
+          item_id?: string
+          net_weight?: number | null
+          next_due_in?: string | null
+          next_due_in_2?: string | null
+          ocala_qty?: number | null
+          snapshot_date?: string
+          source?: string
+          total_qty?: number | null
+          weight?: number | null
         }
         Relationships: []
       }
@@ -555,6 +731,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      price_list: {
+        Row: {
+          cat_number: string | null
+          category: string | null
+          created_at: string
+          dealer_cost: number | null
+          description: string | null
+          effective_date: string | null
+          er_cost: number | null
+          id: string
+          item: string
+          list_price: number | null
+          mfg: string | null
+          source: string | null
+          updated_at: string
+          weight: number | null
+        }
+        Insert: {
+          cat_number?: string | null
+          category?: string | null
+          created_at?: string
+          dealer_cost?: number | null
+          description?: string | null
+          effective_date?: string | null
+          er_cost?: number | null
+          id?: string
+          item: string
+          list_price?: number | null
+          mfg?: string | null
+          source?: string | null
+          updated_at?: string
+          weight?: number | null
+        }
+        Update: {
+          cat_number?: string | null
+          category?: string | null
+          created_at?: string
+          dealer_cost?: number | null
+          description?: string | null
+          effective_date?: string | null
+          er_cost?: number | null
+          id?: string
+          item?: string
+          list_price?: number | null
+          mfg?: string | null
+          source?: string | null
+          updated_at?: string
+          weight?: number | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
