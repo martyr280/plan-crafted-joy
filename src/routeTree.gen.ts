@@ -17,10 +17,14 @@ import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
+import { Route as AppQuotesRouteImport } from './routes/_app.quotes'
+import { Route as AppPricingRouteImport } from './routes/_app.pricing'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
+import { Route as AppInventoryRouteImport } from './routes/_app.inventory'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppDamageRouteImport } from './routes/_app.damage'
+import { Route as AppCatalogsRouteImport } from './routes/_app.catalogs'
 import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppArRouteImport } from './routes/_app.ar'
@@ -66,6 +70,16 @@ const AppReportsRoute = AppReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AppRoute,
 } as any)
+const AppQuotesRoute = AppQuotesRouteImport.update({
+  id: '/quotes',
+  path: '/quotes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPricingRoute = AppPricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppOrdersRoute = AppOrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
@@ -76,6 +90,11 @@ const AppLogisticsRoute = AppLogisticsRouteImport.update({
   path: '/logistics',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInventoryRoute = AppInventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppInboxRoute = AppInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
@@ -84,6 +103,11 @@ const AppInboxRoute = AppInboxRouteImport.update({
 const AppDamageRoute = AppDamageRouteImport.update({
   id: '/damage',
   path: '/damage',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCatalogsRoute = AppCatalogsRouteImport.update({
+  id: '/catalogs',
+  path: '/catalogs',
   getParentRoute: () => AppRoute,
 } as any)
 const AppBridgeRoute = AppBridgeRouteImport.update({
@@ -118,10 +142,14 @@ export interface FileRoutesByFullPath {
   '/ar': typeof AppArRoute
   '/audit': typeof AppAuditRoute
   '/bridge': typeof AppBridgeRoute
+  '/catalogs': typeof AppCatalogsRoute
   '/damage': typeof AppDamageRoute
   '/inbox': typeof AppInboxRoute
+  '/inventory': typeof AppInventoryRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
+  '/pricing': typeof AppPricingRoute
+  '/quotes': typeof AppQuotesRoute
   '/reports': typeof AppReportsRoute
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
@@ -135,10 +163,14 @@ export interface FileRoutesByTo {
   '/ar': typeof AppArRoute
   '/audit': typeof AppAuditRoute
   '/bridge': typeof AppBridgeRoute
+  '/catalogs': typeof AppCatalogsRoute
   '/damage': typeof AppDamageRoute
   '/inbox': typeof AppInboxRoute
+  '/inventory': typeof AppInventoryRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
+  '/pricing': typeof AppPricingRoute
+  '/quotes': typeof AppQuotesRoute
   '/reports': typeof AppReportsRoute
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
@@ -155,10 +187,14 @@ export interface FileRoutesById {
   '/_app/ar': typeof AppArRoute
   '/_app/audit': typeof AppAuditRoute
   '/_app/bridge': typeof AppBridgeRoute
+  '/_app/catalogs': typeof AppCatalogsRoute
   '/_app/damage': typeof AppDamageRoute
   '/_app/inbox': typeof AppInboxRoute
+  '/_app/inventory': typeof AppInventoryRoute
   '/_app/logistics': typeof AppLogisticsRoute
   '/_app/orders': typeof AppOrdersRoute
+  '/_app/pricing': typeof AppPricingRoute
+  '/_app/quotes': typeof AppQuotesRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -176,10 +212,14 @@ export interface FileRouteTypes {
     | '/ar'
     | '/audit'
     | '/bridge'
+    | '/catalogs'
     | '/damage'
     | '/inbox'
+    | '/inventory'
     | '/logistics'
     | '/orders'
+    | '/pricing'
+    | '/quotes'
     | '/reports'
     | '/sales'
     | '/settings'
@@ -193,10 +233,14 @@ export interface FileRouteTypes {
     | '/ar'
     | '/audit'
     | '/bridge'
+    | '/catalogs'
     | '/damage'
     | '/inbox'
+    | '/inventory'
     | '/logistics'
     | '/orders'
+    | '/pricing'
+    | '/quotes'
     | '/reports'
     | '/sales'
     | '/settings'
@@ -212,10 +256,14 @@ export interface FileRouteTypes {
     | '/_app/ar'
     | '/_app/audit'
     | '/_app/bridge'
+    | '/_app/catalogs'
     | '/_app/damage'
     | '/_app/inbox'
+    | '/_app/inventory'
     | '/_app/logistics'
     | '/_app/orders'
+    | '/_app/pricing'
+    | '/_app/quotes'
     | '/_app/reports'
     | '/_app/sales'
     | '/_app/settings'
@@ -291,6 +339,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/quotes': {
+      id: '/_app/quotes'
+      path: '/quotes'
+      fullPath: '/quotes'
+      preLoaderRoute: typeof AppQuotesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/pricing': {
+      id: '/_app/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof AppPricingRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/orders': {
       id: '/_app/orders'
       path: '/orders'
@@ -305,6 +367,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogisticsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/inventory': {
+      id: '/_app/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof AppInventoryRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/inbox': {
       id: '/_app/inbox'
       path: '/inbox'
@@ -317,6 +386,13 @@ declare module '@tanstack/react-router' {
       path: '/damage'
       fullPath: '/damage'
       preLoaderRoute: typeof AppDamageRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/catalogs': {
+      id: '/_app/catalogs'
+      path: '/catalogs'
+      fullPath: '/catalogs'
+      preLoaderRoute: typeof AppCatalogsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/bridge': {
@@ -361,10 +437,14 @@ interface AppRouteChildren {
   AppArRoute: typeof AppArRoute
   AppAuditRoute: typeof AppAuditRoute
   AppBridgeRoute: typeof AppBridgeRoute
+  AppCatalogsRoute: typeof AppCatalogsRoute
   AppDamageRoute: typeof AppDamageRoute
   AppInboxRoute: typeof AppInboxRoute
+  AppInventoryRoute: typeof AppInventoryRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
   AppOrdersRoute: typeof AppOrdersRoute
+  AppPricingRoute: typeof AppPricingRoute
+  AppQuotesRoute: typeof AppQuotesRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSalesRoute: typeof AppSalesRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -377,10 +457,14 @@ const AppRouteChildren: AppRouteChildren = {
   AppArRoute: AppArRoute,
   AppAuditRoute: AppAuditRoute,
   AppBridgeRoute: AppBridgeRoute,
+  AppCatalogsRoute: AppCatalogsRoute,
   AppDamageRoute: AppDamageRoute,
   AppInboxRoute: AppInboxRoute,
+  AppInventoryRoute: AppInventoryRoute,
   AppLogisticsRoute: AppLogisticsRoute,
   AppOrdersRoute: AppOrdersRoute,
+  AppPricingRoute: AppPricingRoute,
+  AppQuotesRoute: AppQuotesRoute,
   AppReportsRoute: AppReportsRoute,
   AppSalesRoute: AppSalesRoute,
   AppSettingsRoute: AppSettingsRoute,
