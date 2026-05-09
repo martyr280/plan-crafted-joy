@@ -34,13 +34,22 @@ function InventoryPage() {
       const d = latest?.[0]?.snapshot_date;
       if (!d) { setRows([]); setLoading(false); return; }
       setSnapshotDate(d);
-      const { data } = await supabase
-        .from("inventory_snapshots")
-        .select("*")
-        .eq("snapshot_date", d)
-        .order("item_id")
-        .limit(10000);
-      setRows(data ?? []);
+      // Page through results — PostgREST caps a single response at 1000 rows
+      // regardless of .limit(), so use .range() until a short page is returned.
+      const all: any[] = [];
+      const step = 1000;
+      for (let from = 0; ; from += step) {
+        const { data, error } = await supabase
+          .from("inventory_snapshots")
+          .select("*")
+          .eq("snapshot_date", d)
+          .order("item_id")
+          .range(from, from + step - 1);
+        if (error) break;
+        all.push(...(data ?? []));
+        if (!data || data.length < step) break;
+      }
+      setRows(all);
       setLoading(false);
     })();
   }, []);
