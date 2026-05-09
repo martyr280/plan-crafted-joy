@@ -45,7 +45,7 @@ function InventoryPage() {
   }, [search]);
 
   // Reset to page 0 when filters change.
-  useEffect(() => { setPage(0); }, [debouncedSearch, sort, snapshotDate]);
+  useEffect(() => { setPage(0); }, [debouncedSearch, sort, snapshotDate, pageSize]);
 
   // Server-side page fetch (only the visible window crosses the wire).
   useEffect(() => {
