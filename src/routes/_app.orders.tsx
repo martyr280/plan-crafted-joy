@@ -204,11 +204,25 @@ function OrdersPage() {
                 <div>
                   <p className="font-semibold text-sm mb-2">Line items</p>
                   <Table>
-                    <TableHeader><TableRow><TableHead>SKU</TableHead><TableHead>Description</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>Total</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>SKU</TableHead><TableHead>Description</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>List</TableHead><TableHead>Total</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {(selected.line_items as any[]).map((li, i) => (
-                        <TableRow key={i}><TableCell>{li.sku}</TableCell><TableCell>{li.description}</TableCell><TableCell>{li.qty}</TableCell><TableCell>${li.unit_price}</TableCell><TableCell>${li.line_total ?? li.qty * li.unit_price}</TableCell></TableRow>
-                      ))}
+                      {(selected.line_items as any[]).map((li, i) => {
+                        const list = li.price_list_match?.list_price;
+                        const unit = Number(li.unit_price);
+                        const noMatch = !li.price_list_match;
+                        const mismatch = list != null && Number.isFinite(unit) && Math.abs(Number(list) - unit) > 0.01;
+                        const cls = noMatch ? "bg-destructive/10" : mismatch ? "bg-warning/10" : "";
+                        return (
+                          <TableRow key={i} className={cls}>
+                            <TableCell>{li.sku}</TableCell>
+                            <TableCell>{li.description}</TableCell>
+                            <TableCell>{li.qty}</TableCell>
+                            <TableCell>${li.unit_price}</TableCell>
+                            <TableCell className="text-xs">{noMatch ? <span className="text-destructive">not in catalog</span> : `$${Number(list).toFixed(2)}`}</TableCell>
+                            <TableCell>${li.line_total ?? li.qty * li.unit_price}</TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
