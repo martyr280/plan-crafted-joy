@@ -44,6 +44,7 @@ function OrdersPage() {
   const [selected, setSelected] = useState<any | null>(null);
   const [parseOpen, setParseOpen] = useState(false);
   const [emailText, setEmailText] = useState("");
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [parsing, setParsing] = useState(false);
   const [stats, setStats] = useState({ today: 0, approved: 0, pending: 0 });
 
@@ -59,11 +60,21 @@ function OrdersPage() {
   }
   useEffect(() => { load(); }, []);
 
+  async function fileToBase64(f: File): Promise<string> {
+    const buf = new Uint8Array(await f.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+    return btoa(bin);
+  }
+
   async function parsePO() {
-    if (!emailText.trim()) return;
+    if (!emailText.trim() && pdfFiles.length === 0) return;
     setParsing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("parse-po", { body: { email_content: emailText } });
+      const attachments = await Promise.all(
+        pdfFiles.map(async (f) => ({ filename: f.name, content_type: f.type || "application/pdf", base64: await fileToBase64(f) }))
+      );
+      const { data, error } = await supabase.functions.invoke("parse-po", { body: { email_content: emailText, attachments } });
       if (error) throw error;
       const parsed = data.parsed;
       await supabase.from("orders").insert({
@@ -84,7 +95,7 @@ function OrdersPage() {
         message: `New PO parsed from ${parsed.customer_name ?? "unknown sender"}`,
       });
       toast.success("Order parsed and added to review queue");
-      setParseOpen(false); setEmailText("");
+      setParseOpen(false); setEmailText(""); setPdfFiles([]);
       load();
     } catch (e: any) {
       toast.error(e.message ?? "Parse failed");
@@ -119,12 +130,20 @@ function OrdersPage() {
               <DialogContent className="max-w-2xl">
                 <DialogHeader><DialogTitle>Parse PO from email</DialogTitle></DialogHeader>
                 <div className="space-y-3">
-                  <Label>Paste the email body (and any attachments as text)</Label>
-                  <Textarea rows={12} value={emailText} onChange={(e) => setEmailText(e.target.value)}
+                  <Label>Paste the email body</Label>
+                  <Textarea rows={10} value={emailText} onChange={(e) => setEmailText(e.target.value)}
                     placeholder="From: orders@apexarch.com&#10;Subject: PO 77821&#10;&#10;Please process the following order..." />
+                  <div>
+                    <Label>Attach PDF purchase orders (optional)</Label>
+                    <Input type="file" accept="application/pdf" multiple
+                      onChange={(e) => setPdfFiles(Array.from(e.target.files ?? []))} />
+                    {pdfFiles.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">{pdfFiles.length} PDF{pdfFiles.length > 1 ? "s" : ""} attached — will be read by AI and prices verified against the price list.</p>
+                    )}
+                  </div>
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={() => setParseOpen(false)}>Cancel</Button>
-                    <Button onClick={parsePO} disabled={parsing}>{parsing ? "Parsing…" : "Parse with AI"}</Button>
+                    <Button onClick={parsePO} disabled={parsing || (!emailText.trim() && pdfFiles.length === 0)}>{parsing ? "Parsing…" : "Parse with AI"}</Button>
                   </div>
                 </div>
               </DialogContent>
