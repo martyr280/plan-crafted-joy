@@ -6,3 +6,6 @@ verify_jwt = true
 [functions.generate-collection-email]
 verify_jwt = true
 
+[functions.ingest-catalog]
+verify_jwt = true
+
