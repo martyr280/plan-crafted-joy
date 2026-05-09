@@ -1,7 +1,27 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { classifyAndRouteInbound } from "@/lib/inbound-routing.server";
 import { z } from "zod";
+
+export const reprocessInboundEmail = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ id: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    // Reset markers so the row goes through the full pipeline again.
+    await supabaseAdmin
+      .from("inbound_emails")
+      .update({
+        status: "received",
+        error: null,
+        created_record_type: null,
+        created_record_id: null,
+        reviewed_by: context.userId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", data.id);
+    return await classifyAndRouteInbound(data.id);
+  });
 
 export const listInboundEmails = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
