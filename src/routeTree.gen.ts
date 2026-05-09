@@ -21,6 +21,7 @@ import { Route as AppQuotesRouteImport } from './routes/_app.quotes'
 import { Route as AppPricingRouteImport } from './routes/_app.pricing'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
+import { Route as AppInventorySyncRouteImport } from './routes/_app.inventory-sync'
 import { Route as AppInventoryRouteImport } from './routes/_app.inventory'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppDamageRouteImport } from './routes/_app.damage'
@@ -90,6 +91,11 @@ const AppLogisticsRoute = AppLogisticsRouteImport.update({
   path: '/logistics',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInventorySyncRoute = AppInventorySyncRouteImport.update({
+  id: '/inventory-sync',
+  path: '/inventory-sync',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppInventoryRoute = AppInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -146,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/damage': typeof AppDamageRoute
   '/inbox': typeof AppInboxRoute
   '/inventory': typeof AppInventoryRoute
+  '/inventory-sync': typeof AppInventorySyncRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
   '/pricing': typeof AppPricingRoute
@@ -167,6 +174,7 @@ export interface FileRoutesByTo {
   '/damage': typeof AppDamageRoute
   '/inbox': typeof AppInboxRoute
   '/inventory': typeof AppInventoryRoute
+  '/inventory-sync': typeof AppInventorySyncRoute
   '/logistics': typeof AppLogisticsRoute
   '/orders': typeof AppOrdersRoute
   '/pricing': typeof AppPricingRoute
@@ -191,6 +199,7 @@ export interface FileRoutesById {
   '/_app/damage': typeof AppDamageRoute
   '/_app/inbox': typeof AppInboxRoute
   '/_app/inventory': typeof AppInventoryRoute
+  '/_app/inventory-sync': typeof AppInventorySyncRoute
   '/_app/logistics': typeof AppLogisticsRoute
   '/_app/orders': typeof AppOrdersRoute
   '/_app/pricing': typeof AppPricingRoute
@@ -216,6 +225,7 @@ export interface FileRouteTypes {
     | '/damage'
     | '/inbox'
     | '/inventory'
+    | '/inventory-sync'
     | '/logistics'
     | '/orders'
     | '/pricing'
@@ -237,6 +247,7 @@ export interface FileRouteTypes {
     | '/damage'
     | '/inbox'
     | '/inventory'
+    | '/inventory-sync'
     | '/logistics'
     | '/orders'
     | '/pricing'
@@ -260,6 +271,7 @@ export interface FileRouteTypes {
     | '/_app/damage'
     | '/_app/inbox'
     | '/_app/inventory'
+    | '/_app/inventory-sync'
     | '/_app/logistics'
     | '/_app/orders'
     | '/_app/pricing'
@@ -367,6 +379,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogisticsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/inventory-sync': {
+      id: '/_app/inventory-sync'
+      path: '/inventory-sync'
+      fullPath: '/inventory-sync'
+      preLoaderRoute: typeof AppInventorySyncRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/inventory': {
       id: '/_app/inventory'
       path: '/inventory'
@@ -441,6 +460,7 @@ interface AppRouteChildren {
   AppDamageRoute: typeof AppDamageRoute
   AppInboxRoute: typeof AppInboxRoute
   AppInventoryRoute: typeof AppInventoryRoute
+  AppInventorySyncRoute: typeof AppInventorySyncRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
   AppOrdersRoute: typeof AppOrdersRoute
   AppPricingRoute: typeof AppPricingRoute
@@ -461,6 +481,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDamageRoute: AppDamageRoute,
   AppInboxRoute: AppInboxRoute,
   AppInventoryRoute: AppInventoryRoute,
+  AppInventorySyncRoute: AppInventorySyncRoute,
   AppLogisticsRoute: AppLogisticsRoute,
   AppOrdersRoute: AppOrdersRoute,
   AppPricingRoute: AppPricingRoute,

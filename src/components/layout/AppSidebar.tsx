@@ -10,6 +10,7 @@ const items = [
   { title: "Inventory", url: "/inventory", icon: Package },
   { title: "Pricing", url: "/pricing", icon: Tag },
   { title: "Catalogs", url: "/catalogs", icon: BookOpen },
+  { title: "Inventory Sync", url: "/inventory-sync", icon: RefreshCw },
   { title: "Sales", url: "/sales", icon: BarChart3 },
   { title: "Logistics", url: "/logistics", icon: Truck },
   { title: "AR & Collections", url: "/ar", icon: Receipt },
