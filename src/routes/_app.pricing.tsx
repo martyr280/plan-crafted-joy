@@ -5,12 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Search, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 
 export const Route = createFileRoute("/_app/pricing")({ component: PricingPage });
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500];
 type SortKey = "item" | "description" | "list_price" | "dealer_cost" | "er_cost" | "category";
 
 function PricingPage() {
