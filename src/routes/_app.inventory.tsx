@@ -11,7 +11,7 @@ import { Search, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 
 export const Route = createFileRoute("/_app/inventory")({ component: InventoryPage });
 
-const PAGE_SIZE = 50;
+const pageSize = 50;
 type SortKey = "item_id" | "item_desc" | "total_qty" | "e2g_price" | "birm_qty" | "dallas_qty" | "ocala_qty";
 
 function InventoryPage() {
@@ -51,8 +51,8 @@ function InventoryPage() {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
       let q = supabase
         .from("inventory_snapshots")
         .select("*", { count: "exact" })
@@ -74,9 +74,9 @@ function InventoryPage() {
     return () => { cancelled = true; };
   }, [page, sort, debouncedSearch, snapshotDate]);
 
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(total, (page + 1) * PAGE_SIZE);
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = total === 0 ? 0 : page * pageSize + 1;
+  const rangeEnd = Math.min(total, (page + 1) * pageSize);
 
   function toggleSort(key: SortKey) {
     setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
