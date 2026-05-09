@@ -22,6 +22,7 @@ function InventoryPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "item_id", dir: "asc" });
   const [snapshotDate, setSnapshotDate] = useState<string | null>(null);
 
