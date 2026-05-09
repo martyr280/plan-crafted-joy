@@ -59,7 +59,7 @@ function PricingPage() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [page, sort, debouncedSearch]);
+  }, [page, pageSize, sort, debouncedSearch]);
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const rangeStart = total === 0 ? 0 : page * pageSize + 1;
