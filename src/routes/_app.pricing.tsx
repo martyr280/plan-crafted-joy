@@ -31,7 +31,7 @@ function PricingPage() {
   }, [search]);
 
   // Reset to first page whenever filters or sort change.
-  useEffect(() => { setPage(0); }, [debouncedSearch, sort]);
+  useEffect(() => { setPage(0); }, [debouncedSearch, sort, pageSize]);
 
   // Server-side page fetch — only the visible window crosses the wire,
   // so the 1000-row PostgREST cap is irrelevant.
