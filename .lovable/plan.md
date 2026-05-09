@@ -1,50 +1,72 @@
-## What's broken
+## Problem
 
-1. **The Inbox page renders the global "Try Again / Go home" error boundary** — that screen comes from `src/router.tsx` `DefaultErrorComponent`, which fires whenever the route throws during render or hits an unhandled promise. The two real triggers in `_app.inbox.tsx`:
-   - `formatDistanceToNow(new Date(r.received_at))` and `r.status.replace(...)` blow up if those fields are ever missing/invalid.
-   - The detail sheet does `Object.keys(selected.ai_extracted)` and `(selected.ai_flags as any[]).map(...)` — both crash if the column comes back as `null` (jsonb columns are nullable in the type).
-   No try/catch on the render path, so any throw escapes to the route boundary instead of staying as a toast.
+Order intake flags SKUs as "not in catalog" whenever they're missing from the `price_list` table. But `price_list` is just the 3,033-row pricer XLSX. The actual catalog PDFs (`2026 NDI WorkSimpli Catalog` ~25 MB, `2026 Clearance List` ~5 MB) live in the `catalogs` storage bucket and are **never parsed**. Result: every SKU that exists in the printed catalog but wasn't typed into the pricer comes back as "unknown."
 
-2. **Inbound emails are not being parsed end-to-end.** The 4 real emails in the table are sitting at `status = "classified"` — a value no current code writes. They were never routed because the webhook handler in `src/routes/api/public/inbound-email.ts` calls the classifier as **fire-and-forget** (`fetch(...).then(routeEmail).catch(...)`). On Cloudflare Workers, the request context terminates as soon as the handler returns its `Response.json(...)`, so the classify+route promise is killed mid-flight. Result: row gets created at `received`, sometimes flips to a half-state, never reaches `routed` / `needs_review`. New rows behave the same way.
-
-3. **PDFs on inbound POs are ignored.** When `routeEmail` creates an `orders` row from a `purchase_order` classification, it only passes the email body. Even though we just taught `parse-po` to read PDFs, the inbound pipeline never invokes it — so an email with a PDF PO attached lands in Orders with empty/garbage line items.
-
-4. **Status filter mismatch.** The UI Select offers `received | needs_review | routed | dismissed | error`, but the DB also contains `classified` (legacy) and the new flow can land in other states. Filtering hides those rows entirely.
+To fix this we need to actually read the PDF text, pull out every `SKU + description (+ list price if present)` row, and use that as the source of truth for "is this a real NDI part?"
 
 ## Plan
 
-### A. Stop the inbox page from blowing up
+### A. New table: `catalog_items`
 
-In `src/routes/_app.inbox.tsx`:
-- Wrap every render-time field access with safe accessors:
-  - `formatDistanceToNow(r.received_at ? new Date(r.received_at) : new Date())` and fall back to `"—"` if invalid.
-  - `String(r.status ?? "unknown").replace(/_/g, " ")`.
-  - In the detail sheet: treat `ai_extracted`, `ai_flags`, `attachments` as possibly null — `const flags = Array.isArray(selected.ai_flags) ? selected.ai_flags : []` etc.
-- Add a per-route `errorComponent` so even if something throws we render an inline "Could not load inbox — Retry" card instead of the full-screen boundary, and we surface `error.message` so the next debug pass is faster.
+```
+catalog_id uuid (fk → catalogs.id)
+sku text                       -- normalized, upper-case, trimmed
+description text
+list_price numeric null
+page int null
+mfg text null                  -- inferred from section header when possible
+raw text                       -- raw line for debugging
+unique (catalog_id, sku)
+```
 
-### B. Fix the parsing pipeline (the real "not parsing" bug)
+Indexed on `sku` for fast `IN (...)` lookups.
 
-Rewrite the `inbound-email` POST handler to **await** the classification + routing instead of fire-and-forget:
-- Call `classify-inbound-email` synchronously, then call `routeEmail` synchronously, then return the response. Total time is well under the Worker's 30s budget for a single email.
-- If classification or routing fails, write `status = "error"` + `error = message` and still return 200 to the webhook so Resend doesn't retry forever.
-- Remove the legacy `received` / `classified` ambiguity — every row exits the handler as one of: `routed`, `needs_review`, `error`, `dismissed`.
+### B. Ingestion edge function: `ingest-catalog`
 
-### C. Wire PDF attachments into PO parsing
+Called when an admin uploads a catalog (and once now, manually, to backfill the 2 existing PDFs).
 
-In the same handler, when classification is `purchase_order`:
-- Detect PDF attachments on `inbound_emails.attachments` (filename ends in `.pdf` or content type contains `pdf`).
-- Fetch each attachment from Resend's URL (Resend returns a signed URL on the attachment payload; if not present, base64 is already inline).
-- Invoke the existing `parse-po` edge function with `{ email_content: body_text, attachments: [...] }` (it already accepts the new shape and verifies prices against `price_list`).
-- Use the richer `parse-po` result for the `orders` row (`line_items`, `ai_confidence`, `ai_flags` including any "SKU not in price list" / "price differs from list" flags) instead of the lighter classification extraction.
+For each catalog:
+1. Download PDF from `catalogs` storage bucket (service role).
+2. Split into page batches (Gemini handles ~50 pages at a time reliably; 25 MB / ~hundreds of pages ⇒ chunked by page range using `pdf-lib` to slice the PDF into smaller PDFs).
+3. For each chunk, send to `google/gemini-2.5-flash` via Lovable AI gateway as a PDF `image_url` with a tool-call schema:
+   ```
+   extract_catalog_rows({ rows: [{ sku, description, list_price?, mfg?, page? }] })
+   ```
+   System prompt: "You are reading an NDI furniture catalog. Extract every product row — part number / SKU, description, list price if shown, and the section's manufacturer if there's a header. Skip headers, footers, page numbers, marketing copy."
+4. Upsert the rows into `catalog_items` (chunked inserts of ~500).
+5. Update `catalogs.pages` with the real page count and write an `activity_events` row with how many SKUs were extracted.
 
-### D. Backfill + UI cleanup
+Run as a background job (`EdgeRuntime.waitUntil`) since a 25 MB PDF will take minutes. Show progress on the Catalogs page (status: pending / parsing / ready / error + sku_count).
 
-- Reclassify the 4 stuck `classified` rows by triggering the new pipeline once (one-shot SQL update to `received` + a small server-fn helper "process now" button on the detail sheet, admin only).
-- Add `received` and `classified` to the status `Select` and `STATUS_COLORS`, and surface a `received → process now` action so an admin can manually retry a stuck row.
-- Show the attachment list in the detail sheet (filename + size) so reviewers can see what came in.
+### C. Hook into `parse-po` price verification
+
+Today `parse-po` only queries `price_list`. Update it to also query `catalog_items` for every SKU on the PO:
+
+- **In price_list AND catalog_items** → green, verify price as today.
+- **Only in catalog_items** → "Found in catalog (no contract price on file)" — informational flag, not an error. Still allow submission.
+- **Not in either** → keep current "SKU not found" hard flag.
+
+Drop the confidence-knockdown when the SKU is at least in the catalog.
+
+### D. UI updates
+
+- `/orders` review table: replace the binary `list $ / not in catalog` cell with three states: contract price / catalog only / unknown, with a tooltip showing which catalog and page.
+- `/catalogs`: show parsing status badge + "Re-parse" admin button.
+- `/inventory` or new `/products`: optional later — surface `catalog_items` as a searchable browse page so reps can look things up.
+
+### E. Backfill
+
+After deploy, manually trigger `ingest-catalog` once for the two existing PDFs (`2026 NDI WorkSimpli Catalog`, `2026 Clearance List`).
 
 ## Out of scope
 
-- Other inbound providers (only Resend is wired up today).
-- OCR for scanned-image PDFs beyond what Gemini handles.
-- Auto-promoting an order to P21 from the inbox (still requires the human review step in `/orders`).
+- OCR for purely scanned/image catalogs (Gemini handles embedded text + reasonable image text already; if a catalog is fully scanned and that fails, we add a Tesseract pass later).
+- Image extraction per SKU.
+- Auto-syncing catalog list_price into `price_list` (kept separate — pricer XLSX remains the source of truth for actual sell pricing).
+
+## Technical notes
+
+- PDF chunking: use `pdf-lib` (Worker-safe, pure JS) to copy page ranges into smaller PDF buffers before base64-encoding for Gemini. Keeps each request under the model's input cap.
+- Gemini call: `model: "google/gemini-2.5-flash"`, tool-choice forced to `extract_catalog_rows`.
+- Normalization: SKUs upper-cased, whitespace stripped, trailing punctuation removed before insert and before lookup. Same normalizer used in `parse-po`.
+- Worker time budget: ingestion runs as a background job that processes one chunk per invocation and re-enqueues itself via `p21_bridge_jobs`-style row, so a single Worker request never has to finish the whole 25 MB catalog.

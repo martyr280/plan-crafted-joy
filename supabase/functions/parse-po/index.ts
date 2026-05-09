@@ -113,46 +113,87 @@ serve(async (req) => {
     const call = j.choices?.[0]?.message?.tool_calls?.[0];
     const parsed: any = call ? JSON.parse(call.function.arguments) : { customer_name: "Unknown", line_items: [], confidence: 0.3, flags: [{ field: "all", issue: "Could not parse", suggestion: "Manual entry required" }] };
 
-    // ---- Price verification against price_list ----
+    // ---- Price verification against price_list AND catalog_items ----
+    const normSku = (s: any) => String(s || "").toUpperCase().replace(/\s+/g, "").replace(/[.,;]+$/, "").trim();
     try {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
-      const skus = Array.from(new Set((parsed.line_items || []).map((l: any) => String(l.sku || "").trim()).filter(Boolean)));
+      const rawSkus = (parsed.line_items || []).map((l: any) => String(l.sku || "").trim()).filter(Boolean);
+      const normSkus = Array.from(new Set(rawSkus.map(normSku)));
+      const allSkus = Array.from(new Set([...rawSkus, ...normSkus]));
+
       let priceMap: Record<string, any> = {};
-      if (skus.length) {
+      let catalogMap: Record<string, any> = {};
+      if (allSkus.length) {
         const { data: prices } = await supabase
           .from("price_list")
           .select("item, list_price, dealer_cost, er_cost, mfg, description")
-          .in("item", skus)
-          .limit(skus.length + 100);
-        for (const p of prices || []) priceMap[String(p.item)] = p;
+          .in("item", allSkus)
+          .limit(allSkus.length + 100);
+        for (const p of prices || []) {
+          priceMap[String(p.item)] = p;
+          priceMap[normSku(p.item)] = p;
+        }
+        const { data: cat } = await supabase
+          .from("catalog_items")
+          .select("sku, description, list_price, mfg, page, catalog_id")
+          .in("sku", normSkus)
+          .limit(normSkus.length + 100);
+        for (const c of cat || []) catalogMap[String(c.sku)] = c;
       }
-      let mismatchCount = 0;
+
+      let unknownCount = 0;
       parsed.flags = parsed.flags || [];
       (parsed.line_items || []).forEach((li: any, i: number) => {
-        const match = priceMap[String(li.sku || "").trim()];
-        if (!match) {
-          parsed.flags.push({ field: `line[${i}].sku`, issue: `SKU ${li.sku} not found in price list`, suggestion: "Verify part number or add to catalog" });
-          mismatchCount++;
-          return;
-        }
-        li.price_list_match = { list_price: match.list_price, dealer_cost: match.dealer_cost, er_cost: match.er_cost, mfg: match.mfg, description: match.description };
-        const list = Number(match.list_price);
-        const unit = Number(li.unit_price);
-        if (Number.isFinite(list) && Number.isFinite(unit) && Math.abs(list - unit) > 0.01) {
+        const raw = String(li.sku || "").trim();
+        const norm = normSku(raw);
+        const price = priceMap[raw] || priceMap[norm];
+        const cat = catalogMap[norm];
+
+        if (price) {
+          li.price_list_match = {
+            list_price: price.list_price,
+            dealer_cost: price.dealer_cost,
+            er_cost: price.er_cost,
+            mfg: price.mfg,
+            description: price.description,
+            source: "contract",
+          };
+          const list = Number(price.list_price);
+          const unit = Number(li.unit_price);
+          if (Number.isFinite(list) && Number.isFinite(unit) && Math.abs(list - unit) > 0.01) {
+            parsed.flags.push({
+              field: `line[${i}].unit_price`,
+              issue: `PO price $${unit.toFixed(2)} differs from list $${list.toFixed(2)} for ${li.sku}`,
+              suggestion: "Confirm contract pricing before submitting",
+            });
+          }
+        } else if (cat) {
+          li.price_list_match = {
+            list_price: cat.list_price,
+            description: cat.description,
+            mfg: cat.mfg,
+            page: cat.page,
+            source: "catalog",
+          };
           parsed.flags.push({
-            field: `line[${i}].unit_price`,
-            issue: `PO price $${unit.toFixed(2)} differs from list $${list.toFixed(2)} for ${li.sku}`,
-            suggestion: "Confirm contract pricing before submitting",
+            field: `line[${i}].sku`,
+            issue: `SKU ${li.sku} found in catalog (page ${cat.page ?? "?"}) but no contract price on file`,
+            suggestion: "Confirm pricing with sales before submitting",
           });
-          mismatchCount++;
+        } else {
+          parsed.flags.push({
+            field: `line[${i}].sku`,
+            issue: `SKU ${li.sku} not found in price list or catalog`,
+            suggestion: "Verify part number — may be a competitor SKU",
+          });
+          unknownCount++;
         }
       });
-      // Knock down confidence if many lines have issues
       const total = (parsed.line_items || []).length || 1;
-      if (mismatchCount / total > 0.2) {
+      if (unknownCount / total > 0.2) {
         parsed.confidence = Math.min(parsed.confidence ?? 0.5, 0.6);
       }
     } catch (e) {

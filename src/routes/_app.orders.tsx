@@ -207,18 +207,31 @@ function OrdersPage() {
                     <TableHeader><TableRow><TableHead>SKU</TableHead><TableHead>Description</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>List</TableHead><TableHead>Total</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {(selected.line_items as any[]).map((li, i) => {
-                        const list = li.price_list_match?.list_price;
+                        const m = li.price_list_match;
+                        const source = m?.source;
+                        const list = m?.list_price;
                         const unit = Number(li.unit_price);
-                        const noMatch = !li.price_list_match;
-                        const mismatch = list != null && Number.isFinite(unit) && Math.abs(Number(list) - unit) > 0.01;
-                        const cls = noMatch ? "bg-destructive/10" : mismatch ? "bg-warning/10" : "";
+                        const unknown = !m;
+                        const catalogOnly = source === "catalog";
+                        const mismatch = source === "contract" && list != null && Number.isFinite(unit) && Math.abs(Number(list) - unit) > 0.01;
+                        const cls = unknown ? "bg-destructive/10" : (mismatch || catalogOnly) ? "bg-warning/10" : "";
                         return (
                           <TableRow key={i} className={cls}>
                             <TableCell>{li.sku}</TableCell>
                             <TableCell>{li.description}</TableCell>
                             <TableCell>{li.qty}</TableCell>
                             <TableCell>${li.unit_price}</TableCell>
-                            <TableCell className="text-xs">{noMatch ? <span className="text-destructive">not in catalog</span> : `$${Number(list).toFixed(2)}`}</TableCell>
+                            <TableCell className="text-xs">
+                              {unknown ? (
+                                <span className="text-destructive">not found</span>
+                              ) : catalogOnly ? (
+                                <span title={`From catalog (page ${m.page ?? "?"})`}>
+                                  ${list != null ? Number(list).toFixed(2) : "—"} <span className="text-muted-foreground">(catalog)</span>
+                                </span>
+                              ) : (
+                                `$${Number(list).toFixed(2)}`
+                              )}
+                            </TableCell>
                             <TableCell>${li.line_total ?? li.qty * li.unit_price}</TableCell>
                           </TableRow>
                         );
