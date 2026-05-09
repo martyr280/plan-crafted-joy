@@ -1,24 +1,53 @@
 // @ts-nocheck
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+type Attachment = { filename: string; content_type?: string; base64?: string; url?: string };
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
-    const { email_content } = await req.json();
+    const { email_content, attachments = [] } = await req.json() as { email_content: string; attachments?: Attachment[] };
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+
+    // Build multimodal user content: email text + any PDF attachments (Gemini accepts PDFs as image_url base64 data URLs).
+    const userContent: any[] = [{ type: "text", text: email_content || "(no email body provided)" }];
+
+    const pdfs = (attachments || []).filter(
+      (a) => (a.content_type && a.content_type.toLowerCase().includes("pdf")) || /\.pdf$/i.test(a.filename || "")
+    );
+
+    for (const att of pdfs) {
+      let b64 = att.base64;
+      if (!b64 && att.url) {
+        try {
+          const r = await fetch(att.url);
+          const buf = new Uint8Array(await r.arrayBuffer());
+          let bin = "";
+          for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+          b64 = btoa(bin);
+        } catch (e) {
+          console.error("Failed to fetch attachment", att.filename, e);
+          continue;
+        }
+      }
+      if (!b64) continue;
+      userContent.push({ type: "text", text: `\n--- Attached PDF: ${att.filename} ---` });
+      userContent.push({ type: "image_url", image_url: { url: `data:application/pdf;base64,${b64}` } });
+    }
 
     const tools = [{
       type: "function",
       function: {
         name: "extract_po",
-        description: "Extract a structured purchase order from an email body.",
+        description: "Extract a structured purchase order from an email body and any attached PDFs.",
         parameters: {
           type: "object",
           properties: {
@@ -62,10 +91,10 @@ serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: pdfs.length ? "google/gemini-2.5-flash" : "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: "You extract purchase orders from emails for NDI, a commercial furniture distributor. Be precise. Flag any SKU that looks like a competitor part number, missing prices, or low confidence customer matches. Return via the extract_po tool only." },
-          { role: "user", content: email_content },
+          { role: "system", content: "You extract purchase orders for NDI, a commercial furniture distributor. Read the email body AND any attached PDF purchase orders to assemble a single combined order. Be precise with SKUs, qty, and unit prices. Flag competitor SKUs, missing prices, or low confidence customer matches. Return only via the extract_po tool." },
+          { role: "user", content: userContent },
         ],
         tools,
         tool_choice: { type: "function", function: { name: "extract_po" } },
@@ -82,7 +111,54 @@ serve(async (req) => {
 
     const j = await r.json();
     const call = j.choices?.[0]?.message?.tool_calls?.[0];
-    const parsed = call ? JSON.parse(call.function.arguments) : { customer_name: "Unknown", line_items: [], confidence: 0.3, flags: [{ field: "all", issue: "Could not parse", suggestion: "Manual entry required" }] };
+    const parsed: any = call ? JSON.parse(call.function.arguments) : { customer_name: "Unknown", line_items: [], confidence: 0.3, flags: [{ field: "all", issue: "Could not parse", suggestion: "Manual entry required" }] };
+
+    // ---- Price verification against price_list ----
+    try {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const skus = Array.from(new Set((parsed.line_items || []).map((l: any) => String(l.sku || "").trim()).filter(Boolean)));
+      let priceMap: Record<string, any> = {};
+      if (skus.length) {
+        const { data: prices } = await supabase
+          .from("price_list")
+          .select("item, list_price, dealer_cost, er_cost, mfg, description")
+          .in("item", skus)
+          .limit(skus.length + 100);
+        for (const p of prices || []) priceMap[String(p.item)] = p;
+      }
+      let mismatchCount = 0;
+      parsed.flags = parsed.flags || [];
+      (parsed.line_items || []).forEach((li: any, i: number) => {
+        const match = priceMap[String(li.sku || "").trim()];
+        if (!match) {
+          parsed.flags.push({ field: `line[${i}].sku`, issue: `SKU ${li.sku} not found in price list`, suggestion: "Verify part number or add to catalog" });
+          mismatchCount++;
+          return;
+        }
+        li.price_list_match = { list_price: match.list_price, dealer_cost: match.dealer_cost, er_cost: match.er_cost, mfg: match.mfg, description: match.description };
+        const list = Number(match.list_price);
+        const unit = Number(li.unit_price);
+        if (Number.isFinite(list) && Number.isFinite(unit) && Math.abs(list - unit) > 0.01) {
+          parsed.flags.push({
+            field: `line[${i}].unit_price`,
+            issue: `PO price $${unit.toFixed(2)} differs from list $${list.toFixed(2)} for ${li.sku}`,
+            suggestion: "Confirm contract pricing before submitting",
+          });
+          mismatchCount++;
+        }
+      });
+      // Knock down confidence if many lines have issues
+      const total = (parsed.line_items || []).length || 1;
+      if (mismatchCount / total > 0.2) {
+        parsed.confidence = Math.min(parsed.confidence ?? 0.5, 0.6);
+      }
+    } catch (e) {
+      console.error("price verification failed", e);
+    }
+
     return new Response(JSON.stringify({ parsed }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e: any) {
     console.error(e);
