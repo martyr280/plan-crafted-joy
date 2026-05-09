@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,67 +16,76 @@ type SortKey = "item_id" | "item_desc" | "total_qty" | "e2g_price" | "birm_qty" 
 
 function InventoryPage() {
   const [rows, setRows] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "item_id", dir: "asc" });
   const [snapshotDate, setSnapshotDate] = useState<string | null>(null);
 
+  // Resolve the latest snapshot date once.
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      // latest snapshot date only
-      const { data: latest } = await supabase
+      const { data } = await supabase
         .from("inventory_snapshots")
         .select("snapshot_date")
         .order("snapshot_date", { ascending: false })
         .limit(1);
-      const d = latest?.[0]?.snapshot_date;
-      if (!d) { setRows([]); setLoading(false); return; }
-      setSnapshotDate(d);
-      // Page through results — PostgREST caps a single response at 1000 rows
-      // regardless of .limit(), so use .range() until a short page is returned.
-      const all: any[] = [];
-      const step = 1000;
-      for (let from = 0; ; from += step) {
-        const { data, error } = await supabase
-          .from("inventory_snapshots")
-          .select("*")
-          .eq("snapshot_date", d)
-          .order("item_id")
-          .range(from, from + step - 1);
-        if (error) break;
-        all.push(...(data ?? []));
-        if (!data || data.length < step) break;
-      }
-      setRows(all);
-      setLoading(false);
+      setSnapshotDate(data?.[0]?.snapshot_date ?? null);
     })();
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let out = rows;
-    if (q) out = out.filter((r) => r.item_id?.toLowerCase().includes(q) || r.item_desc?.toLowerCase().includes(q));
-    out = [...out].sort((a, b) => {
-      const av = a[sort.key], bv = b[sort.key];
-      const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av ?? "").localeCompare(String(bv ?? ""));
-      return sort.dir === "asc" ? cmp : -cmp;
-    });
-    return out;
-  }, [rows, search, sort]);
+  // Debounce typing.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const slice = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  useEffect(() => { setPage(0); }, [search, sort]);
+  // Reset to page 0 when filters change.
+  useEffect(() => { setPage(0); }, [debouncedSearch, sort, snapshotDate]);
+
+  // Server-side page fetch (only the visible window crosses the wire).
+  useEffect(() => {
+    if (!snapshotDate) { setRows([]); setTotal(0); setLoading(false); return; }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      let q = supabase
+        .from("inventory_snapshots")
+        .select("*", { count: "exact" })
+        .eq("snapshot_date", snapshotDate)
+        .order(sort.key, { ascending: sort.dir === "asc", nullsFirst: false })
+        .range(from, to);
+      if (debouncedSearch) {
+        const esc = debouncedSearch.replace(/[%,()]/g, " ");
+        q = q.or(`item_id.ilike.%${esc}%,item_desc.ilike.%${esc}%`);
+      }
+      const { data, count, error } = await q;
+      if (cancelled) return;
+      if (!error) {
+        setRows(data ?? []);
+        setTotal(count ?? 0);
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [page, sort, debouncedSearch, snapshotDate]);
+
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(total, (page + 1) * PAGE_SIZE);
 
   function toggleSort(key: SortKey) {
     setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   }
   function SortHead({ k, label }: { k: SortKey; label: string }) {
+    const active = sort.key === k;
     return (
       <TableHead onClick={() => toggleSort(k)} className="cursor-pointer select-none">
-        <span className="inline-flex items-center gap-1">{label}<ArrowUpDown className="w-3 h-3 opacity-50" /></span>
+        <span className={`inline-flex items-center gap-1 ${active ? "text-foreground" : ""}`}>{label}<ArrowUpDown className={`w-3 h-3 ${active ? "opacity-100" : "opacity-50"}`} /></span>
       </TableHead>
     );
   }
@@ -85,7 +94,7 @@ function InventoryPage() {
     <div>
       <ModuleHeader
         title="Inventory"
-        description={snapshotDate ? `Latest snapshot · ${new Date(snapshotDate).toLocaleString()} · ${filtered.length.toLocaleString()} items` : "P21 inventory snapshot across Birmingham, Dallas, and Ocala"}
+        description={snapshotDate ? `Latest snapshot · ${new Date(snapshotDate).toLocaleString()} · ${total.toLocaleString()} items` : "P21 inventory snapshot across Birmingham, Dallas, and Ocala"}
         actions={
           <div className="relative w-72">
             <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -110,8 +119,8 @@ function InventoryPage() {
           </TableHeader>
           <TableBody>
             {loading && (<TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>)}
-            {!loading && slice.length === 0 && (<TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No items.</TableCell></TableRow>)}
-            {slice.map((r) => (
+            {!loading && rows.length === 0 && (<TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No items.</TableCell></TableRow>)}
+            {!loading && rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="font-mono text-xs">{r.item_id}{r.is_kit && <Badge variant="outline" className="ml-2 text-[10px]">kit</Badge>}</TableCell>
                 <TableCell className="max-w-md truncate">{r.item_desc}</TableCell>
@@ -126,10 +135,10 @@ function InventoryPage() {
           </TableBody>
         </Table>
         <div className="flex items-center justify-between p-3 border-t">
-          <span className="text-xs text-muted-foreground">Page {page + 1} of {pages}</span>
+          <span className="text-xs text-muted-foreground">{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} of {total.toLocaleString()} · Page {page + 1} of {pages}</span>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="w-4 h-4" /></Button>
-            <Button size="sm" variant="outline" disabled={page >= pages - 1} onClick={() => setPage((p) => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
+            <Button size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft className="w-4 h-4" /></Button>
+            <Button size="sm" variant="outline" disabled={page >= pages - 1 || loading} onClick={() => setPage((p) => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
           </div>
         </div>
       </Card>

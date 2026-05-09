@@ -15,55 +15,62 @@ type SortKey = "item" | "description" | "list_price" | "dealer_cost" | "er_cost"
 
 function PricingPage() {
   const [rows, setRows] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "item", dir: "asc" });
 
+  // Debounce the search input so we don't fire a query per keystroke.
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Reset to first page whenever filters or sort change.
+  useEffect(() => { setPage(0); }, [debouncedSearch, sort]);
+
+  // Server-side page fetch — only the visible window crosses the wire,
+  // so the 1000-row PostgREST cap is irrelevant.
+  useEffect(() => {
+    let cancelled = false;
     (async () => {
       setLoading(true);
-      // PostgREST caps responses at 1000 rows; page through with .range().
-      const all: any[] = [];
-      const step = 1000;
-      for (let from = 0; ; from += step) {
-        const { data, error } = await supabase
-          .from("price_list")
-          .select("*")
-          .order("item")
-          .range(from, from + step - 1);
-        if (error) break;
-        all.push(...(data ?? []));
-        if (!data || data.length < step) break;
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      let q = supabase
+        .from("price_list")
+        .select("*", { count: "exact" })
+        .order(sort.key, { ascending: sort.dir === "asc", nullsFirst: false })
+        .range(from, to);
+      if (debouncedSearch) {
+        const esc = debouncedSearch.replace(/[%,()]/g, " ");
+        q = q.or(`item.ilike.%${esc}%,description.ilike.%${esc}%,mfg.ilike.%${esc}%,category.ilike.%${esc}%`);
       }
-      setRows(all);
+      const { data, count, error } = await q;
+      if (cancelled) return;
+      if (!error) {
+        setRows(data ?? []);
+        setTotal(count ?? 0);
+      }
       setLoading(false);
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [page, sort, debouncedSearch]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let out = rows;
-    if (q) out = out.filter((r) => r.item?.toLowerCase().includes(q) || r.description?.toLowerCase().includes(q) || r.mfg?.toLowerCase().includes(q) || r.category?.toLowerCase().includes(q));
-    out = [...out].sort((a, b) => {
-      const av = a[sort.key], bv = b[sort.key];
-      const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av ?? "").localeCompare(String(bv ?? ""));
-      return sort.dir === "asc" ? cmp : -cmp;
-    });
-    return out;
-  }, [rows, search, sort]);
-
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const slice = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  useEffect(() => { setPage(0); }, [search, sort]);
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(total, (page + 1) * PAGE_SIZE);
 
   function toggleSort(key: SortKey) {
     setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   }
   function SortHead({ k, label }: { k: SortKey; label: string }) {
+    const active = sort.key === k;
     return (
       <TableHead onClick={() => toggleSort(k)} className="cursor-pointer select-none">
-        <span className="inline-flex items-center gap-1">{label}<ArrowUpDown className="w-3 h-3 opacity-50" /></span>
+        <span className={`inline-flex items-center gap-1 ${active ? "text-foreground" : ""}`}>{label}<ArrowUpDown className={`w-3 h-3 ${active ? "opacity-100" : "opacity-50"}`} /></span>
       </TableHead>
     );
   }
@@ -73,7 +80,7 @@ function PricingPage() {
     <div>
       <ModuleHeader
         title="Price List"
-        description={`Master pricing · ${filtered.length.toLocaleString()} items`}
+        description={`Master pricing · ${total.toLocaleString()} items`}
         actions={
           <div className="relative w-72">
             <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -97,8 +104,8 @@ function PricingPage() {
           </TableHeader>
           <TableBody>
             {loading && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>)}
-            {!loading && slice.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No items.</TableCell></TableRow>)}
-            {slice.map((r) => (
+            {!loading && rows.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No items.</TableCell></TableRow>)}
+            {!loading && rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="font-mono text-xs">{r.item}</TableCell>
                 <TableCell className="max-w-md truncate">{r.description ?? "—"}</TableCell>
@@ -112,10 +119,10 @@ function PricingPage() {
           </TableBody>
         </Table>
         <div className="flex items-center justify-between p-3 border-t">
-          <span className="text-xs text-muted-foreground">Page {page + 1} of {pages}</span>
+          <span className="text-xs text-muted-foreground">{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} of {total.toLocaleString()} · Page {page + 1} of {pages}</span>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="w-4 h-4" /></Button>
-            <Button size="sm" variant="outline" disabled={page >= pages - 1} onClick={() => setPage((p) => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
+            <Button size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft className="w-4 h-4" /></Button>
+            <Button size="sm" variant="outline" disabled={page >= pages - 1 || loading} onClick={() => setPage((p) => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
           </div>
         </div>
       </Card>
