@@ -23,8 +23,20 @@ function PricingPage() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from("price_list").select("*").order("item").limit(10000);
-      setRows(data ?? []);
+      // PostgREST caps responses at 1000 rows; page through with .range().
+      const all: any[] = [];
+      const step = 1000;
+      for (let from = 0; ; from += step) {
+        const { data, error } = await supabase
+          .from("price_list")
+          .select("*")
+          .order("item")
+          .range(from, from + step - 1);
+        if (error) break;
+        all.push(...(data ?? []));
+        if (!data || data.length < step) break;
+      }
+      setRows(all);
       setLoading(false);
     })();
   }, []);
