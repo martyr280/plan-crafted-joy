@@ -255,6 +255,48 @@ export type Database = {
         }
         Relationships: []
       }
+      fleet_routes: {
+        Row: {
+          created_at: string
+          delivery_day: string | null
+          destination_city: string
+          driver_name: string | null
+          group_label: string | null
+          hub: string
+          id: string
+          raw_row: Json
+          route_code: string | null
+          schedule_notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_day?: string | null
+          destination_city: string
+          driver_name?: string | null
+          group_label?: string | null
+          hub: string
+          id?: string
+          raw_row?: Json
+          route_code?: string | null
+          schedule_notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          delivery_day?: string | null
+          destination_city?: string
+          driver_name?: string | null
+          group_label?: string | null
+          hub?: string
+          id?: string
+          raw_row?: Json
+          route_code?: string | null
+          schedule_notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       inbound_emails: {
         Row: {
           ai_extracted: Json
