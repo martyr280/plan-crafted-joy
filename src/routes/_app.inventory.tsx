@@ -74,7 +74,7 @@ function InventoryPage() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [page, sort, debouncedSearch, snapshotDate]);
+  }, [page, pageSize, sort, debouncedSearch, snapshotDate]);
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const rangeStart = total === 0 ? 0 : page * pageSize + 1;
