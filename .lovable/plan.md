@@ -1,88 +1,50 @@
-## P21 Bridge via Local Agent (Version A)
+## Files to import
 
-A small Node agent runs on your Windows machine (the one with FortiClient). It dials **out** to this app over HTTPS, polls a job queue, runs SQL against P21 through the VPN, and posts results back. No inbound firewall rule, no VPN exposure to the cloud.
+| File | Type | Size | Destination |
+|---|---|---|---|
+| NDI-E2G-20260428.xlsx | P21 inventory snapshot (Birm/Dallas/Ocala stock + price) | 4,414 rows | new `inventory_snapshots` table |
+| Pricer-202603.xlsx | Master price list (multi-sheet) | ~2,500 clean rows | new `price_list` table |
+| SUN_03052026_…sif | Configura design quote (293 line items, 35 rooms, 44 SKUs) | 16k lines | new `design_quotes` + `design_quote_lines` tables |
+| E2G_Combined_Report.sql | P21 SQL template for the E2G report | 168 lines | `app_settings` key `p21.queries.e2g_combined` |
+| 2026_Clearance_…pdf | Clearance catalog | binary | `catalogs` storage bucket + `catalogs` table |
+| 2026_NDI_Worksimpli_Catalog…pdf | Main product catalog | binary | same |
 
-```text
- Browser (you)         Lovable Cloud (Worker)            Your machine + FortiClient
- ───────────         ─────────────────────────           ─────────────────────────
-   UI ──────────► /api/public/p21-bridge  ◄─────── poll ── agent.js
-                  (HMAC-signed job queue)  ─────── result─►  └─► P21 SQL Server
-```
+## Schema additions
 
-### What gets built
+1. **inventory_snapshots** — `item_id`, `item_desc`, `birm_qty`, `dallas_qty`, `ocala_qty`, `total_qty`, `e2g_price`, `weight`, `net_weight`, `next_due_in`, `snapshot_date`, `source`. Indexed on `item_id` and `snapshot_date`. Logistics + orders + admin can read; admin can write.
+2. **price_list** — `item`, `description`, `mfg`, `category`, `list_price`, `dealer_cost`, `er_cost`, `weight`, `cat_number`, `effective_date`. Indexed on `item`. Orders + AR + admin read; admin write.
+3. **design_quotes** — `quote_name`, `source_file`, `sif_date`, `total_list`, `total_sell`, `room_count`, `line_count`, `imported_by`. Orders + admin read/write.
+4. **design_quote_lines** — `quote_id`, `line_no`, `part_number`, `description`, `quantity`, `list_price`, `room`, `options` (jsonb of finish/color selections), `image_path`. Same RLS as parent.
+5. **catalogs** — `name`, `kind` (catalog/clearance/spec), `file_path`, `published_date`, `pages`, `size_bytes`. All authenticated read; admin write.
+6. **Storage bucket** `catalogs` (public read), then upload the 2 PDFs.
+7. **app_settings** insert for `p21.queries.e2g_combined` containing the SQL.
 
-**1. Database (`p21_bridge_jobs` table)**
-- `id`, `kind` (e.g. `sales_query`, `ar_aging`, `submit_order`), `payload` jsonb, `status` (`pending`/`claimed`/`done`/`error`), `result` jsonb, `error`, `created_at`, `claimed_at`, `completed_at`, `agent_id`.
-- `p21_bridge_agents` table: `id`, `name`, `last_seen_at`, `version`, `ip`. Heartbeats from the agent.
-- RLS: admins read/write all; service role used by the bridge endpoint.
+## Data import
 
-**2. Server route `src/routes/api/public/p21-bridge.ts`**
-- `POST /api/public/p21-bridge/claim` — agent claims up to N pending jobs. HMAC-signed with `P21_BRIDGE_SECRET`.
-- `POST /api/public/p21-bridge/complete` — agent posts `{ jobId, result | error }`.
-- `POST /api/public/p21-bridge/heartbeat` — updates `last_seen_at`.
-- All requests verified with `x-bridge-signature` header (HMAC-SHA256 of body + timestamp).
+- Parse each xlsx with openpyxl, build bulk INSERT, run via psql.
+- For Pricer, merge the **CSV** sheet (cleanest: item/desc/list/standard/er) with **Pricer Main** to attach mfg/category; dedupe by `item`.
+- For SIF: parse blocks delimited by `PN=` lines, group child option records (`ON=/OD=`) into the parent line's `options` jsonb. Group room from `GC=`.
+- Upload PDFs to `catalogs` bucket, write a row per file in `catalogs` table.
 
-**3. Server functions `src/server/p21.functions.ts`**
-- `enqueueP21Job({ kind, payload })` — admin-protected; inserts a job, polls for completion (with timeout), returns result.
-- Replaces the `// TODO: replace with P21 SQL` stubs in sales/AR/orders flows so admins can flip individual modules from "stub" to "live bridge" via Settings.
+## UI additions
 
-**4. Settings → Integrations panel update**
-- Status card for the P21 Bridge: agent name, last seen (green if <60s, yellow <5m, red otherwise), pending/failed job counts.
-- Per-module toggle: "Use live P21 via bridge" vs "Use stubbed seed data" (stored in a small `integration_settings` table).
-- "Rotate bridge secret" button + copy-to-clipboard for the agent config.
+Four new routes under the authenticated app shell:
 
-**5. `agent/` folder (committed in repo, runs on your machine)**
-- `agent/package.json` — minimal Node 20 deps: `mssql` (P21 is SQL Server), `node-fetch` not needed (Node 20 has fetch), `dotenv`.
-- `agent/agent.js` — loop: heartbeat → claim jobs → run handler per `kind` → post result. 5s poll interval.
-- `agent/handlers/` — one file per job kind, each is a parameterized SQL query against P21.
-- `agent/.env.example` — `BRIDGE_URL`, `BRIDGE_SECRET`, `P21_SQL_HOST`, `P21_SQL_DB`, `P21_SQL_USER`, `P21_SQL_PASS`, `AGENT_NAME`.
-- `agent/README.md` — install steps:
-  1. Install Node 20 LTS.
-  2. `cd agent && npm install`.
-  3. Copy `.env.example` → `.env`, fill in P21 creds + bridge secret (copied from Settings).
-  4. Make sure FortiClient is connected.
-  5. `node agent.js` to test, then install as a Windows service with `node-windows` (script included) so it runs on boot.
+- **`/inventory`** — table of `inventory_snapshots` with search by item id/desc, location-stock columns, sort, paginate (50/page), shown latest snapshot only. Logistics + orders + admin.
+- **`/pricing`** — table of `price_list` with search, sort by list/dealer/ER, paginate. Orders + AR + admin.
+- **`/quotes`** — list of `design_quotes`, click to view lines grouped by room with totals. Orders + admin. "Import SIF" button (admin) accepts a `.sif` upload and runs the same parser server-side via an edge function.
+- **`/catalogs`** — card grid of catalogs with thumbnail and download link. All users.
 
-**6. Secret**
-- `P21_BRIDGE_SECRET` — generated and stored as a Lovable Cloud secret. The same value goes in `agent/.env`.
+Add nav links to the existing sidebar in `_app.tsx`. All data fetching via TanStack Query in `src/hooks/`. Pagination + sort + filter per workspace rules.
 
-### Security properties
-- Outbound-only from your network; FortiGate sees normal HTTPS to `*.lovable.app`.
-- HMAC signature on every request → only an agent holding the secret can claim/complete jobs.
-- Timestamp in signed payload → 5-minute replay window.
-- Service-role writes happen only after signature verification.
-- Per-job type allowlist on the agent → app cannot ask the agent to run arbitrary SQL.
+## Technical notes
 
-### What I will NOT build (out of scope for now)
-- Auto-installer / MSI for the agent (manual `npm install` + service step is fine for one machine).
-- Multi-agent failover (single agent is enough; schema supports more later).
-- Live P21 query editor in the UI (job kinds are predefined for safety).
+- Snapshot table is append-only — every re-import creates a new `snapshot_date`; UI filters to MAX(snapshot_date) per item.
+- SIF parser handles the multi-segment per-item structure (a `PN=` block followed by zero or more option blocks ending at the next `PN=` or EOF). The 8 leading SIF header lines (`SF/ST/DT/TM/NR/TL/TP/TS`) populate the `design_quotes` row.
+- An "Import SIF" edge function (`parse-sif`) lets ops upload more `.sif` files later without DB access.
+- E2G SQL template stored in settings is referenced by the existing P21 bridge agent so the inventory snapshot can be refreshed from live P21 by submitting a `p21_bridge_jobs` row of kind `inventory_snapshot`.
 
-### After approval
-I'll create the migration, the bridge route, the server functions, the Settings panel, the `agent/` folder, and request the `P21_BRIDGE_SECRET` secret. Then you copy the secret + your P21 creds into `agent/.env`, run `node agent.js`, and the bridge goes live.
+## Out of scope (ask before doing)
 
----
-
-## Section H — Inbound Email Pipeline Fix
-
-**H.1 — Root cause**
-Resend does not support inbound email parsing. The current webhook is receiving outbound delivery events with no email content. `inbound_emails` table has 0 rows.
-
-**H.2 — Inbound provider**
-Use Postmark Inbound as the inbound email parser. It delivers a clean JSON webhook with From, Subject, TextBody, HtmlBody, Attachments, and Headers parsed out of the box.
-
-**H.3 — Build receive-inbound-email edge function**
-Create a Supabase edge function `receive-inbound-email` that accepts POST from Postmark, verifies via `POSTMARK_INBOUND_SECRET`, maps Postmark fields to our schema, inserts into `inbound_emails`, calls `classify-inbound-email`, and routes to downstream records (orders, ar_reply activity, damage_reports, fleet_loads) when confidence >= 0.75.
-
-**H.4 — Remove Resend inbound webhook**
-Remove/disable the Resend inbound webhook handler. Keep Resend for outbound sending only.
-
-**H.5 — Add webhook URL to admin UI**
-On the webhook debug page, show the Postmark inbound webhook URL `{SUPABASE_URL}/functions/v1/receive-inbound-email` and the `POSTMARK_INBOUND_SECRET` env var name.
-
-**H.6 — Execution order**
-1. Write plan ← done
-2. Build edge function (H.3)
-3. Wire auto-routing (H.3)
-4. Update webhook debug page (H.5)
-5. Remove Resend inbound (H.4)
+- Auto-refresh schedule for inventory snapshots from P21.
+- Linking `design_quote_lines.part_number` to `price_list.item` for live pricing rollups.
