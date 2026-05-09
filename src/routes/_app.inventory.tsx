@@ -6,12 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Search, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 
 export const Route = createFileRoute("/_app/inventory")({ component: InventoryPage });
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500];
 type SortKey = "item_id" | "item_desc" | "total_qty" | "e2g_price" | "birm_qty" | "dallas_qty" | "ocala_qty";
 
 function InventoryPage() {
@@ -21,6 +22,7 @@ function InventoryPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "item_id", dir: "asc" });
   const [snapshotDate, setSnapshotDate] = useState<string | null>(null);
 
@@ -43,7 +45,7 @@ function InventoryPage() {
   }, [search]);
 
   // Reset to page 0 when filters change.
-  useEffect(() => { setPage(0); }, [debouncedSearch, sort, snapshotDate]);
+  useEffect(() => { setPage(0); }, [debouncedSearch, sort, snapshotDate, pageSize]);
 
   // Server-side page fetch (only the visible window crosses the wire).
   useEffect(() => {
@@ -51,8 +53,8 @@ function InventoryPage() {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
       let q = supabase
         .from("inventory_snapshots")
         .select("*", { count: "exact" })
@@ -72,11 +74,11 @@ function InventoryPage() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [page, sort, debouncedSearch, snapshotDate]);
+  }, [page, pageSize, sort, debouncedSearch, snapshotDate]);
 
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(total, (page + 1) * PAGE_SIZE);
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = total === 0 ? 0 : page * pageSize + 1;
+  const rangeEnd = Math.min(total, (page + 1) * pageSize);
 
   function toggleSort(key: SortKey) {
     setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
@@ -134,9 +136,16 @@ function InventoryPage() {
             ))}
           </TableBody>
         </Table>
-        <div className="flex items-center justify-between p-3 border-t">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-t">
           <span className="text-xs text-muted-foreground">{rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} of {total.toLocaleString()} · Page {page + 1} of {pages}</span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Rows per page</span>
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+              <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Button size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft className="w-4 h-4" /></Button>
             <Button size="sm" variant="outline" disabled={page >= pages - 1 || loading} onClick={() => setPage((p) => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
           </div>
