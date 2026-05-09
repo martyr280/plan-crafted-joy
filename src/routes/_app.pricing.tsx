@@ -11,7 +11,7 @@ import { Search, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 
 export const Route = createFileRoute("/_app/pricing")({ component: PricingPage });
 
-const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500];
+const pageSize_OPTIONS = [25, 50, 100, 200, 500];
 type SortKey = "item" | "description" | "list_price" | "dealer_cost" | "er_cost" | "category";
 
 function PricingPage() {
@@ -39,8 +39,8 @@ function PricingPage() {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
       let q = supabase
         .from("price_list")
         .select("*", { count: "exact" })
@@ -61,9 +61,9 @@ function PricingPage() {
     return () => { cancelled = true; };
   }, [page, sort, debouncedSearch]);
 
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(total, (page + 1) * PAGE_SIZE);
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = total === 0 ? 0 : page * pageSize + 1;
+  const rangeEnd = Math.min(total, (page + 1) * pageSize);
 
   function toggleSort(key: SortKey) {
     setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
