@@ -85,6 +85,23 @@ The Windows service runs as **LocalSystem** by default, which starts before any 
 - ✅ If FortiClient is configured to **auto-connect at system startup** (recommended), the agent will reach P21 right away.
 - ⚠️ If FortiClient only connects after a **user logs in interactively**, the agent will sit there retrying until you log in and FortiClient comes up. Configure FortiClient → Settings → "Always Up" / "Auto Connect" to avoid this.
 
+## P21 Data API (REST)
+
+The agent can also call P21's REST API alongside direct SQL. The agent should run **on the P21 server itself** so the base URL stays on loopback and the consumer key never leaves the box.
+
+1. In the **P21 Middleware Configuration Utility**, register a consumer and copy the generated **consumer key**.
+2. Pick a P21 service account (separate from your SQL read-only login) and note its username/password.
+3. Fill in the `P21_API_*` block in `.env`:
+   - `P21_API_BASE_URL` — IIS path to the P21 API service (e.g. `http://localhost/P21APIService`).
+   - `P21_API_CONSUMER_KEY` — from step 1.
+   - `P21_API_CONSUMER_KEY_HEADER` — leave as `Authorization` unless your install uses a custom header.
+   - `P21_API_USERNAME` / `P21_API_PASSWORD` — from step 2.
+4. Restart the agent (`sc stop ... && sc start ...` for the service).
+5. From the app, call `testP21ApiConnection()` — it round-trips `POST /api/security/token` and returns the token prefix on success.
+6. To read data, call `queryP21View({ view: "P21Customers", query: { "$top": 50, "$filter": "..." } })`. The handler hits `GET /data/erp/views/v1/<view>` and returns `{ rows, count }`.
+
+The access token is cached in the agent process for ~50 minutes and refreshed automatically on a 401.
+
 ## Adding new job kinds
 
 1. Drop a new file in `handlers/`, exporting an `async function (payload) { ... }`.
