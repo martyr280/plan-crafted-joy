@@ -13,7 +13,7 @@ This is a small Node program that runs **on a machine inside your network with t
 
 1. Install **Node.js 20 LTS** on the machine: <https://nodejs.org/>
 2. Make sure **FortiClient is connected** and you can reach the P21 SQL Server (try `telnet p21sql.internal 1433`).
-3. Copy this `agent/` folder to the machine (anywhere, e.g. `C:\ndi-agent\`).
+3. Copy this `agent/` folder to the machine (anywhere, e.g. `C:\ndiOS-agent\`).
 4. From a terminal in that folder:
 
    ```bash
