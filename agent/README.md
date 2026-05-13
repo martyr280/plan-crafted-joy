@@ -9,7 +9,57 @@ This is a small Node program that runs **on a machine inside your network with t
 - Runs only the job kinds defined in `handlers/index.js` (allowlist — the app cannot ask for arbitrary SQL).
 - Returns JSON results (or an error message) to the app.
 
-## One-time setup
+## Quick install — prebuilt `.exe` (no Node, no installer)
+
+The agent ships as a single self-contained Windows executable (~112 MB) with the runtime and all dependencies bundled inside. **Use this path if you don't want to install Node.js or register a Windows service.**
+
+1. **Get `ndiOS-agent.exe`** — either download it from the project's Releases page, or build it yourself on any machine that has [Bun](https://bun.sh) installed:
+
+   ```bash
+   cd agent
+   bun install
+   bun run build:exe   # writes dist/ndiOS-agent.exe
+   ```
+
+2. On the P21 server, create `C:\ndiOS-agent\` and drop two files into it:
+   - `ndiOS-agent.exe` (from step 1)
+   - `.env` — copy the contents of [`.env.example`](.env.example) and fill in the values (bridge secret, P21 API consumer key + service account, SQL creds if you want SQL jobs)
+
+3. **Run it from PowerShell** to smoke-test:
+
+   ```powershell
+   cd C:\ndiOS-agent
+   .\ndiOS-agent.exe
+   ```
+
+   You should see `Polling https://plan-crafted-joy.lovable.app/...` and the agent will show **online (green)** in the app within 5 seconds. `Ctrl+C` to stop.
+
+4. **Make it survive reboots via Task Scheduler** (no admin install, no service registration). From PowerShell:
+
+   ```powershell
+   $action  = New-ScheduledTaskAction -Execute "C:\ndiOS-agent\ndiOS-agent.exe" -WorkingDirectory "C:\ndiOS-agent"
+   $trigger = New-ScheduledTaskTrigger -AtStartup
+   $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+   $settings  = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
+   Register-ScheduledTask -TaskName "ndiOS Agent" -Action $action -Trigger $trigger -Principal $principal -Settings $settings
+   Start-ScheduledTask -TaskName "ndiOS Agent"
+   ```
+
+   That registers a task that runs as `SYSTEM` at boot, restarts every minute on failure, and starts now. To uninstall: `Unregister-ScheduledTask -TaskName "ndiOS Agent" -Confirm:$false`.
+
+5. **View logs**: the `.exe` writes to stdout. To capture them to disk, change step 4's `-Execute` to a small wrapper or, simplest, run from PowerShell with redirection:
+
+   ```powershell
+   .\ndiOS-agent.exe *>> .\ndiOS-agent.log
+   ```
+
+That's it — no Node, no npm, no `node_modules`, no service registration, no admin rights for the install itself (though writing to `C:\ndiOS-agent\` may need admin once at folder-creation time).
+
+---
+
+## Full setup (from source, with Node + Windows service)
+
+Use this path if you want to develop on the agent, or prefer a managed Windows service over Task Scheduler.
 
 1. Install **Node.js 20 LTS** on the machine: <https://nodejs.org/>
 2. Make sure **FortiClient is connected** and you can reach the P21 SQL Server (try `telnet p21sql.internal 1433`).
