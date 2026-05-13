@@ -13,13 +13,17 @@ This is a small Node program that runs **on a machine inside your network with t
 
 The agent ships as a single self-contained Windows executable (~112 MB) with the runtime and all dependencies bundled inside. **Use this path if you don't want to install Node.js or register a Windows service.**
 
-1. **Get `ndiOS-agent.exe`** — either download it from the project's Releases page, or build it yourself on any machine that has [Bun](https://bun.sh) installed:
+1. **Get `ndiOS-agent.exe`** — either:
 
-   ```bash
-   cd agent
-   bun install
-   bun run build:exe   # writes dist/ndiOS-agent.exe
-   ```
+   - **Download it from GitHub Releases**: every time a tag matching `agent-v*` is pushed (e.g. `agent-v1.0.0`), CI builds the .exe and attaches it (with a `.sha256` checksum) to a release at <https://github.com/martyr280/plan-crafted-joy/releases>. To cut a new release: `git tag agent-v1.0.0 && git push origin agent-v1.0.0`.
+
+   - **Or build it yourself** on any machine that has [Bun](https://bun.sh) installed:
+
+     ```bash
+     cd agent
+     bun install
+     bun run build:exe   # writes dist/ndiOS-agent.exe
+     ```
 
 2. On the P21 server, create `C:\ndiOS-agent\` and drop two files into it:
    - `ndiOS-agent.exe` (from step 1)
