@@ -9,11 +9,65 @@ This is a small Node program that runs **on a machine inside your network with t
 - Runs only the job kinds defined in `handlers/index.js` (allowlist — the app cannot ask for arbitrary SQL).
 - Returns JSON results (or an error message) to the app.
 
-## One-time setup
+## Quick install — prebuilt `.exe` (no Node, no installer)
+
+The agent ships as a single self-contained Windows executable (~112 MB) with the runtime and all dependencies bundled inside. **Use this path if you don't want to install Node.js or register a Windows service.**
+
+1. **Get `ndiOS-agent.exe`** — either:
+
+   - **Download it from GitHub Releases**: every time a tag matching `agent-v*` is pushed (e.g. `agent-v1.0.0`), CI builds the .exe and attaches it (with a `.sha256` checksum) to a release at <https://github.com/martyr280/plan-crafted-joy/releases>. To cut a new release: `git tag agent-v1.0.0 && git push origin agent-v1.0.0`.
+
+   - **Or build it yourself** on any machine that has [Bun](https://bun.sh) installed:
+
+     ```bash
+     cd agent
+     bun install
+     bun run build:exe   # writes dist/ndiOS-agent.exe
+     ```
+
+2. On the P21 server, create `C:\ndiOS-agent\` and drop two files into it:
+   - `ndiOS-agent.exe` (from step 1)
+   - `.env` — copy the contents of [`.env.example`](.env.example) and fill in the values (bridge secret, P21 API consumer key + service account, SQL creds if you want SQL jobs)
+
+3. **Run it from PowerShell** to smoke-test:
+
+   ```powershell
+   cd C:\ndiOS-agent
+   .\ndiOS-agent.exe
+   ```
+
+   You should see `Polling https://plan-crafted-joy.lovable.app/...` and the agent will show **online (green)** in the app within 5 seconds. `Ctrl+C` to stop.
+
+4. **Make it survive reboots via Task Scheduler** (no admin install, no service registration). From PowerShell:
+
+   ```powershell
+   $action  = New-ScheduledTaskAction -Execute "C:\ndiOS-agent\ndiOS-agent.exe" -WorkingDirectory "C:\ndiOS-agent"
+   $trigger = New-ScheduledTaskTrigger -AtStartup
+   $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+   $settings  = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
+   Register-ScheduledTask -TaskName "ndiOS Agent" -Action $action -Trigger $trigger -Principal $principal -Settings $settings
+   Start-ScheduledTask -TaskName "ndiOS Agent"
+   ```
+
+   That registers a task that runs as `SYSTEM` at boot, restarts every minute on failure, and starts now. To uninstall: `Unregister-ScheduledTask -TaskName "ndiOS Agent" -Confirm:$false`.
+
+5. **View logs**: the `.exe` writes to stdout. To capture them to disk, change step 4's `-Execute` to a small wrapper or, simplest, run from PowerShell with redirection:
+
+   ```powershell
+   .\ndiOS-agent.exe *>> .\ndiOS-agent.log
+   ```
+
+That's it — no Node, no npm, no `node_modules`, no service registration, no admin rights for the install itself (though writing to `C:\ndiOS-agent\` may need admin once at folder-creation time).
+
+---
+
+## Full setup (from source, with Node + Windows service)
+
+Use this path if you want to develop on the agent, or prefer a managed Windows service over Task Scheduler.
 
 1. Install **Node.js 20 LTS** on the machine: <https://nodejs.org/>
 2. Make sure **FortiClient is connected** and you can reach the P21 SQL Server (try `telnet p21sql.internal 1433`).
-3. Copy this `agent/` folder to the machine (anywhere, e.g. `C:\ndi-agent\`).
+3. Copy this `agent/` folder to the machine (anywhere, e.g. `C:\ndiOS-agent\`).
 4. From a terminal in that folder:
 
    ```bash
@@ -84,6 +138,23 @@ The Windows service runs as **LocalSystem** by default, which starts before any 
 
 - ✅ If FortiClient is configured to **auto-connect at system startup** (recommended), the agent will reach P21 right away.
 - ⚠️ If FortiClient only connects after a **user logs in interactively**, the agent will sit there retrying until you log in and FortiClient comes up. Configure FortiClient → Settings → "Always Up" / "Auto Connect" to avoid this.
+
+## P21 Data API (REST)
+
+The agent can also call P21's REST API alongside direct SQL. The agent should run **on the P21 server itself** so the base URL stays on loopback and the consumer key never leaves the box.
+
+1. In the **P21 Middleware Configuration Utility**, register a consumer and copy the generated **consumer key**.
+2. Pick a P21 service account (separate from your SQL read-only login) and note its username/password.
+3. Fill in the `P21_API_*` block in `.env`:
+   - `P21_API_BASE_URL` — IIS path to the P21 API service (e.g. `http://localhost/P21APIService`).
+   - `P21_API_CONSUMER_KEY` — from step 1.
+   - `P21_API_CONSUMER_KEY_HEADER` — leave as `Authorization` unless your install uses a custom header.
+   - `P21_API_USERNAME` / `P21_API_PASSWORD` — from step 2.
+4. Restart the agent (`sc stop ... && sc start ...` for the service).
+5. From the app, call `testP21ApiConnection()` — it round-trips `POST /api/security/token` and returns the token prefix on success.
+6. To read data, call `queryP21View({ view: "P21Customers", query: { "$top": 50, "$filter": "..." } })`. The handler hits `GET /data/erp/views/v1/<view>` and returns `{ rows, count }`.
+
+The access token is cached in the agent process for ~50 minutes and refreshed automatically on a 401.
 
 ## Adding new job kinds
 

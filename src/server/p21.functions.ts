@@ -193,6 +193,45 @@ export const syncArAging = createServerFn({ method: "POST" })
     return { imported: toInsert.length };
   });
 
+// ─── P21 Data API (REST) ──────────────────────────────────────────────────────
+
+export const testP21ApiConnection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { result } = await runJob("p21.api.test", {}, 30000);
+    return result as { ok: boolean; baseUrl: string; tokenPrefix: string; fetchedAt: string };
+  });
+
+const ODataQuerySchema = z
+  .object({
+    "$filter": z.string().max(2000).optional(),
+    "$select": z.string().max(500).optional(),
+    "$orderby": z.string().max(200).optional(),
+    "$top": z.number().int().min(1).max(5000).optional(),
+    "$skip": z.number().int().min(0).optional(),
+    "$count": z.boolean().optional(),
+  })
+  .strict();
+
+const QueryViewSchema = z.object({
+  view: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[A-Za-z0-9_]+$/, "view must be alphanumeric/underscore"),
+  query: ODataQuerySchema.optional(),
+});
+
+export const queryP21View = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => QueryViewSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { result } = await runJob("p21.api.query", data, 60000);
+    return result as { rows: any[]; count: number };
+  });
+
 const SubmitSchema = z.object({
   orderId: z.string().uuid(),
 });
