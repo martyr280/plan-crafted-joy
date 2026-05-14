@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { RefreshCw, ExternalLink, Download, Loader2 } from "lucide-react";
+import { RefreshCw, ExternalLink, Download, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { syncE2GReport } from "@/lib/p21.functions";
 
 export const Route = createFileRoute("/_app/inventory-sync")({ component: InventorySyncPage });
 
