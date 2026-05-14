@@ -1,7 +1,7 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { assertAdmin, runJob, bucketFor, applyE2GSnapshot } from "./p21.server";
+import { assertAdmin, runJob, bucketFor, applyE2GSnapshot, applyE2GToPriceList } from "./p21.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const EnqueueSchema = z.object({
