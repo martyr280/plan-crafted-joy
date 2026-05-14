@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { assertAdmin, runJob, bucketFor, applyE2GSnapshot } from "./p21.server";
@@ -193,6 +193,8 @@ export const syncE2GReport = createServerFn({ method: "POST" })
     await assertAdmin(context.supabase, context.userId);
     return applyE2GSnapshot();
   });
+
+export const applyE2GSnapshotServerOnly = createServerOnlyFn(applyE2GSnapshot);
 
 const SubmitSchema = z.object({
   orderId: z.string().uuid(),
