@@ -13,6 +13,7 @@ import { enqueueP21Job, getBridgeStatus, retryBridgeJob } from "@/server/p21.fun
 import { formatDistanceToNow } from "date-fns";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/bridge")({
   component: BridgeAdminPage,
@@ -44,6 +45,9 @@ function statusBadge(status: string) {
 }
 
 function BridgeAdminPage() {
+  const getBridgeStatusFn = useServerFn(getBridgeStatus);
+  const enqueueP21JobFn = useServerFn(enqueueP21Job);
+  const retryBridgeJobFn = useServerFn(retryBridgeJob);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [recent, setRecent] = useState<Job[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
@@ -57,12 +61,16 @@ function BridgeAdminPage() {
   async function refresh() {
     setLoading(true);
     try {
-      const res = await getBridgeStatus();
-      setAgents(res.agents as Agent[]);
-      setRecent(res.recent as Job[]);
-      setPendingCount(res.pendingCount);
-      setFailedCount(res.failedCount);
+      const res = await getBridgeStatusFn();
+      setAgents(Array.isArray((res as any)?.agents) ? ((res as any).agents as Agent[]) : []);
+      setRecent(Array.isArray((res as any)?.recent) ? ((res as any).recent as Job[]) : []);
+      setPendingCount(typeof (res as any)?.pendingCount === "number" ? (res as any).pendingCount : 0);
+      setFailedCount(typeof (res as any)?.failedCount === "number" ? (res as any).failedCount : 0);
     } catch (e: any) {
+      setAgents([]);
+      setRecent([]);
+      setPendingCount(0);
+      setFailedCount(0);
       toast.error(e.message ?? "Failed to load bridge status");
     } finally {
       setLoading(false);
@@ -78,7 +86,7 @@ function BridgeAdminPage() {
   async function runPing() {
     setPinging(true);
     try {
-      const res = await enqueueP21Job({ data: { kind: "ping", payload: {}, timeoutMs: 15000 } });
+      const res = await enqueueP21JobFn({ data: { kind: "ping", payload: {}, timeoutMs: 15000 } });
       toast.success(`Ping ok — server time ${(res as any).result?.server_time ?? "?"}`);
       refresh();
     } catch (e: any) {
@@ -91,7 +99,7 @@ function BridgeAdminPage() {
   async function retryJob(jobId: string) {
     setRetrying(jobId);
     try {
-      await retryBridgeJob({ data: { jobId } });
+      await retryBridgeJobFn({ data: { jobId } });
       toast.success("Job requeued");
       refresh();
     } catch (e: any) {
