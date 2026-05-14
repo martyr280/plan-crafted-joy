@@ -2,25 +2,58 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader } from "@/components/ui/sidebar";
 import { Building2, LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, RefreshCw } from "lucide-react";
 
-const items = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Inbound Email", url: "/inbox", icon: Inbox },
-  { title: "Order Intake", url: "/orders", icon: FileInput },
-  { title: "Design Quotes", url: "/quotes", icon: Layers },
-  { title: "Inventory", url: "/inventory", icon: Package },
-  { title: "Pricing", url: "/pricing", icon: Tag },
-  { title: "Catalogs", url: "/catalogs", icon: BookOpen },
-  { title: "Inventory Sync", url: "/inventory-sync", icon: RefreshCw },
-  { title: "Sales", url: "/sales", icon: BarChart3 },
-  { title: "Logistics", url: "/logistics", icon: Truck },
-  { title: "AR & Collections", url: "/ar", icon: Receipt },
-  { title: "SPIFF", url: "/spiff", icon: BadgeDollarSign },
-  { title: "Reports", url: "/reports", icon: FileBarChart },
-  { title: "Damage Tracker", url: "/damage", icon: AlertTriangle },
-  { title: "Audit Log", url: "/audit", icon: ScrollText },
-  { title: "P21 Bridge", url: "/bridge", icon: Network },
-  { title: "Webhook Debug", url: "/webhooks", icon: Webhook },
-  { title: "Settings", url: "/settings", icon: Settings },
+const groups = [
+  {
+    label: "Overview",
+    items: [{ title: "Dashboard", url: "/", icon: LayoutDashboard }],
+  },
+  {
+    label: "Intake",
+    items: [
+      { title: "Inbound Email", url: "/inbox", icon: Inbox },
+      { title: "Order Intake", url: "/orders", icon: FileInput },
+      { title: "Design Quotes", url: "/quotes", icon: Layers },
+    ],
+  },
+  {
+    label: "Catalog & Pricing",
+    items: [
+      { title: "Inventory", url: "/inventory", icon: Package },
+      { title: "Inventory Sync", url: "/inventory-sync", icon: RefreshCw },
+      { title: "Pricing", url: "/pricing", icon: Tag },
+      { title: "Catalogs", url: "/catalogs", icon: BookOpen },
+    ],
+  },
+  {
+    label: "Fulfillment",
+    items: [
+      { title: "Sales", url: "/sales", icon: BarChart3 },
+      { title: "Logistics", url: "/logistics", icon: Truck },
+      { title: "Damage Tracker", url: "/damage", icon: AlertTriangle },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { title: "AR & Collections", url: "/ar", icon: Receipt },
+      { title: "SPIFF", url: "/spiff", icon: BadgeDollarSign },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [
+      { title: "Reports", url: "/reports", icon: FileBarChart },
+      { title: "Audit Log", url: "/audit", icon: ScrollText },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { title: "P21 Bridge", url: "/bridge", icon: Network },
+      { title: "Webhook Debug", url: "/webhooks", icon: Webhook },
+      { title: "Settings", url: "/settings", icon: Settings },
+    ],
+  },
 ];
 
 export function AppSidebar() {
@@ -41,23 +74,25 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((it) => (
-                <SidebarMenuItem key={it.url}>
-                  <SidebarMenuButton asChild isActive={isActive(it.url)} tooltip={it.title}>
-                    <Link to={it.url}>
-                      <it.icon className="w-4 h-4" />
-                      <span>{it.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {groups.map((g) => (
+          <SidebarGroup key={g.label}>
+            <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {g.items.map((it) => (
+                  <SidebarMenuItem key={it.url}>
+                    <SidebarMenuButton asChild isActive={isActive(it.url)} tooltip={it.title}>
+                      <Link to={it.url}>
+                        <it.icon className="w-4 h-4" />
+                        <span>{it.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
     </Sidebar>
   );
