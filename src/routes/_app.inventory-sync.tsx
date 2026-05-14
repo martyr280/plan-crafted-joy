@@ -51,6 +51,35 @@ function InventorySyncPage() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(0);
+  const [e2gSyncing, setE2gSyncing] = useState(false);
+  const [e2gLast, setE2gLast] = useState<{ syncedAt: string | null; count: number }>({ syncedAt: null, count: 0 });
+  const [e2gError, setE2gError] = useState<string | null>(null);
+  const runSyncE2G = useServerFn(syncE2GReport);
+
+  async function loadE2GStatus() {
+    const [{ data: latest }, { count }] = await Promise.all([
+      supabase.from("e2g_inventory_snapshot").select("synced_at").order("synced_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("e2g_inventory_snapshot").select("id", { count: "exact", head: true }),
+    ]);
+    setE2gLast({ syncedAt: (latest as any)?.synced_at ?? null, count: count ?? 0 });
+  }
+
+  async function handleSyncE2G() {
+    setE2gSyncing(true);
+    setE2gError(null);
+    try {
+      const res = await runSyncE2G();
+      toast.success(`E2G sync complete — imported ${res.imported.toLocaleString()} items`);
+      await loadE2GStatus();
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      setE2gError(msg);
+      toast.error(`E2G sync failed: ${msg}`);
+    } finally {
+      setE2gSyncing(false);
+    }
+  }
+
 
   async function loadAll() {
     setLoading(true);
