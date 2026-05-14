@@ -110,7 +110,7 @@ function InventorySyncPage() {
     }
   }
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { loadAll(); loadE2GStatus(); }, []);
   useEffect(() => {
     const ch = supabase.channel("website_crawls-live").on("postgres_changes", { event: "*", schema: "public", table: "website_crawls" }, () => loadAll()).subscribe();
     return () => { supabase.removeChannel(ch); };
