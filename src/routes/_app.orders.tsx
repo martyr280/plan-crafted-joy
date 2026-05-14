@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { submitOrderToP21 } from "@/server/p21.functions";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/orders")({ component: OrdersPage });
 
@@ -39,6 +40,7 @@ function StatusBadge({ s }: { s: string }) {
 }
 
 function OrdersPage() {
+  const submitOrderToP21Fn = useServerFn(submitOrderToP21);
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
@@ -104,7 +106,7 @@ function OrdersPage() {
 
   async function approve(o: any) {
     try {
-      const res = await submitOrderToP21({ data: { orderId: o.id } });
+      const res = await submitOrderToP21Fn({ data: { orderId: o.id } });
       toast.success(`Submitted as ${(res as any).p21OrderId}`);
       setSelected(null);
       load();

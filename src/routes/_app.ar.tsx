@@ -13,6 +13,7 @@ import { Mail, AlertOctagon, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { syncArAging } from "@/server/p21.functions";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/ar")({ component: ArPage });
 
@@ -25,6 +26,7 @@ const BUCKETS = [
 ];
 
 function ArPage() {
+  const syncArAgingFn = useServerFn(syncArAging);
   const { user, hasRole } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [bucket, setBucket] = useState<string>("all");
@@ -36,7 +38,7 @@ function ArPage() {
     if (!hasRole("admin")) { toast.error("Admin role required"); return; }
     setSyncing(true);
     try {
-      const res = await syncArAging({ data: undefined as any });
+      const res = await syncArAgingFn({ data: undefined as any });
       toast.success(`Synced ${(res as any).imported} invoices from P21`);
       load();
     } catch (e: any) {

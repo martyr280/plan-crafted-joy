@@ -7,6 +7,7 @@ import { Loader2, RefreshCw, Play, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { enqueueP21Job, getBridgeStatus } from "@/server/p21.functions";
 import { formatDistanceToNow } from "date-fns";
+import { useServerFn } from "@tanstack/react-start";
 
 type Agent = { id: string; name: string; version: string | null; ip: string | null; last_seen_at: string | null };
 type Job = { id: string; kind: string; status: string; created_at: string; completed_at: string | null; error: string | null };
@@ -20,19 +21,29 @@ function agentHealth(lastSeenAt: string | null) {
 }
 
 export function P21BridgePanel() {
+  const getBridgeStatusFn = useServerFn(getBridgeStatus);
+  const enqueueP21JobFn = useServerFn(enqueueP21Job);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [recent, setRecent] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [pinging, setPinging] = useState(false);
 
+  function getErrorMessage(error: unknown) {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === "string") return error;
+    return "Failed to load bridge status";
+  }
+
   async function refresh() {
     setLoading(true);
     try {
-      const res = await getBridgeStatus();
-      setAgents(res.agents as Agent[]);
-      setRecent(res.recent as Job[]);
+      const res = await getBridgeStatusFn();
+      setAgents(Array.isArray((res as any)?.agents) ? ((res as any).agents as Agent[]) : []);
+      setRecent(Array.isArray((res as any)?.recent) ? ((res as any).recent as Job[]) : []);
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to load bridge status");
+      setAgents([]);
+      setRecent([]);
+      toast.error(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -46,7 +57,7 @@ export function P21BridgePanel() {
   async function runPing() {
     setPinging(true);
     try {
-      const res = await enqueueP21Job({ data: { kind: "ping", payload: {}, timeoutMs: 15000 } });
+      const res = await enqueueP21JobFn({ data: { kind: "ping", payload: {}, timeoutMs: 15000 } });
       toast.success(`Ping ok — server time ${(res as any).result?.server_time ?? "?"}`);
       refresh();
     } catch (e: any) {
