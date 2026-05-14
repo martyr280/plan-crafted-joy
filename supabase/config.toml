@@ -19,3 +19,9 @@ verify_jwt = false
 [functions.sync-e2g]
 verify_jwt = false
 
+[functions.classify-inbound-email]
+verify_jwt = true
+
+[functions.crawl-website]
+verify_jwt = true
+
