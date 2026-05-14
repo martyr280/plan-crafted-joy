@@ -12,7 +12,7 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Mail, AlertOctagon, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { syncArAging } from "@/server/p21.functions";
+import { syncArAging } from "@/lib/p21.functions";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/ar")({ component: ArPage });

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, RefreshCw, Play, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
-import { enqueueP21Job, getBridgeStatus } from "@/server/p21.functions";
+import { enqueueP21Job, getBridgeStatus } from "@/lib/p21.functions";
 import { formatDistanceToNow } from "date-fns";
 import { useServerFn } from "@tanstack/react-start";
 

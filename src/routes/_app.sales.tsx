@@ -9,7 +9,7 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Download, RefreshCw, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { fetchSalesData } from "@/server/p21.functions";
+import { fetchSalesData } from "@/lib/p21.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/sales")({ component: SalesPage });

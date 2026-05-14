@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { timingSafeEqual } from "crypto";
-import { applyE2GSnapshot } from "@/server/p21.functions";
+import { applyE2GSnapshot } from "@/lib/p21.functions";
 
 // Public webhook for scheduling the E2G Combined Report sync.
 // Caller must send `Authorization: Bearer <CRON_SECRET>` (or

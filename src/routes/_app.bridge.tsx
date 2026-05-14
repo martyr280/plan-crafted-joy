@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, RefreshCw, Play, Wifi, WifiOff, RotateCcw, Eye, AlertCircle, Clock, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import { enqueueP21Job, getBridgeStatus, retryBridgeJob } from "@/server/p21.functions";
+import { enqueueP21Job, getBridgeStatus, retryBridgeJob } from "@/lib/p21.functions";
 import { formatDistanceToNow } from "date-fns";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
