@@ -25,14 +25,22 @@ export function P21BridgePanel() {
   const [loading, setLoading] = useState(false);
   const [pinging, setPinging] = useState(false);
 
+  function getErrorMessage(error: unknown) {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === "string") return error;
+    return "Failed to load bridge status";
+  }
+
   async function refresh() {
     setLoading(true);
     try {
       const res = await getBridgeStatus();
-      setAgents(res.agents as Agent[]);
-      setRecent(res.recent as Job[]);
+      setAgents(Array.isArray((res as any)?.agents) ? ((res as any).agents as Agent[]) : []);
+      setRecent(Array.isArray((res as any)?.recent) ? ((res as any).recent as Job[]) : []);
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to load bridge status");
+      setAgents([]);
+      setRecent([]);
+      toast.error(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
