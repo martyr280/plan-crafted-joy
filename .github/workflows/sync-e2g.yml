@@ -1,0 +1,32 @@
+name: Sync E2G Combined Report
+
+on:
+  schedule:
+    # Nightly at 06:00 UTC (~01:00 US Central). Adjust as needed.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger E2G snapshot sync
+        env:
+          WEBHOOK_URL: ${{ vars.SYNC_E2G_URL || 'https://qvkiheecfatnfjnfwcau.supabase.co/functions/v1/sync-e2g' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret is not set"
+            exit 1
+          fi
+          echo "POST $WEBHOOK_URL"
+          response=$(curl -sS -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json")
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "HTTP $status"
+          echo "$body"
+          if [ "$status" != "200" ]; then
+            exit 1
+          fi

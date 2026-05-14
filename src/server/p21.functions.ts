@@ -232,6 +232,63 @@ export const queryP21View = createServerFn({ method: "POST" })
     return result as { rows: any[]; count: number };
   });
 
+// ─── E2G Combined Report sync ─────────────────────────────────────────────────
+
+// Internal: shared by both the admin-triggered server function and the
+// CRON_SECRET-gated public webhook.
+export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: number }> {
+  const { result } = await runJob("e2g.combined-report", {}, timeoutMs);
+  const rows = ((result as any)?.rows ?? []) as Array<Record<string, any>>;
+  if (rows.length === 0) {
+    await supabaseAdmin.from("e2g_inventory_snapshot").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    return { imported: 0 };
+  }
+
+  const toInsert = rows.map((r) => {
+    const rawDate = r.next_due_date;
+    let nextDate: string | null = null;
+    if (rawDate) {
+      const d = rawDate instanceof Date ? rawDate : new Date(rawDate);
+      if (!Number.isNaN(d.getTime())) nextDate = d.toISOString().slice(0, 10);
+    }
+    return {
+      item_id: String(r.item_id),
+      item_desc: r.item_desc ?? null,
+      birm: r.Birm ?? null,
+      dallas: r.Dallas ?? null,
+      ocala: r.Ocala ?? null,
+      total: r.Total ?? null,
+      e2g_price: r["E2G Price"] ?? null,
+      weight: r.weight ?? null,
+      net_weight: r.net_weight ?? null,
+      next_due_date: nextDate,
+      next_due_in_display: r["Next Due In"] || null,
+    };
+  });
+
+  // Replace snapshot: P21 is source of truth.
+  await supabaseAdmin
+    .from("e2g_inventory_snapshot")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+
+  for (let i = 0; i < toInsert.length; i += 500) {
+    const { error } = await supabaseAdmin
+      .from("e2g_inventory_snapshot")
+      .insert(toInsert.slice(i, i + 500));
+    if (error) throw new Error(`E2G snapshot insert failed: ${error.message}`);
+  }
+
+  return { imported: toInsert.length };
+}
+
+export const syncE2GReport = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    return applyE2GSnapshot();
+  });
+
 const SubmitSchema = z.object({
   orderId: z.string().uuid(),
 });

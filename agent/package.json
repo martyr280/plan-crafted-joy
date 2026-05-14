@@ -8,7 +8,7 @@
     "start": "node agent.js",
     "install-service": "node install-service.js",
     "uninstall-service": "node uninstall-service.js",
-    "build:exe": "bun build --compile --target=bun-windows-x64 --minify --outfile dist/ndiOS-agent.exe ./agent.js"
+    "build:exe": "bun build --compile --target=bun-windows-x64-baseline --minify --outfile dist/ndiOS-agent.exe ./agent.js"
   },
   "engines": { "node": ">=20" },
   "dependencies": {

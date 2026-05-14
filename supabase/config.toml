@@ -9,3 +9,13 @@ verify_jwt = true
 [functions.ingest-catalog]
 verify_jwt = true
 
+# Bridge endpoint hit by the local P21 agent.
+# Auth is HMAC-SHA256 with P21_BRIDGE_SECRET, not a Supabase JWT.
+[functions.p21-bridge]
+verify_jwt = false
+
+# Cron-triggered E2G report sync.
+# Auth is a CRON_SECRET shared with the scheduler, not a Supabase JWT.
+[functions.sync-e2g]
+verify_jwt = false
+

@@ -3,6 +3,7 @@ import { salesQuery } from "./sales-query.js";
 import { arAging } from "./ar-aging.js";
 import { submitOrder } from "./submit-order.js";
 import { p21ApiTest, p21ApiQuery } from "./p21-rest.js";
+import { e2gCombinedReport } from "./e2g-report.js";
 
 // Allowlist of job kinds the agent will execute. The app cannot ask for
 // anything not listed here — keeps SQL safe and predictable.
@@ -13,4 +14,5 @@ export const handlers = {
   "order.submit": submitOrder,
   "p21.api.test": p21ApiTest,
   "p21.api.query": p21ApiQuery,
+  "e2g.combined-report": e2gCombinedReport,
 };
