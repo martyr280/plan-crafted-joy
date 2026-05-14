@@ -46,6 +46,7 @@ function InventorySyncPage() {
   const [website, setWebsite] = useState<any[]>([]);
   const [pricer, setPricer] = useState<any[]>([]);
   const [catalog, setCatalog] = useState<any[]>([]);
+  const [e2gAll, setE2gAll] = useState<any[]>([]);
   const [crawls, setCrawls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -55,7 +56,10 @@ function InventorySyncPage() {
   const [e2gLast, setE2gLast] = useState<{ syncedAt: string | null; count: number }>({ syncedAt: null, count: 0 });
   const [e2gError, setE2gError] = useState<string | null>(null);
   const [e2gPreview, setE2gPreview] = useState<any[]>([]);
+  const [applying, setApplying] = useState(false);
+  const [confirmApply, setConfirmApply] = useState(false);
   const runSyncE2G = useServerFn(syncE2GReport);
+  const runApplyE2G = useServerFn(applyE2GToPricer);
 
   async function loadE2GStatus() {
     const [{ data: latest }, { count }, { data: preview }] = await Promise.all([
