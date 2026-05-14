@@ -388,6 +388,54 @@ export type Database = {
         }
         Relationships: []
       }
+      e2g_inventory_snapshot: {
+        Row: {
+          birm: number | null
+          dallas: number | null
+          e2g_price: number | null
+          id: string
+          item_desc: string | null
+          item_id: string
+          net_weight: number | null
+          next_due_date: string | null
+          next_due_in_display: string | null
+          ocala: number | null
+          synced_at: string
+          total: number | null
+          weight: number | null
+        }
+        Insert: {
+          birm?: number | null
+          dallas?: number | null
+          e2g_price?: number | null
+          id?: string
+          item_desc?: string | null
+          item_id: string
+          net_weight?: number | null
+          next_due_date?: string | null
+          next_due_in_display?: string | null
+          ocala?: number | null
+          synced_at?: string
+          total?: number | null
+          weight?: number | null
+        }
+        Update: {
+          birm?: number | null
+          dallas?: number | null
+          e2g_price?: number | null
+          id?: string
+          item_desc?: string | null
+          item_id?: string
+          net_weight?: number | null
+          next_due_date?: string | null
+          next_due_in_display?: string | null
+          ocala?: number | null
+          synced_at?: string
+          total?: number | null
+          weight?: number | null
+        }
+        Relationships: []
+      }
       fleet_loads: {
         Row: {
           capacity_pct: number | null
