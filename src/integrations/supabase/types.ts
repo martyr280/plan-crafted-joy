@@ -398,9 +398,11 @@ export type Database = {
           item_id: string
           net_weight: number | null
           next_due_date: string | null
+          next_due_in_2: string | null
           next_due_in_display: string | null
           ocala: number | null
           synced_at: string
+          today: string | null
           total: number | null
           weight: number | null
         }
@@ -413,9 +415,11 @@ export type Database = {
           item_id: string
           net_weight?: number | null
           next_due_date?: string | null
+          next_due_in_2?: string | null
           next_due_in_display?: string | null
           ocala?: number | null
           synced_at?: string
+          today?: string | null
           total?: number | null
           weight?: number | null
         }
@@ -428,9 +432,11 @@ export type Database = {
           item_id?: string
           net_weight?: number | null
           next_due_date?: string | null
+          next_due_in_2?: string | null
           next_due_in_display?: string | null
           ocala?: number | null
           synced_at?: string
+          today?: string | null
           total?: number | null
           weight?: number | null
         }

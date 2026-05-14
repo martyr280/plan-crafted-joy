@@ -55,6 +55,12 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
     return Number.isFinite(n) ? n : null;
   };
 
+  const toIso = (v: any): string | null => {
+    if (!v) return null;
+    const d = v instanceof Date ? v : new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
+
   const toInsert = rows.map((r) => {
     const rawDate = r.next_due_date;
     let nextDate: string | null = null;
@@ -64,6 +70,7 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
     }
     return {
       item_id: String(r.item_id),
+      today: toIso(r.Today),
       item_desc: r.item_desc ?? null,
       birm: num(r.Birm),
       dallas: num(r.Dallas),
@@ -74,6 +81,7 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
       net_weight: num(r.net_weight),
       next_due_date: nextDate,
       next_due_in_display: r["Next Due In"] != null ? String(r["Next Due In"]) : null,
+      next_due_in_2: r["Next Due In 2"] != null ? String(r["Next Due In 2"]) : null,
     };
   });
 
