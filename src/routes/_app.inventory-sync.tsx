@@ -244,6 +244,31 @@ function InventorySyncPage() {
       />
 
       <Card className="p-4 mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
+              <Database className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <div className="font-semibold">E2G Combined Report (P21)</div>
+              <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                {e2gError ? (
+                  <><AlertCircle className="w-3.5 h-3.5 text-destructive" /><span className="text-destructive">{e2gError}</span></>
+                ) : e2gLast.syncedAt ? (
+                  <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />Last synced {new Date(e2gLast.syncedAt).toLocaleString()} · {e2gLast.count.toLocaleString()} items</>
+                ) : (
+                  <>Never synced</>
+                )}
+              </div>
+            </div>
+          </div>
+          <Button onClick={handleSyncE2G} disabled={e2gSyncing}>
+            {e2gSyncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            {e2gSyncing ? "Syncing P21…" : "Sync E2G report"}
+          </Button>
+        </div>
+      </Card>
+
         <div className="flex flex-wrap gap-6 items-center justify-between">
           <div className="flex flex-wrap gap-6 text-sm">
             <Stat label="Website SKUs" value={website.length} />
