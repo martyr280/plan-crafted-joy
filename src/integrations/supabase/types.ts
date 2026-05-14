@@ -857,8 +857,14 @@ export type Database = {
           id: string
           in_e2g: boolean
           item: string
+          item_short: string | null
           list_price: number | null
           mfg: string | null
+          price_l1: number | null
+          price_l2: number | null
+          price_l3: number | null
+          price_l4: number | null
+          price_l5: number | null
           source: string | null
           updated_at: string
           weight: number | null
@@ -877,8 +883,14 @@ export type Database = {
           id?: string
           in_e2g?: boolean
           item: string
+          item_short?: string | null
           list_price?: number | null
           mfg?: string | null
+          price_l1?: number | null
+          price_l2?: number | null
+          price_l3?: number | null
+          price_l4?: number | null
+          price_l5?: number | null
           source?: string | null
           updated_at?: string
           weight?: number | null
@@ -897,11 +909,59 @@ export type Database = {
           id?: string
           in_e2g?: boolean
           item?: string
+          item_short?: string | null
           list_price?: number | null
           mfg?: string | null
+          price_l1?: number | null
+          price_l2?: number | null
+          price_l3?: number | null
+          price_l4?: number | null
+          price_l5?: number | null
           source?: string | null
           updated_at?: string
           weight?: number | null
+        }
+        Relationships: []
+      }
+      pricer_publications: {
+        Row: {
+          error: string | null
+          filters: Json
+          generated_at: string
+          generated_by: string | null
+          id: string
+          name: string
+          orientation: string
+          pdf_path: string | null
+          portrait_level: string | null
+          row_count: number
+          status: string
+        }
+        Insert: {
+          error?: string | null
+          filters?: Json
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          name: string
+          orientation: string
+          pdf_path?: string | null
+          portrait_level?: string | null
+          row_count?: number
+          status?: string
+        }
+        Update: {
+          error?: string | null
+          filters?: Json
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          name?: string
+          orientation?: string
+          pdf_path?: string | null
+          portrait_level?: string | null
+          row_count?: number
+          status?: string
         }
         Relationships: []
       }
@@ -1081,6 +1141,48 @@ export type Database = {
           id?: string
           ndi_sku?: string
           source?: string
+        }
+        Relationships: []
+      }
+      sku_family_image_overrides: {
+        Row: {
+          image_path: string
+          item_short: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          image_path: string
+          item_short: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          image_path?: string
+          item_short?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
+      sku_image_cache: {
+        Row: {
+          checked_at: string
+          full_sku: string
+          image_url: string
+          status: string
+        }
+        Insert: {
+          checked_at?: string
+          full_sku: string
+          image_url: string
+          status?: string
+        }
+        Update: {
+          checked_at?: string
+          full_sku?: string
+          image_url?: string
+          status?: string
         }
         Relationships: []
       }

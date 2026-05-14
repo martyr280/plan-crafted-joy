@@ -21,6 +21,7 @@ const groups = [
       { title: "Inventory", url: "/inventory", icon: Package },
       { title: "Inventory Sync", url: "/inventory-sync", icon: RefreshCw },
       { title: "Pricing", url: "/pricing", icon: Tag },
+      { title: "Pricer", url: "/pricer", icon: FileBarChart },
       { title: "Catalogs", url: "/catalogs", icon: BookOpen },
     ],
   },
