@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { RefreshCw, ExternalLink, Download, Loader2 } from "lucide-react";
+import { RefreshCw, ExternalLink, Download, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { syncE2GReport } from "@/lib/p21.functions";
 
 export const Route = createFileRoute("/_app/inventory-sync")({ component: InventorySyncPage });
 
@@ -49,6 +51,35 @@ function InventorySyncPage() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(0);
+  const [e2gSyncing, setE2gSyncing] = useState(false);
+  const [e2gLast, setE2gLast] = useState<{ syncedAt: string | null; count: number }>({ syncedAt: null, count: 0 });
+  const [e2gError, setE2gError] = useState<string | null>(null);
+  const runSyncE2G = useServerFn(syncE2GReport);
+
+  async function loadE2GStatus() {
+    const [{ data: latest }, { count }] = await Promise.all([
+      supabase.from("e2g_inventory_snapshot").select("synced_at").order("synced_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("e2g_inventory_snapshot").select("id", { count: "exact", head: true }),
+    ]);
+    setE2gLast({ syncedAt: (latest as any)?.synced_at ?? null, count: count ?? 0 });
+  }
+
+  async function handleSyncE2G() {
+    setE2gSyncing(true);
+    setE2gError(null);
+    try {
+      const res = await runSyncE2G();
+      toast.success(`E2G sync complete — imported ${res.imported.toLocaleString()} items`);
+      await loadE2GStatus();
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      setE2gError(msg);
+      toast.error(`E2G sync failed: ${msg}`);
+    } finally {
+      setE2gSyncing(false);
+    }
+  }
+
 
   async function loadAll() {
     setLoading(true);
@@ -79,7 +110,7 @@ function InventorySyncPage() {
     }
   }
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { loadAll(); loadE2GStatus(); }, []);
   useEffect(() => {
     const ch = supabase.channel("website_crawls-live").on("postgres_changes", { event: "*", schema: "public", table: "website_crawls" }, () => loadAll()).subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -211,6 +242,32 @@ function InventorySyncPage() {
         title="Inventory Sync"
         description="Reconcile ndiof.com against the pricer XLSX and parsed catalogs. Crawls the website with Firecrawl."
       />
+
+      <Card className="p-4 mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
+              <Database className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <div className="font-semibold">E2G Combined Report (P21)</div>
+              <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                {e2gError ? (
+                  <><AlertCircle className="w-3.5 h-3.5 text-destructive" /><span className="text-destructive">{e2gError}</span></>
+                ) : e2gLast.syncedAt ? (
+                  <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />Last synced {new Date(e2gLast.syncedAt).toLocaleString()} · {e2gLast.count.toLocaleString()} items</>
+                ) : (
+                  <>Never synced</>
+                )}
+              </div>
+            </div>
+          </div>
+          <Button onClick={handleSyncE2G} disabled={e2gSyncing}>
+            {e2gSyncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            {e2gSyncing ? "Syncing P21…" : "Sync E2G report"}
+          </Button>
+        </div>
+      </Card>
 
       <Card className="p-4 mb-4">
         <div className="flex flex-wrap gap-6 items-center justify-between">
