@@ -107,13 +107,14 @@ function InventorySyncPage() {
       return out;
     };
     try {
-      const [w, p, c, cr] = await Promise.all([
+      const [w, p, c, e, cr] = await Promise.all([
         fetchAll("website_items", "sku, name, description, image_url, detail_url, brand, in_stock, stock_text, crawled_at"),
-        fetchAll("price_list", "item, description, list_price, mfg, category"),
+        fetchAll("price_list", "id, item, description, list_price, weight, mfg, category, e2g_price, e2g_weight, in_e2g, e2g_synced_at"),
         fetchAll("catalog_items", "sku, description, list_price, page, mfg"),
+        fetchAll("e2g_inventory_snapshot", "item_id, item_desc, e2g_price, weight, total"),
         supabase.from("website_crawls").select("*").order("started_at", { ascending: false }).limit(10).then((r) => r.data ?? []),
       ]);
-      setWebsite(w); setPricer(p); setCatalog(c); setCrawls(cr);
+      setWebsite(w); setPricer(p); setCatalog(c); setE2gAll(e); setCrawls(cr);
     } catch (e: any) {
       toast.error(`Load failed: ${e.message}`);
     } finally {
