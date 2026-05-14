@@ -8,6 +8,10 @@ import type { Database } from './types'
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
+    const unauthorized = (message: string, status = 401) => {
+      console.error(`[Supabase] ${message}`);
+      throw new Error(message);
+    };
     
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -19,28 +23,28 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       ];
       const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
       console.error(`[Supabase] ${message}`);
-      throw new Response(message, { status: 500 });
+      throw new Error(message);
     }
     
     const request = getRequest();
 
     if (!request?.headers) {
-      throw new Response('Unauthorized: No request headers available', { status: 401 });
+      unauthorized('Unauthorized: No request headers available');
     }
 
     const authHeader = request.headers.get('authorization');
 
     if (!authHeader) {
-      throw new Response('Unauthorized: No authorization header provided', { status: 401 });
+      unauthorized('Unauthorized: No authorization header provided');
     }
 
     if (!authHeader.startsWith('Bearer ')) {
-      throw new Response('Unauthorized: Only Bearer tokens are supported', { status: 401 });
+      unauthorized('Unauthorized: Only Bearer tokens are supported');
     }
 
     const token = authHeader.replace('Bearer ', '');
     if (!token) {
-      throw new Response('Unauthorized: No token provided', { status: 401 });
+      unauthorized('Unauthorized: No token provided');
     }
 
     const supabase = createClient<Database>(
@@ -62,11 +66,11 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
 
     const { data, error } = await supabase.auth.getClaims(token);
     if (error || !data?.claims) {
-      throw new Response('Unauthorized: Invalid token', { status: 401 });
+      unauthorized('Unauthorized: Invalid token');
     }
 
     if (!data.claims.sub) {
-      throw new Response('Unauthorized: No user ID found in token', { status: 401 });
+      unauthorized('Unauthorized: No user ID found in token');
     }
 
     return next({
