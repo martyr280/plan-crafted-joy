@@ -11,6 +11,7 @@ import { listWebhookDeliveries } from "@/lib/webhook-debug.functions";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
 import { RefreshCw, Webhook, CheckCircle2, AlertCircle, Clock, Mail } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/webhooks")({ component: WebhooksPage });
 
@@ -23,6 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function WebhooksPage() {
+  const listWebhookDeliveriesFn = useServerFn(listWebhookDeliveries);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<any | null>(null);
@@ -36,7 +38,7 @@ function WebhooksPage() {
   async function load() {
     setLoading(true);
     try {
-      const res = await listWebhookDeliveries({ data: { limit: 100 } });
+      const res = await listWebhookDeliveriesFn({ data: { limit: 100 } });
       setRows(Array.isArray((res as any)?.rows) ? (res as any).rows : []);
     } catch (e: any) {
       setRows([]);
