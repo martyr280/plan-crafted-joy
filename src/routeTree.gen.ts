@@ -29,6 +29,7 @@ import { Route as AppCatalogsRouteImport } from './routes/_app.catalogs'
 import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppArRouteImport } from './routes/_app.ar'
+import { Route as ApiPublicSyncE2gRouteImport } from './routes/api/public/sync-e2g'
 import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-bridge'
 import { Route as ApiPublicInboundEmailRouteImport } from './routes/api/public/inbound-email'
 
@@ -131,6 +132,11 @@ const AppArRoute = AppArRouteImport.update({
   path: '/ar',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicSyncE2gRoute = ApiPublicSyncE2gRouteImport.update({
+  id: '/api/public/sync-e2g',
+  path: '/api/public/sync-e2g',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicP21BridgeRoute = ApiPublicP21BridgeRouteImport.update({
   id: '/api/public/p21-bridge',
   path: '/api/public/p21-bridge',
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/webhooks': typeof AppWebhooksRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
+  '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
+  '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
+  '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/webhooks'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
+    | '/api/public/sync-e2g'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
+    | '/api/public/sync-e2g'
   id:
     | '__root__'
     | '/_app'
@@ -284,6 +295,7 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
+    | '/api/public/sync-e2g'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -291,6 +303,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ApiPublicInboundEmailRoute: typeof ApiPublicInboundEmailRoute
   ApiPublicP21BridgeRoute: typeof ApiPublicP21BridgeRoute
+  ApiPublicSyncE2gRoute: typeof ApiPublicSyncE2gRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -435,6 +448,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/sync-e2g': {
+      id: '/api/public/sync-e2g'
+      path: '/api/public/sync-e2g'
+      fullPath: '/api/public/sync-e2g'
+      preLoaderRoute: typeof ApiPublicSyncE2gRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/p21-bridge': {
       id: '/api/public/p21-bridge'
       path: '/api/public/p21-bridge'
@@ -501,6 +521,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ApiPublicInboundEmailRoute: ApiPublicInboundEmailRoute,
   ApiPublicP21BridgeRoute: ApiPublicP21BridgeRoute,
+  ApiPublicSyncE2gRoute: ApiPublicSyncE2gRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
