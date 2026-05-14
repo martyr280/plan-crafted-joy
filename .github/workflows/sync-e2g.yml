@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Trigger E2G snapshot sync
         env:
-          WEBHOOK_URL: ${{ vars.APP_URL || 'https://plan-crafted-joy.lovable.app' }}/api/public/sync-e2g
+          WEBHOOK_URL: ${{ vars.SYNC_E2G_URL || 'https://qvkiheecfatnfjnfwcau.supabase.co/functions/v1/sync-e2g' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
