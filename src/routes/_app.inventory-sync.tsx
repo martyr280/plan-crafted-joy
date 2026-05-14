@@ -66,7 +66,7 @@ function InventorySyncPage() {
       supabase.from("e2g_inventory_snapshot").select("synced_at").order("synced_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("e2g_inventory_snapshot").select("id", { count: "exact", head: true }),
       supabase.from("e2g_inventory_snapshot")
-        .select("item_id, item_desc, birm, dallas, ocala, total, e2g_price, next_due_date, next_due_in_display, synced_at")
+        .select("item_id, today, item_desc, birm, dallas, ocala, total, e2g_price, weight, net_weight, next_due_date, next_due_in_display, next_due_in_2, synced_at")
         .order("synced_at", { ascending: false })
         .order("item_id", { ascending: true })
         .limit(25),
