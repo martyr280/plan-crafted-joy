@@ -8,7 +8,7 @@ import type { Database } from './types'
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
-    const unauthorized = (message: string, status = 401) => {
+    const unauthorized = (message: string): never => {
       console.error(`[Supabase] ${message}`);
       throw new Error(message);
     };
@@ -32,11 +32,13 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       unauthorized('Unauthorized: No request headers available');
     }
 
-    const authHeader = request.headers.get('authorization');
+    const authHeaderValue = request.headers.get('authorization');
 
-    if (!authHeader) {
+    if (!authHeaderValue) {
       unauthorized('Unauthorized: No authorization header provided');
     }
+
+    const authHeader = authHeaderValue;
 
     if (!authHeader.startsWith('Bearer ')) {
       unauthorized('Unauthorized: Only Bearer tokens are supported');
@@ -64,20 +66,22 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       }
     );
 
-    const { data, error } = await supabase.auth.getClaims(token);
-    if (error || !data?.claims) {
+    const { data: claimsData, error } = await supabase.auth.getClaims(token);
+    if (error || !claimsData?.claims) {
       unauthorized('Unauthorized: Invalid token');
     }
 
-    if (!data.claims.sub) {
+    const claims = claimsData.claims;
+
+    if (!claims.sub) {
       unauthorized('Unauthorized: No user ID found in token');
     }
 
     return next({
       context: {
         supabase,
-        userId: data.claims.sub,
-        claims: data.claims,
+        userId: claims.sub,
+        claims,
       },
     })
   }
