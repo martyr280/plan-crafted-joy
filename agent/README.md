@@ -13,6 +13,8 @@ This is a small Node program that runs **on a machine inside your network with t
 
 The agent ships as a single self-contained Windows executable (~112 MB) with the runtime and all dependencies bundled inside. **Use this path if you don't want to install Node.js or register a Windows service.**
 
+> The build uses Bun's `bun-windows-x64-baseline` target so it runs on older server CPUs that don't support AVX2 (most P21-era Xeons). If you see the binary crash on startup with Windows Event Log error `0xc000001d` (STATUS_ILLEGAL_INSTRUCTION), the build script accidentally got switched off the baseline target — keep it as-is.
+
 1. **Get `ndiOS-agent.exe`** — either:
 
    - **Download it from GitHub Releases**: every time a tag matching `agent-v*` is pushed (e.g. `agent-v1.0.0`), CI builds the .exe and attaches it (with a `.sha256` checksum) to a release at <https://github.com/martyr280/plan-crafted-joy/releases>. To cut a new release: `git tag agent-v1.0.0 && git push origin agent-v1.0.0`.
