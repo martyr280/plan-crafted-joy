@@ -156,6 +156,24 @@ The agent can also call P21's REST API alongside direct SQL. The agent should ru
 
 The access token is cached in the agent process for ~50 minutes and refreshed automatically on a 401.
 
+## E2G Combined Report (`e2g.combined-report`)
+
+A pre-canned inventory report that joins regular products, kit products, and open POs across the Birmingham (`21`), Dallas (`41`), and Ocala (`51`) locations. SQL lives in `agent/handlers/e2g-report.js`.
+
+End-to-end flow:
+
+1. Agent must have valid `P21_SQL_*` env vars (this is a SQL handler, not REST).
+2. A scheduled trigger calls `POST /api/public/sync-e2g` on the web app with `Authorization: Bearer <CRON_SECRET>`.
+3. The server enqueues an `e2g.combined-report` job; the agent runs the SQL.
+4. The server replaces the `public.e2g_inventory_snapshot` Supabase table with the new rows.
+
+To wire up the schedule, set two values:
+
+- **Lovable Cloud secret** → `CRON_SECRET=<random 32+ char string>` so the webhook can authenticate the caller.
+- **GitHub Actions secret** → `CRON_SECRET=<same value>` at <https://github.com/martyr280/plan-crafted-joy/settings/secrets/actions>. The workflow at `.github/workflows/sync-e2g.yml` runs nightly at 06:00 UTC and hits the webhook.
+
+Manual sync (admin only) is also available via the `syncE2GReport` server function — wire it to a button in Settings if you want one-click resyncs.
+
 ## Adding new job kinds
 
 1. Drop a new file in `handlers/`, exporting an `async function (payload) { ... }`.
