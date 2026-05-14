@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { RefreshCw, Inbox, FileText, Play } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,
@@ -53,6 +54,11 @@ function safeRelative(d: any): string {
 }
 
 function InboxPage() {
+  const listInboundEmailsFn = useServerFn(listInboundEmails);
+  const getInboundEmailFn = useServerFn(getInboundEmail);
+  const reclassifyInboundEmailFn = useServerFn(reclassifyInboundEmail);
+  const dismissInboundEmailFn = useServerFn(dismissInboundEmail);
+  const reprocessInboundEmailFn = useServerFn(reprocessInboundEmail);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("all");
@@ -63,7 +69,7 @@ function InboxPage() {
   async function load() {
     setLoading(true);
     try {
-      const res = await listInboundEmails({ data: { status, classification: klass, limit: 100 } });
+      const res = await listInboundEmailsFn({ data: { status, classification: klass, limit: 100 } });
       setRows(((res as any)?.rows ?? []) as any[]);
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to load");
@@ -76,7 +82,7 @@ function InboxPage() {
 
   async function openRow(id: string) {
     try {
-      const row = await getInboundEmail({ data: { id } });
+      const row = await getInboundEmailFn({ data: { id } });
       setSelected(row);
     } catch (e: any) { toast.error(e?.message ?? "Failed"); }
   }
@@ -220,7 +226,7 @@ function InboxPage() {
                     onClick={async () => {
                       setBusy(true);
                       try {
-                        const r: any = await reprocessInboundEmail({ data: { id: selected.id } });
+                        const r: any = await reprocessInboundEmailFn({ data: { id: selected.id } });
                         toast.success(`Processed → ${r.status}`);
                         setSelected(null); load();
                       } catch (e: any) { toast.error(e?.message ?? "Failed"); }
@@ -232,7 +238,7 @@ function InboxPage() {
                   <Button variant="outline" disabled={busy} onClick={async () => {
                     setBusy(true);
                     try {
-                      const r = await reclassifyInboundEmail({ data: { id: selected.id } });
+                      const r = await reclassifyInboundEmailFn({ data: { id: selected.id } });
                       toast.success(`Reclassified as ${(r as any).classification}`);
                       setSelected(null); load();
                     } catch (e: any) { toast.error(e?.message ?? "Failed"); }
@@ -241,7 +247,7 @@ function InboxPage() {
                   <Button variant="outline" disabled={busy} onClick={async () => {
                     setBusy(true);
                     try {
-                      await dismissInboundEmail({ data: { id: selected.id } });
+                      await dismissInboundEmailFn({ data: { id: selected.id } });
                       toast.success("Dismissed"); setSelected(null); load();
                     } catch (e: any) { toast.error(e?.message ?? "Failed"); }
                     finally { setBusy(false); }
