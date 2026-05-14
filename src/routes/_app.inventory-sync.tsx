@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { RefreshCw, ExternalLink, Download, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { syncE2GReport } from "@/lib/p21.functions";
+import { syncE2GReport, applyE2GToPricer } from "@/lib/p21.functions";
 
 export const Route = createFileRoute("/_app/inventory-sync")({ component: InventorySyncPage });
 
