@@ -27,13 +27,20 @@ function WebhooksPage() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<any | null>(null);
 
+  function getErrorMessage(error: unknown) {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === "string") return error;
+    return "Failed to load";
+  }
+
   async function load() {
     setLoading(true);
     try {
       const res = await listWebhookDeliveries({ data: { limit: 100 } });
-      setRows((res as any).rows);
+      setRows(Array.isArray((res as any)?.rows) ? (res as any).rows : []);
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to load");
+      setRows([]);
+      toast.error(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
