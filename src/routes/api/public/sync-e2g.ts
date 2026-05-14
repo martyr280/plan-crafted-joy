@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { timingSafeEqual } from "crypto";
-import { applyE2GSnapshot } from "@/lib/p21.server";
+// NOTE: applyE2GSnapshot is imported dynamically inside the handler so the
+// server-only `@/integrations/supabase/client.server` dependency doesn't
+// leak into the client bundle via the route tree.
 
 // Public webhook for scheduling the E2G Combined Report sync.
 // Caller must send `Authorization: Bearer <CRON_SECRET>` (or
@@ -33,6 +35,7 @@ export const Route = createFileRoute("/api/public/sync-e2g")({
         }
 
         try {
+          const { applyE2GSnapshot } = await import("@/lib/p21.server");
           const { imported } = await applyE2GSnapshot();
           return Response.json({ ok: true, imported, syncedAt: new Date().toISOString() });
         } catch (e: any) {

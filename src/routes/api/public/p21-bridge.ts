@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createHmac, timingSafeEqual } from "crypto";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+// NOTE: supabaseAdmin is imported dynamically inside the handler so the
+// server-only client.server module doesn't leak into the client bundle via
+// the route tree. Vite's splitter strips handler bodies (and their dynamic
+// imports) but does not tree-shake top-level imports that are only used
+// inside them.
+//
+// This route is functionally superseded by the Supabase Edge Function at
+// supabase/functions/p21-bridge/index.ts (the lovable.app host doesn't run
+// TanStack server routes reliably). Kept for parity / local testing.
 
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 
@@ -21,7 +29,12 @@ function verify(body: string, header: string | null): { ok: boolean; reason?: st
   return { ok: true };
 }
 
-async function upsertAgent(name: string, version?: string, ip?: string) {
+async function upsertAgent(
+  supabaseAdmin: any,
+  name: string,
+  version?: string,
+  ip?: string,
+): Promise<string> {
   const { data: existing } = await supabaseAdmin
     .from("p21_bridge_agents")
     .select("id")
@@ -46,6 +59,8 @@ export const Route = createFileRoute("/api/public/p21-bridge")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
         const bodyText = await request.text();
         const sig = request.headers.get("x-bridge-signature");
         const v = verify(bodyText, sig);
@@ -62,7 +77,7 @@ export const Route = createFileRoute("/api/public/p21-bridge")({
         if (!agent?.name) return new Response("missing agent", { status: 400 });
 
         const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? null;
-        const agentId = await upsertAgent(agent.name, agent.version, ip ?? undefined);
+        const agentId = await upsertAgent(supabaseAdmin, agent.name, agent.version, ip ?? undefined);
 
         if (action === "heartbeat") {
           return Response.json({ ok: true, agent_id: agentId });
@@ -76,7 +91,7 @@ export const Route = createFileRoute("/api/public/p21-bridge")({
             .eq("status", "pending")
             .order("created_at", { ascending: true })
             .limit(limit);
-          const ids = (pending ?? []).map((r) => r.id);
+          const ids = (pending ?? []).map((r: any) => r.id);
           if (ids.length === 0) return Response.json({ jobs: [] });
           const { data: claimed } = await supabaseAdmin
             .from("p21_bridge_jobs")
