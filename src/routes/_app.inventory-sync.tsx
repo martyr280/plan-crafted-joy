@@ -381,30 +381,40 @@ function InventorySyncPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
+                <TableHead>Today</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">Birm</TableHead>
                 <TableHead className="text-right">Dallas</TableHead>
                 <TableHead className="text-right">Ocala</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead className="text-right">E2G Price</TableHead>
+                <TableHead className="text-right">Weight</TableHead>
+                <TableHead className="text-right">Net Wt</TableHead>
                 <TableHead>Next Due</TableHead>
+                <TableHead>Next Due 2</TableHead>
+                <TableHead>Synced</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {e2gPreview.map((r, i) => (
                 <TableRow key={i}>
                   <TableCell className="font-mono text-xs">{r.item_id}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{r.today ? new Date(r.today).toLocaleDateString() : "—"}</TableCell>
                   <TableCell className="max-w-[320px] truncate" title={r.item_desc ?? ""}>{r.item_desc ?? "—"}</TableCell>
                   <TableCell className="text-right">{r.birm ?? "—"}</TableCell>
                   <TableCell className="text-right">{r.dallas ?? "—"}</TableCell>
                   <TableCell className="text-right">{r.ocala ?? "—"}</TableCell>
                   <TableCell className="text-right font-medium">{r.total ?? "—"}</TableCell>
                   <TableCell className="text-right">{r.e2g_price != null ? `$${Number(r.e2g_price).toFixed(2)}` : "—"}</TableCell>
-                  <TableCell className="text-xs">{r.next_due_in_display ?? r.next_due_date ?? "—"}</TableCell>
+                  <TableCell className="text-right">{r.weight ?? "—"}</TableCell>
+                  <TableCell className="text-right">{r.net_weight ?? "—"}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{r.next_due_in_display ?? r.next_due_date ?? "—"}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{r.next_due_in_2 ?? "—"}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{r.synced_at ? new Date(r.synced_at).toLocaleString() : "—"}</TableCell>
                 </TableRow>
               ))}
               {e2gPreview.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
+                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
