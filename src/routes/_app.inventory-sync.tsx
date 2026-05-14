@@ -277,6 +277,57 @@ function InventorySyncPage() {
       </Card>
 
       <Card className="p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="font-semibold text-sm">Snapshot preview</div>
+            <div className="text-xs text-muted-foreground">
+              {e2gPreview.length
+                ? `Showing ${e2gPreview.length} of ${e2gLast.count.toLocaleString()} rows from e2g_inventory_snapshot`
+                : "No snapshot data yet — run a sync to populate."}
+            </div>
+          </div>
+          {e2gPreview.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => csvDownload("e2g_snapshot_preview.csv", e2gPreview)}>
+              <Download className="w-4 h-4 mr-1" /> CSV
+            </Button>
+          )}
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="text-right">Birm</TableHead>
+                <TableHead className="text-right">Dallas</TableHead>
+                <TableHead className="text-right">Ocala</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">E2G Price</TableHead>
+                <TableHead>Next Due</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {e2gPreview.map((r, i) => (
+                <TableRow key={i}>
+                  <TableCell className="font-mono text-xs">{r.item_id}</TableCell>
+                  <TableCell className="max-w-[320px] truncate" title={r.item_desc ?? ""}>{r.item_desc ?? "—"}</TableCell>
+                  <TableCell className="text-right">{r.birm ?? "—"}</TableCell>
+                  <TableCell className="text-right">{r.dallas ?? "—"}</TableCell>
+                  <TableCell className="text-right">{r.ocala ?? "—"}</TableCell>
+                  <TableCell className="text-right font-medium">{r.total ?? "—"}</TableCell>
+                  <TableCell className="text-right">{r.e2g_price != null ? `$${Number(r.e2g_price).toFixed(2)}` : "—"}</TableCell>
+                  <TableCell className="text-xs">{r.next_due_in_display ?? r.next_due_date ?? "—"}</TableCell>
+                </TableRow>
+              ))}
+              {e2gPreview.length === 0 && (
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      <Card className="p-4 mb-4">
         <div className="flex flex-wrap gap-6 items-center justify-between">
           <div className="flex flex-wrap gap-6 text-sm">
             <Stat label="Website SKUs" value={website.length} />
