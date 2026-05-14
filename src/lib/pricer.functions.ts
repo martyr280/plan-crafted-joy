@@ -83,7 +83,7 @@ export const updateFamilyPrices = createServerFn({ method: "POST" })
     const { item_short, ...prices } = data;
     const patch: Record<string, number | null> = {};
     for (const [k, v] of Object.entries(prices)) if (v !== undefined) patch[k] = v as number | null;
-    const { error } = await supabaseAdmin.from("price_list").update(patch).eq("item_short", item_short);
+    const { error } = await supabaseAdmin.from("price_list").update(patch as any).eq("item_short", item_short);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
