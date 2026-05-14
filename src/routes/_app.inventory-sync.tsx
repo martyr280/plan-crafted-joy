@@ -269,6 +269,7 @@ function InventorySyncPage() {
         </div>
       </Card>
 
+      <Card className="p-4 mb-4">
         <div className="flex flex-wrap gap-6 items-center justify-between">
           <div className="flex flex-wrap gap-6 text-sm">
             <Stat label="Website SKUs" value={website.length} />
