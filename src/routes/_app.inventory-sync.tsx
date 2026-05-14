@@ -173,6 +173,85 @@ function InventorySyncPage() {
     return { missingFromPricer: missingPricer, missingFromWebsite: missingWeb, mismatches: mism };
   }, [website, pricer, catalog]);
 
+  const pricerVsE2G = useMemo(() => {
+    const pricerMap = new Map<string, any>();
+    for (const r of pricer) pricerMap.set(normSku(r.item), r);
+    const e2gMap = new Map<string, any>();
+    for (const r of e2gAll) e2gMap.set(normSku(r.item_id), r);
+
+    const out: any[] = [];
+    const numEq = (a: any, b: any) => {
+      const na = a == null ? null : Number(a);
+      const nb = b == null ? null : Number(b);
+      if (na == null && nb == null) return true;
+      if (na == null || nb == null) return false;
+      return Math.abs(na - nb) < 0.005;
+    };
+
+    for (const [k, e] of e2gMap) {
+      const p = pricerMap.get(k);
+      if (!p) {
+        out.push({
+          sku: e.item_id, status: "missing_in_pricer",
+          pricer_desc: null, e2g_desc: e.item_desc,
+          list_price: null, e2g_price: e.e2g_price,
+          pricer_weight: null, e2g_weight: e.weight,
+        });
+      } else {
+        const descDiff = (p.description ?? "").trim() !== (e.item_desc ?? "").trim();
+        const priceDiff = !numEq(p.e2g_price, e.e2g_price);
+        const weightDiff = !numEq(p.e2g_weight ?? p.weight, e.weight);
+        let status = "match";
+        if (descDiff && (priceDiff || weightDiff)) status = "multi_diff";
+        else if (descDiff) status = "desc_diff";
+        else if (priceDiff) status = "price_diff";
+        else if (weightDiff) status = "weight_diff";
+        out.push({
+          sku: p.item, status,
+          pricer_desc: p.description, e2g_desc: e.item_desc,
+          list_price: p.list_price, e2g_price: e.e2g_price,
+          pricer_weight: p.e2g_weight ?? p.weight, e2g_weight: e.weight,
+        });
+      }
+    }
+    for (const [k, p] of pricerMap) {
+      if (!e2gMap.has(k)) {
+        out.push({
+          sku: p.item, status: "missing_in_e2g",
+          pricer_desc: p.description, e2g_desc: null,
+          list_price: p.list_price, e2g_price: null,
+          pricer_weight: p.e2g_weight ?? p.weight, e2g_weight: null,
+        });
+      }
+    }
+    return out;
+  }, [pricer, e2gAll]);
+
+  const pricerVsE2GStats = useMemo(() => {
+    const s = { match: 0, diff: 0, missing_in_pricer: 0, missing_in_e2g: 0 };
+    for (const r of pricerVsE2G) {
+      if (r.status === "match") s.match++;
+      else if (r.status === "missing_in_pricer") s.missing_in_pricer++;
+      else if (r.status === "missing_in_e2g") s.missing_in_e2g++;
+      else s.diff++;
+    }
+    return s;
+  }, [pricerVsE2G]);
+
+  async function handleApplyE2G() {
+    setApplying(true);
+    setConfirmApply(false);
+    try {
+      const res = await runApplyE2G();
+      toast.success(`Applied E2G: ${res.updated} updated · ${res.inserted} added · ${res.flaggedMissing} flagged missing`);
+      await loadAll();
+    } catch (e: any) {
+      toast.error(`Apply failed: ${e?.message ?? e}`);
+    } finally {
+      setApplying(false);
+    }
+  }
+
   async function startCrawl() {
     setBusy(true);
     const { data: { user } } = await supabase.auth.getUser();
