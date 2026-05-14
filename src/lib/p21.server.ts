@@ -46,6 +46,15 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
     return { imported: 0 };
   }
 
+  const num = (v: any): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    const s = String(v).replace(/[$,\s]/g, "");
+    if (!/^-?\d*\.?\d+$/.test(s)) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
   const toInsert = rows.map((r) => {
     const rawDate = r.next_due_date;
     let nextDate: string | null = null;
@@ -56,15 +65,15 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
     return {
       item_id: String(r.item_id),
       item_desc: r.item_desc ?? null,
-      birm: r.Birm ?? null,
-      dallas: r.Dallas ?? null,
-      ocala: r.Ocala ?? null,
-      total: r.Total ?? null,
-      e2g_price: r["E2G Price"] ?? null,
-      weight: r.weight ?? null,
-      net_weight: r.net_weight ?? null,
+      birm: num(r.Birm),
+      dallas: num(r.Dallas),
+      ocala: num(r.Ocala),
+      total: num(r.Total),
+      e2g_price: num(r["E2G Price"]),
+      weight: num(r.weight),
+      net_weight: num(r.net_weight),
       next_due_date: nextDate,
-      next_due_in_display: r["Next Due In"] || null,
+      next_due_in_display: r["Next Due In"] != null ? String(r["Next Due In"]) : null,
     };
   });
 
