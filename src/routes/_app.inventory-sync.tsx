@@ -455,6 +455,9 @@ function InventorySyncPage() {
             <TabsTrigger value="mismatch">
               Description mismatch <Badge variant="secondary" className="ml-2">{mismatches.length}</Badge>
             </TabsTrigger>
+            <TabsTrigger value="pricer-vs-e2g">
+              Pricer vs E2G <Badge variant="secondary" className="ml-2">{pricerVsE2GStats.diff + pricerVsE2GStats.missing_in_pricer}</Badge>
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="missing-pricer" className="mt-4">
             <FilteredTable rows={missingFromPricer} columns={[
@@ -479,6 +482,42 @@ function InventorySyncPage() {
               { key: "website_desc", label: "Website" },
               { key: "pricer_desc", label: "Pricer" },
               { key: "catalog_desc", label: "Catalog" },
+            ]} />
+          </TabsContent>
+          <TabsContent value="pricer-vs-e2g" className="mt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="flex gap-5 text-sm">
+                <Stat label="Match" value={pricerVsE2GStats.match} />
+                <Stat label="Differ" value={pricerVsE2GStats.diff} variant="warn" />
+                <Stat label="E2G-only" value={pricerVsE2GStats.missing_in_pricer} variant="warn" />
+                <Stat label="Pricer-only" value={pricerVsE2GStats.missing_in_e2g} variant="warn" />
+              </div>
+              <div className="flex items-center gap-2">
+                {confirmApply ? (
+                  <>
+                    <span className="text-xs text-muted-foreground">Overwrite pricer description/weight and store E2G price?</span>
+                    <Button size="sm" variant="outline" onClick={() => setConfirmApply(false)} disabled={applying}>Cancel</Button>
+                    <Button size="sm" onClick={handleApplyE2G} disabled={applying}>
+                      {applying ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                      Confirm
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" onClick={() => setConfirmApply(true)} disabled={applying || e2gAll.length === 0}>
+                    <Database className="w-4 h-4 mr-1" /> Apply E2G values to pricer
+                  </Button>
+                )}
+              </div>
+            </div>
+            <FilteredTable rows={pricerVsE2G} columns={[
+              { key: "sku", label: "SKU" },
+              { key: "status", label: "Status" },
+              { key: "pricer_desc", label: "Pricer desc" },
+              { key: "e2g_desc", label: "E2G desc" },
+              { key: "list_price", label: "List price" },
+              { key: "e2g_price", label: "E2G price" },
+              { key: "pricer_weight", label: "Pricer wt" },
+              { key: "e2g_weight", label: "E2G wt" },
             ]} />
           </TabsContent>
         </Tabs>
