@@ -1,7 +1,7 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { assertAdmin, runJob, bucketFor, applyE2GSnapshot } from "./p21.server";
+import { assertAdmin, runJob, bucketFor, applyE2GSnapshot, applyE2GToPriceList } from "./p21.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const EnqueueSchema = z.object({
@@ -195,6 +195,21 @@ export const syncE2GReport = createServerFn({ method: "POST" })
   });
 
 export const applyE2GSnapshotServerOnly = createServerOnlyFn(applyE2GSnapshot);
+
+export const applyE2GToPricer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const res = await applyE2GToPriceList();
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "e2g.apply_to_pricer",
+      entity_type: "price_list",
+      actor_id: context.userId,
+      message: `Applied E2G to pricer: ${res.updated} updated, ${res.inserted} added, ${res.flaggedMissing} flagged missing`,
+      metadata: res as any,
+    });
+    return res;
+  });
 
 const SubmitSchema = z.object({
   orderId: z.string().uuid(),

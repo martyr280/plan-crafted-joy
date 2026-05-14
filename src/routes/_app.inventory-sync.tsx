@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { RefreshCw, ExternalLink, Download, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { syncE2GReport } from "@/lib/p21.functions";
+import { syncE2GReport, applyE2GToPricer } from "@/lib/p21.functions";
 
 export const Route = createFileRoute("/_app/inventory-sync")({ component: InventorySyncPage });
 
@@ -46,6 +46,7 @@ function InventorySyncPage() {
   const [website, setWebsite] = useState<any[]>([]);
   const [pricer, setPricer] = useState<any[]>([]);
   const [catalog, setCatalog] = useState<any[]>([]);
+  const [e2gAll, setE2gAll] = useState<any[]>([]);
   const [crawls, setCrawls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -55,7 +56,10 @@ function InventorySyncPage() {
   const [e2gLast, setE2gLast] = useState<{ syncedAt: string | null; count: number }>({ syncedAt: null, count: 0 });
   const [e2gError, setE2gError] = useState<string | null>(null);
   const [e2gPreview, setE2gPreview] = useState<any[]>([]);
+  const [applying, setApplying] = useState(false);
+  const [confirmApply, setConfirmApply] = useState(false);
   const runSyncE2G = useServerFn(syncE2GReport);
+  const runApplyE2G = useServerFn(applyE2GToPricer);
 
   async function loadE2GStatus() {
     const [{ data: latest }, { count }, { data: preview }] = await Promise.all([
@@ -103,13 +107,14 @@ function InventorySyncPage() {
       return out;
     };
     try {
-      const [w, p, c, cr] = await Promise.all([
+      const [w, p, c, e, cr] = await Promise.all([
         fetchAll("website_items", "sku, name, description, image_url, detail_url, brand, in_stock, stock_text, crawled_at"),
-        fetchAll("price_list", "item, description, list_price, mfg, category"),
+        fetchAll("price_list", "id, item, description, list_price, weight, mfg, category, e2g_price, e2g_weight, in_e2g, e2g_synced_at"),
         fetchAll("catalog_items", "sku, description, list_price, page, mfg"),
+        fetchAll("e2g_inventory_snapshot", "item_id, item_desc, e2g_price, weight, total"),
         supabase.from("website_crawls").select("*").order("started_at", { ascending: false }).limit(10).then((r) => r.data ?? []),
       ]);
-      setWebsite(w); setPricer(p); setCatalog(c); setCrawls(cr);
+      setWebsite(w); setPricer(p); setCatalog(c); setE2gAll(e); setCrawls(cr);
     } catch (e: any) {
       toast.error(`Load failed: ${e.message}`);
     } finally {
@@ -167,6 +172,85 @@ function InventorySyncPage() {
     }
     return { missingFromPricer: missingPricer, missingFromWebsite: missingWeb, mismatches: mism };
   }, [website, pricer, catalog]);
+
+  const pricerVsE2G = useMemo(() => {
+    const pricerMap = new Map<string, any>();
+    for (const r of pricer) pricerMap.set(normSku(r.item), r);
+    const e2gMap = new Map<string, any>();
+    for (const r of e2gAll) e2gMap.set(normSku(r.item_id), r);
+
+    const out: any[] = [];
+    const numEq = (a: any, b: any) => {
+      const na = a == null ? null : Number(a);
+      const nb = b == null ? null : Number(b);
+      if (na == null && nb == null) return true;
+      if (na == null || nb == null) return false;
+      return Math.abs(na - nb) < 0.005;
+    };
+
+    for (const [k, e] of e2gMap) {
+      const p = pricerMap.get(k);
+      if (!p) {
+        out.push({
+          sku: e.item_id, status: "missing_in_pricer",
+          pricer_desc: null, e2g_desc: e.item_desc,
+          list_price: null, e2g_price: e.e2g_price,
+          pricer_weight: null, e2g_weight: e.weight,
+        });
+      } else {
+        const descDiff = (p.description ?? "").trim() !== (e.item_desc ?? "").trim();
+        const priceDiff = !numEq(p.e2g_price, e.e2g_price);
+        const weightDiff = !numEq(p.e2g_weight ?? p.weight, e.weight);
+        let status = "match";
+        if (descDiff && (priceDiff || weightDiff)) status = "multi_diff";
+        else if (descDiff) status = "desc_diff";
+        else if (priceDiff) status = "price_diff";
+        else if (weightDiff) status = "weight_diff";
+        out.push({
+          sku: p.item, status,
+          pricer_desc: p.description, e2g_desc: e.item_desc,
+          list_price: p.list_price, e2g_price: e.e2g_price,
+          pricer_weight: p.e2g_weight ?? p.weight, e2g_weight: e.weight,
+        });
+      }
+    }
+    for (const [k, p] of pricerMap) {
+      if (!e2gMap.has(k)) {
+        out.push({
+          sku: p.item, status: "missing_in_e2g",
+          pricer_desc: p.description, e2g_desc: null,
+          list_price: p.list_price, e2g_price: null,
+          pricer_weight: p.e2g_weight ?? p.weight, e2g_weight: null,
+        });
+      }
+    }
+    return out;
+  }, [pricer, e2gAll]);
+
+  const pricerVsE2GStats = useMemo(() => {
+    const s = { match: 0, diff: 0, missing_in_pricer: 0, missing_in_e2g: 0 };
+    for (const r of pricerVsE2G) {
+      if (r.status === "match") s.match++;
+      else if (r.status === "missing_in_pricer") s.missing_in_pricer++;
+      else if (r.status === "missing_in_e2g") s.missing_in_e2g++;
+      else s.diff++;
+    }
+    return s;
+  }, [pricerVsE2G]);
+
+  async function handleApplyE2G() {
+    setApplying(true);
+    setConfirmApply(false);
+    try {
+      const res = await runApplyE2G();
+      toast.success(`Applied E2G: ${res.updated} updated · ${res.inserted} added · ${res.flaggedMissing} flagged missing`);
+      await loadAll();
+    } catch (e: any) {
+      toast.error(`Apply failed: ${e?.message ?? e}`);
+    } finally {
+      setApplying(false);
+    }
+  }
 
   async function startCrawl() {
     setBusy(true);
@@ -371,6 +455,9 @@ function InventorySyncPage() {
             <TabsTrigger value="mismatch">
               Description mismatch <Badge variant="secondary" className="ml-2">{mismatches.length}</Badge>
             </TabsTrigger>
+            <TabsTrigger value="pricer-vs-e2g">
+              Pricer vs E2G <Badge variant="secondary" className="ml-2">{pricerVsE2GStats.diff + pricerVsE2GStats.missing_in_pricer}</Badge>
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="missing-pricer" className="mt-4">
             <FilteredTable rows={missingFromPricer} columns={[
@@ -395,6 +482,42 @@ function InventorySyncPage() {
               { key: "website_desc", label: "Website" },
               { key: "pricer_desc", label: "Pricer" },
               { key: "catalog_desc", label: "Catalog" },
+            ]} />
+          </TabsContent>
+          <TabsContent value="pricer-vs-e2g" className="mt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="flex gap-5 text-sm">
+                <Stat label="Match" value={pricerVsE2GStats.match} />
+                <Stat label="Differ" value={pricerVsE2GStats.diff} variant="warn" />
+                <Stat label="E2G-only" value={pricerVsE2GStats.missing_in_pricer} variant="warn" />
+                <Stat label="Pricer-only" value={pricerVsE2GStats.missing_in_e2g} variant="warn" />
+              </div>
+              <div className="flex items-center gap-2">
+                {confirmApply ? (
+                  <>
+                    <span className="text-xs text-muted-foreground">Overwrite pricer description/weight and store E2G price?</span>
+                    <Button size="sm" variant="outline" onClick={() => setConfirmApply(false)} disabled={applying}>Cancel</Button>
+                    <Button size="sm" onClick={handleApplyE2G} disabled={applying}>
+                      {applying ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                      Confirm
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" onClick={() => setConfirmApply(true)} disabled={applying || e2gAll.length === 0}>
+                    <Database className="w-4 h-4 mr-1" /> Apply E2G values to pricer
+                  </Button>
+                )}
+              </div>
+            </div>
+            <FilteredTable rows={pricerVsE2G} columns={[
+              { key: "sku", label: "SKU" },
+              { key: "status", label: "Status" },
+              { key: "pricer_desc", label: "Pricer desc" },
+              { key: "e2g_desc", label: "E2G desc" },
+              { key: "list_price", label: "List price" },
+              { key: "e2g_price", label: "E2G price" },
+              { key: "pricer_weight", label: "Pricer wt" },
+              { key: "e2g_weight", label: "E2G wt" },
             ]} />
           </TabsContent>
         </Tabs>

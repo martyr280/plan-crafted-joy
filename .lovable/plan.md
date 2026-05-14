@@ -1,63 +1,92 @@
-# Sync ndiof.com Inventory with Pricer & Catalog
+## Context
 
-Connect Firecrawl, crawl every product page on ndiof.com, store SKU + description + image + stock status, then reconcile against `price_list` (pricer XLSX) and `catalog_items` (parsed catalog PDFs).
+After looking at the data:
 
-## A. Firecrawl connection
-1. Use `standard_connectors--connect` with `connector_id: firecrawl`. Once linked, `FIRECRAWL_API_KEY` is available to server functions.
-2. Verify availability via `fetch_secrets`.
+- `price_list`: 3,033 rows — pricer XLSX, has list price (e.g. $159, $519).
+- `catalog_items`: 0 rows — empty. Drop from comparison.
+- `e2g_inventory_snapshot`: 4,414 rows — P21 truth with description, qty, weight, and `e2g_price` (= P21 `price10` tier, ~$36 / $126 / $143). Overlap with pricer: 1,022 SKUs.
 
-## B. Database
-New table `website_items` (SKU-level snapshot of ndiof.com):
-- `sku` (PK with `crawl_id`), `family`, `name`, `description`, `image_url`, `detail_url`, `brand`, `category`, `in_stock` (bool), `stock_text`, `crawled_at`, `crawl_id`.
+`e2g_price` is **not** a list price — it's a dealer/cost-tier price. Overwriting `price_list.list_price` with it would corrupt list pricing. The plan keeps both prices and lets E2G own everything else.
 
-New table `website_crawls`:
-- `id`, `started_at`, `completed_at`, `status` (`running|completed|failed`), `pages_crawled`, `skus_found`, `error`, `triggered_by`.
+## What gets built
 
-RLS: read for any authenticated ops role; write admin-only (matches existing catalog tables).
+### 1. Schema change on `price_list`
 
-## C. Edge function `crawl-website`
-- Background job pattern (job row + `EdgeRuntime.waitUntil`).
-- Step 1 — **map**: `firecrawl.map('https://www.ndiof.com', { limit: 5000, includeSubdomains: false })` to get every URL, then filter to `/itemdetail/...` (single SKU) and `/itemoptions/?familyName=...` (variant family) URLs. Also include `/catsearch/...` listing pages as a fallback to capture SKUs that aren't surfaced by map.
-- Step 2 — **batch scrape** in chunks of ~50 URLs using `firecrawl.batchScrape(urls, { formats: ['markdown'], onlyMainContent: true })`.
-- Step 3 — parse each result with a deterministic regex pass (SKU/brand/description follow a fixed pattern shown on listing pages: `## <name>` / `SKU: <sku>` / `Brand: <brand>` / in-stock label). For variant family pages, follow the embedded `/itemdetail/SKU` links.
-- Step 4 — upsert into `website_items` keyed on `sku`; update progress on `website_crawls` every batch.
-- **Skip JS-rendered prices** (per user choice). Stock label is in static HTML so we keep it.
+Add three columns so E2G data lives next to the pricer's list price without overwriting it:
 
-## D. Reconciliation view
-Server function `getInventoryReconciliation` joins three sources by normalized SKU (upper-trim, strip spaces/dashes optional alias):
+- `e2g_price numeric` — P21 `price10` from the latest E2G snapshot.
+- `e2g_weight numeric` — P21 weight (replaces the old `weight` column for E2G-sourced rows).
+- `in_e2g boolean default false` — true when the SKU exists in the latest E2G snapshot.
+- `e2g_synced_at timestamptz` — when this row was last touched by an E2G sync.
+
+`list_price` stays untouched. Existing `weight`/`description` get overwritten on apply (E2G wins).
+
+### 2. New server function `applyE2GToPriceList`
+
+Called from the UI button. In one transaction-equivalent batch it:
+
+- For every SKU in `e2g_inventory_snapshot`:
+  - If a `price_list` row exists (matched by uppercased, whitespace-stripped SKU): overwrite `description`, `e2g_weight`, `e2g_price`; set `in_e2g = true`, `e2g_synced_at = now()`. Leave `list_price`, `dealer_cost`, `er_cost`, `mfg`, `category`, `cat_number` alone.
+  - If no `price_list` row exists: insert a new row with `item`, `description`, `e2g_price`, `e2g_weight`, `in_e2g = true`. `list_price` left null (operator can fill it later).
+- For every SKU **not** in the snapshot: set `in_e2g = false` (keeps the row, just flags it as not on E2G/P21).
+
+Server function uses `supabaseAdmin` (admin-only RLS already on `price_list`), batched in 500-row chunks. Returns `{ updated, inserted, flaggedMissing }`.
+
+### 3. New "Pricer vs E2G" tab on `/inventory-sync`
+
+Adds a 4th tab next to the existing three. Shows per-SKU diffs computed client-side from the data already loaded:
+
+| Column | Source |
+|---|---|
+| SKU | both |
+| Pricer desc | `price_list.description` |
+| E2G desc | `e2g_inventory_snapshot.item_desc` |
+| List price | `price_list.list_price` (unchanged) |
+| E2G price | `e2g_inventory_snapshot.e2g_price` |
+| Pricer weight | `price_list.weight` |
+| E2G weight | `e2g_inventory_snapshot.weight` |
+| Status | `match` / `desc differs` / `weight differs` / `missing in pricer` / `missing in E2G` |
+
+Header has:
+
+- Filter input + status filter chips (reuse existing pattern).
+- Stat row: total compared, matches, diffs, E2G-only, pricer-only.
+- **"Apply E2G values to pricer"** button → confirmation dialog → calls `applyE2GToPriceList` → toast with counts → reloads.
+- CSV export of the diff.
+
+The existing "On website, no pricing" and "In pricer/catalog, not on website" tabs keep working — `catalog_items` is dropped from the join since it's empty (graceful: if catalog rows reappear later, code still handles them, just no UI surface).
+
+### 4. Activity log entry
+
+Each apply writes one `activity_events` row (`event_type = "e2g.apply_to_pricer"`, message with counts) so admins can audit when pricer data was overwritten.
+
+## What's deliberately NOT in scope
+
+- No automatic apply on every sync — explicit button only. Easy to flip later if you want it.
+- `list_price` is never modified. If you later decide E2G price IS your list price, we add one more button.
+- `catalog_items` is left untouched (empty table, no UI).
+
+## Technical details
+
+- Files touched: `src/lib/p21.functions.ts` (new fn), `src/lib/p21.server.ts` (impl), `src/routes/_app.inventory-sync.tsx` (new tab + handler).
+- Migration adds 4 columns on `price_list` — nullable, safe on existing data.
+- SKU matching: `UPPER(REGEXP_REPLACE(item, '\s+', '', 'g'))` — same normalization already used in the page.
+- Batching: 500 rows per upsert, 90 s server-fn budget is plenty (≤ 5k rows).
+- RLS unchanged — admin-only writes, ops-roles still read.
 
 ```text
-website_items   ─┐
-price_list      ─┼─► reconciliation rows
-catalog_items   ─┘
+┌──────────────────────────────────────────────────────────┐
+│  /inventory-sync                                         │
+│  ┌─[E2G card]────────────────────────[Sync E2G report]─┐ │
+│  │ Last synced … · 4,414 items                         │ │
+│  └─────────────────────────────────────────────────────┘ │
+│  ┌─[Snapshot preview]───────────────────────────[CSV]──┐ │
+│  └─────────────────────────────────────────────────────┘ │
+│  Tabs: no-pricing | not-on-web | desc-mismatch |         │
+│        ▶ Pricer vs E2G ◀  ← new                          │
+│  ┌────────────────────────[Apply E2G values to pricer]─┐ │
+│  │ 1,022 matched · 412 diff · 3,392 E2G-only · ...     │ │
+│  │ table…                                              │ │
+│  └─────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────┘
 ```
-
-Categories surfaced:
-1. **On website but not in pricer/catalog** — needs pricing setup.
-2. **In pricer/catalog but not on website** — needs to be added/published on ndiof.com.
-3. **Mismatch** — same SKU, but description differs significantly (token Jaccard < 0.5) or brand mismatch. Price-mismatch row is reserved for a future pass when prices are scraped.
-
-## E. UI — new route `/inventory-sync`
-- Header card: last crawl timestamp, totals (website / pricer / catalog), counts per discrepancy bucket.
-- "Run full crawl" button (admin only) + live progress bar polling `website_crawls`.
-- Tabbed table (TanStack Query, paginated, sortable, filterable per workspace rules):
-  - Tab 1 — Missing from pricer/catalog
-  - Tab 2 — Missing from website
-  - Tab 3 — Description mismatch
-- Each row links to the ndiof.com detail page and shows source data side-by-side.
-- CSV export per tab.
-- Add nav entry under Catalogs section.
-
-## F. Scheduling (optional, admin toggle)
-`pg_cron` weekly job hitting `/api/public/hooks/crawl-website` (apikey auth) so the snapshot stays fresh without manual runs.
-
-## Out of scope
-- Scraping JS-rendered prices (revisit later with `waitFor` + JS rendering).
-- Auto-pushing fixes back to ndiof.com.
-- Image diffing.
-
-## Technical notes
-- Firecrawl SDK: `@mendable/firecrawl-js` (server-only, never expose key to client).
-- All Firecrawl calls happen in the edge function; frontend only reads `website_items` / `website_crawls` via TanStack Query hooks in `src/hooks/`.
-- Normalize SKU = `sku.trim().toUpperCase()` consistent with `parse-po`.
-- Crawl is idempotent: each run gets a new `crawl_id`; upsert by `sku` keeps the latest snapshot, and we retain prior crawl history in `website_crawls` for auditing.

@@ -91,3 +91,109 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
 
   return { imported: toInsert.length };
 }
+
+const normSku = (s: string) => String(s ?? "").toUpperCase().replace(/\s+/g, "");
+
+export async function applyE2GToPriceList(): Promise<{ updated: number; inserted: number; flaggedMissing: number }> {
+  // Pull all E2G snapshot rows
+  const e2gRows: Array<{ item_id: string; item_desc: string | null; e2g_price: number | null; weight: number | null }> = [];
+  {
+    const step = 1000;
+    for (let from = 0; ; from += step) {
+      const { data, error } = await supabaseAdmin
+        .from("e2g_inventory_snapshot")
+        .select("item_id, item_desc, e2g_price, weight")
+        .range(from, from + step - 1);
+      if (error) throw new Error(`E2G read failed: ${error.message}`);
+      e2gRows.push(...((data ?? []) as any));
+      if (!data || data.length < step) break;
+    }
+  }
+
+  // Pull all existing pricer rows
+  const pricerRows: Array<{ id: string; item: string }> = [];
+  {
+    const step = 1000;
+    for (let from = 0; ; from += step) {
+      const { data, error } = await supabaseAdmin
+        .from("price_list")
+        .select("id, item")
+        .range(from, from + step - 1);
+      if (error) throw new Error(`price_list read failed: ${error.message}`);
+      pricerRows.push(...((data ?? []) as any));
+      if (!data || data.length < step) break;
+    }
+  }
+
+  const pricerByKey = new Map<string, string>(); // normSku -> id
+  for (const r of pricerRows) pricerByKey.set(normSku(r.item), r.id);
+
+  const now = new Date().toISOString();
+  const updates: Array<{ id: string; description: string | null; e2g_price: number | null; e2g_weight: number | null }> = [];
+  const inserts: Array<{ item: string; description: string | null; e2g_price: number | null; e2g_weight: number | null; in_e2g: boolean; e2g_synced_at: string; source: string }> = [];
+  const e2gKeys = new Set<string>();
+
+  for (const r of e2gRows) {
+    const key = normSku(r.item_id);
+    if (!key) continue;
+    e2gKeys.add(key);
+    const id = pricerByKey.get(key);
+    if (id) {
+      updates.push({ id, description: r.item_desc, e2g_price: r.e2g_price, e2g_weight: r.weight });
+    } else {
+      inserts.push({
+        item: r.item_id,
+        description: r.item_desc,
+        e2g_price: r.e2g_price,
+        e2g_weight: r.weight,
+        in_e2g: true,
+        e2g_synced_at: now,
+        source: "e2g_p21",
+      });
+    }
+  }
+
+  // Apply updates one row at a time but in parallel batches of 50
+  let updated = 0;
+  const concurrency = 25;
+  for (let i = 0; i < updates.length; i += concurrency) {
+    const slice = updates.slice(i, i + concurrency);
+    await Promise.all(
+      slice.map(async (u) => {
+        const { error } = await supabaseAdmin
+          .from("price_list")
+          .update({
+            description: u.description,
+            e2g_price: u.e2g_price,
+            e2g_weight: u.e2g_weight,
+            in_e2g: true,
+            e2g_synced_at: now,
+          })
+          .eq("id", u.id);
+        if (error) throw new Error(`price_list update failed: ${error.message}`);
+        updated++;
+      }),
+    );
+  }
+
+  // Bulk insert new rows in chunks of 500
+  let inserted = 0;
+  for (let i = 0; i < inserts.length; i += 500) {
+    const chunk = inserts.slice(i, i + 500);
+    const { error } = await supabaseAdmin.from("price_list").insert(chunk);
+    if (error) throw new Error(`price_list insert failed: ${error.message}`);
+    inserted += chunk.length;
+  }
+
+  // Flag SKUs missing from E2G: set in_e2g = false in batches by id
+  const missingIds = pricerRows.filter((p) => !e2gKeys.has(normSku(p.item))).map((p) => p.id);
+  let flaggedMissing = 0;
+  for (let i = 0; i < missingIds.length; i += 500) {
+    const slice = missingIds.slice(i, i + 500);
+    const { error } = await supabaseAdmin.from("price_list").update({ in_e2g: false }).in("id", slice);
+    if (error) throw new Error(`price_list flag-missing failed: ${error.message}`);
+    flaggedMissing += slice.length;
+  }
+
+  return { updated, inserted, flaggedMissing };
+}
