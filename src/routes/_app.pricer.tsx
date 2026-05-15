@@ -352,7 +352,13 @@ function PublicationsTab() {
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">{new Date(p.generated_at).toLocaleString()}</TableCell>
               <TableCell>
-                {p.signed_url && <a href={p.signed_url} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><FileDown className="w-3 h-3" /> Open</Button></a>}
+                {p.status === "ready" && p.signed_url ? (
+                  <a href={p.signed_url} target="_blank" rel="noreferrer" download>
+                    <Button size="sm" variant="default"><FileDown className="w-3 h-3 mr-1" /> Download PDF</Button>
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
               </TableCell>
             </TableRow>
           ))}
