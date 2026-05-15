@@ -1,100 +1,51 @@
-# Plan: Automated Pricer Module
+# Plan: Nelson AI rebrand + user management
 
-Replace the manual Pricer spreadsheet with a data-driven module. The uploaded `Pricer-202603.xlsx` is the **target output format**, not a data source — we will not import from it. All data lives in `price_list` plus a few new tables; PDFs are generated on demand to match the spreadsheet's look.
+## 1. Rebrand "Ned AI" → "Nelson AI"
 
-## Output spec — taken from the uploaded Pricer
+Keep the existing auth left-rail marketing copy ("Operations, unified." + paragraph) — only swap the wordmark/name.
 
-**Landscape** (sales / customer care) — repeating header, one row per Short Part Number, columns:
+- `src/routes/__root.tsx` — title + meta/OG/Twitter strings
+- `src/routes/auth.tsx` — header lockup, footer, "Sign in to …" copy
+- `src/components/layout/AppSidebar.tsx` — sidebar header text
+- Generate a new `src/assets/nelson-ai-logo.png` (navy square, "Nelson AI" wordmark, orange swoosh — same NDI palette as current logo) and replace imports of `ned-ai-logo.png`. Delete the old asset.
+- Sweep `rg -i "ned ai|ned-ai"` after edits to confirm nothing remains.
 
-```text
-Short PN | Full PN (rep) | Description | Finishes | List | L5 | L4 | L3 | L2 | L1
-```
+## 2. User management upgrades
 
-**Portrait** (one per price level, distributed by reps to dealers at that level) — image left, Short PN + description + finish chips center, single chosen level price right. Generated one PDF per generation; the level is selected at generation time.
+Build on the existing `Settings → Users & Roles` tab (admin-only). Current state: list profiles, toggle role checkboxes, claim-admin fallback.
 
-Both share a brand header/footer (logo, "Effective {date}", page x/y).
+### New capabilities
+1. **Invite user by email** — admin enters email + initial roles, sends a Supabase invite (magic-link style) so they set their own password. Pending invites listed separately until accepted.
+2. **Revoke access** — one-click "Remove all roles" (soft revoke; user can no longer access any module) and "Disable user" (hard revoke via auth admin API: bans the user). Both with confirm dialog.
+3. **Resend invite / Reset password** — admin-triggered password reset email for an existing user.
+4. **Last sign-in column** — surface `auth.users.last_sign_in_at` so admins see stale accounts.
+5. **Audit trail** — write to `activity_events` on every invite / role change / revoke / disable, attributed to the acting admin. Surface a small "Recent admin actions" list at the bottom of the tab.
 
-## Pricing model — confirmed by Kevin
+### Backend (server functions, admin-gated)
+New file `src/lib/user-admin.functions.ts` — all use `requireSupabaseAuth` + verify caller `has_role('admin')`, then use `supabaseAdmin` for privileged ops:
+- `inviteUser({ email, roles[] })` → `supabaseAdmin.auth.admin.inviteUserByEmail(...)` then insert role rows
+- `resendInvite({ userId })` / `sendPasswordReset({ email })`
+- `revokeAllRoles({ userId })` → delete from `user_roles`
+- `setUserDisabled({ userId, disabled })` → `supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: '876000h' | 'none' })`
+- `listUsers()` → returns profiles joined with `last_sign_in_at` + `banned_until` from `auth.admin.listUsers()`
 
-Six published levels per item: **List, L1, L2, L3, L4, L5**. Five custom dealer levels exist but are never published — out of scope.
+Each function logs an `activity_events` row (`event_type: 'admin.invite' | 'admin.role_grant' | 'admin.role_revoke' | 'admin.disable' | 'admin.enable'`).
 
-`price_list` today only has `list_price`, `dealer_cost`, `er_cost`, `e2g_price`. **L1–L5 do not exist yet** — we add them as real numeric columns on `price_list`. Initial values are entered/maintained in the SKU Families admin tab (bulk-edit grid + CSV paste). No xlsx import step.
+### Frontend
+Refactor `src/routes/_app.settings.tsx` `UsersAndRoles`:
+- Add **Invite user** button → dialog with email + role checkboxes
+- Add per-row actions menu (kebab): Resend invite, Send password reset, Revoke all roles, Disable/Enable user
+- Add **Last sign-in** and **Status** (Active / Disabled / Pending) columns
+- Confirm dialogs (`AlertDialog`) for destructive actions
+- Recent admin actions card below the table (reads `activity_events` filtered to `event_type LIKE 'admin.%'`)
 
-## Color/finish rollup — confirmed pattern
+### DB
+No new tables required. Optional: add a `disabled_at` column to `profiles` only if we want to show status without calling auth admin on every load — can skip and rely on `auth.admin.listUsers()` server-side.
 
-Each finish is its own row in `price_list` (e.g. `PL102APN`, `PL102CGY`, `PL102CH`, …) and they share identical pricing. The pricer prints **one row per family** identified by a new `item_short` column (e.g. `PL102`, `PLTVRMETLEG`) and lists the finishes underneath as a chip strip — no manual de-duplication.
+## 3. Verification
+- After rebrand: visit `/auth` and `/` (sidebar), confirm "Nelson AI" copy + new logo render, no "Ned" string left.
+- After user mgmt: as admin, invite a test email, confirm invite row appears + activity event written; toggle roles; disable/enable a user; revoke all.
 
-`item_short` is added as a real column on `price_list`. Population strategy:
-1. **Auto-derive** — group by identical 6-level price tuple within the same `mfg`/`category`, take the longest common alphabetic prefix as the candidate `item_short`. Store on every row.
-2. **Override per row** — editable in the SKU Families tab.
-3. **Recompute** button to re-run the auto-derive after pricing edits.
-
-Items that don't fit a family (singletons) get `item_short = item`.
-
-## Images — confirmed pattern
-
-Per-finish, served from `https://ndiofficefurniture.net/images/{FULL_SKU}.jpg` (e.g. `PL102APN.jpg`, `PLTVRMETLEGBLK.jpg`). The pricer picks the first finish in the family with a reachable image (HEAD 200) and shows it as the family thumbnail. Status (`reachable`, `not_found`) cached in `sku_image_cache` — no per-render re-probe.
-
-The Item Images tab lists families with no reachable image and accepts a manual upload to the `pricer-images` bucket as override. **Resync** button re-probes the URL pattern.
-
-## Pages & flows
-
-**Route:** `/pricing/pricer` (Catalog & Pricing sidebar group)
-
-Three tabs:
-
-1. **Pricer Builder** — pick filters (category, mfg, optionally restrict to in-stock via `e2g_inventory_snapshot`), pick orientation. For **portrait** pick exactly one of List / L1 / L2 / L3 / L4 / L5. Click **Generate PDF**.
-2. **SKU Families** — bulk-edit grid: `item`, `item_short`, `description`, six prices. Inline edit any cell. **Recompute families** runs the auto-derive. CSV paste-in for a level column when Kevin needs to bulk-update prices.
-3. **Item Images** — thumbnail grid per family with status; **Probe** to recheck `ndiofficefurniture.net`; **Upload override** for families with no live image.
-
-**Output:** PDFs land in `pricer_publications` table + `pricer-pdfs` storage bucket (signed URLs). Each row snapshots filters + orientation + level so a **Regenerate** rerun matches.
-
-## Data changes — one migration
-
-```text
-price_list                 + item_short    TEXT     -- editable family key
-                           + price_l1..l5  NUMERIC  -- new published levels
-                           + index on (item_short)
-
-sku_image_cache            full_sku TEXT PK, image_url TEXT,
-                           status TEXT (reachable|not_found|error),
-                           checked_at TIMESTAMPTZ
-
-sku_family_image_overrides item_short TEXT PK, image_path TEXT,
-                           uploaded_by UUID, updated_at TIMESTAMPTZ
-
-pricer_publications        id UUID PK, name TEXT, orientation TEXT,
-                           portrait_level TEXT NULL, filters JSONB,
-                           pdf_path TEXT, row_count INT,
-                           generated_by UUID, generated_at TIMESTAMPTZ
-```
-
-Storage: `pricer-images` (public, manual overrides), `pricer-pdfs` (private, signed URLs).
-
-RLS: admin-write, ops_orders/ops_ar/admin read — matches existing `price_list`.
-
-`list_price` stays as-is and is what feeds the "List" column. L1–L5 start NULL until Kevin enters them in the SKU Families tab. The Pricer Builder warns if any selected family has missing levels and offers to skip those rows.
-
-## PDF generation
-
-Server function `generatePricerPdf` in `src/lib/pricer.functions.ts`, admin-only via `requireSupabaseAuth` + role check:
-
-- Pulls families matching filters with all six prices + resolved image URL.
-- Renders with `@react-pdf/renderer` (pure JS, Worker-compatible). Two layout components: `PricerLandscape`, `PricerPortrait`.
-- Uploads to `pricer-pdfs`, inserts `pricer_publications` row, returns signed URL.
-- Header/footer + repeating table header live in the React templates and stay consistent across orientations.
-
-## Phases
-
-1. **Migration** — add `item_short` + `price_l1..l5`, three new tables, two buckets, RLS, index.
-2. **Family rollup** — SKU Families tab with bulk-edit grid, auto-derive, override, CSV paste.
-3. **Image pipeline** — `sku_image_cache`, on-demand HEAD probe of `ndiofficefurniture.net/images/{SKU}.jpg`, manual upload override.
-4. **PDF generation** — `@react-pdf/renderer` landscape + portrait templates matching the uploaded Pricer's layout.
-5. **Publications list** — table of past PDFs with Regenerate / Download.
-
-## Out of scope for v1
-
-- Importing from `Pricer-202603.xlsx` (it's a reference for output layout only).
-- The five unpublished custom-dealer levels.
-- Auto-emailing PDFs to dealers (download only).
-- Background scheduling — generation is on-demand.
+## Out of scope
+- SSO / SCIM provisioning
+- Custom branded invite email templates (uses default Supabase invite email; can wire Lovable auth email templates in a follow-up)
