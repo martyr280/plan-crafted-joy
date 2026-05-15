@@ -322,7 +322,25 @@ function PublicationsTab() {
   useEffect(() => { load(); }, []);
   return (
     <Card>
-      <div className="flex justify-end p-3 border-b">
+      <div className="flex justify-between items-center p-3 border-b gap-2">
+        <Button size="sm" variant="secondary" onClick={() => {
+          const ready = rows.filter((p) => p.status === "ready" && p.signed_url);
+          if (!ready.length) { toast.info("No ready publications to download"); return; }
+          ready.forEach((p, i) => {
+            setTimeout(() => {
+              const a = document.createElement("a");
+              a.href = p.signed_url;
+              a.target = "_blank";
+              a.download = `${p.name}.pdf`;
+              a.rel = "noreferrer";
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }, i * 800);
+          });
+        }}>
+          <FileDown className="w-4 h-4 mr-1" /> Download all ready
+        </Button>
         <Button size="sm" variant="outline" onClick={load}><RefreshCw className="w-4 h-4" /> Reload</Button>
       </div>
       <Table>
