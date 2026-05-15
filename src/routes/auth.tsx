@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
+import { Logo } from "@/components/shared/Logo";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
