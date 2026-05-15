@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import nedAiLogo from "@/assets/ned-ai-logo.png";
+import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -82,9 +82,9 @@ function AuthPage() {
           style={{ background: "var(--gradient-accent)" }}
         />
         <div className="flex items-center gap-3 relative">
-          <img src={nedAiLogo} alt="Ned AI" width={44} height={44} className="w-11 h-11 rounded-lg shadow-[var(--shadow-glow)]" />
+          <img src={nelsonAiLogo} alt="Nelson AI" width={44} height={44} className="w-11 h-11 rounded-lg shadow-[var(--shadow-glow)]" />
           <div className="flex flex-col leading-tight">
-            <span className="text-xl font-bold tracking-tight">Ned AI</span>
+            <span className="text-xl font-bold tracking-tight">Nelson AI</span>
             <span className="text-xs text-primary-foreground/70">for NDI Office Furniture</span>
           </div>
         </div>
@@ -94,14 +94,14 @@ function AuthPage() {
             Order intake, sales, logistics, AR, SPIFF and reports — one workspace replacing the spreadsheets and Web Connect.
           </p>
         </div>
-        <p className="text-sm text-primary-foreground/60 relative">© Ned AI · Internal use only</p>
+        <p className="text-sm text-primary-foreground/60 relative">© Nelson AI · Internal use only</p>
       </div>
 
       <div className="flex items-center justify-center p-8">
         <Card className="w-full max-w-md shadow-[var(--shadow-elegant)]">
           <CardHeader>
             <CardTitle>Welcome</CardTitle>
-            <CardDescription>Sign in to Ned AI</CardDescription>
+            <CardDescription>Sign in to Nelson AI</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="signin">
