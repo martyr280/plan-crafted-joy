@@ -65,13 +65,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2.5 px-2 py-2">
-          <img
-            src={nelsonAiLogo}
-            alt="Nelson AI"
-            width={32}
-            height={32}
-            className="w-8 h-8 rounded-md shrink-0 shadow-[var(--shadow-soft)]"
-          />
+          <Logo size={32} />
           <div className="flex flex-col group-data-[collapsible=icon]:hidden leading-tight">
             <span className="text-sm font-bold tracking-tight text-sidebar-foreground">Nelson AI</span>
             <span className="text-[11px] text-sidebar-foreground/60">for NDI Office Furniture</span>
