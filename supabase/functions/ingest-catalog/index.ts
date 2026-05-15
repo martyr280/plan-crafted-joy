@@ -10,6 +10,9 @@ const cors = {
 };
 
 const PAGES_PER_CHUNK = 8;
+// Per-invocation cap so we always finish before the Edge Function wall-clock kills us.
+// At ~10–20s per Gemini chunk call, 6 chunks = ~60–120s, leaving headroom under the ~150s budget.
+const MAX_CHUNKS_PER_INVOCATION = 6;
 
 function normSku(s: string) {
   return String(s || "").toUpperCase().replace(/\s+/g, "").replace(/[.,;]+$/, "").trim();
