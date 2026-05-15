@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader } from "@/components/ui/sidebar";
 import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen } from "lucide-react";
-import { Logo } from "@/components/shared/Logo";
+import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
 
 const groups = [
   {
@@ -65,7 +65,13 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2.5 px-2 py-2">
-          <Logo size={32} />
+          <img
+            src={nelsonAiLogo}
+            alt="Nelson AI"
+            width={32}
+            height={32}
+            className="w-8 h-8 rounded-md shrink-0 shadow-[var(--shadow-soft)]"
+          />
           <div className="flex flex-col group-data-[collapsible=icon]:hidden leading-tight">
             <span className="text-sm font-bold tracking-tight text-sidebar-foreground">Nelson AI</span>
             <span className="text-[11px] text-sidebar-foreground/60">for NDI Office Furniture</span>

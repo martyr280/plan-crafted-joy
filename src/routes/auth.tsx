@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Logo } from "@/components/shared/Logo";
+import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -82,7 +82,7 @@ function AuthPage() {
           style={{ background: "var(--gradient-accent)" }}
         />
         <div className="flex items-center gap-3 relative">
-          <Logo size={44} rounded="lg" shadow="glow" />
+          <img src={nelsonAiLogo} alt="Nelson AI" width={44} height={44} className="w-11 h-11 rounded-lg shadow-[var(--shadow-glow)]" />
           <div className="flex flex-col leading-tight">
             <span className="text-xl font-bold tracking-tight">Nelson AI</span>
             <span className="text-xs text-primary-foreground/70">for NDI Office Furniture</span>
