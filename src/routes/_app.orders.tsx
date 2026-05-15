@@ -230,6 +230,10 @@ function OrdersPage() {
                                 <span title={`From catalog (page ${m.page ?? "?"})`}>
                                   ${list != null ? Number(list).toFixed(2) : "—"} <span className="text-muted-foreground">(catalog)</span>
                                 </span>
+                              ) : source === "e2g" ? (
+                                <span title="From E2G inventory upload">
+                                  ${list != null ? Number(list).toFixed(2) : "—"} <span className="text-muted-foreground">(E2G)</span>
+                                </span>
                               ) : (
                                 `$${Number(list).toFixed(2)}`
                               )}

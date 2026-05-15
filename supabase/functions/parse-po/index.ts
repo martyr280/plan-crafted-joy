@@ -126,6 +126,7 @@ serve(async (req) => {
 
       let priceMap: Record<string, any> = {};
       let catalogMap: Record<string, any> = {};
+      let e2gMap: Record<string, any> = {};
       if (allSkus.length) {
         const { data: prices } = await supabase
           .from("price_list")
@@ -142,6 +143,16 @@ serve(async (req) => {
           .in("sku", normSkus)
           .limit(normSkus.length + 100);
         for (const c of cat || []) catalogMap[String(c.sku)] = c;
+
+        const { data: e2g } = await supabase
+          .from("e2g_inventory_snapshot")
+          .select("item_id, item_desc, e2g_price, total")
+          .in("item_id", allSkus)
+          .limit(allSkus.length + 100);
+        for (const e of e2g || []) {
+          e2gMap[String(e.item_id)] = e;
+          e2gMap[normSku(e.item_id)] = e;
+        }
       }
 
       let unknownCount = 0;
@@ -151,6 +162,7 @@ serve(async (req) => {
         const norm = normSku(raw);
         const price = priceMap[raw] || priceMap[norm];
         const cat = catalogMap[norm];
+        const e2g = e2gMap[raw] || e2gMap[norm];
 
         if (price) {
           li.price_list_match = {
@@ -183,10 +195,22 @@ serve(async (req) => {
             issue: `SKU ${li.sku} found in catalog (page ${cat.page ?? "?"}) but no contract price on file`,
             suggestion: "Confirm pricing with sales before submitting",
           });
+        } else if (e2g) {
+          li.price_list_match = {
+            list_price: e2g.e2g_price,
+            description: e2g.item_desc,
+            source: "e2g",
+            stock: e2g.total,
+          };
+          parsed.flags.push({
+            field: `line[${i}].sku`,
+            issue: `SKU ${li.sku} priced from E2G inventory upload (no contract price)`,
+            suggestion: "Verify pricing before submitting",
+          });
         } else {
           parsed.flags.push({
             field: `line[${i}].sku`,
-            issue: `SKU ${li.sku} not found in price list or catalog`,
+            issue: `SKU ${li.sku} not found in price list, catalog, or E2G`,
             suggestion: "Verify part number — may be a competitor SKU",
           });
           unknownCount++;
