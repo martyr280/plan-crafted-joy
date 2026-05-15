@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Building2 } from "lucide-react";
+import nedAiLogo from "@/assets/ned-ai-logo.png";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -72,27 +72,36 @@ function AuthPage() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
-      <div className="hidden lg:flex flex-col justify-between p-12 bg-primary text-primary-foreground">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-            <Building2 className="w-6 h-6 text-accent-foreground" />
+      <div
+        className="hidden lg:flex flex-col justify-between p-12 text-primary-foreground relative overflow-hidden"
+        style={{ background: "var(--gradient-primary)" }}
+      >
+        <div
+          aria-hidden
+          className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-30 blur-3xl"
+          style={{ background: "var(--gradient-accent)" }}
+        />
+        <div className="flex items-center gap-3 relative">
+          <img src={nedAiLogo} alt="Ned AI" width={44} height={44} className="w-11 h-11 rounded-lg shadow-[var(--shadow-glow)]" />
+          <div className="flex flex-col leading-tight">
+            <span className="text-xl font-bold tracking-tight">Ned AI</span>
+            <span className="text-xs text-primary-foreground/70">for NDI Office Furniture</span>
           </div>
-          <span className="text-xl font-bold">NDI Ops Hub</span>
         </div>
-        <div>
-          <h1 className="text-4xl font-bold leading-tight">Operations, unified.</h1>
+        <div className="relative">
+          <h1 className="text-4xl font-bold leading-tight tracking-tight">Operations, unified.</h1>
           <p className="mt-4 text-primary-foreground/80 max-w-md">
             Order intake, sales, logistics, AR, SPIFF and reports — one workspace replacing the spreadsheets and Web Connect.
           </p>
         </div>
-        <p className="text-sm text-primary-foreground/60">© Apex AI Advisors · Internal use only</p>
+        <p className="text-sm text-primary-foreground/60 relative">© Ned AI · Internal use only</p>
       </div>
 
       <div className="flex items-center justify-center p-8">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md shadow-[var(--shadow-elegant)]">
           <CardHeader>
             <CardTitle>Welcome</CardTitle>
-            <CardDescription>Sign in to NDI Ops Hub</CardDescription>
+            <CardDescription>Sign in to Ned AI</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="signin">
