@@ -75,16 +75,27 @@ export const inviteUser = createServerFn({ method: "POST" })
     await assertAdmin(context.supabase, context.userId);
 
     const origin = process.env.PUBLIC_APP_URL || undefined;
-    const { data: invite, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(data.email, {
-      redirectTo: origin ? `${origin}/` : undefined,
+    const redirectTo = origin ? `${origin}/` : undefined;
+
+    // Generate the invite action link without relying on Supabase's default mailer.
+    const { data: linkData, error } = await supabaseAdmin.auth.admin.generateLink({
+      type: "invite",
+      email: data.email,
+      options: { redirectTo },
     });
     if (error) throw new Error(error.message);
 
-    const newId = invite.user?.id;
+    const actionUrl = linkData?.properties?.action_link;
+    const newId = linkData?.user?.id;
+    if (!actionUrl) throw new Error("Failed to generate invite link");
+
     if (newId && data.roles.length) {
       const rows = data.roles.map((role) => ({ user_id: newId, role }));
       await supabaseAdmin.from("user_roles").upsert(rows, { onConflict: "user_id,role", ignoreDuplicates: true });
     }
+
+    // Send the Nelson AI–branded invite via Resend.
+    await sendNelsonInviteEmail(data.email, actionUrl);
 
     await logActivity("admin.invite", `Invited ${data.email}`, context.userId, { email: data.email, roles: data.roles });
     return { ok: true, userId: newId };
@@ -96,12 +107,17 @@ export const sendPasswordReset = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
     const origin = process.env.PUBLIC_APP_URL || undefined;
-    const { error } = await supabaseAdmin.auth.admin.generateLink({
+    const { data: linkData, error } = await supabaseAdmin.auth.admin.generateLink({
       type: "recovery",
       email: data.email,
       options: { redirectTo: origin ? `${origin}/` : undefined },
     });
     if (error) throw new Error(error.message);
+    const actionUrl = linkData?.properties?.action_link;
+    if (!actionUrl) throw new Error("Failed to generate password reset link");
+
+    await sendNelsonPasswordResetEmail(data.email, actionUrl);
+
     await logActivity("admin.password_reset", `Sent password reset to ${data.email}`, context.userId, { email: data.email });
     return { ok: true };
   });
