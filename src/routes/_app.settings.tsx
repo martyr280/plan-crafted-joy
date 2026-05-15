@@ -6,13 +6,27 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { CheckCircle2, AlertCircle, Shield, ShieldCheck, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, Shield, ShieldCheck, Loader2, MoreHorizontal, UserPlus, Mail, Ban, RotateCcw, KeyRound } from "lucide-react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
 import { P21BridgePanel } from "@/components/shared/P21BridgePanel";
+import {
+  listManagedUsers,
+  inviteUser,
+  sendPasswordReset,
+  revokeAllRoles,
+  setUserDisabled,
+  setUserRole,
+  listAdminActivity,
+} from "@/lib/user-admin.functions";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
