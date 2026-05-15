@@ -10,7 +10,7 @@ const MUTED = "#64748b";
 const BORDER = "#e5e7eb";
 
 function fromAddress(): string {
-  return process.env.NELSON_FROM_EMAIL || "Nelson AI <onboarding@resend.dev>";
+  return process.env.NELSON_FROM_EMAIL || "Nelson AI <noreply@nelsonbot.ai>";
 }
 
 function brandedHtml(opts: { heading: string; intro: string; ctaLabel: string; ctaUrl: string; footnote?: string }) {
