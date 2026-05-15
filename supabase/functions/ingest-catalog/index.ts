@@ -10,6 +10,9 @@ const cors = {
 };
 
 const PAGES_PER_CHUNK = 8;
+// Per-invocation cap so we always finish before the Edge Function wall-clock kills us.
+// At ~10–20s per Gemini chunk call, 6 chunks = ~60–120s, leaving headroom under the ~150s budget.
+const MAX_CHUNKS_PER_INVOCATION = 6;
 
 function normSku(s: string) {
   return String(s || "").toUpperCase().replace(/\s+/g, "").replace(/[.,;]+$/, "").trim();
@@ -100,14 +103,18 @@ async function ingest(catalogId: string) {
   if (!apiKey) throw new Error("LOVABLE_API_KEY missing");
 
   const { data: cat, error: catErr } = await supabase
-    .from("catalogs").select("id, name, file_path").eq("id", catalogId).single();
+    .from("catalogs").select("id, name, file_path, parse_status, sku_count").eq("id", catalogId).single();
   if (catErr || !cat) throw new Error(catErr?.message ?? "catalog not found");
 
-  await supabase.from("catalogs").update({ parse_status: "parsing", parse_error: null }).eq("id", catalogId);
-  // Clear any previous rows for a clean re-ingest
-  await supabase.from("catalog_items").delete().eq("catalog_id", catalogId);
+  // Resume support: if status is already 'parsing', keep existing rows and continue from max(page).
+  // Otherwise this is a fresh ingest — clear prior rows.
+  const isResume = cat.parse_status === "parsing";
+  if (!isResume) {
+    await supabase.from("catalog_items").delete().eq("catalog_id", catalogId);
+    await supabase.from("catalogs").update({ parse_status: "parsing", parse_error: null, sku_count: 0 }).eq("id", catalogId);
+  }
 
-  // Download PDF from storage (signed URL works for private buckets too)
+  // Download PDF (signed URL works for private buckets too)
   const { data: signed, error: signErr } = await supabase.storage.from("catalogs").createSignedUrl(cat.file_path, 600);
   if (signErr || !signed?.signedUrl) throw new Error(signErr?.message ?? "could not sign url");
   const pdfResp = await fetch(signed.signedUrl);
@@ -118,10 +125,43 @@ async function ingest(catalogId: string) {
 
   await supabase.from("catalogs").update({ pages: totalPages }).eq("id", catalogId);
 
-  let totalSkus = 0;
-  const seenInCatalog = new Set<string>();
+  // Determine resume point: highest page already extracted (rounded up to next chunk boundary).
+  let resumeFromPage = 0;
+  if (isResume) {
+    const { data: maxRow } = await supabase
+      .from("catalog_items")
+      .select("page")
+      .eq("catalog_id", catalogId)
+      .order("page", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const maxPage = Number(maxRow?.page ?? 0);
+    if (maxPage > 0) {
+      // Round down to chunk start so we don't skip rows the prior run was mid-way through.
+      resumeFromPage = Math.floor((maxPage - 1) / PAGES_PER_CHUNK) * PAGES_PER_CHUNK + PAGES_PER_CHUNK;
+    }
+  }
 
-  for (let start = 0; start < totalPages; start += PAGES_PER_CHUNK) {
+  // Seed seenInCatalog from existing rows so resumed runs don't double-insert (catalog_id+sku is unique-by-convention).
+  const seenInCatalog = new Set<string>();
+  if (isResume) {
+    const { data: existing } = await supabase
+      .from("catalog_items")
+      .select("sku")
+      .eq("catalog_id", catalogId)
+      .limit(50000);
+    for (const r of existing ?? []) seenInCatalog.add(String(r.sku));
+  }
+  let totalSkus = seenInCatalog.size;
+
+  let chunksThisInvocation = 0;
+  let nextStart = resumeFromPage;
+
+  for (let start = resumeFromPage; start < totalPages; start += PAGES_PER_CHUNK) {
+    if (chunksThisInvocation >= MAX_CHUNKS_PER_INVOCATION) {
+      nextStart = start;
+      break;
+    }
     const end = Math.min(start + PAGES_PER_CHUNK, totalPages);
     const sub = await PDFDocument.create();
     const pageIndices = Array.from({ length: end - start }, (_, i) => start + i);
@@ -135,6 +175,8 @@ async function ingest(catalogId: string) {
       rows = await extractChunk(apiKey, b64, start + 1);
     } catch (e) {
       console.error(`chunk ${start}-${end} failed`, e);
+      chunksThisInvocation++;
+      nextStart = start + PAGES_PER_CHUNK;
       continue;
     }
 
@@ -160,6 +202,27 @@ async function ingest(catalogId: string) {
       else totalSkus += inserts.length;
     }
     await supabase.from("catalogs").update({ sku_count: totalSkus }).eq("id", catalogId);
+
+    chunksThisInvocation++;
+    nextStart = start + PAGES_PER_CHUNK;
+  }
+
+  if (nextStart < totalPages) {
+    // More work to do — chain a fresh invocation so we keep making progress without timing out.
+    console.log(`Catalog ${catalogId}: processed up to page ${nextStart}/${totalPages}, chaining next invocation`);
+    try {
+      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ingest-catalog`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ catalog_id: catalogId }),
+      });
+    } catch (e) {
+      console.error("self-chain fetch failed", e);
+    }
+    return { totalPages, totalSkus, partial: true, nextStart };
   }
 
   await supabase.from("catalogs").update({
