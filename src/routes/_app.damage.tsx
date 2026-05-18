@@ -17,11 +17,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { format, formatDistanceToNow } from "date-fns";
 import { listDvirs, listDocuments } from "@/lib/samsara.functions";
-import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
@@ -99,6 +100,8 @@ function SortableHead({ label, col, sortKey, sortDir, onClick }: {
 
 function DamagePage() {
   const [rows, setRows] = useState<any[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const navigate = useNavigate({ from: "/_app/damage" });
   const {
     search,
@@ -186,6 +189,51 @@ function DamagePage() {
   const startIdx = (safePage - 1) * pageSize;
   const pageRows = filtered.slice(startIdx, startIdx + pageSize);
   const hasFilters = !!(search || status !== "all" || severity !== "all" || stage !== "all" || range?.from);
+
+  // Prune selections that no longer match the current filter set.
+  useEffect(() => {
+    const visible = new Set(filtered.map((r) => r.id as string));
+    setSelected((prev) => {
+      const next = new Set<string>();
+      for (const id of prev) if (visible.has(id)) next.add(id);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filtered]);
+
+  const pageIds = pageRows.map((r) => r.id as string);
+  const pageAllSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const pageSomeSelected = pageIds.some((id) => selected.has(id));
+
+  const togglePage = (checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of pageIds) checked ? next.add(id) : next.delete(id);
+      return next;
+    });
+  };
+  const toggleRow = (id: string, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      checked ? next.add(id) : next.delete(id);
+      return next;
+    });
+  };
+  const selectAllFiltered = () => setSelected(new Set(filtered.map((r) => r.id as string)));
+  const clearSelection = () => setSelected(new Set());
+
+  async function applyBulk(column: "status" | "severity", value: string) {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    const patch: Record<string, string> = { [column]: value };
+    const { error } = await supabase.from("damage_reports").update(patch as any).in("id", ids);
+    setBulkBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Updated ${ids.length} report${ids.length === 1 ? "" : "s"}`);
+    clearSelection();
+    reload();
+  }
+
 
   return (
     <div>
@@ -306,8 +354,50 @@ function DamagePage() {
       </Card>
 
       <Card>
+        {selected.size > 0 && (
+          <div className="flex items-center justify-between gap-3 p-3 border-b bg-muted/40 flex-wrap">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="font-medium">{selected.size} selected</span>
+              {selected.size < filtered.length && (
+                <Button variant="link" size="sm" className="h-auto p-0" onClick={selectAllFiltered}>
+                  Select all {filtered.length} matching
+                </Button>
+              )}
+              <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground" onClick={clearSelection}>
+                Clear
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select disabled={bulkBusy} onValueChange={(v) => applyBulk("status", v)}>
+                <SelectTrigger className="w-44 h-8"><SelectValue placeholder="Set status…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="in_review">In review</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select disabled={bulkBusy} onValueChange={(v) => applyBulk("severity", v)}>
+                <SelectTrigger className="w-44 h-8"><SelectValue placeholder="Set severity…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="minor">Minor</SelectItem>
+                  <SelectItem value="moderate">Moderate</SelectItem>
+                  <SelectItem value="severe">Severe</SelectItem>
+                </SelectContent>
+              </Select>
+              {bulkBusy && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            </div>
+          </div>
+        )}
         <Table>
           <TableHeader><TableRow>
+            <TableHead className="w-10">
+              <Checkbox
+                checked={pageAllSelected ? true : pageSomeSelected ? "indeterminate" : false}
+                onCheckedChange={(v) => togglePage(v === true)}
+                aria-label="Select page"
+              />
+            </TableHead>
             <SortableHead label="When" col="when" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
             <TableHead>P21 Order</TableHead><TableHead>Stage</TableHead>
             <TableHead>Type</TableHead>
@@ -318,11 +408,18 @@ function DamagePage() {
           </TableRow></TableHeader>
           <TableBody>
             {pageRows.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                 {rows.length === 0 ? "No damage reports recorded." : "No reports match the current filters."}
               </TableCell></TableRow>
             ) : pageRows.map((r) => (
-              <TableRow key={r.id}>
+              <TableRow key={r.id} data-state={selected.has(r.id) ? "selected" : undefined}>
+                <TableCell>
+                  <Checkbox
+                    checked={selected.has(r.id)}
+                    onCheckedChange={(v) => toggleRow(r.id, v === true)}
+                    aria-label="Select row"
+                  />
+                </TableCell>
                 <TableCell title={new Date(r.created_at).toLocaleString()}>{formatDistanceToNow(new Date(r.created_at), { addSuffix: true })}</TableCell>
                 <TableCell>{r.p21_order_id ?? "—"}</TableCell>
                 <TableCell>{r.stage}</TableCell>
