@@ -70,7 +70,7 @@ function DamagePage() {
     const q = search.trim().toLowerCase();
     const fromMs = range?.from ? new Date(range.from).setHours(0, 0, 0, 0) : null;
     const toMs = range?.to ? new Date(range.to).setHours(23, 59, 59, 999) : fromMs;
-    return rows.filter((r) => {
+    const out = rows.filter((r) => {
       if (status !== "all" && r.status !== status) return false;
       if (severity !== "all" && r.severity !== severity) return false;
       if (stage !== "all" && r.stage !== stage) return false;
@@ -84,7 +84,17 @@ function DamagePage() {
       }
       return true;
     });
-  }, [rows, search, status, severity, stage, range]);
+    const sevRank: Record<string, number> = { minor: 1, moderate: 2, severe: 3 };
+    const statusRank: Record<string, number> = { open: 1, in_review: 2, in_progress: 2, pending: 2, resolved: 3, closed: 4 };
+    const dir = sortDir === "asc" ? 1 : -1;
+    const cmp = (a: any, b: any): number => {
+      if (sortKey === "when") return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir;
+      if (sortKey === "severity") return ((sevRank[a.severity] ?? 0) - (sevRank[b.severity] ?? 0)) * dir;
+      return ((statusRank[a.status] ?? 99) - (statusRank[b.status] ?? 99)) * dir
+        || String(a.status ?? "").localeCompare(String(b.status ?? "")) * dir;
+    };
+    return out.sort(cmp);
+  }, [rows, search, status, severity, stage, range, sortKey, sortDir]);
 
   const open = filtered.filter((r) => r.status === "open").length;
   const severe = filtered.filter((r) => r.severity === "severe").length;
