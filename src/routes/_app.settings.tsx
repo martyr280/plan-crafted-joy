@@ -27,6 +27,8 @@ import {
   setUserRole,
   listAdminActivity,
 } from "@/lib/user-admin.functions";
+import { samsaraStatus } from "@/lib/samsara.functions";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
@@ -50,9 +52,15 @@ function SettingsPage() {
     supabase.from("sku_crossref").select("*").order("competitor_sku").then(({ data }) => setSkus(data ?? []));
   }, []);
 
+  const samsaraCheck = useServerFn(samsaraStatus);
+  const samsaraQ = useQuery({ queryKey: ["samsara", "status"], queryFn: () => samsaraCheck() });
   const integrations = [
     { name: "P21 (Epicor)", status: "bridge", note: "Connect via the local bridge agent below." },
-    { name: "Samsara", status: "stub", note: "API token not configured. Stub returning placeholder photos." },
+    {
+      name: "Samsara",
+      status: samsaraQ.isLoading ? "stub" : samsaraQ.data?.ok ? "live" : "stub",
+      note: samsaraQ.isLoading ? "Checking connection…" : samsaraQ.data?.message ?? "Not connected.",
+    },
     { name: "Lovable AI Gateway", status: "live", note: "PO parser and reminder generator active." },
   ];
 
