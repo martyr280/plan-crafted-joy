@@ -190,10 +190,26 @@ function DamagePage() {
   return (
     <div>
       <ModuleHeader title="Damage Tracker" description="RMA log linked to Samsara DVIRs and proof-of-delivery documents." />
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card className="p-4"><p className="text-sm text-muted-foreground">Open (filtered)</p><p className="text-2xl font-bold">{open}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Severe (filtered)</p><p className="text-2xl font-bold text-destructive">{severe}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Matching / total</p><p className="text-2xl font-bold">{filtered.length} <span className="text-sm font-normal text-muted-foreground">/ {rows.length}</span></p></Card>
+        <Card className="p-4 flex flex-col justify-between">
+          <p className="text-sm text-muted-foreground">By severity</p>
+          <div className="h-20 mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={severityData} barCategoryGap="20%">
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                <Tooltip cursor={{ fill: "transparent" }} contentStyle={{ fontSize: 12, borderRadius: 6 }} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {severityData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
       </div>
 
       <Card className="p-3 mb-3">
