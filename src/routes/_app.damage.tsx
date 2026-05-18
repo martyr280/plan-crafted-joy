@@ -21,6 +21,7 @@ import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight, Ar
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
