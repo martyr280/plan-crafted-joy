@@ -354,8 +354,50 @@ function DamagePage() {
       </Card>
 
       <Card>
+        {selected.size > 0 && (
+          <div className="flex items-center justify-between gap-3 p-3 border-b bg-muted/40 flex-wrap">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="font-medium">{selected.size} selected</span>
+              {selected.size < filtered.length && (
+                <Button variant="link" size="sm" className="h-auto p-0" onClick={selectAllFiltered}>
+                  Select all {filtered.length} matching
+                </Button>
+              )}
+              <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground" onClick={clearSelection}>
+                Clear
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select disabled={bulkBusy} onValueChange={(v) => applyBulk("status", v)}>
+                <SelectTrigger className="w-44 h-8"><SelectValue placeholder="Set status…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="in_review">In review</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select disabled={bulkBusy} onValueChange={(v) => applyBulk("severity", v)}>
+                <SelectTrigger className="w-44 h-8"><SelectValue placeholder="Set severity…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="minor">Minor</SelectItem>
+                  <SelectItem value="moderate">Moderate</SelectItem>
+                  <SelectItem value="severe">Severe</SelectItem>
+                </SelectContent>
+              </Select>
+              {bulkBusy && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            </div>
+          </div>
+        )}
         <Table>
           <TableHeader><TableRow>
+            <TableHead className="w-10">
+              <Checkbox
+                checked={pageAllSelected ? true : pageSomeSelected ? "indeterminate" : false}
+                onCheckedChange={(v) => togglePage(v === true)}
+                aria-label="Select page"
+              />
+            </TableHead>
             <SortableHead label="When" col="when" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
             <TableHead>P21 Order</TableHead><TableHead>Stage</TableHead>
             <TableHead>Type</TableHead>
@@ -366,11 +408,18 @@ function DamagePage() {
           </TableRow></TableHeader>
           <TableBody>
             {pageRows.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                 {rows.length === 0 ? "No damage reports recorded." : "No reports match the current filters."}
               </TableCell></TableRow>
             ) : pageRows.map((r) => (
-              <TableRow key={r.id}>
+              <TableRow key={r.id} data-state={selected.has(r.id) ? "selected" : undefined}>
+                <TableCell>
+                  <Checkbox
+                    checked={selected.has(r.id)}
+                    onCheckedChange={(v) => toggleRow(r.id, v === true)}
+                    aria-label="Select row"
+                  />
+                </TableCell>
                 <TableCell title={new Date(r.created_at).toLocaleString()}>{formatDistanceToNow(new Date(r.created_at), { addSuffix: true })}</TableCell>
                 <TableCell>{r.p21_order_id ?? "—"}</TableCell>
                 <TableCell>{r.stage}</TableCell>
