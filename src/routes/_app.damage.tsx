@@ -225,7 +225,8 @@ function DamagePage() {
     if (selected.size === 0) return;
     setBulkBusy(true);
     const ids = Array.from(selected);
-    const { error } = await supabase.from("damage_reports").update({ [column]: value }).in("id", ids);
+    const patch: Record<string, string> = { [column]: value };
+    const { error } = await supabase.from("damage_reports").update(patch as any).in("id", ids);
     setBulkBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`Updated ${ids.length} report${ids.length === 1 ? "" : "s"}`);
