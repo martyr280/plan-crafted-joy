@@ -1,7 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, stripSearchParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { zodValidator, fallback } from "@tanstack/zod-adapter";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +22,39 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 
-export const Route = createFileRoute("/_app/damage")({ component: DamagePage });
-
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
+const defaults = {
+  search: "",
+  status: "all",
+  severity: "all",
+  stage: "all",
+  page: 1,
+  pageSize: 25,
+  sortKey: "when",
+  sortDir: "desc",
+} as const;
+
+const damageSearchSchema = z.object({
+  search: fallback(z.string(), "").default(""),
+  status: fallback(z.string(), "all").default("all"),
+  severity: fallback(z.string(), "all").default("all"),
+  stage: fallback(z.string(), "all").default("all"),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  page: fallback(z.number(), 1).default(1),
+  pageSize: fallback(z.number(), 25).default(25),
+  sortKey: fallback(z.enum(["when", "severity", "status"]), "when").default("when"),
+  sortDir: fallback(z.enum(["asc", "desc"]), "desc").default("desc"),
+});
+
+type DamageSearch = z.infer<typeof damageSearchSchema>;
+
+export const Route = createFileRoute("/_app/damage")({
+  validateSearch: zodValidator(damageSearchSchema),
+  search: { middlewares: [stripSearchParams(defaults)] },
+  component: DamagePage,
+});
 
 // Page through all rows — PostgREST caps responses at 1000.
 async function fetchAllDamage() {
@@ -66,33 +98,45 @@ function SortableHead({ label, col, sortKey, sortDir, onClick }: {
 
 function DamagePage() {
   const [rows, setRows] = useState<any[]>([]);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<string>("all");
-  const [severity, setSeverity] = useState<string>("all");
-  const [stage, setStage] = useState<string>("all");
-  const [range, setRange] = useState<DateRange | undefined>();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [sortKey, setSortKey] = useState<"when" | "severity" | "status">("when");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const navigate = useNavigate({ from: "/_app/damage" });
+  const {
+    search,
+    status,
+    severity,
+    stage,
+    from: dateFrom,
+    to: dateTo,
+    page,
+    pageSize,
+    sortKey,
+    sortDir,
+  } = Route.useSearch();
+
+  const range: DateRange | undefined = useMemo(() => {
+    if (!dateFrom) return undefined;
+    return {
+      from: new Date(dateFrom),
+      to: dateTo ? new Date(dateTo) : undefined,
+    };
+  }, [dateFrom, dateTo]);
 
   const toggleSort = (key: "when" | "severity" | "status") => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir(key === "when" ? "desc" : "asc"); }
+    if (sortKey === key) {
+      navigate({ search: (prev: DamageSearch) => ({ ...prev, sortDir: sortDir === "asc" ? "desc" : "asc", page: 1 }) });
+    } else {
+      navigate({ search: (prev: DamageSearch) => ({ ...prev, sortKey: key, sortDir: key === "when" ? "desc" : "asc", page: 1 }) });
+    }
   };
 
   const reload = () => fetchAllDamage().then(setRows);
   useEffect(() => { reload(); }, []);
 
-  // Reset to page 1 whenever filters change.
-  useEffect(() => { setPage(1); }, [search, status, severity, stage, range?.from, range?.to, pageSize]);
-
   const stages = useMemo(() => Array.from(new Set(rows.map((r) => r.stage).filter(Boolean))).sort(), [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const fromMs = range?.from ? new Date(range.from).setHours(0, 0, 0, 0) : null;
-    const toMs = range?.to ? new Date(range.to).setHours(23, 59, 59, 999) : fromMs;
+    const fromMs = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : null;
+    const toMs = dateTo ? new Date(dateTo).setHours(23, 59, 59, 999) : fromMs;
     const out = rows.filter((r) => {
       if (status !== "all" && r.status !== status) return false;
       if (severity !== "all" && r.severity !== severity) return false;
@@ -117,7 +161,7 @@ function DamagePage() {
         || String(a.status ?? "").localeCompare(String(b.status ?? "")) * dir;
     };
     return out.sort(cmp);
-  }, [rows, search, status, severity, stage, range, sortKey, sortDir]);
+  }, [rows, search, status, severity, stage, dateFrom, dateTo, sortKey, sortDir]);
 
   const open = filtered.filter((r) => r.status === "open").length;
   const severe = filtered.filter((r) => r.severity === "severe").length;
@@ -142,10 +186,10 @@ function DamagePage() {
           <Input
             placeholder="Search order, route, driver, type…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => navigate({ search: (prev: DamageSearch) => ({ ...prev, search: e.target.value, page: 1 }) })}
             className="max-w-xs"
           />
-          <Select value={status} onValueChange={setStatus}>
+          <Select value={status} onValueChange={(v) => navigate({ search: (prev: DamageSearch) => ({ ...prev, status: v, page: 1 }) })}>
             <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
@@ -155,7 +199,7 @@ function DamagePage() {
               <SelectItem value="closed">Closed</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={severity} onValueChange={setSeverity}>
+          <Select value={severity} onValueChange={(v) => navigate({ search: (prev: DamageSearch) => ({ ...prev, severity: v, page: 1 }) })}>
             <SelectTrigger className="w-36"><SelectValue placeholder="Severity" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All severities</SelectItem>
@@ -164,7 +208,7 @@ function DamagePage() {
               <SelectItem value="severe">Severe</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={stage} onValueChange={setStage}>
+          <Select value={stage} onValueChange={(v) => navigate({ search: (prev: DamageSearch) => ({ ...prev, stage: v, page: 1 }) })}>
             <SelectTrigger className="w-36"><SelectValue placeholder="Stage" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All stages</SelectItem>
@@ -188,7 +232,16 @@ function DamagePage() {
               <Calendar
                 mode="range"
                 selected={range}
-                onSelect={setRange}
+                onSelect={(r) =>
+                  navigate({
+                    search: (prev: DamageSearch) => ({
+                      ...prev,
+                      from: r?.from?.toISOString(),
+                      to: r?.to?.toISOString(),
+                      page: 1,
+                    }),
+                  })
+                }
                 numberOfMonths={2}
                 initialFocus
                 className={cn("p-3 pointer-events-auto")}
@@ -200,7 +253,20 @@ function DamagePage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { setSearch(""); setStatus("all"); setSeverity("all"); setStage("all"); setRange(undefined); }}
+              onClick={() =>
+                navigate({
+                  search: (prev: DamageSearch) => ({
+                    ...prev,
+                    search: "",
+                    status: "all",
+                    severity: "all",
+                    stage: "all",
+                    from: undefined,
+                    to: undefined,
+                    page: 1,
+                  }),
+                })
+              }
             >
               <X className="w-3 h-3 mr-1" /> Clear
             </Button>
@@ -244,7 +310,7 @@ function DamagePage() {
             <span>
               {filtered.length === 0 ? "0" : `${startIdx + 1}–${Math.min(startIdx + pageSize, filtered.length)}`} of {filtered.length}
             </span>
-            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+            <Select value={String(pageSize)} onValueChange={(v) => navigate({ search: (prev: DamageSearch) => ({ ...prev, pageSize: Number(v), page: 1 }) })}>
               <SelectTrigger className="w-24 h-8"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {PAGE_SIZE_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}
@@ -252,11 +318,11 @@ function DamagePage() {
             </Select>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => navigate({ search: (prev: DamageSearch) => ({ ...prev, page: Math.max(1, prev.page - 1) }) })}>
               <ChevronLeft className="w-4 h-4" /> Prev
             </Button>
             <span className="text-sm">Page {safePage} of {totalPages}</span>
-            <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+            <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => navigate({ search: (prev: DamageSearch) => ({ ...prev, page: Math.min(totalPages, prev.page + 1) }) })}>
               Next <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -372,4 +438,3 @@ function AttachSamsaraCell({ row, onChanged }: { row: any; onChanged: () => void
     </Dialog>
   );
 }
-
