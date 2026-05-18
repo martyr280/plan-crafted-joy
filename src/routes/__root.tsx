@@ -43,14 +43,17 @@ export const Route = createRootRoute({
 });
 
 function RootShell({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient());
   return (
     <html lang="en">
       <head><HeadContent /></head>
       <body>
-        <AuthProvider>
-          {children}
-          <Toaster richColors position="top-right" />
-        </AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </AuthProvider>
+        </QueryClientProvider>
         <Scripts />
       </body>
     </html>
