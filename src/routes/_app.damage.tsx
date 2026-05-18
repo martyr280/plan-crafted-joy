@@ -164,6 +164,20 @@ function DamagePage() {
     return out.sort(cmp);
   }, [rows, search, status, severity, stage, dateFrom, dateTo, sortKey, sortDir]);
 
+  const severityData = useMemo(() => {
+    const counts = { minor: 0, moderate: 0, severe: 0 };
+    for (const r of filtered) {
+      if (r.severity === "minor") counts.minor++;
+      else if (r.severity === "moderate") counts.moderate++;
+      else if (r.severity === "severe") counts.severe++;
+    }
+    return [
+      { name: "Minor", value: counts.minor, fill: "hsl(var(--chart-3))" },
+      { name: "Moderate", value: counts.moderate, fill: "hsl(var(--chart-4))" },
+      { name: "Severe", value: counts.severe, fill: "hsl(var(--chart-5))" },
+    ];
+  }, [filtered]);
+
   const open = filtered.filter((r) => r.status === "open").length;
   const severe = filtered.filter((r) => r.severity === "severe").length;
 
