@@ -15,7 +15,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { format, formatDistanceToNow } from "date-fns";
 import { listDvirs, listDocuments } from "@/lib/samsara.functions";
-import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
@@ -50,6 +50,13 @@ function DamagePage() {
   const [range, setRange] = useState<DateRange | undefined>();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [sortKey, setSortKey] = useState<"when" | "severity" | "status">("when");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (key: "when" | "severity" | "status") => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir(key === "when" ? "desc" : "asc"); }
+  };
 
   const reload = () => fetchAllDamage().then(setRows);
   useEffect(() => { reload(); }, []);
@@ -63,7 +70,7 @@ function DamagePage() {
     const q = search.trim().toLowerCase();
     const fromMs = range?.from ? new Date(range.from).setHours(0, 0, 0, 0) : null;
     const toMs = range?.to ? new Date(range.to).setHours(23, 59, 59, 999) : fromMs;
-    return rows.filter((r) => {
+    const out = rows.filter((r) => {
       if (status !== "all" && r.status !== status) return false;
       if (severity !== "all" && r.severity !== severity) return false;
       if (stage !== "all" && r.stage !== stage) return false;
@@ -77,7 +84,17 @@ function DamagePage() {
       }
       return true;
     });
-  }, [rows, search, status, severity, stage, range]);
+    const sevRank: Record<string, number> = { minor: 1, moderate: 2, severe: 3 };
+    const statusRank: Record<string, number> = { open: 1, in_review: 2, in_progress: 2, pending: 2, resolved: 3, closed: 4 };
+    const dir = sortDir === "asc" ? 1 : -1;
+    const cmp = (a: any, b: any): number => {
+      if (sortKey === "when") return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir;
+      if (sortKey === "severity") return ((sevRank[a.severity] ?? 0) - (sevRank[b.severity] ?? 0)) * dir;
+      return ((statusRank[a.status] ?? 99) - (statusRank[b.status] ?? 99)) * dir
+        || String(a.status ?? "").localeCompare(String(b.status ?? "")) * dir;
+    };
+    return out.sort(cmp);
+  }, [rows, search, status, severity, stage, range, sortKey, sortDir]);
 
   const open = filtered.filter((r) => r.status === "open").length;
   const severe = filtered.filter((r) => r.severity === "severe").length;
@@ -171,9 +188,13 @@ function DamagePage() {
       <Card>
         <Table>
           <TableHeader><TableRow>
-            <TableHead>When</TableHead><TableHead>P21 Order</TableHead><TableHead>Stage</TableHead>
-            <TableHead>Type</TableHead><TableHead>Severity</TableHead><TableHead>Route</TableHead>
-            <TableHead>Status</TableHead><TableHead>Photos</TableHead><TableHead>Samsara</TableHead>
+            <SortableHead label="When" col="when" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <TableHead>P21 Order</TableHead><TableHead>Stage</TableHead>
+            <TableHead>Type</TableHead>
+            <SortableHead label="Severity" col="severity" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <TableHead>Route</TableHead>
+            <SortableHead label="Status" col="status" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <TableHead>Photos</TableHead><TableHead>Samsara</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {pageRows.length === 0 ? (
@@ -326,5 +347,28 @@ function AttachSamsaraCell({ row, onChanged }: { row: any; onChanged: () => void
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SortableHead({ label, col, sortKey, sortDir, onClick }: {
+  label: string;
+  col: "when" | "severity" | "status";
+  sortKey: "when" | "severity" | "status";
+  sortDir: "asc" | "desc";
+  onClick: (col: "when" | "severity" | "status") => void;
+}) {
+  const active = sortKey === col;
+  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <TableHead>
+      <button
+        type="button"
+        onClick={() => onClick(col)}
+        className={cn("inline-flex items-center gap-1 hover:text-foreground transition-colors", active ? "text-foreground font-medium" : "text-muted-foreground")}
+      >
+        {label}
+        <Icon className="h-3.5 w-3.5" />
+      </button>
+    </TableHead>
   );
 }
