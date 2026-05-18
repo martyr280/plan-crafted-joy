@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
-import { Truck, MapPin } from "lucide-react";
+import { Truck, MapPin, RefreshCw } from "lucide-react";
+import { getFleetLocations, listTrips } from "@/lib/samsara.functions";
+import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_app/logistics")({ component: LogisticsPage });
 
@@ -91,7 +95,7 @@ function LogisticsPage() {
           <TabsTrigger value="loads">Loads ({loads.length})</TabsTrigger>
           <TabsTrigger value="routes">Routes ({routes.length})</TabsTrigger>
           <TabsTrigger value="damage">Damage Log ({damage.length})</TabsTrigger>
-          <TabsTrigger value="photos">Samsara Photos</TabsTrigger>
+          <TabsTrigger value="samsara">Live Fleet (Samsara)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="loads">
@@ -204,10 +208,8 @@ function LogisticsPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="photos">
-          <Card className="p-6 text-center text-muted-foreground">
-            <p>Samsara photo viewer — connect Samsara API to fetch delivery proof photos by pick ticket.</p>
-          </Card>
+        <TabsContent value="samsara">
+          <SamsaraLivePanel />
         </TabsContent>
       </Tabs>
 
