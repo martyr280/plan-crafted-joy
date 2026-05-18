@@ -188,9 +188,13 @@ function DamagePage() {
       <Card>
         <Table>
           <TableHeader><TableRow>
-            <TableHead>When</TableHead><TableHead>P21 Order</TableHead><TableHead>Stage</TableHead>
-            <TableHead>Type</TableHead><TableHead>Severity</TableHead><TableHead>Route</TableHead>
-            <TableHead>Status</TableHead><TableHead>Photos</TableHead><TableHead>Samsara</TableHead>
+            <SortableHead label="When" col="when" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <TableHead>P21 Order</TableHead><TableHead>Stage</TableHead>
+            <TableHead>Type</TableHead>
+            <SortableHead label="Severity" col="severity" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <TableHead>Route</TableHead>
+            <SortableHead label="Status" col="status" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+            <TableHead>Photos</TableHead><TableHead>Samsara</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {pageRows.length === 0 ? (
