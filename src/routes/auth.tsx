@@ -18,7 +18,9 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [magicEmail, setMagicEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -55,6 +57,18 @@ function AuthPage() {
     setLoading(false);
     if (error) return toast.error(error.message);
     toast.success("Check your email to confirm your account.");
+  }
+
+  async function magicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setMagicLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: magicEmail,
+      options: { emailRedirectTo: `${window.location.origin}/` },
+    });
+    setMagicLoading(false);
+    if (error) return toast.error(error.message);
+    toast.success("Check your email for the magic link.");
   }
 
   async function googleSignIn() {
@@ -128,7 +142,26 @@ function AuthPage() {
             <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
               <div className="h-px bg-border flex-1" /> OR <div className="h-px bg-border flex-1" />
             </div>
-            <Button variant="outline" className="w-full" onClick={googleSignIn}>Continue with Google</Button>
+            <div className="space-y-3">
+              <Button variant="outline" className="w-full" onClick={googleSignIn}>Continue with Google</Button>
+              <form onSubmit={magicLink} className="space-y-2">
+                <Label htmlFor="magic-email">Magic link</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="magic-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    required
+                    value={magicEmail}
+                    onChange={(e) => setMagicEmail(e.target.value)}
+                  />
+                  <Button type="submit" variant="secondary" disabled={magicLoading}>
+                    {magicLoading ? "Sending…" : "Send link"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">We'll email you a one-click sign-in link.</p>
+              </form>
+            </div>
           </CardContent>
         </Card>
       </div>
