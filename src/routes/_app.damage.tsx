@@ -50,6 +50,13 @@ function DamagePage() {
   const [range, setRange] = useState<DateRange | undefined>();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [sortKey, setSortKey] = useState<"when" | "severity" | "status">("when");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (key: "when" | "severity" | "status") => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir(key === "when" ? "desc" : "asc"); }
+  };
 
   const reload = () => fetchAllDamage().then(setRows);
   useEffect(() => { reload(); }, []);
