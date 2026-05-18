@@ -17,11 +17,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { format, formatDistanceToNow } from "date-fns";
 import { listDvirs, listDocuments } from "@/lib/samsara.functions";
-import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
