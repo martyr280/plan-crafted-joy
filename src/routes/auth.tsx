@@ -142,7 +142,26 @@ function AuthPage() {
             <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
               <div className="h-px bg-border flex-1" /> OR <div className="h-px bg-border flex-1" />
             </div>
-            <Button variant="outline" className="w-full" onClick={googleSignIn}>Continue with Google</Button>
+            <div className="space-y-3">
+              <Button variant="outline" className="w-full" onClick={googleSignIn}>Continue with Google</Button>
+              <form onSubmit={magicLink} className="space-y-2">
+                <Label htmlFor="magic-email">Magic link</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="magic-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    required
+                    value={magicEmail}
+                    onChange={(e) => setMagicEmail(e.target.value)}
+                  />
+                  <Button type="submit" variant="secondary" disabled={magicLoading}>
+                    {magicLoading ? "Sending…" : "Send link"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">We'll email you a one-click sign-in link.</p>
+              </form>
+            </div>
           </CardContent>
         </Card>
       </div>
