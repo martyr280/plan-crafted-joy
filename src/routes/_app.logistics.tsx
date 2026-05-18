@@ -229,3 +229,105 @@ function LogisticsPage() {
     </div>
   );
 }
+
+function SamsaraLivePanel() {
+  const getLocs = useServerFn(getFleetLocations);
+  const getTrips = useServerFn(listTrips);
+
+  const locs = useQuery({
+    queryKey: ["samsara", "locations"],
+    queryFn: () => getLocs(),
+    refetchInterval: 60_000,
+  });
+  const trips = useQuery({
+    queryKey: ["samsara", "trips", 24],
+    queryFn: () => getTrips({ data: { hours: 24 } }),
+  });
+
+  const vehicles = locs.data?.vehicles ?? [];
+  const tripRows = trips.data?.trips ?? [];
+  const err = locs.data?.error ?? trips.data?.error;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">Live vehicle positions</p>
+          <p className="text-xs text-muted-foreground">Polled from Samsara every 60s.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => { locs.refetch(); trips.refetch(); }}>
+          <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      {err && (
+        <Card className="p-4 border-destructive/40 bg-destructive/5 text-sm text-destructive">{err}</Card>
+      )}
+
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Vehicle</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Speed</TableHead>
+              <TableHead>Last update</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {locs.isLoading ? (
+              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">Loading…</TableCell></TableRow>
+            ) : vehicles.length === 0 ? (
+              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No vehicles reporting.</TableCell></TableRow>
+            ) : vehicles.map((v: any) => (
+              <TableRow key={v.id}>
+                <TableCell className="font-medium">{v.name}</TableCell>
+                <TableCell className="text-sm">
+                  {v.reverseGeo ?? (v.latitude != null ? `${v.latitude.toFixed(4)}, ${v.longitude.toFixed(4)}` : "—")}
+                </TableCell>
+                <TableCell>{v.speedMph != null ? `${Math.round(v.speedMph)} mph` : "—"}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {v.time ? formatDistanceToNow(new Date(v.time), { addSuffix: true }) : "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <div>
+        <p className="text-sm font-semibold mb-2">Trips (last 24h)</p>
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vehicle</TableHead>
+                <TableHead>From</TableHead>
+                <TableHead>To</TableHead>
+                <TableHead>Distance</TableHead>
+                <TableHead>Started</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {trips.isLoading ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Loading…</TableCell></TableRow>
+              ) : tripRows.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No trips in window.</TableCell></TableRow>
+              ) : tripRows.slice(0, 50).map((t: any) => (
+                <TableRow key={t.id}>
+                  <TableCell>{t.vehicle?.name ?? t.vehicle?.id ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{t.startLocation?.formattedLocation ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{t.endLocation?.formattedLocation ?? "—"}</TableCell>
+                  <TableCell>{t.distanceMeters != null ? `${(t.distanceMeters / 1609.34).toFixed(1)} mi` : "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {t.startTime ? formatDistanceToNow(new Date(t.startTime), { addSuffix: true }) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      </div>
+    </div>
+  );
+}
