@@ -15,6 +15,7 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
 import { Truck, MapPin, RefreshCw } from "lucide-react";
 import { getFleetLocations, listTrips } from "@/lib/samsara.functions";
+import { FleetMap } from "@/components/shared/FleetMap";
 import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_app/logistics")({ component: LogisticsPage });
