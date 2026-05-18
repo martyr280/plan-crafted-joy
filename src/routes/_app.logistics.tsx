@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
-import { Truck, MapPin } from "lucide-react";
+import { Truck, MapPin, RefreshCw } from "lucide-react";
+import { getFleetLocations, listTrips } from "@/lib/samsara.functions";
+import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_app/logistics")({ component: LogisticsPage });
 
@@ -91,7 +95,7 @@ function LogisticsPage() {
           <TabsTrigger value="loads">Loads ({loads.length})</TabsTrigger>
           <TabsTrigger value="routes">Routes ({routes.length})</TabsTrigger>
           <TabsTrigger value="damage">Damage Log ({damage.length})</TabsTrigger>
-          <TabsTrigger value="photos">Samsara Photos</TabsTrigger>
+          <TabsTrigger value="samsara">Live Fleet (Samsara)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="loads">
@@ -204,10 +208,8 @@ function LogisticsPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="photos">
-          <Card className="p-6 text-center text-muted-foreground">
-            <p>Samsara photo viewer — connect Samsara API to fetch delivery proof photos by pick ticket.</p>
-          </Card>
+        <TabsContent value="samsara">
+          <SamsaraLivePanel />
         </TabsContent>
       </Tabs>
 
@@ -224,6 +226,108 @@ function LogisticsPage() {
           </>}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+function SamsaraLivePanel() {
+  const getLocs = useServerFn(getFleetLocations);
+  const getTrips = useServerFn(listTrips);
+
+  const locs = useQuery({
+    queryKey: ["samsara", "locations"],
+    queryFn: () => getLocs(),
+    refetchInterval: 60_000,
+  });
+  const trips = useQuery({
+    queryKey: ["samsara", "trips", 24],
+    queryFn: () => getTrips({ data: { hours: 24 } }),
+  });
+
+  const vehicles = locs.data?.vehicles ?? [];
+  const tripRows = trips.data?.trips ?? [];
+  const err = locs.data?.error ?? trips.data?.error;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">Live vehicle positions</p>
+          <p className="text-xs text-muted-foreground">Polled from Samsara every 60s.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => { locs.refetch(); trips.refetch(); }}>
+          <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      {err && (
+        <Card className="p-4 border-destructive/40 bg-destructive/5 text-sm text-destructive">{err}</Card>
+      )}
+
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Vehicle</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Speed</TableHead>
+              <TableHead>Last update</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {locs.isLoading ? (
+              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">Loading…</TableCell></TableRow>
+            ) : vehicles.length === 0 ? (
+              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No vehicles reporting.</TableCell></TableRow>
+            ) : vehicles.map((v: any) => (
+              <TableRow key={v.id}>
+                <TableCell className="font-medium">{v.name}</TableCell>
+                <TableCell className="text-sm">
+                  {v.reverseGeo ?? (v.latitude != null ? `${v.latitude.toFixed(4)}, ${v.longitude.toFixed(4)}` : "—")}
+                </TableCell>
+                <TableCell>{v.speedMph != null ? `${Math.round(v.speedMph)} mph` : "—"}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {v.time ? formatDistanceToNow(new Date(v.time), { addSuffix: true }) : "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <div>
+        <p className="text-sm font-semibold mb-2">Trips (last 24h)</p>
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vehicle</TableHead>
+                <TableHead>From</TableHead>
+                <TableHead>To</TableHead>
+                <TableHead>Distance</TableHead>
+                <TableHead>Started</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {trips.isLoading ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Loading…</TableCell></TableRow>
+              ) : tripRows.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No trips in window.</TableCell></TableRow>
+              ) : tripRows.slice(0, 50).map((t: any) => (
+                <TableRow key={t.id}>
+                  <TableCell>{t.vehicle?.name ?? t.vehicle?.id ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{t.startLocation?.formattedLocation ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{t.endLocation?.formattedLocation ?? "—"}</TableCell>
+                  <TableCell>{t.distanceMeters != null ? `${(t.distanceMeters / 1609.34).toFixed(1)} mi` : "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {t.startTime ? formatDistanceToNow(new Date(t.startTime), { addSuffix: true }) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      </div>
     </div>
   );
 }
