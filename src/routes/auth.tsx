@@ -59,6 +59,18 @@ function AuthPage() {
     toast.success("Check your email to confirm your account.");
   }
 
+  async function magicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setMagicLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: magicEmail,
+      options: { emailRedirectTo: `${window.location.origin}/` },
+    });
+    setMagicLoading(false);
+    if (error) return toast.error(error.message);
+    toast.success("Check your email for the magic link.");
+  }
+
   async function googleSignIn() {
     const { lovable } = await import("@/integrations/lovable/index");
     const result = await lovable.auth.signInWithOAuth("google", {
