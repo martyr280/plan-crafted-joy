@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { FileInput, Receipt, Truck, AlertTriangle, FileBarChart } from "lucide-react";
+import { getFleetLocations } from "@/lib/samsara.functions";
 import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_app/")({
