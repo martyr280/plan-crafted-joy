@@ -122,9 +122,9 @@ function DamagePage() {
 
   const toggleSort = (key: "when" | "severity" | "status") => {
     if (sortKey === key) {
-      navigate({ search: (prev) => ({ ...prev, sortDir: sortDir === "asc" ? "desc" : "asc", page: 1 }) });
+      navigate({ search: (prev: DamageSearch) => ({ ...prev, sortDir: sortDir === "asc" ? "desc" : "asc", page: 1 }) });
     } else {
-      navigate({ search: (prev) => ({ ...prev, sortKey: key, sortDir: key === "when" ? "desc" : "asc", page: 1 }) });
+      navigate({ search: (prev: DamageSearch) => ({ ...prev, sortKey: key, sortDir: key === "when" ? "desc" : "asc", page: 1 }) });
     }
   };
 
@@ -186,10 +186,10 @@ function DamagePage() {
           <Input
             placeholder="Search order, route, driver, type…"
             value={search}
-            onChange={(e) => navigate({ search: (prev) => ({ ...prev, search: e.target.value, page: 1 }) })}
+            onChange={(e) => navigate({ search: (prev: DamageSearch) => ({ ...prev, search: e.target.value, page: 1 }) })}
             className="max-w-xs"
           />
-          <Select value={status} onValueChange={(v) => navigate({ search: (prev) => ({ ...prev, status: v, page: 1 }) })}>
+          <Select value={status} onValueChange={(v) => navigate({ search: (prev: DamageSearch) => ({ ...prev, status: v, page: 1 }) })}>
             <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
@@ -199,7 +199,7 @@ function DamagePage() {
               <SelectItem value="closed">Closed</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={severity} onValueChange={(v) => navigate({ search: (prev) => ({ ...prev, severity: v, page: 1 }) })}>
+          <Select value={severity} onValueChange={(v) => navigate({ search: (prev: DamageSearch) => ({ ...prev, severity: v, page: 1 }) })}>
             <SelectTrigger className="w-36"><SelectValue placeholder="Severity" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All severities</SelectItem>
@@ -208,7 +208,7 @@ function DamagePage() {
               <SelectItem value="severe">Severe</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={stage} onValueChange={(v) => navigate({ search: (prev) => ({ ...prev, stage: v, page: 1 }) })}>
+          <Select value={stage} onValueChange={(v) => navigate({ search: (prev: DamageSearch) => ({ ...prev, stage: v, page: 1 }) })}>
             <SelectTrigger className="w-36"><SelectValue placeholder="Stage" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All stages</SelectItem>
@@ -234,7 +234,7 @@ function DamagePage() {
                 selected={range}
                 onSelect={(r) =>
                   navigate({
-                    search: (prev) => ({
+                    search: (prev: DamageSearch) => ({
                       ...prev,
                       from: r?.from?.toISOString(),
                       to: r?.to?.toISOString(),
@@ -255,7 +255,7 @@ function DamagePage() {
               size="sm"
               onClick={() =>
                 navigate({
-                  search: (prev) => ({
+                  search: (prev: DamageSearch) => ({
                     ...prev,
                     search: "",
                     status: "all",
@@ -310,7 +310,7 @@ function DamagePage() {
             <span>
               {filtered.length === 0 ? "0" : `${startIdx + 1}–${Math.min(startIdx + pageSize, filtered.length)}`} of {filtered.length}
             </span>
-            <Select value={String(pageSize)} onValueChange={(v) => navigate({ search: (prev) => ({ ...prev, pageSize: Number(v), page: 1 }) })}>
+            <Select value={String(pageSize)} onValueChange={(v) => navigate({ search: (prev: DamageSearch) => ({ ...prev, pageSize: Number(v), page: 1 }) })}>
               <SelectTrigger className="w-24 h-8"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {PAGE_SIZE_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}
@@ -318,11 +318,11 @@ function DamagePage() {
             </Select>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => navigate({ search: (prev) => ({ ...prev, page: Math.max(1, prev.page - 1) }) })}>
+            <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => navigate({ search: (prev: DamageSearch) => ({ ...prev, page: Math.max(1, prev.page - 1) }) })}>
               <ChevronLeft className="w-4 h-4" /> Prev
             </Button>
             <span className="text-sm">Page {safePage} of {totalPages}</span>
-            <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => navigate({ search: (prev) => ({ ...prev, page: Math.min(totalPages, prev.page + 1) }) })}>
+            <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => navigate({ search: (prev: DamageSearch) => ({ ...prev, page: Math.min(totalPages, prev.page + 1) }) })}>
               Next <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
