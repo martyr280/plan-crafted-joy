@@ -48,6 +48,8 @@ const damageSearchSchema = z.object({
   sortDir: fallback(z.enum(["asc", "desc"]), "desc").default("desc"),
 });
 
+type DamageSearch = z.infer<typeof damageSearchSchema>;
+
 export const Route = createFileRoute("/_app/damage")({
   validateSearch: zodValidator(damageSearchSchema),
   search: { middlewares: [stripSearchParams(defaults)] },
