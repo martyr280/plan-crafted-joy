@@ -190,6 +190,50 @@ function DamagePage() {
   const pageRows = filtered.slice(startIdx, startIdx + pageSize);
   const hasFilters = !!(search || status !== "all" || severity !== "all" || stage !== "all" || range?.from);
 
+  // Prune selections that no longer match the current filter set.
+  useEffect(() => {
+    const visible = new Set(filtered.map((r) => r.id as string));
+    setSelected((prev) => {
+      const next = new Set<string>();
+      for (const id of prev) if (visible.has(id)) next.add(id);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filtered]);
+
+  const pageIds = pageRows.map((r) => r.id as string);
+  const pageAllSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const pageSomeSelected = pageIds.some((id) => selected.has(id));
+
+  const togglePage = (checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of pageIds) checked ? next.add(id) : next.delete(id);
+      return next;
+    });
+  };
+  const toggleRow = (id: string, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      checked ? next.add(id) : next.delete(id);
+      return next;
+    });
+  };
+  const selectAllFiltered = () => setSelected(new Set(filtered.map((r) => r.id as string)));
+  const clearSelection = () => setSelected(new Set());
+
+  async function applyBulk(column: "status" | "severity", value: string) {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    const { error } = await supabase.from("damage_reports").update({ [column]: value }).in("id", ids);
+    setBulkBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Updated ${ids.length} report${ids.length === 1 ? "" : "s"}`);
+    clearSelection();
+    reload();
+  }
+
+
   return (
     <div>
       <ModuleHeader title="Damage Tracker" description="RMA log linked to Samsara DVIRs and proof-of-delivery documents." />
