@@ -265,6 +265,9 @@ function SamsaraLivePanel() {
         <Card className="p-4 border-destructive/40 bg-destructive/5 text-sm text-destructive">{err}</Card>
       )}
 
+      <FleetMap vehicles={vehicles} />
+
+
       <Card>
         <Table>
           <TableHeader>
