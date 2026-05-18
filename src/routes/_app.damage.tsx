@@ -350,25 +350,3 @@ function AttachSamsaraCell({ row, onChanged }: { row: any; onChanged: () => void
   );
 }
 
-function SortableHead({ label, col, sortKey, sortDir, onClick }: {
-  label: string;
-  col: "when" | "severity" | "status";
-  sortKey: "when" | "severity" | "status";
-  sortDir: "asc" | "desc";
-  onClick: (col: "when" | "severity" | "status") => void;
-}) {
-  const active = sortKey === col;
-  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
-  return (
-    <TableHead>
-      <button
-        type="button"
-        onClick={() => onClick(col)}
-        className={cn("inline-flex items-center gap-1 hover:text-foreground transition-colors", active ? "text-foreground font-medium" : "text-muted-foreground")}
-      >
-        {label}
-        <Icon className="h-3.5 w-3.5" />
-      </button>
-    </TableHead>
-  );
-}
