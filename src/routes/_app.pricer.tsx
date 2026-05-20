@@ -7,9 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -55,7 +55,7 @@ function BuilderTab() {
   const [level, setLevel] = useState<"list" | "l1" | "l2" | "l3" | "l4" | "l5">("list");
   const [category, setCategory] = useState<string>("");
   const [mfg, setMfg] = useState<string>("");
-  const [inStockOnly, setInStockOnly] = useState(false);
+  
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [opts, setOpts] = useState<{ categories: string[]; mfgs: string[] }>({ categories: [], mfgs: [] });
@@ -71,7 +71,6 @@ function BuilderTab() {
         filters: {
           category: category || null,
           mfg: mfg || null,
-          in_stock_only: inStockOnly,
           search: search || null,
         },
       }});
@@ -134,10 +133,6 @@ function BuilderTab() {
         <div>
           <Label>Search (item / description)</Label>
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="optional" />
-        </div>
-        <div className="flex items-center gap-2 pt-6">
-          <Switch checked={inStockOnly} onCheckedChange={setInStockOnly} />
-          <Label>In-stock only (E2G)</Label>
         </div>
       </div>
       <div className="pt-2">

@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,9 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { RefreshCw, ExternalLink, Download, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
+import { RefreshCw, ExternalLink, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { syncE2GReport, applyE2GToPricer } from "@/lib/p21.functions";
 
 export const Route = createFileRoute("/_app/inventory-sync")({ component: InventorySyncPage });
 
@@ -46,55 +44,14 @@ function InventorySyncPage() {
   const [website, setWebsite] = useState<any[]>([]);
   const [pricer, setPricer] = useState<any[]>([]);
   const [catalog, setCatalog] = useState<any[]>([]);
-  const [e2gAll, setE2gAll] = useState<any[]>([]);
   const [crawls, setCrawls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(0);
-  const [e2gSyncing, setE2gSyncing] = useState(false);
-  const [e2gLast, setE2gLast] = useState<{ syncedAt: string | null; count: number }>({ syncedAt: null, count: 0 });
-  const [e2gError, setE2gError] = useState<string | null>(null);
-  const [e2gPreview, setE2gPreview] = useState<any[]>([]);
-  const [applying, setApplying] = useState(false);
-  const [confirmApply, setConfirmApply] = useState(false);
-  const runSyncE2G = useServerFn(syncE2GReport);
-  const runApplyE2G = useServerFn(applyE2GToPricer);
-
-  async function loadE2GStatus() {
-    const [{ data: latest }, { count }, { data: preview }] = await Promise.all([
-      supabase.from("e2g_inventory_snapshot").select("synced_at").order("synced_at", { ascending: false }).limit(1).maybeSingle(),
-      supabase.from("e2g_inventory_snapshot").select("id", { count: "exact", head: true }),
-      supabase.from("e2g_inventory_snapshot")
-        .select("item_id, today, item_desc, birm, dallas, ocala, total, e2g_price, weight, net_weight, next_due_date, next_due_in_display, next_due_in_2, synced_at")
-        .order("synced_at", { ascending: false })
-        .order("item_id", { ascending: true })
-        .limit(25),
-    ]);
-    setE2gLast({ syncedAt: (latest as any)?.synced_at ?? null, count: count ?? 0 });
-    setE2gPreview(preview ?? []);
-  }
-
-  async function handleSyncE2G() {
-    setE2gSyncing(true);
-    setE2gError(null);
-    try {
-      const res = await runSyncE2G();
-      toast.success(`E2G sync complete — imported ${res.imported.toLocaleString()} items`);
-      await loadE2GStatus();
-    } catch (e: any) {
-      const msg = e?.message ?? String(e);
-      setE2gError(msg);
-      toast.error(`E2G sync failed: ${msg}`);
-    } finally {
-      setE2gSyncing(false);
-    }
-  }
-
 
   async function loadAll() {
     setLoading(true);
-    // Fetch ALL rows with explicit pagination; never trust default 1000.
     const fetchAll = async (table: string, cols: string) => {
       const out: any[] = [];
       const step = 1000;
@@ -107,14 +64,13 @@ function InventorySyncPage() {
       return out;
     };
     try {
-      const [w, p, c, e, cr] = await Promise.all([
+      const [w, p, c, cr] = await Promise.all([
         fetchAll("website_items", "sku, name, description, image_url, detail_url, brand, in_stock, stock_text, crawled_at"),
-        fetchAll("price_list", "id, item, description, list_price, weight, mfg, category, e2g_price, e2g_weight, in_e2g, e2g_synced_at"),
+        fetchAll("price_list", "id, item, description, list_price, weight, mfg, category"),
         fetchAll("catalog_items", "sku, description, list_price, page, mfg"),
-        fetchAll("e2g_inventory_snapshot", "item_id, item_desc, e2g_price, weight, total"),
         supabase.from("website_crawls").select("*").order("started_at", { ascending: false }).limit(10).then((r) => r.data ?? []),
       ]);
-      setWebsite(w); setPricer(p); setCatalog(c); setE2gAll(e); setCrawls(cr);
+      setWebsite(w); setPricer(p); setCatalog(c); setCrawls(cr);
     } catch (e: any) {
       toast.error(`Load failed: ${e.message}`);
     } finally {
@@ -122,7 +78,7 @@ function InventorySyncPage() {
     }
   }
 
-  useEffect(() => { loadAll(); loadE2GStatus(); }, []);
+  useEffect(() => { loadAll(); }, []);
   useEffect(() => {
     const ch = supabase.channel("website_crawls-live").on("postgres_changes", { event: "*", schema: "public", table: "website_crawls" }, () => loadAll()).subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -172,85 +128,6 @@ function InventorySyncPage() {
     }
     return { missingFromPricer: missingPricer, missingFromWebsite: missingWeb, mismatches: mism };
   }, [website, pricer, catalog]);
-
-  const pricerVsE2G = useMemo(() => {
-    const pricerMap = new Map<string, any>();
-    for (const r of pricer) pricerMap.set(normSku(r.item), r);
-    const e2gMap = new Map<string, any>();
-    for (const r of e2gAll) e2gMap.set(normSku(r.item_id), r);
-
-    const out: any[] = [];
-    const numEq = (a: any, b: any) => {
-      const na = a == null ? null : Number(a);
-      const nb = b == null ? null : Number(b);
-      if (na == null && nb == null) return true;
-      if (na == null || nb == null) return false;
-      return Math.abs(na - nb) < 0.005;
-    };
-
-    for (const [k, e] of e2gMap) {
-      const p = pricerMap.get(k);
-      if (!p) {
-        out.push({
-          sku: e.item_id, status: "missing_in_pricer",
-          pricer_desc: null, e2g_desc: e.item_desc,
-          list_price: null, e2g_price: e.e2g_price,
-          pricer_weight: null, e2g_weight: e.weight,
-        });
-      } else {
-        const descDiff = (p.description ?? "").trim() !== (e.item_desc ?? "").trim();
-        const priceDiff = !numEq(p.e2g_price, e.e2g_price);
-        const weightDiff = !numEq(p.e2g_weight ?? p.weight, e.weight);
-        let status = "match";
-        if (descDiff && (priceDiff || weightDiff)) status = "multi_diff";
-        else if (descDiff) status = "desc_diff";
-        else if (priceDiff) status = "price_diff";
-        else if (weightDiff) status = "weight_diff";
-        out.push({
-          sku: p.item, status,
-          pricer_desc: p.description, e2g_desc: e.item_desc,
-          list_price: p.list_price, e2g_price: e.e2g_price,
-          pricer_weight: p.e2g_weight ?? p.weight, e2g_weight: e.weight,
-        });
-      }
-    }
-    for (const [k, p] of pricerMap) {
-      if (!e2gMap.has(k)) {
-        out.push({
-          sku: p.item, status: "missing_in_e2g",
-          pricer_desc: p.description, e2g_desc: null,
-          list_price: p.list_price, e2g_price: null,
-          pricer_weight: p.e2g_weight ?? p.weight, e2g_weight: null,
-        });
-      }
-    }
-    return out;
-  }, [pricer, e2gAll]);
-
-  const pricerVsE2GStats = useMemo(() => {
-    const s = { match: 0, diff: 0, missing_in_pricer: 0, missing_in_e2g: 0 };
-    for (const r of pricerVsE2G) {
-      if (r.status === "match") s.match++;
-      else if (r.status === "missing_in_pricer") s.missing_in_pricer++;
-      else if (r.status === "missing_in_e2g") s.missing_in_e2g++;
-      else s.diff++;
-    }
-    return s;
-  }, [pricerVsE2G]);
-
-  async function handleApplyE2G() {
-    setApplying(true);
-    setConfirmApply(false);
-    try {
-      const res = await runApplyE2G();
-      toast.success(`Applied E2G: ${res.updated} updated · ${res.inserted} added · ${res.flaggedMissing} flagged missing`);
-      await loadAll();
-    } catch (e: any) {
-      toast.error(`Apply failed: ${e?.message ?? e}`);
-    } finally {
-      setApplying(false);
-    }
-  }
 
   async function startCrawl() {
     setBusy(true);
@@ -335,93 +212,6 @@ function InventorySyncPage() {
       />
 
       <Card className="p-4 mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-              <Database className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <div className="font-semibold">E2G Combined Report (P21)</div>
-              <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                {e2gError ? (
-                  <><AlertCircle className="w-3.5 h-3.5 text-destructive" /><span className="text-destructive">{e2gError}</span></>
-                ) : e2gLast.syncedAt ? (
-                  <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />Last synced {new Date(e2gLast.syncedAt).toLocaleString()} · {e2gLast.count.toLocaleString()} items</>
-                ) : (
-                  <>Never synced</>
-                )}
-              </div>
-            </div>
-          </div>
-          <Button onClick={handleSyncE2G} disabled={e2gSyncing}>
-            {e2gSyncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            {e2gSyncing ? "Syncing P21…" : "Sync E2G report"}
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="p-4 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <div className="font-semibold text-sm">Snapshot preview</div>
-            <div className="text-xs text-muted-foreground">
-              {e2gPreview.length
-                ? `Showing ${e2gPreview.length} of ${e2gLast.count.toLocaleString()} rows from e2g_inventory_snapshot`
-                : "No snapshot data yet — run a sync to populate."}
-            </div>
-          </div>
-          {e2gPreview.length > 0 && (
-            <Button size="sm" variant="outline" onClick={() => csvDownload("e2g_snapshot_preview.csv", e2gPreview)}>
-              <Download className="w-4 h-4 mr-1" /> CSV
-            </Button>
-          )}
-        </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead>Today</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Birm</TableHead>
-                <TableHead className="text-right">Dallas</TableHead>
-                <TableHead className="text-right">Ocala</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right">E2G Price</TableHead>
-                <TableHead className="text-right">Weight</TableHead>
-                <TableHead className="text-right">Net Wt</TableHead>
-                <TableHead>Next Due</TableHead>
-                <TableHead>Next Due 2</TableHead>
-                <TableHead>Synced</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {e2gPreview.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell className="font-mono text-xs">{r.item_id}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{r.today ? new Date(r.today).toLocaleDateString() : "—"}</TableCell>
-                  <TableCell className="max-w-[320px] truncate" title={r.item_desc ?? ""}>{r.item_desc ?? "—"}</TableCell>
-                  <TableCell className="text-right">{r.birm ?? "—"}</TableCell>
-                  <TableCell className="text-right">{r.dallas ?? "—"}</TableCell>
-                  <TableCell className="text-right">{r.ocala ?? "—"}</TableCell>
-                  <TableCell className="text-right font-medium">{r.total ?? "—"}</TableCell>
-                  <TableCell className="text-right">{r.e2g_price != null ? `$${Number(r.e2g_price).toFixed(2)}` : "—"}</TableCell>
-                  <TableCell className="text-right">{r.weight ?? "—"}</TableCell>
-                  <TableCell className="text-right">{r.net_weight ?? "—"}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{r.next_due_in_display ?? r.next_due_date ?? "—"}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{r.next_due_in_2 ?? "—"}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{r.synced_at ? new Date(r.synced_at).toLocaleString() : "—"}</TableCell>
-                </TableRow>
-              ))}
-              {e2gPreview.length === 0 && (
-                <TableRow><TableCell colSpan={14} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
-
-      <Card className="p-4 mb-4">
         <div className="flex flex-wrap gap-6 items-center justify-between">
           <div className="flex flex-wrap gap-6 text-sm">
             <Stat label="Website SKUs" value={website.length} />
@@ -465,9 +255,6 @@ function InventorySyncPage() {
             <TabsTrigger value="mismatch">
               Description mismatch <Badge variant="secondary" className="ml-2">{mismatches.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="pricer-vs-e2g">
-              Pricer vs E2G <Badge variant="secondary" className="ml-2">{pricerVsE2GStats.diff + pricerVsE2GStats.missing_in_pricer}</Badge>
-            </TabsTrigger>
           </TabsList>
           <TabsContent value="missing-pricer" className="mt-4">
             <FilteredTable rows={missingFromPricer} columns={[
@@ -492,42 +279,6 @@ function InventorySyncPage() {
               { key: "website_desc", label: "Website" },
               { key: "pricer_desc", label: "Pricer" },
               { key: "catalog_desc", label: "Catalog" },
-            ]} />
-          </TabsContent>
-          <TabsContent value="pricer-vs-e2g" className="mt-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-              <div className="flex gap-5 text-sm">
-                <Stat label="Match" value={pricerVsE2GStats.match} />
-                <Stat label="Differ" value={pricerVsE2GStats.diff} variant="warn" />
-                <Stat label="E2G-only" value={pricerVsE2GStats.missing_in_pricer} variant="warn" />
-                <Stat label="Pricer-only" value={pricerVsE2GStats.missing_in_e2g} variant="warn" />
-              </div>
-              <div className="flex items-center gap-2">
-                {confirmApply ? (
-                  <>
-                    <span className="text-xs text-muted-foreground">Overwrite pricer description/weight and store E2G price?</span>
-                    <Button size="sm" variant="outline" onClick={() => setConfirmApply(false)} disabled={applying}>Cancel</Button>
-                    <Button size="sm" onClick={handleApplyE2G} disabled={applying}>
-                      {applying ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                      Confirm
-                    </Button>
-                  </>
-                ) : (
-                  <Button size="sm" onClick={() => setConfirmApply(true)} disabled={applying || e2gAll.length === 0}>
-                    <Database className="w-4 h-4 mr-1" /> Apply E2G values to pricer
-                  </Button>
-                )}
-              </div>
-            </div>
-            <FilteredTable rows={pricerVsE2G} columns={[
-              { key: "sku", label: "SKU" },
-              { key: "status", label: "Status" },
-              { key: "pricer_desc", label: "Pricer desc" },
-              { key: "e2g_desc", label: "E2G desc" },
-              { key: "list_price", label: "List price" },
-              { key: "e2g_price", label: "E2G price" },
-              { key: "pricer_weight", label: "Pricer wt" },
-              { key: "e2g_weight", label: "E2G wt" },
             ]} />
           </TabsContent>
         </Tabs>

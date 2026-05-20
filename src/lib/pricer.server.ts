@@ -133,7 +133,6 @@ export type PricerRow = {
 export async function loadPricerRows(filters: {
   category?: string | null;
   mfg?: string | null;
-  in_stock_only?: boolean;
   search?: string | null;
 }): Promise<PricerRow[]> {
   let q = supabaseAdmin
@@ -154,17 +153,6 @@ export async function loadPricerRows(filters: {
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   const rows = data ?? [];
-
-  // Optional in-stock restriction
-  let stockSet: Set<string> | null = null;
-  if (filters.in_stock_only) {
-    const { data: stock } = await supabaseAdmin
-      .from("e2g_inventory_snapshot")
-      .select("item_id,total")
-      .gt("total", 0)
-      .limit(20000);
-    stockSet = new Set((stock ?? []).map((s) => s.item_id as string));
-  }
 
   // Cached image lookups for all candidate SKUs
   const allSkus = rows.map((r) => r.item as string);
@@ -187,7 +175,6 @@ export async function loadPricerRows(filters: {
   const families = new Map<string, PricerRow>();
   for (const r of rows) {
     const itemShort = r.item_short as string;
-    if (stockSet && !stockSet.has(r.item as string)) continue;
     let fam = families.get(itemShort);
     if (!fam) {
       fam = {
