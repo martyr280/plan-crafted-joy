@@ -145,7 +145,6 @@ export const generatePricerPdf = createServerFn({ method: "POST" })
       filters: z.object({
         category: z.string().nullable().optional(),
         mfg: z.string().nullable().optional(),
-        in_stock_only: z.boolean().optional(),
         search: z.string().nullable().optional(),
       }).default({}),
     }).parse
