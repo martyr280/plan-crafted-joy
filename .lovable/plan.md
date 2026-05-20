@@ -1,70 +1,92 @@
-# Decouple E2G from the pricer; ship a dedicated E2G report
+# Replace Pricer Source with P21 SQL
 
-E2G is a customer, not a pricing parent. Today the E2G snapshot writes back into `price_list` (overwriting description/weight and storing `e2g_price`/`in_e2g`), and the Pricer page filters by E2G stock. We'll rip out that coupling and move E2G into a standalone report at `/reports/e2g`.
+Replace the existing `price_list` data source with a new P21 SQL query that runs through the P21 bridge. Add a "Sync Pricer from P21" admin button and a nightly cron job.
 
-## What changes for the user
+## What this changes
 
-- **Pricer page** no longer mentions E2G. The "In-stock only (E2G)" filter is removed.
-- **Inventory Sync** page loses the "Pricer vs E2G" compare/apply tab and the "Apply E2G values to pricer" button. The E2G snapshot panel moves out entirely.
-- **New page: Reports → E2G Combined Report** (`/reports/e2g`)
-  - Sync button (runs the P21 bridge job, same as today)
-  - Last-synced timestamp and row count
-  - Full sortable / filterable table of the snapshot (item, description, Birm / Dallas / Ocala / Total, E2G price, weight, net weight, next due date)
-  - Search box and CSV download
-  - Visible to admins and ops roles (matches existing snapshot RLS)
-- **Cron sync** keeps working unchanged — it just populates the snapshot, no longer touches `price_list`.
+- The pricer page (`/pricer`) and pricing page (`/pricing`) keep reading from the `price_list` table — nothing in the UI consumer code changes.
+- `price_list` is now repopulated from a single P21 SQL query (regular products from 9 specific suppliers) instead of any prior XLSX import flow.
+- Sync runs two ways: manually (admin button on `/pricer`) and nightly via Supabase cron.
 
-## Technical details
+## Column mapping (P21 SQL → `price_list`)
 
-### Database migration
+| P21 column                          | `price_list` column   |
+|-------------------------------------|-----------------------|
+| `inv_mast.item_id`                  | `item`                |
+| `inv_mast.item_desc`                | `description`         |
+| `list_price`                        | `list_price`          |
+| `cost`                              | `dealer_cost`         |
+| `price1`–`price5`                   | `price_l1`–`price_l5` |
+| `price7` (Showroom)                 | `price_showroom` (NEW)|
+| `vendor.vendor_name`                | `mfg`                 |
+| `inventory_supplier.supplier_part_no` | `cat_number`        |
 
-Drop the pricer-side E2G columns now that nothing writes or reads them:
+`source` is set to `'p21_sql'` on every synced row. After sync, `recomputeFamilies()` runs to refresh `item_short`.
+
+If `dealer_cost`, `cat_number`, or `mfg` are wrong targets, say so before approving and I'll adjust.
+
+## Phases
+
+### Phase 1 — Database
+
+Add one column to `price_list`:
 
 ```sql
-ALTER TABLE public.price_list
-  DROP COLUMN IF EXISTS e2g_price,
-  DROP COLUMN IF EXISTS e2g_weight,
-  DROP COLUMN IF EXISTS in_e2g,
-  DROP COLUMN IF EXISTS e2g_synced_at;
+ALTER TABLE public.price_list ADD COLUMN IF NOT EXISTS price_showroom numeric;
 ```
 
-`public.e2g_inventory_snapshot` and its RLS policies stay as-is — that's the source for the report.
+### Phase 2 — Bridge handler (Node agent)
 
-### Server / lib changes
+New file `agent/handlers/pricer-sync.js` containing the supplied SQL verbatim. Returns `{ rows, count }`. Registered in `agent/handlers/index.js` under kind `"pricer.sync"`. The agent must be redeployed via the existing GitHub release workflow for the new handler to be available.
 
-- `src/lib/p21.server.ts`
-  - Remove `applyE2GToPriceList` and its `normSku` helper (no longer needed).
-  - Keep `applyE2GSnapshot` (drives the sync).
-- `src/lib/p21.functions.ts`
-  - Remove `applyE2GToPricer` server function and its import.
-  - Keep `syncE2GReport` and `applyE2GSnapshotServerOnly` (used by the cron route).
-- `src/lib/pricer.server.ts`
-  - Remove the `in_stock_only` branch that queries `e2g_inventory_snapshot`. Drop the parameter from the filter type.
-- `src/routes/_app.pricer.tsx`
-  - Remove the "In-stock only (E2G)" switch and the state/query plumbing for it.
+### Phase 3 — Server function
 
-### Route changes
+New `syncPricerFromP21` in `src/lib/p21.functions.ts`:
+1. Admin-only.
+2. `runJob("pricer.sync", {}, 120000)` — bridge fetches rows from P21.
+3. Upsert into `price_list` on `item` (unique index already exists), mapping columns per the table above, setting `source = 'p21_sql'`.
+4. Delete rows where `source = 'p21_sql'` and `item NOT IN (synced items)` so removed SKUs disappear.
+5. Call `recomputeFamilies()`.
+6. Insert an `activity_events` row: `pricer.synced` with row count.
+7. Return `{ imported, removed, families_updated }`.
 
-- **New** `src/routes/_app.reports.e2g.tsx`
-  - Loader-less; uses `useQuery` to read `e2g_inventory_snapshot` via supabase client.
-  - Sync button calls `syncE2GReport` server fn.
-  - Columns + filters + CSV export as listed above.
-  - Pagination (page size 100) since snapshots can be large — per workspace rules, no unbounded fetch.
-- `src/routes/_app.inventory-sync.tsx`
-  - Delete the E2G Combined Report card, the snapshot preview table, the "Pricer vs E2G" tab, `pricerVsE2G` memo and stats, `handleSyncE2G` / `handleApplyE2G`, and the related state.
-  - Keep the rest of the inventory-sync flow intact.
-- Sidebar: `Reports` already exists at `/reports`. Either add a subnav link or surface E2G as a card on the existing reports page. We'll link from `_app.reports.tsx`.
+### Phase 4 — UI
 
-### Cron / public webhook
+On `/pricer` (admin only): add a "Sync from P21" button next to the existing header actions. Uses TanStack Query mutation + Sonner toast. Disables while running. Invalidates pricer queries on success.
 
-`src/routes/api/public/sync-e2g.ts` and `supabase/functions/sync-e2g/index.ts` keep working — they only touch `e2g_inventory_snapshot`. No code change required.
+### Phase 5 — Scheduled sync
 
-### File-touch summary
+New public route `src/routes/api/public/hooks/sync-pricer.ts`:
+- Validates `apikey` header against `SUPABASE_ANON_KEY`.
+- Calls `applyPricerSyncServerOnly()` (a `createServerOnlyFn` wrapper around the same logic).
+- Returns `{ imported, removed }`.
 
-- Migration: drop 4 columns from `price_list`
-- Edit: `src/lib/p21.server.ts`, `src/lib/p21.functions.ts`, `src/lib/pricer.server.ts`, `src/routes/_app.pricer.tsx`, `src/routes/_app.inventory-sync.tsx`, `src/routes/_app.reports.tsx`
-- New: `src/routes/_app.reports.e2g.tsx`
+Cron job (created via `supabase--insert`, not migration — stable URL pattern):
+```sql
+select cron.schedule(
+  'sync-pricer-nightly',
+  '0 6 * * *',  -- 06:00 UTC nightly
+  $$ select net.http_post(
+       url := 'https://project--8f98c139-aabe-4588-ba0d-f1c274f9fea8.lovable.app/api/public/hooks/sync-pricer',
+       headers := '{"Content-Type":"application/json","apikey":"<ANON_KEY>"}'::jsonb,
+       body := '{}'::jsonb
+     ) $$
+);
+```
 
 ## Out of scope
 
-- Multi-customer pricing (Tier 1 / 1.5 / 2 from the earlier discussion). The E2G column alias stays in the SQL — it just lands in the snapshot table and the report, never in `price_list`.
+- No changes to pricer family logic, image cache, PDF export, or order pricing lookups.
+- No removal of existing `price_list` rows from other sources unless they happen to share an `item` value (upserted).
+- No new admin role; reuses existing `admin` checks.
+
+## Files touched
+
+- `supabase/migrations/<new>.sql` — add `price_showroom`
+- `agent/handlers/pricer-sync.js` (new)
+- `agent/handlers/index.js` — register `pricer.sync`
+- `src/lib/p21.functions.ts` — `syncPricerFromP21`, `applyPricerSyncServerOnly`
+- `src/lib/p21.server.ts` — `applyPricerSync()` helper
+- `src/routes/_app.pricer.tsx` — Sync button
+- `src/routes/api/public/hooks/sync-pricer.ts` (new) — cron endpoint
+- Cron job inserted via `supabase--insert`
