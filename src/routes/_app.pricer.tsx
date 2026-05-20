@@ -17,8 +17,8 @@ import {
   recomputeSkuFamilies, listSkuFamilies, updateFamilyPrices,
   probeFamilyImage, listFamilyImages,
   generatePricerPdf, listPricerPublications, listPricerFilters,
-  syncPricerFromP21,
 } from "@/lib/pricer.functions";
+import { syncPricerFromP21 } from "@/lib/p21.functions";
 import { Loader2, RefreshCw, FileDown, Image as ImageIcon, Search, Upload, Database } from "lucide-react";
 
 export const Route = createFileRoute("/_app/pricer")({ component: PricerPage });
@@ -150,10 +150,12 @@ function FamiliesTab() {
   const fnList = useServerFn(listSkuFamilies);
   const fnRecompute = useServerFn(recomputeSkuFamilies);
   const fnUpdate = useServerFn(updateFamilyPrices);
+  const fnSync = useServerFn(syncPricerFromP21);
   const [rows, setRows] = useState<FamilyRow[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -192,6 +194,23 @@ function FamiliesTab() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className="w-4 h-4" /> Reload</Button>
           <Button size="sm" onClick={onRecompute} disabled={busy}>{busy && <Loader2 className="w-4 h-4 animate-spin" />} Recompute families</Button>
+          <Button
+            size="sm"
+            variant="default"
+            disabled={syncing}
+            onClick={async () => {
+              setSyncing(true);
+              try {
+                const r = await fnSync({ data: undefined as any });
+                toast.success(`Synced from P21: ${r.imported} items, ${r.removed} removed`);
+                await load();
+              } catch (e: any) {
+                toast.error(e.message ?? "Sync failed");
+              } finally { setSyncing(false); }
+            }}
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />} Sync from P21
+          </Button>
         </div>
       </div>
       <Table>
