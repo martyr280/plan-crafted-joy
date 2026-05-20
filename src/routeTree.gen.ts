@@ -30,6 +30,7 @@ import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppArRouteImport } from './routes/_app.ar'
 import { Route as AppReportsIndexRouteImport } from './routes/_app.reports.index'
+import { Route as ApiPublicSyncPricerRouteImport } from './routes/api/public/sync-pricer'
 import { Route as ApiPublicSyncE2gRouteImport } from './routes/api/public/sync-e2g'
 import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-bridge'
 import { Route as ApiPublicInboundEmailRouteImport } from './routes/api/public/inbound-email'
@@ -139,6 +140,11 @@ const AppReportsIndexRoute = AppReportsIndexRouteImport.update({
   path: '/reports/',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicSyncPricerRoute = ApiPublicSyncPricerRouteImport.update({
+  id: '/api/public/sync-pricer',
+  path: '/api/public/sync-pricer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSyncE2gRoute = ApiPublicSyncE2gRouteImport.update({
   id: '/api/public/sync-e2g',
   path: '/api/public/sync-e2g',
@@ -184,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
+  '/api/public/sync-pricer': typeof ApiPublicSyncPricerRoute
   '/reports/': typeof AppReportsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
+  '/api/public/sync-pricer': typeof ApiPublicSyncPricerRoute
   '/reports': typeof AppReportsIndexRoute
 }
 export interface FileRoutesById {
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
+  '/api/public/sync-pricer': typeof ApiPublicSyncPricerRoute
   '/_app/reports/': typeof AppReportsIndexRoute
 }
 export interface FileRouteTypes {
@@ -266,6 +275,7 @@ export interface FileRouteTypes {
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/sync-e2g'
+    | '/api/public/sync-pricer'
     | '/reports/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -292,6 +302,7 @@ export interface FileRouteTypes {
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/sync-e2g'
+    | '/api/public/sync-pricer'
     | '/reports'
   id:
     | '__root__'
@@ -319,6 +330,7 @@ export interface FileRouteTypes {
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/sync-e2g'
+    | '/api/public/sync-pricer'
     | '/_app/reports/'
   fileRoutesById: FileRoutesById
 }
@@ -328,6 +340,7 @@ export interface RootRouteChildren {
   ApiPublicInboundEmailRoute: typeof ApiPublicInboundEmailRoute
   ApiPublicP21BridgeRoute: typeof ApiPublicP21BridgeRoute
   ApiPublicSyncE2gRoute: typeof ApiPublicSyncE2gRoute
+  ApiPublicSyncPricerRoute: typeof ApiPublicSyncPricerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -479,6 +492,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/sync-pricer': {
+      id: '/api/public/sync-pricer'
+      path: '/api/public/sync-pricer'
+      fullPath: '/api/public/sync-pricer'
+      preLoaderRoute: typeof ApiPublicSyncPricerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sync-e2g': {
       id: '/api/public/sync-e2g'
       path: '/api/public/sync-e2g'
@@ -564,6 +584,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicInboundEmailRoute: ApiPublicInboundEmailRoute,
   ApiPublicP21BridgeRoute: ApiPublicP21BridgeRoute,
   ApiPublicSyncE2gRoute: ApiPublicSyncE2gRoute,
+  ApiPublicSyncPricerRoute: ApiPublicSyncPricerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

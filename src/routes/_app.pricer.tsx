@@ -17,8 +17,9 @@ import {
   recomputeSkuFamilies, listSkuFamilies, updateFamilyPrices,
   probeFamilyImage, listFamilyImages,
   generatePricerPdf, listPricerPublications, listPricerFilters,
+  syncPricerFromP21,
 } from "@/lib/pricer.functions";
-import { Loader2, RefreshCw, FileDown, Image as ImageIcon, Search, Upload } from "lucide-react";
+import { Loader2, RefreshCw, FileDown, Image as ImageIcon, Search, Upload, Database } from "lucide-react";
 
 export const Route = createFileRoute("/_app/pricer")({ component: PricerPage });
 
