@@ -1,51 +1,70 @@
-# Plan: Nelson AI rebrand + user management
+# Decouple E2G from the pricer; ship a dedicated E2G report
 
-## 1. Rebrand "Ned AI" → "Nelson AI"
+E2G is a customer, not a pricing parent. Today the E2G snapshot writes back into `price_list` (overwriting description/weight and storing `e2g_price`/`in_e2g`), and the Pricer page filters by E2G stock. We'll rip out that coupling and move E2G into a standalone report at `/reports/e2g`.
 
-Keep the existing auth left-rail marketing copy ("Operations, unified." + paragraph) — only swap the wordmark/name.
+## What changes for the user
 
-- `src/routes/__root.tsx` — title + meta/OG/Twitter strings
-- `src/routes/auth.tsx` — header lockup, footer, "Sign in to …" copy
-- `src/components/layout/AppSidebar.tsx` — sidebar header text
-- Generate a new `src/assets/nelson-ai-logo.png` (navy square, "Nelson AI" wordmark, orange swoosh — same NDI palette as current logo) and replace imports of `ned-ai-logo.png`. Delete the old asset.
-- Sweep `rg -i "ned ai|ned-ai"` after edits to confirm nothing remains.
+- **Pricer page** no longer mentions E2G. The "In-stock only (E2G)" filter is removed.
+- **Inventory Sync** page loses the "Pricer vs E2G" compare/apply tab and the "Apply E2G values to pricer" button. The E2G snapshot panel moves out entirely.
+- **New page: Reports → E2G Combined Report** (`/reports/e2g`)
+  - Sync button (runs the P21 bridge job, same as today)
+  - Last-synced timestamp and row count
+  - Full sortable / filterable table of the snapshot (item, description, Birm / Dallas / Ocala / Total, E2G price, weight, net weight, next due date)
+  - Search box and CSV download
+  - Visible to admins and ops roles (matches existing snapshot RLS)
+- **Cron sync** keeps working unchanged — it just populates the snapshot, no longer touches `price_list`.
 
-## 2. User management upgrades
+## Technical details
 
-Build on the existing `Settings → Users & Roles` tab (admin-only). Current state: list profiles, toggle role checkboxes, claim-admin fallback.
+### Database migration
 
-### New capabilities
-1. **Invite user by email** — admin enters email + initial roles, sends a Supabase invite (magic-link style) so they set their own password. Pending invites listed separately until accepted.
-2. **Revoke access** — one-click "Remove all roles" (soft revoke; user can no longer access any module) and "Disable user" (hard revoke via auth admin API: bans the user). Both with confirm dialog.
-3. **Resend invite / Reset password** — admin-triggered password reset email for an existing user.
-4. **Last sign-in column** — surface `auth.users.last_sign_in_at` so admins see stale accounts.
-5. **Audit trail** — write to `activity_events` on every invite / role change / revoke / disable, attributed to the acting admin. Surface a small "Recent admin actions" list at the bottom of the tab.
+Drop the pricer-side E2G columns now that nothing writes or reads them:
 
-### Backend (server functions, admin-gated)
-New file `src/lib/user-admin.functions.ts` — all use `requireSupabaseAuth` + verify caller `has_role('admin')`, then use `supabaseAdmin` for privileged ops:
-- `inviteUser({ email, roles[] })` → `supabaseAdmin.auth.admin.inviteUserByEmail(...)` then insert role rows
-- `resendInvite({ userId })` / `sendPasswordReset({ email })`
-- `revokeAllRoles({ userId })` → delete from `user_roles`
-- `setUserDisabled({ userId, disabled })` → `supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: '876000h' | 'none' })`
-- `listUsers()` → returns profiles joined with `last_sign_in_at` + `banned_until` from `auth.admin.listUsers()`
+```sql
+ALTER TABLE public.price_list
+  DROP COLUMN IF EXISTS e2g_price,
+  DROP COLUMN IF EXISTS e2g_weight,
+  DROP COLUMN IF EXISTS in_e2g,
+  DROP COLUMN IF EXISTS e2g_synced_at;
+```
 
-Each function logs an `activity_events` row (`event_type: 'admin.invite' | 'admin.role_grant' | 'admin.role_revoke' | 'admin.disable' | 'admin.enable'`).
+`public.e2g_inventory_snapshot` and its RLS policies stay as-is — that's the source for the report.
 
-### Frontend
-Refactor `src/routes/_app.settings.tsx` `UsersAndRoles`:
-- Add **Invite user** button → dialog with email + role checkboxes
-- Add per-row actions menu (kebab): Resend invite, Send password reset, Revoke all roles, Disable/Enable user
-- Add **Last sign-in** and **Status** (Active / Disabled / Pending) columns
-- Confirm dialogs (`AlertDialog`) for destructive actions
-- Recent admin actions card below the table (reads `activity_events` filtered to `event_type LIKE 'admin.%'`)
+### Server / lib changes
 
-### DB
-No new tables required. Optional: add a `disabled_at` column to `profiles` only if we want to show status without calling auth admin on every load — can skip and rely on `auth.admin.listUsers()` server-side.
+- `src/lib/p21.server.ts`
+  - Remove `applyE2GToPriceList` and its `normSku` helper (no longer needed).
+  - Keep `applyE2GSnapshot` (drives the sync).
+- `src/lib/p21.functions.ts`
+  - Remove `applyE2GToPricer` server function and its import.
+  - Keep `syncE2GReport` and `applyE2GSnapshotServerOnly` (used by the cron route).
+- `src/lib/pricer.server.ts`
+  - Remove the `in_stock_only` branch that queries `e2g_inventory_snapshot`. Drop the parameter from the filter type.
+- `src/routes/_app.pricer.tsx`
+  - Remove the "In-stock only (E2G)" switch and the state/query plumbing for it.
 
-## 3. Verification
-- After rebrand: visit `/auth` and `/` (sidebar), confirm "Nelson AI" copy + new logo render, no "Ned" string left.
-- After user mgmt: as admin, invite a test email, confirm invite row appears + activity event written; toggle roles; disable/enable a user; revoke all.
+### Route changes
+
+- **New** `src/routes/_app.reports.e2g.tsx`
+  - Loader-less; uses `useQuery` to read `e2g_inventory_snapshot` via supabase client.
+  - Sync button calls `syncE2GReport` server fn.
+  - Columns + filters + CSV export as listed above.
+  - Pagination (page size 100) since snapshots can be large — per workspace rules, no unbounded fetch.
+- `src/routes/_app.inventory-sync.tsx`
+  - Delete the E2G Combined Report card, the snapshot preview table, the "Pricer vs E2G" tab, `pricerVsE2G` memo and stats, `handleSyncE2G` / `handleApplyE2G`, and the related state.
+  - Keep the rest of the inventory-sync flow intact.
+- Sidebar: `Reports` already exists at `/reports`. Either add a subnav link or surface E2G as a card on the existing reports page. We'll link from `_app.reports.tsx`.
+
+### Cron / public webhook
+
+`src/routes/api/public/sync-e2g.ts` and `supabase/functions/sync-e2g/index.ts` keep working — they only touch `e2g_inventory_snapshot`. No code change required.
+
+### File-touch summary
+
+- Migration: drop 4 columns from `price_list`
+- Edit: `src/lib/p21.server.ts`, `src/lib/p21.functions.ts`, `src/lib/pricer.server.ts`, `src/routes/_app.pricer.tsx`, `src/routes/_app.inventory-sync.tsx`, `src/routes/_app.reports.tsx`
+- New: `src/routes/_app.reports.e2g.tsx`
 
 ## Out of scope
-- SSO / SCIM provisioning
-- Custom branded invite email templates (uses default Supabase invite email; can wire Lovable auth email templates in a follow-up)
+
+- Multi-customer pricing (Tier 1 / 1.5 / 2 from the earlier discussion). The E2G column alias stays in the SQL — it just lands in the snapshot table and the report, never in `price_list`.
