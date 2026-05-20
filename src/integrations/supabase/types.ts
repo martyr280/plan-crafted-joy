@@ -861,6 +861,7 @@ export type Database = {
           price_l3: number | null
           price_l4: number | null
           price_l5: number | null
+          price_showroom: number | null
           source: string | null
           updated_at: string
           weight: number | null
@@ -883,6 +884,7 @@ export type Database = {
           price_l3?: number | null
           price_l4?: number | null
           price_l5?: number | null
+          price_showroom?: number | null
           source?: string | null
           updated_at?: string
           weight?: number | null
@@ -905,6 +907,7 @@ export type Database = {
           price_l3?: number | null
           price_l4?: number | null
           price_l5?: number | null
+          price_showroom?: number | null
           source?: string | null
           updated_at?: string
           weight?: number | null

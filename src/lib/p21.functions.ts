@@ -1,7 +1,7 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { assertAdmin, runJob, bucketFor, applyE2GSnapshot } from "./p21.server";
+import { assertAdmin, runJob, bucketFor, applyE2GSnapshot, applyPricerSync } from "./p21.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const EnqueueSchema = z.object({
@@ -195,6 +195,17 @@ export const syncE2GReport = createServerFn({ method: "POST" })
   });
 
 export const applyE2GSnapshotServerOnly = createServerOnlyFn(applyE2GSnapshot);
+
+export const syncPricerFromP21 = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    return applyPricerSync();
+  });
+
+export const applyPricerSyncServerOnly = createServerOnlyFn(applyPricerSync);
+
+
 
 
 const SubmitSchema = z.object({
