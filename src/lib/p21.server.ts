@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { recomputeFamilies } from "./pricer.server";
 
 export async function assertAdmin(supabase: any, userId: string) {
   const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
@@ -99,4 +100,94 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
 
   return { imported: toInsert.length };
 }
+
+export async function applyPricerSync(
+  timeoutMs = 120000
+): Promise<{ imported: number; removed: number; families_updated: number }> {
+  const { result } = await runJob("pricer.sync", {}, timeoutMs);
+  const rows = ((result as any)?.rows ?? []) as Array<Record<string, any>>;
+
+  const num = (v: any): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    const s = String(v).replace(/[$,\s]/g, "");
+    if (!/^-?\d*\.?\d+$/.test(s)) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const toUpsert = rows
+    .filter((r) => r["Item #"] != null && String(r["Item #"]).trim() !== "")
+    .map((r) => ({
+      item: String(r["Item #"]).trim(),
+      description: r["Description"] != null ? String(r["Description"]) : null,
+      list_price: num(r["List Price"]),
+      dealer_cost: num(r["Std Cost"]),
+      price_l1: num(r["L1 Price"]),
+      price_l2: num(r["L2 Price"]),
+      price_l3: num(r["L3 Price"]),
+      price_l4: num(r["L4 Price"]),
+      price_l5: num(r["L5 Price"]),
+      price_showroom: num(r["Showroom"]),
+      mfg: r["Vendor"] != null ? String(r["Vendor"]) : null,
+      cat_number: r["Vendor Part #"] != null ? String(r["Vendor Part #"]) : null,
+      source: "p21_sql",
+    }));
+
+  // Deduplicate by item (unique index). Keep the first occurrence.
+  const seen = new Set<string>();
+  const dedup = [] as typeof toUpsert;
+  for (const r of toUpsert) {
+    if (seen.has(r.item)) continue;
+    seen.add(r.item);
+    dedup.push(r);
+  }
+
+  let imported = 0;
+  for (let i = 0; i < dedup.length; i += 500) {
+    const batch = dedup.slice(i, i + 500);
+    const { error } = await supabaseAdmin
+      .from("price_list")
+      .upsert(batch, { onConflict: "item" });
+    if (error) throw new Error(`Pricer upsert failed: ${error.message}`);
+    imported += batch.length;
+  }
+
+  // Remove p21_sql rows that no longer exist in the new pull.
+  const keepItems = Array.from(seen);
+  let removed = 0;
+  // Fetch existing p21_sql rows in pages, compute diff client-side (item count
+  // is moderate; this avoids huge .not("item", "in", "(...)") expressions).
+  const { data: existing } = await supabaseAdmin
+    .from("price_list")
+    .select("item")
+    .eq("source", "p21_sql")
+    .limit(50000);
+  const keepSet = new Set(keepItems);
+  const toDelete = (existing ?? [])
+    .map((r) => r.item as string)
+    .filter((it) => !keepSet.has(it));
+  for (let i = 0; i < toDelete.length; i += 500) {
+    const batch = toDelete.slice(i, i + 500);
+    const { error } = await supabaseAdmin
+      .from("price_list")
+      .delete()
+      .in("item", batch)
+      .eq("source", "p21_sql");
+    if (error) throw new Error(`Pricer cleanup failed: ${error.message}`);
+    removed += batch.length;
+  }
+
+  const { updated: families_updated } = await recomputeFamilies();
+
+  await supabaseAdmin.from("activity_events").insert({
+    event_type: "pricer.synced",
+    entity_type: "price_list",
+    message: `Pricer synced from P21: ${imported} upserted, ${removed} removed, ${families_updated} families updated`,
+    metadata: { imported, removed, families_updated },
+  });
+
+  return { imported, removed, families_updated };
+}
+
 
