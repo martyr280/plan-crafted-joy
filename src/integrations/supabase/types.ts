@@ -849,13 +849,9 @@ export type Database = {
           created_at: string
           dealer_cost: number | null
           description: string | null
-          e2g_price: number | null
-          e2g_synced_at: string | null
-          e2g_weight: number | null
           effective_date: string | null
           er_cost: number | null
           id: string
-          in_e2g: boolean
           item: string
           item_short: string | null
           list_price: number | null
@@ -875,13 +871,9 @@ export type Database = {
           created_at?: string
           dealer_cost?: number | null
           description?: string | null
-          e2g_price?: number | null
-          e2g_synced_at?: string | null
-          e2g_weight?: number | null
           effective_date?: string | null
           er_cost?: number | null
           id?: string
-          in_e2g?: boolean
           item: string
           item_short?: string | null
           list_price?: number | null
@@ -901,13 +893,9 @@ export type Database = {
           created_at?: string
           dealer_cost?: number | null
           description?: string | null
-          e2g_price?: number | null
-          e2g_synced_at?: string | null
-          e2g_weight?: number | null
           effective_date?: string | null
           er_cost?: number | null
           id?: string
-          in_e2g?: boolean
           item?: string
           item_short?: string | null
           list_price?: number | null
