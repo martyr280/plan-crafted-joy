@@ -16,7 +16,6 @@ import { Route as AppWebhooksRouteImport } from './routes/_app.webhooks'
 import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
-import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppQuotesRouteImport } from './routes/_app.quotes'
 import { Route as AppPricingRouteImport } from './routes/_app.pricing'
 import { Route as AppPricerRouteImport } from './routes/_app.pricer'
@@ -30,6 +29,7 @@ import { Route as AppCatalogsRouteImport } from './routes/_app.catalogs'
 import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppArRouteImport } from './routes/_app.ar'
+import { Route as AppReportsIndexRouteImport } from './routes/_app.reports.index'
 import { Route as ApiPublicSyncE2gRouteImport } from './routes/api/public/sync-e2g'
 import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-bridge'
 import { Route as ApiPublicInboundEmailRouteImport } from './routes/api/public/inbound-email'
@@ -67,11 +67,6 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
 const AppSalesRoute = AppSalesRouteImport.update({
   id: '/sales',
   path: '/sales',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReportsRoute = AppReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
   getParentRoute: () => AppRoute,
 } as any)
 const AppQuotesRoute = AppQuotesRouteImport.update({
@@ -139,6 +134,11 @@ const AppArRoute = AppArRouteImport.update({
   path: '/ar',
   getParentRoute: () => AppRoute,
 } as any)
+const AppReportsIndexRoute = AppReportsIndexRouteImport.update({
+  id: '/reports/',
+  path: '/reports/',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiPublicSyncE2gRoute = ApiPublicSyncE2gRouteImport.update({
   id: '/api/public/sync-e2g',
   path: '/api/public/sync-e2g',
@@ -155,9 +155,9 @@ const ApiPublicInboundEmailRoute = ApiPublicInboundEmailRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppReportsE2gRoute = AppReportsE2gRouteImport.update({
-  id: '/e2g',
-  path: '/e2g',
-  getParentRoute: () => AppReportsRoute,
+  id: '/reports/e2g',
+  path: '/reports/e2g',
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -176,7 +176,6 @@ export interface FileRoutesByFullPath {
   '/pricer': typeof AppPricerRoute
   '/pricing': typeof AppPricingRoute
   '/quotes': typeof AppQuotesRoute
-  '/reports': typeof AppReportsRouteWithChildren
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
@@ -185,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
+  '/reports/': typeof AppReportsIndexRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -201,7 +201,6 @@ export interface FileRoutesByTo {
   '/pricer': typeof AppPricerRoute
   '/pricing': typeof AppPricingRoute
   '/quotes': typeof AppQuotesRoute
-  '/reports': typeof AppReportsRouteWithChildren
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
@@ -211,6 +210,7 @@ export interface FileRoutesByTo {
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
+  '/reports': typeof AppReportsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -229,7 +229,6 @@ export interface FileRoutesById {
   '/_app/pricer': typeof AppPricerRoute
   '/_app/pricing': typeof AppPricingRoute
   '/_app/quotes': typeof AppQuotesRoute
-  '/_app/reports': typeof AppReportsRouteWithChildren
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/spiff': typeof AppSpiffRoute
@@ -239,6 +238,7 @@ export interface FileRoutesById {
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
+  '/_app/reports/': typeof AppReportsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -258,7 +258,6 @@ export interface FileRouteTypes {
     | '/pricer'
     | '/pricing'
     | '/quotes'
-    | '/reports'
     | '/sales'
     | '/settings'
     | '/spiff'
@@ -267,6 +266,7 @@ export interface FileRouteTypes {
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/sync-e2g'
+    | '/reports/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -283,7 +283,6 @@ export interface FileRouteTypes {
     | '/pricer'
     | '/pricing'
     | '/quotes'
-    | '/reports'
     | '/sales'
     | '/settings'
     | '/spiff'
@@ -293,6 +292,7 @@ export interface FileRouteTypes {
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/sync-e2g'
+    | '/reports'
   id:
     | '__root__'
     | '/_app'
@@ -310,7 +310,6 @@ export interface FileRouteTypes {
     | '/_app/pricer'
     | '/_app/pricing'
     | '/_app/quotes'
-    | '/_app/reports'
     | '/_app/sales'
     | '/_app/settings'
     | '/_app/spiff'
@@ -320,6 +319,7 @@ export interface FileRouteTypes {
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/sync-e2g'
+    | '/_app/reports/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -379,13 +379,6 @@ declare module '@tanstack/react-router' {
       path: '/sales'
       fullPath: '/sales'
       preLoaderRoute: typeof AppSalesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/reports': {
-      id: '/_app/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/quotes': {
@@ -479,6 +472,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/reports/': {
+      id: '/_app/reports/'
+      path: '/reports'
+      fullPath: '/reports/'
+      preLoaderRoute: typeof AppReportsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/public/sync-e2g': {
       id: '/api/public/sync-e2g'
       path: '/api/public/sync-e2g'
@@ -502,25 +502,13 @@ declare module '@tanstack/react-router' {
     }
     '/_app/reports/e2g': {
       id: '/_app/reports/e2g'
-      path: '/e2g'
+      path: '/reports/e2g'
       fullPath: '/reports/e2g'
       preLoaderRoute: typeof AppReportsE2gRouteImport
-      parentRoute: typeof AppReportsRoute
+      parentRoute: typeof AppRoute
     }
   }
 }
-
-interface AppReportsRouteChildren {
-  AppReportsE2gRoute: typeof AppReportsE2gRoute
-}
-
-const AppReportsRouteChildren: AppReportsRouteChildren = {
-  AppReportsE2gRoute: AppReportsE2gRoute,
-}
-
-const AppReportsRouteWithChildren = AppReportsRoute._addFileChildren(
-  AppReportsRouteChildren,
-)
 
 interface AppRouteChildren {
   AppArRoute: typeof AppArRoute
@@ -536,12 +524,13 @@ interface AppRouteChildren {
   AppPricerRoute: typeof AppPricerRoute
   AppPricingRoute: typeof AppPricingRoute
   AppQuotesRoute: typeof AppQuotesRoute
-  AppReportsRoute: typeof AppReportsRouteWithChildren
   AppSalesRoute: typeof AppSalesRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSpiffRoute: typeof AppSpiffRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppReportsE2gRoute: typeof AppReportsE2gRoute
+  AppReportsIndexRoute: typeof AppReportsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -558,12 +547,13 @@ const AppRouteChildren: AppRouteChildren = {
   AppPricerRoute: AppPricerRoute,
   AppPricingRoute: AppPricingRoute,
   AppQuotesRoute: AppQuotesRoute,
-  AppReportsRoute: AppReportsRouteWithChildren,
   AppSalesRoute: AppSalesRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSpiffRoute: AppSpiffRoute,
   AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,
+  AppReportsE2gRoute: AppReportsE2gRoute,
+  AppReportsIndexRoute: AppReportsIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -578,3 +568,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

@@ -18,7 +18,7 @@ import { useAuth, type AppRole } from "@/lib/auth";
 import { formatDistanceToNow } from "date-fns";
 import { REPORT_TYPES, DATE_RANGES, generateAndExport, type ReportType, type DateRangePreset, type ReportFormat } from "@/lib/reports";
 
-export const Route = createFileRoute("/_app/reports")({ component: ReportsPage });
+export const Route = createFileRoute("/_app/reports/")({ component: ReportsPage });
 
 const ROLES: AppRole[] = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_reports", "sales_rep"];
 
