@@ -10,6 +10,8 @@ export function getPool() {
       database: process.env.P21_SQL_DB,
       user: process.env.P21_SQL_USER,
       password: process.env.P21_SQL_PASS,
+      // Cap any single query so a runaway catalog query can't hang the agent.
+      requestTimeout: Number(process.env.P21_SQL_REQUEST_TIMEOUT_MS ?? 120000),
       options: {
         encrypt: process.env.P21_SQL_ENCRYPT !== "false",
         trustServerCertificate: process.env.P21_SQL_TRUST_CERT !== "false",

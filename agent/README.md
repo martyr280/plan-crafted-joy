@@ -176,6 +176,42 @@ To wire up the schedule, set two values:
 
 Manual sync (admin only) is also available via the `syncE2GReport` server function — wire it to a button in Settings if you want one-click resyncs.
 
+## P21 query catalog (`sql.select`)
+
+The `sql.select` job kind lets you run **read-only** queries that are defined in
+the app's `p21_query_catalog` Supabase table instead of being hard-coded in a
+handler. Add or edit a query = insert/update a catalog row; **no agent rebuild
+or redeploy needed**.
+
+Flow:
+
+1. An admin manages catalog rows via the `upsertP21Query` / `deleteP21Query`
+   server functions (or directly in the `p21_query_catalog` table).
+2. To run one, the app calls `runP21Query({ slug, params })`. The server
+   resolves the catalog entry, enforces declared `required` params, and sends
+   `{ sql, params, slug }` to the agent as a `sql.select` job.
+3. The agent runs the SQL through the same parameterized `query()` path the
+   other handlers use, then returns `{ rows, count, truncated }`.
+
+Safety model — two layers:
+
+- **Read-only login (the real boundary).** `P21_SQL_USER` MUST be a SQL login
+  with only `db_datareader`. A read-only login physically cannot mutate P21,
+  regardless of what query arrives.
+- **Agent-side guard (defense in depth).** `handlers/sql-select.js` rejects
+  anything that isn't a single `SELECT` / `WITH` statement: no `;`-separated
+  statements, no `INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/MERGE/CREATE/EXEC`,
+  no `SELECT ... INTO`.
+
+Catalog SQL rules:
+
+- One statement only. Do **not** include `USE <db>;` — the connection already
+  targets `P21_SQL_DB`.
+- Use named parameters (`@itemId`, `@dateFrom`) — never string-concatenate
+  values. Params are bound via `mssql` `request.input()`.
+- Results are capped at 50,000 rows (`truncated: true` flags an over-cap run).
+  Single-query time is capped by `P21_SQL_REQUEST_TIMEOUT_MS` (default 120s).
+
 ## Adding new job kinds
 
 1. Drop a new file in `handlers/`, exporting an `async function (payload) { ... }`.

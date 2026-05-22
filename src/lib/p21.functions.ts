@@ -269,3 +269,116 @@ export const submitOrderToP21 = createServerFn({ method: "POST" })
 
     return { p21OrderId };
   });
+
+// ─── P21 query catalog ────────────────────────────────────────────────────────
+// Named, parameterized, read-only SELECT definitions live in the
+// `p21_query_catalog` table. The app resolves an entry and sends the SQL +
+// params to the agent as a `sql.select` job. Adding a report = inserting a
+// catalog row; no agent rebuild required.
+
+const ParamSchemaItem = z.object({
+  name: z.string().min(1).max(64).regex(/^[A-Za-z0-9_]+$/, "param name: letters/digits/underscore"),
+  type: z.enum(["string", "number", "date"]).default("string"),
+  required: z.boolean().default(false),
+});
+
+export const listP21Queries = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { data, error } = await supabaseAdmin
+      .from("p21_query_catalog")
+      .select("id, slug, name, description, param_schema, enabled, updated_at")
+      .order("name", { ascending: true });
+    if (error) throw new Error(error.message);
+    return { queries: data ?? [] };
+  });
+
+export const runP21Query = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z.object({ slug: z.string().min(1).max(128), params: z.record(z.string(), z.any()).optional() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+
+    const { data: entry, error } = await supabaseAdmin
+      .from("p21_query_catalog")
+      .select("slug, sql, param_schema, enabled")
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!entry) throw new Error(`No catalog query with slug '${data.slug}'`);
+    if (!entry.enabled) throw new Error(`Query '${data.slug}' is disabled`);
+
+    // Pass through only params the catalog entry declares; enforce `required`.
+    const schema = (Array.isArray(entry.param_schema) ? entry.param_schema : []) as Array<{
+      name: string;
+      required?: boolean;
+    }>;
+    const params: Record<string, any> = {};
+    for (const p of schema) {
+      const v = (data.params ?? {})[p.name];
+      if (v === undefined || v === null || v === "") {
+        if (p.required) throw new Error(`Missing required parameter: ${p.name}`);
+        params[p.name] = null;
+      } else {
+        params[p.name] = v;
+      }
+    }
+
+    const { result } = await runJob("sql.select", { sql: entry.sql, params, slug: entry.slug }, 120000);
+    return {
+      slug: entry.slug,
+      rows: ((result as any)?.rows ?? []) as any[],
+      count: ((result as any)?.count ?? 0) as number,
+      truncated: Boolean((result as any)?.truncated),
+    };
+  });
+
+export const upsertP21Query = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        slug: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[a-z0-9-]+$/, "slug: lowercase letters, digits and hyphens only"),
+        name: z.string().min(1).max(200),
+        description: z.string().max(1000).optional(),
+        sql: z.string().min(1).max(20000),
+        param_schema: z.array(ParamSchemaItem).default([]),
+        enabled: z.boolean().default(true),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const row = {
+      slug: data.slug,
+      name: data.name,
+      description: data.description ?? null,
+      sql: data.sql,
+      param_schema: data.param_schema,
+      enabled: data.enabled,
+      updated_at: new Date().toISOString(),
+    };
+    const { data: saved, error } = data.id
+      ? await supabaseAdmin.from("p21_query_catalog").update(row).eq("id", data.id).select("id").single()
+      : await supabaseAdmin.from("p21_query_catalog").insert(row).select("id").single();
+    if (error) throw new Error(error.message);
+    return { id: saved!.id };
+  });
+
+export const deleteP21Query = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { error } = await supabaseAdmin.from("p21_query_catalog").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
