@@ -1,0 +1,5 @@
+ALTER TABLE public.price_list
+  DROP COLUMN IF EXISTS e2g_price,
+  DROP COLUMN IF EXISTS e2g_weight,
+  DROP COLUMN IF EXISTS in_e2g,
+  DROP COLUMN IF EXISTS e2g_synced_at;

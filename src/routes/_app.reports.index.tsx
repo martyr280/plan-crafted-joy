@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -18,7 +18,7 @@ import { useAuth, type AppRole } from "@/lib/auth";
 import { formatDistanceToNow } from "date-fns";
 import { REPORT_TYPES, DATE_RANGES, generateAndExport, type ReportType, type DateRangePreset, type ReportFormat } from "@/lib/reports";
 
-export const Route = createFileRoute("/_app/reports")({ component: ReportsPage });
+export const Route = createFileRoute("/_app/reports/")({ component: ReportsPage });
 
 const ROLES: AppRole[] = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_reports", "sales_rep"];
 
@@ -117,6 +117,18 @@ function ReportsPage() {
         description="Configure filters, audience, and delivery format. Run on demand or on schedule."
         actions={<Button onClick={() => setEditing(emptySchedule())}><Plus className="w-4 h-4 mr-2" /> New Report</Button>}
       />
+
+      <Card className="p-4 mb-6 flex items-center justify-between">
+        <div>
+          <div className="font-semibold">E2G Combined Report</div>
+          <div className="text-xs text-muted-foreground">Customer inventory snapshot from P21 — sync on demand and export.</div>
+        </div>
+        <Link to="/reports/e2g">
+          <Button variant="outline">Open report</Button>
+        </Link>
+      </Card>
+
+
 
       <Card className="mb-6">
         <Table>

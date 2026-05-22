@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { FileInput, Receipt, Truck, AlertTriangle, FileBarChart } from "lucide-react";
+import { getFleetLocations } from "@/lib/samsara.functions";
 import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_app/")({
@@ -40,6 +43,17 @@ function HomePage() {
     })();
   }, []);
 
+  const getLocs = useServerFn(getFleetLocations);
+  const samsara = useQuery({
+    queryKey: ["samsara", "locations", "dashboard"],
+    queryFn: () => getLocs(),
+    refetchInterval: 120_000,
+  });
+  const trucksOnline = (samsara.data?.vehicles ?? []).filter(
+    (v: any) => v.time && Date.now() - new Date(v.time).getTime() < 30 * 60_000
+  ).length;
+  const trucksMoving = (samsara.data?.vehicles ?? []).filter((v: any) => (v.speedMph ?? 0) > 1).length;
+
   return (
     <div className="space-y-6">
       <div>
@@ -47,10 +61,16 @@ function HomePage() {
         <p className="text-sm text-muted-foreground">Operations overview · live</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <KpiCard label="Orders in Review" value={kpi.pending ?? 0} sub={`Oldest: ${kpi.oldestAge ?? "—"}`} icon={<FileInput className="w-5 h-5" />} />
         <KpiCard label="AR Reminders (24h)" value={kpi.arToday ?? 0} icon={<Receipt className="w-5 h-5" />} />
         <KpiCard label="Active Fleet Loads" value={kpi.fleetCount ?? 0} sub={`Avg capacity ${kpi.avgCap ?? 0}%`} icon={<Truck className="w-5 h-5" />} />
+        <KpiCard
+          label="Trucks Online"
+          value={samsara.data?.error ? "—" : trucksOnline}
+          sub={samsara.data?.error ? "Samsara error" : `${trucksMoving} moving now`}
+          icon={<Truck className="w-5 h-5" />}
+        />
         <KpiCard label="Open Damage Claims" value={kpi.damage ?? 0} icon={<AlertTriangle className="w-5 h-5" />} />
         <KpiCard label="Orders this Week" value={kpi.weekOrders ?? 0} icon={<FileBarChart className="w-5 h-5" />} trend={kpi.wow ?? 0} />
       </div>

@@ -1,4 +1,6 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
@@ -8,18 +10,24 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "NDI Ops Hub" },
-      { name: "description", content: "NDI internal operations platform — orders, AR, logistics, SPIFF, reports." },
-      { property: "og:title", content: "NDI Ops Hub" },
-      { name: "twitter:title", content: "NDI Ops Hub" },
-      { property: "og:description", content: "NDI internal operations platform — orders, AR, logistics, SPIFF, reports." },
-      { name: "twitter:description", content: "NDI internal operations platform — orders, AR, logistics, SPIFF, reports." },
+      { title: "Nelson AI" },
+      { name: "description", content: "Nelson AI — operations platform for NDI Office Furniture. Orders, AR, logistics, SPIFF, and reports in one workspace." },
+      { property: "og:title", content: "Nelson AI" },
+      { name: "twitter:title", content: "Nelson AI" },
+      { property: "og:description", content: "Nelson AI — operations platform for NDI Office Furniture. Orders, AR, logistics, SPIFF, and reports in one workspace." },
+      { name: "twitter:description", content: "Nelson AI — operations platform for NDI Office Furniture. Orders, AR, logistics, SPIFF, and reports in one workspace." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a68c3570-5568-40c4-9c08-0cc1dda6ba60/id-preview-2c7ed15d--8f98c139-aabe-4588-ba0d-f1c274f9fea8.lovable.app-1778011263842.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a68c3570-5568-40c4-9c08-0cc1dda6ba60/id-preview-2c7ed15d--8f98c139-aabe-4588-ba0d-f1c274f9fea8.lovable.app-1778011263842.png" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/favicon.ico", sizes: "any" },
+      { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32x32.png" },
+      { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16x16.png" },
+      { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
+    ],
   }),
   shellComponent: RootShell,
   component: () => <Outlet />,
@@ -35,14 +43,17 @@ export const Route = createRootRoute({
 });
 
 function RootShell({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient());
   return (
     <html lang="en">
       <head><HeadContent /></head>
       <body>
-        <AuthProvider>
-          {children}
-          <Toaster richColors position="top-right" />
-        </AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </AuthProvider>
+        </QueryClientProvider>
         <Scripts />
       </body>
     </html>

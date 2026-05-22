@@ -1,14 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { timingSafeEqual } from "crypto";
-import { applyE2GSnapshotServerOnly } from "@/lib/p21.functions";
+import { applyPricerSyncServerOnly } from "@/lib/p21.functions";
 
-// Public webhook for scheduling the E2G Combined Report sync.
+// Public webhook for scheduling the Pricer sync from P21.
 // Caller must send `Authorization: Bearer <CRON_SECRET>` (or
 // `x-cron-secret: <CRON_SECRET>`) matching the env var.
-//
-// Example (GitHub Actions, cron-job.org, Supabase pg_cron, etc.):
-//   curl -X POST https://plan-crafted-joy.lovable.app/api/public/sync-e2g \
-//        -H "Authorization: Bearer $CRON_SECRET"
 
 function checkSecret(provided: string | null | undefined, expected: string): boolean {
   if (!provided) return false;
@@ -17,7 +13,7 @@ function checkSecret(provided: string | null | undefined, expected: string): boo
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export const Route = createFileRoute("/api/public/sync-e2g")({
+export const Route = createFileRoute("/api/public/sync-pricer")({
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -33,8 +29,8 @@ export const Route = createFileRoute("/api/public/sync-e2g")({
         }
 
         try {
-          const { imported } = await applyE2GSnapshotServerOnly();
-          return Response.json({ ok: true, imported, syncedAt: new Date().toISOString() });
+          const result = await applyPricerSyncServerOnly();
+          return Response.json({ ok: true, ...result, syncedAt: new Date().toISOString() });
         } catch (e: any) {
           return Response.json(
             { ok: false, error: e?.message ?? String(e) },

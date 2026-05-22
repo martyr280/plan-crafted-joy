@@ -52,7 +52,6 @@ function InventorySyncPage() {
 
   async function loadAll() {
     setLoading(true);
-    // Fetch ALL rows with explicit pagination; never trust default 1000.
     const fetchAll = async (table: string, cols: string) => {
       const out: any[] = [];
       const step = 1000;
@@ -67,7 +66,7 @@ function InventorySyncPage() {
     try {
       const [w, p, c, cr] = await Promise.all([
         fetchAll("website_items", "sku, name, description, image_url, detail_url, brand, in_stock, stock_text, crawled_at"),
-        fetchAll("price_list", "item, description, list_price, mfg, category"),
+        fetchAll("price_list", "id, item, description, list_price, weight, mfg, category"),
         fetchAll("catalog_items", "sku, description, list_price, page, mfg"),
         supabase.from("website_crawls").select("*").order("started_at", { ascending: false }).limit(10).then((r) => r.data ?? []),
       ]);

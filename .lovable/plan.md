@@ -1,63 +1,92 @@
-# Sync ndiof.com Inventory with Pricer & Catalog
+# Replace Pricer Source with P21 SQL
 
-Connect Firecrawl, crawl every product page on ndiof.com, store SKU + description + image + stock status, then reconcile against `price_list` (pricer XLSX) and `catalog_items` (parsed catalog PDFs).
+Replace the existing `price_list` data source with a new P21 SQL query that runs through the P21 bridge. Add a "Sync Pricer from P21" admin button and a nightly cron job.
 
-## A. Firecrawl connection
-1. Use `standard_connectors--connect` with `connector_id: firecrawl`. Once linked, `FIRECRAWL_API_KEY` is available to server functions.
-2. Verify availability via `fetch_secrets`.
+## What this changes
 
-## B. Database
-New table `website_items` (SKU-level snapshot of ndiof.com):
-- `sku` (PK with `crawl_id`), `family`, `name`, `description`, `image_url`, `detail_url`, `brand`, `category`, `in_stock` (bool), `stock_text`, `crawled_at`, `crawl_id`.
+- The pricer page (`/pricer`) and pricing page (`/pricing`) keep reading from the `price_list` table — nothing in the UI consumer code changes.
+- `price_list` is now repopulated from a single P21 SQL query (regular products from 9 specific suppliers) instead of any prior XLSX import flow.
+- Sync runs two ways: manually (admin button on `/pricer`) and nightly via Supabase cron.
 
-New table `website_crawls`:
-- `id`, `started_at`, `completed_at`, `status` (`running|completed|failed`), `pages_crawled`, `skus_found`, `error`, `triggered_by`.
+## Column mapping (P21 SQL → `price_list`)
 
-RLS: read for any authenticated ops role; write admin-only (matches existing catalog tables).
+| P21 column                          | `price_list` column   |
+|-------------------------------------|-----------------------|
+| `inv_mast.item_id`                  | `item`                |
+| `inv_mast.item_desc`                | `description`         |
+| `list_price`                        | `list_price`          |
+| `cost`                              | `dealer_cost`         |
+| `price1`–`price5`                   | `price_l1`–`price_l5` |
+| `price7` (Showroom)                 | `price_showroom` (NEW)|
+| `vendor.vendor_name`                | `mfg`                 |
+| `inventory_supplier.supplier_part_no` | `cat_number`        |
 
-## C. Edge function `crawl-website`
-- Background job pattern (job row + `EdgeRuntime.waitUntil`).
-- Step 1 — **map**: `firecrawl.map('https://www.ndiof.com', { limit: 5000, includeSubdomains: false })` to get every URL, then filter to `/itemdetail/...` (single SKU) and `/itemoptions/?familyName=...` (variant family) URLs. Also include `/catsearch/...` listing pages as a fallback to capture SKUs that aren't surfaced by map.
-- Step 2 — **batch scrape** in chunks of ~50 URLs using `firecrawl.batchScrape(urls, { formats: ['markdown'], onlyMainContent: true })`.
-- Step 3 — parse each result with a deterministic regex pass (SKU/brand/description follow a fixed pattern shown on listing pages: `## <name>` / `SKU: <sku>` / `Brand: <brand>` / in-stock label). For variant family pages, follow the embedded `/itemdetail/SKU` links.
-- Step 4 — upsert into `website_items` keyed on `sku`; update progress on `website_crawls` every batch.
-- **Skip JS-rendered prices** (per user choice). Stock label is in static HTML so we keep it.
+`source` is set to `'p21_sql'` on every synced row. After sync, `recomputeFamilies()` runs to refresh `item_short`.
 
-## D. Reconciliation view
-Server function `getInventoryReconciliation` joins three sources by normalized SKU (upper-trim, strip spaces/dashes optional alias):
+If `dealer_cost`, `cat_number`, or `mfg` are wrong targets, say so before approving and I'll adjust.
 
-```text
-website_items   ─┐
-price_list      ─┼─► reconciliation rows
-catalog_items   ─┘
+## Phases
+
+### Phase 1 — Database
+
+Add one column to `price_list`:
+
+```sql
+ALTER TABLE public.price_list ADD COLUMN IF NOT EXISTS price_showroom numeric;
 ```
 
-Categories surfaced:
-1. **On website but not in pricer/catalog** — needs pricing setup.
-2. **In pricer/catalog but not on website** — needs to be added/published on ndiof.com.
-3. **Mismatch** — same SKU, but description differs significantly (token Jaccard < 0.5) or brand mismatch. Price-mismatch row is reserved for a future pass when prices are scraped.
+### Phase 2 — Bridge handler (Node agent)
 
-## E. UI — new route `/inventory-sync`
-- Header card: last crawl timestamp, totals (website / pricer / catalog), counts per discrepancy bucket.
-- "Run full crawl" button (admin only) + live progress bar polling `website_crawls`.
-- Tabbed table (TanStack Query, paginated, sortable, filterable per workspace rules):
-  - Tab 1 — Missing from pricer/catalog
-  - Tab 2 — Missing from website
-  - Tab 3 — Description mismatch
-- Each row links to the ndiof.com detail page and shows source data side-by-side.
-- CSV export per tab.
-- Add nav entry under Catalogs section.
+New file `agent/handlers/pricer-sync.js` containing the supplied SQL verbatim. Returns `{ rows, count }`. Registered in `agent/handlers/index.js` under kind `"pricer.sync"`. The agent must be redeployed via the existing GitHub release workflow for the new handler to be available.
 
-## F. Scheduling (optional, admin toggle)
-`pg_cron` weekly job hitting `/api/public/hooks/crawl-website` (apikey auth) so the snapshot stays fresh without manual runs.
+### Phase 3 — Server function
+
+New `syncPricerFromP21` in `src/lib/p21.functions.ts`:
+1. Admin-only.
+2. `runJob("pricer.sync", {}, 120000)` — bridge fetches rows from P21.
+3. Upsert into `price_list` on `item` (unique index already exists), mapping columns per the table above, setting `source = 'p21_sql'`.
+4. Delete rows where `source = 'p21_sql'` and `item NOT IN (synced items)` so removed SKUs disappear.
+5. Call `recomputeFamilies()`.
+6. Insert an `activity_events` row: `pricer.synced` with row count.
+7. Return `{ imported, removed, families_updated }`.
+
+### Phase 4 — UI
+
+On `/pricer` (admin only): add a "Sync from P21" button next to the existing header actions. Uses TanStack Query mutation + Sonner toast. Disables while running. Invalidates pricer queries on success.
+
+### Phase 5 — Scheduled sync
+
+New public route `src/routes/api/public/hooks/sync-pricer.ts`:
+- Validates `apikey` header against `SUPABASE_ANON_KEY`.
+- Calls `applyPricerSyncServerOnly()` (a `createServerOnlyFn` wrapper around the same logic).
+- Returns `{ imported, removed }`.
+
+Cron job (created via `supabase--insert`, not migration — stable URL pattern):
+```sql
+select cron.schedule(
+  'sync-pricer-nightly',
+  '0 6 * * *',  -- 06:00 UTC nightly
+  $$ select net.http_post(
+       url := 'https://project--8f98c139-aabe-4588-ba0d-f1c274f9fea8.lovable.app/api/public/hooks/sync-pricer',
+       headers := '{"Content-Type":"application/json","apikey":"<ANON_KEY>"}'::jsonb,
+       body := '{}'::jsonb
+     ) $$
+);
+```
 
 ## Out of scope
-- Scraping JS-rendered prices (revisit later with `waitFor` + JS rendering).
-- Auto-pushing fixes back to ndiof.com.
-- Image diffing.
 
-## Technical notes
-- Firecrawl SDK: `@mendable/firecrawl-js` (server-only, never expose key to client).
-- All Firecrawl calls happen in the edge function; frontend only reads `website_items` / `website_crawls` via TanStack Query hooks in `src/hooks/`.
-- Normalize SKU = `sku.trim().toUpperCase()` consistent with `parse-po`.
-- Crawl is idempotent: each run gets a new `crawl_id`; upsert by `sku` keeps the latest snapshot, and we retain prior crawl history in `website_crawls` for auditing.
+- No changes to pricer family logic, image cache, PDF export, or order pricing lookups.
+- No removal of existing `price_list` rows from other sources unless they happen to share an `item` value (upserted).
+- No new admin role; reuses existing `admin` checks.
+
+## Files touched
+
+- `supabase/migrations/<new>.sql` — add `price_showroom`
+- `agent/handlers/pricer-sync.js` (new)
+- `agent/handlers/index.js` — register `pricer.sync`
+- `src/lib/p21.functions.ts` — `syncPricerFromP21`, `applyPricerSyncServerOnly`
+- `src/lib/p21.server.ts` — `applyPricerSync()` helper
+- `src/routes/_app.pricer.tsx` — Sync button
+- `src/routes/api/public/hooks/sync-pricer.ts` (new) — cron endpoint
+- Cron job inserted via `supabase--insert`
