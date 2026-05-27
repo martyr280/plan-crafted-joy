@@ -41,15 +41,37 @@ export async function fetchVehicleLocations() {
   }));
 }
 
-// Active trips for a vehicle (or all vehicles in a window).
+// Trips via the modern Trips Stream endpoint. Requires asset (vehicle) IDs.
+// If no vehicleIds passed, fetches the fleet first and batches up to 50 per call.
 export async function fetchTrips(opts: { startMs: number; endMs: number; vehicleIds?: string[] }) {
-  const params = new URLSearchParams({
-    startMs: String(opts.startMs),
-    endMs: String(opts.endMs),
-  });
-  if (opts.vehicleIds?.length) params.set("vehicleIds", opts.vehicleIds.join(","));
-  const data = await samsaraFetch<{ data: any[] }>(`/fleet/trips?${params.toString()}`);
-  return data.data ?? [];
+  let ids = opts.vehicleIds ?? [];
+  if (!ids.length) {
+    const vehicles = await samsaraFetch<{ data: any[] }>(`/fleet/vehicles?limit=512`);
+    ids = (vehicles.data ?? []).map((v) => String(v.id)).filter(Boolean);
+  }
+  if (!ids.length) return [];
+
+  const startTime = new Date(opts.startMs).toISOString();
+  const endTime = new Date(opts.endMs).toISOString();
+  const all: any[] = [];
+
+  for (let i = 0; i < ids.length; i += 50) {
+    const batch = ids.slice(i, i + 50);
+    const params = new URLSearchParams({
+      startTime,
+      endTime,
+      ids: batch.join(","),
+      completionStatus: "all",
+    });
+    let after: string | null = null;
+    do {
+      const url = `/trips/stream?${params.toString()}${after ? `&after=${encodeURIComponent(after)}` : ""}`;
+      const data = await samsaraFetch<{ data: any[]; pagination?: { endCursor?: string; hasNextPage?: boolean } }>(url);
+      all.push(...(data.data ?? []));
+      after = data.pagination?.hasNextPage ? data.pagination.endCursor ?? null : null;
+    } while (after);
+  }
+  return all;
 }
 
 // Safety events.
