@@ -21,6 +21,7 @@ import { P21BridgePanel } from "@/components/shared/P21BridgePanel";
 import {
   listManagedUsers,
   inviteUser,
+  createUserWithPassword,
   sendPasswordReset,
   revokeAllRoles,
   setUserDisabled,
