@@ -107,3 +107,52 @@ export async function sendNelsonMagicLinkEmail(to: string, actionUrl: string) {
   );
 }
 
+export async function sendNelsonCredentialsEmail(to: string, password: string, signInUrl: string) {
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${TEXT};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;">
+        <tr><td style="background:${NAVY};padding:24px 28px;">
+          <div style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.01em;">
+            Nelson <span style="color:${ORANGE};">AI</span>
+          </div>
+          <div style="font-size:12px;color:#cbd5e1;margin-top:2px;">for NDI Office Furniture</div>
+        </td></tr>
+        <tr><td style="padding:32px 28px 8px;">
+          <h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:${NAVY};font-weight:600;">Your Nelson AI account is ready</h1>
+          <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:${TEXT};">
+            An administrator has created an account for you. Use the credentials below to sign in. We recommend changing your password after your first login.
+          </p>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f8fafc;border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px;">
+            <tr><td style="padding:14px 18px;border-bottom:1px solid ${BORDER};">
+              <div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">Email</div>
+              <div style="font-size:15px;color:${NAVY};font-weight:500;">${to}</div>
+            </td></tr>
+            <tr><td style="padding:14px 18px;">
+              <div style="font-size:12px;color:${MUTED};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">Temporary password</div>
+              <div style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:15px;color:${NAVY};font-weight:600;letter-spacing:0.02em;">${password}</div>
+            </td></tr>
+          </table>
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr><td>
+            <a href="${signInUrl}" style="display:inline-block;background:${ORANGE};color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:8px;">Sign in to Nelson AI</a>
+          </td></tr></table>
+          <p style="margin:24px 0 0;font-size:13px;color:${MUTED};line-height:1.6;">
+            For your security, change your password after signing in by using "Forgot password?" on the sign-in screen.
+          </p>
+        </td></tr>
+        <tr><td style="padding:24px 28px 28px;border-top:1px solid ${BORDER};margin-top:24px;">
+          <p style="margin:0;font-size:12px;color:${MUTED};line-height:1.5;">
+            Sent by Nelson AI · NDI Office Furniture<br/>
+            If you weren't expecting this email, please contact your administrator.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+  return sendResend(to, "Your Nelson AI account credentials", html);
+}
+
+
+

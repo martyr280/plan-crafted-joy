@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { sendNelsonInviteEmail, sendNelsonPasswordResetEmail } from "./email/nelson-resend.server";
+import { sendNelsonInviteEmail, sendNelsonPasswordResetEmail, sendNelsonCredentialsEmail } from "./email/nelson-resend.server";
 
 const APP_ROLES = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_reports", "sales_rep"] as const;
 type AppRole = (typeof APP_ROLES)[number];
@@ -98,6 +98,56 @@ export const inviteUser = createServerFn({ method: "POST" })
     await sendNelsonInviteEmail(data.email, actionUrl);
 
     await logActivity("admin.invite", `Invited ${data.email}`, context.userId, { email: data.email, roles: data.roles });
+    return { ok: true, userId: newId };
+  });
+
+export const createUserWithPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z.object({
+      email: z.string().trim().toLowerCase().email().max(255),
+      password: z.string().min(8).max(128),
+      displayName: z.string().trim().max(255).optional(),
+      roles: z.array(z.enum(APP_ROLES)).max(APP_ROLES.length).default([]),
+      sendEmail: z.boolean().default(true),
+    }).parse(input)
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+
+    const origin = process.env.PUBLIC_APP_URL || "https://www.nelsonbot.ai";
+
+    const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
+      email: data.email,
+      password: data.password,
+      email_confirm: true,
+      user_metadata: data.displayName ? { display_name: data.displayName } : undefined,
+    });
+    if (error) throw new Error(error.message);
+    const newId = created.user?.id;
+    if (!newId) throw new Error("Failed to create user");
+
+    if (data.roles.length) {
+      const rows = data.roles.map((role) => ({ user_id: newId, role }));
+      const { error: rolesErr } = await supabaseAdmin
+        .from("user_roles")
+        .upsert(rows, { onConflict: "user_id,role", ignoreDuplicates: true });
+      if (rolesErr) throw new Error(rolesErr.message);
+    }
+
+    if (data.sendEmail) {
+      try {
+        await sendNelsonCredentialsEmail(data.email, data.password, `${origin}/auth`);
+      } catch (e: any) {
+        console.error("sendNelsonCredentialsEmail failed:", e?.message ?? e);
+      }
+    }
+
+    await logActivity("admin.create_user", `Created ${data.email} with password`, context.userId, {
+      email: data.email,
+      roles: data.roles,
+      emailed: data.sendEmail,
+    });
     return { ok: true, userId: newId };
   });
 

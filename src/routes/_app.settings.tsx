@@ -21,6 +21,7 @@ import { P21BridgePanel } from "@/components/shared/P21BridgePanel";
 import {
   listManagedUsers,
   inviteUser,
+  createUserWithPassword,
   sendPasswordReset,
   revokeAllRoles,
   setUserDisabled,
@@ -166,12 +167,17 @@ function UsersAndRoles({ isAdmin, currentUserId, currentRoles }: { isAdmin: bool
   const [claiming, setClaiming] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteDisplayName, setInviteDisplayName] = useState("");
   const [inviteRoles, setInviteRoles] = useState<AppRole[]>(["ops_orders"]);
+  const [inviteMode, setInviteMode] = useState<"email" | "password">("password");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [inviteEmailCreds, setInviteEmailCreds] = useState(true);
   const [inviting, setInviting] = useState(false);
   const [confirm, setConfirm] = useState<null | { title: string; description: string; action: () => Promise<void> }>(null);
 
   const listFn = useServerFn(listManagedUsers);
   const inviteFn = useServerFn(inviteUser);
+  const createUserFn = useServerFn(createUserWithPassword);
   const resetFn = useServerFn(sendPasswordReset);
   const revokeAllFn = useServerFn(revokeAllRoles);
   const disableFn = useServerFn(setUserDisabled);
@@ -234,18 +240,50 @@ function UsersAndRoles({ isAdmin, currentUserId, currentRoles }: { isAdmin: bool
     }
   }
 
+  function generatePassword() {
+    const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
+    const arr = new Uint32Array(16);
+    crypto.getRandomValues(arr);
+    const pw = Array.from(arr, (n) => charset[n % charset.length]).join("");
+    setInvitePassword(pw);
+  }
+
   async function submitInvite() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      await inviteFn({ data: { email: inviteEmail.trim(), roles: inviteRoles } });
-      toast.success(`Invite sent to ${inviteEmail.trim()}`);
+      if (inviteMode === "password") {
+        if (invitePassword.length < 8) {
+          toast.error("Password must be at least 8 characters");
+          setInviting(false);
+          return;
+        }
+        await createUserFn({
+          data: {
+            email: inviteEmail.trim(),
+            password: invitePassword,
+            displayName: inviteDisplayName.trim() || undefined,
+            roles: inviteRoles,
+            sendEmail: inviteEmailCreds,
+          },
+        });
+        toast.success(
+          inviteEmailCreds
+            ? `Account created and credentials emailed to ${inviteEmail.trim()}`
+            : `Account created for ${inviteEmail.trim()}`
+        );
+      } else {
+        await inviteFn({ data: { email: inviteEmail.trim(), roles: inviteRoles } });
+        toast.success(`Invite sent to ${inviteEmail.trim()}`);
+      }
       setInviteOpen(false);
       setInviteEmail("");
+      setInviteDisplayName("");
+      setInvitePassword("");
       setInviteRoles(["ops_orders"]);
       load();
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to send invite");
+      toast.error(e.message ?? "Failed to add user");
     } finally {
       setInviting(false);
     }
@@ -294,42 +332,91 @@ function UsersAndRoles({ isAdmin, currentUserId, currentRoles }: { isAdmin: bool
           </div>
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
             <DialogTrigger asChild>
-              <Button size="sm"><UserPlus className="w-4 h-4 mr-2" /> Invite user</Button>
+              <Button size="sm"><UserPlus className="w-4 h-4 mr-2" /> Add user</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Invite a user</DialogTitle>
-                <DialogDescription>They'll receive an email to set their password and join Nelson AI.</DialogDescription>
+                <DialogTitle>Add a user</DialogTitle>
+                <DialogDescription>
+                  Create the account with a password now, or send an invite email so they set their own.
+                </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Email</Label>
-                  <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="user@ndiof.com" />
-                </div>
-                <div>
-                  <Label className="mb-2 block">Initial roles</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {ALL_ROLES.map((r) => (
-                      <label key={r} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={inviteRoles.includes(r)}
-                          onCheckedChange={(v) =>
-                            setInviteRoles((rs) => (v ? Array.from(new Set([...rs, r])) : rs.filter((x) => x !== r)))
-                          }
-                        />
-                        {ROLE_LABELS[r]}
-                      </label>
-                    ))}
+              <Tabs value={inviteMode} onValueChange={(v) => setInviteMode(v as "email" | "password")}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="password" className="flex-1">Set password now</TabsTrigger>
+                  <TabsTrigger value="email" className="flex-1">Send invite email</TabsTrigger>
+                </TabsList>
+                <TabsContent value="password" className="space-y-4 pt-4">
+                  <div>
+                    <Label>Email</Label>
+                    <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="user@ndiof.com" />
                   </div>
+                  <div>
+                    <Label>Display name (optional)</Label>
+                    <Input value={inviteDisplayName} onChange={(e) => setInviteDisplayName(e.target.value)} placeholder="Jane Doe" />
+                  </div>
+                  <div>
+                    <Label>Initial password</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        value={invitePassword}
+                        onChange={(e) => setInvitePassword(e.target.value)}
+                        placeholder="At least 8 characters"
+                        className="font-mono"
+                      />
+                      <Button type="button" variant="outline" onClick={generatePassword}>Generate</Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">The user can change this anytime via "Forgot password?".</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={inviteEmailCreds} onCheckedChange={(v) => setInviteEmailCreds(!!v)} />
+                    Email these credentials to the user
+                  </label>
+                </TabsContent>
+                <TabsContent value="email" className="space-y-4 pt-4">
+                  <div>
+                    <Label>Email</Label>
+                    <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="user@ndiof.com" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    They'll receive a branded email with a link to set their own password and join Nelson AI.
+                  </p>
+                </TabsContent>
+              </Tabs>
+              <div>
+                <Label className="mb-2 block">Initial roles</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_ROLES.map((r) => (
+                    <label key={r} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={inviteRoles.includes(r)}
+                        onCheckedChange={(v) =>
+                          setInviteRoles((rs) => (v ? Array.from(new Set([...rs, r])) : rs.filter((x) => x !== r)))
+                        }
+                      />
+                      {ROLE_LABELS[r]}
+                    </label>
+                  ))}
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setInviteOpen(false)} disabled={inviting}>Cancel</Button>
-                <Button onClick={submitInvite} disabled={inviting || !inviteEmail.trim()}>
-                  {inviting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
-                  Send invite
+                <Button
+                  onClick={submitInvite}
+                  disabled={inviting || !inviteEmail.trim() || (inviteMode === "password" && invitePassword.length < 8)}
+                >
+                  {inviting ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : inviteMode === "password" ? (
+                    <UserPlus className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Mail className="w-4 h-4 mr-2" />
+                  )}
+                  {inviteMode === "password" ? "Create user" : "Send invite"}
                 </Button>
               </DialogFooter>
+
             </DialogContent>
           </Dialog>
         </div>
