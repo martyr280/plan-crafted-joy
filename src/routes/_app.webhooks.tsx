@@ -25,9 +25,21 @@ const STATUS_COLORS: Record<string, string> = {
 
 function WebhooksPage() {
   const listWebhookDeliveriesFn = useServerFn(listWebhookDeliveries);
+  const getWebhookDeliveryFn = useServerFn(getWebhookDelivery);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<any | null>(null);
+
+  async function openDetail(row: any) {
+    setSelected(row);
+    try {
+      const res = await getWebhookDeliveryFn({ data: { id: row.id } });
+      const full = (res as any)?.row;
+      if (full) setSelected((cur: any) => (cur?.id === full.id ? { ...cur, ...full } : cur));
+    } catch (e: any) {
+      toast.error(getErrorMessage(e));
+    }
+  }
 
   function getErrorMessage(error: unknown) {
     if (error instanceof Error && error.message) return error.message;
