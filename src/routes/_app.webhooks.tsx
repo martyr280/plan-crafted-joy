@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listWebhookDeliveries } from "@/lib/webhook-debug.functions";
+import { listWebhookDeliveries, getWebhookDelivery } from "@/lib/webhook-debug.functions";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
 import { RefreshCw, Webhook, CheckCircle2, AlertCircle, Clock, Mail } from "lucide-react";
@@ -25,9 +25,21 @@ const STATUS_COLORS: Record<string, string> = {
 
 function WebhooksPage() {
   const listWebhookDeliveriesFn = useServerFn(listWebhookDeliveries);
+  const getWebhookDeliveryFn = useServerFn(getWebhookDelivery);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<any | null>(null);
+
+  async function openDetail(row: any) {
+    setSelected(row);
+    try {
+      const res = await getWebhookDeliveryFn({ data: { id: row.id } });
+      const full = (res as any)?.row;
+      if (full) setSelected((cur: any) => (cur?.id === full.id ? { ...cur, ...full } : cur));
+    } catch (e: any) {
+      toast.error(getErrorMessage(e));
+    }
+  }
 
   function getErrorMessage(error: unknown) {
     if (error instanceof Error && error.message) return error.message;
@@ -119,7 +131,7 @@ function WebhooksPage() {
               </TableCell></TableRow>
             )}
             {rows.map((r) => (
-              <TableRow key={r.id} className="cursor-pointer" onClick={() => setSelected(r)}>
+              <TableRow key={r.id} className="cursor-pointer" onClick={() => openDetail(r)}>
                 <TableCell className="text-sm text-muted-foreground" suppressHydrationWarning>
                   {formatDistanceToNow(new Date(r.received_at), { addSuffix: true })}
                 </TableCell>
