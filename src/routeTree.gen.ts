@@ -29,6 +29,7 @@ import { Route as AppDamageRouteImport } from './routes/_app.damage'
 import { Route as AppCatalogsRouteImport } from './routes/_app.catalogs'
 import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
+import { Route as AppAskRouteImport } from './routes/_app.ask'
 import { Route as AppArRouteImport } from './routes/_app.ar'
 import { Route as AppReportsIndexRouteImport } from './routes/_app.reports.index'
 import { Route as ApiPublicSyncPricerRouteImport } from './routes/api/public/sync-pricer'
@@ -136,6 +137,11 @@ const AppAuditRoute = AppAuditRouteImport.update({
   path: '/audit',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAskRoute = AppAskRouteImport.update({
+  id: '/ask',
+  path: '/ask',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppArRoute = AppArRouteImport.update({
   id: '/ar',
   path: '/ar',
@@ -177,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ar': typeof AppArRoute
+  '/ask': typeof AppAskRoute
   '/audit': typeof AppAuditRoute
   '/bridge': typeof AppBridgeRoute
   '/catalogs': typeof AppCatalogsRoute
@@ -204,6 +211,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ar': typeof AppArRoute
+  '/ask': typeof AppAskRoute
   '/audit': typeof AppAuditRoute
   '/bridge': typeof AppBridgeRoute
   '/catalogs': typeof AppCatalogsRoute
@@ -234,6 +242,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_app/ar': typeof AppArRoute
+  '/_app/ask': typeof AppAskRoute
   '/_app/audit': typeof AppAuditRoute
   '/_app/bridge': typeof AppBridgeRoute
   '/_app/catalogs': typeof AppCatalogsRoute
@@ -265,6 +274,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/ar'
+    | '/ask'
     | '/audit'
     | '/bridge'
     | '/catalogs'
@@ -292,6 +302,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/ar'
+    | '/ask'
     | '/audit'
     | '/bridge'
     | '/catalogs'
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/_app/ar'
+    | '/_app/ask'
     | '/_app/audit'
     | '/_app/bridge'
     | '/_app/catalogs'
@@ -498,6 +510,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuditRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/ask': {
+      id: '/_app/ask'
+      path: '/ask'
+      fullPath: '/ask'
+      preLoaderRoute: typeof AppAskRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/ar': {
       id: '/_app/ar'
       path: '/ar'
@@ -552,6 +571,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppArRoute: typeof AppArRoute
+  AppAskRoute: typeof AppAskRoute
   AppAuditRoute: typeof AppAuditRoute
   AppBridgeRoute: typeof AppBridgeRoute
   AppCatalogsRoute: typeof AppCatalogsRoute
@@ -575,6 +595,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppArRoute: AppArRoute,
+  AppAskRoute: AppAskRoute,
   AppAuditRoute: AppAuditRoute,
   AppBridgeRoute: AppBridgeRoute,
   AppCatalogsRoute: AppCatalogsRoute,
