@@ -1,92 +1,57 @@
-# Replace Pricer Source with P21 SQL
+## Ask Nelson — DB-aware chat assistant
 
-Replace the existing `price_list` data source with a new P21 SQL query that runs through the P21 bridge. Add a "Sync Pricer from P21" admin button and a nightly cron job.
+A chat assistant available to every signed-in user, with read access to the entire operational database. Persists conversations per user, defaults to a fast model, and escalates to a stronger reasoning model when the user pushes back or asks for a deeper look.
 
-## What this changes
+### Surfaces
+1. **`/ask` page** — full chat UI in the sidebar under a new "Assistant" group, with conversation list + active conversation pane.
+2. **Floating bubble** — bottom-right widget rendered from the `_app` layout, available on every authenticated page. Expands into a compact chat panel; "Open full chat" link jumps to `/ask` with the same conversation.
 
-- The pricer page (`/pricer`) and pricing page (`/pricing`) keep reading from the `price_list` table — nothing in the UI consumer code changes.
-- `price_list` is now repopulated from a single P21 SQL query (regular products from 9 specific suppliers) instead of any prior XLSX import flow.
-- Sync runs two ways: manually (admin button on `/pricer`) and nightly via Supabase cron.
+### Database (migration)
+- `chat_conversations` — `id`, `user_id`, `title`, `created_at`, `updated_at`. RLS: user sees own; admins see all.
+- `chat_messages` — `id`, `conversation_id`, `role` (`user` | `assistant` | `tool`), `content` (text), `tool_calls` (jsonb), `model`, `tokens_in`, `tokens_out`, `created_at`. RLS scoped via parent conversation.
+- GRANTs to `authenticated` + `service_role`.
 
-## Column mapping (P21 SQL → `price_list`)
+### Server functions (`src/lib/ask-nelson.functions.ts`)
+- `listConversations` — current user's conversations, ordered by `updated_at`.
+- `getConversation(id)` — messages for one conversation (auth-scoped).
+- `createConversation()` — new empty conversation, returns id.
+- `deleteConversation(id)`.
+- `askNelson({ conversationId, message, escalate? })` — main entry; non-streaming for v1 (simpler, fits the "concise answer" goal).
 
-| P21 column                          | `price_list` column   |
-|-------------------------------------|-----------------------|
-| `inv_mast.item_id`                  | `item`                |
-| `inv_mast.item_desc`                | `description`         |
-| `list_price`                        | `list_price`          |
-| `cost`                              | `dealer_cost`         |
-| `price1`–`price5`                   | `price_l1`–`price_l5` |
-| `price7` (Showroom)                 | `price_showroom` (NEW)|
-| `vendor.vendor_name`                | `mfg`                 |
-| `inventory_supplier.supplier_part_no` | `cat_number`        |
+### `askNelson` flow (anti-hallucination)
+1. Load conversation history (last ~20 messages).
+2. **Prompt improvement pass** — quick Flash call rewrites the user message into a precise question + lists which tables/filters are likely relevant. Stored internally, not shown.
+3. **Tool-calling loop** with Lovable AI (`google/gemini-3-flash-preview` by default; `openai/gpt-5.4` with `reasoning.effort: "high"` when `escalate=true` or when the user message matches challenge phrases like "are you sure", "double-check", "dig deeper", "that's wrong"). Tools exposed to the model:
+   - `list_tables()` — returns the whitelisted schema (tables + columns) from a hardcoded catalog so the model knows what exists.
+   - `query_table({ table, select, filters, order, limit })` — server validates `table` against the whitelist, builds a parameterized Supabase query via `supabaseAdmin`, caps `limit` at 200, returns rows + `rowCount`. Read-only — no insert/update/delete tools exposed.
+   - `count_table({ table, filters })` — cheap existence/count check.
+   - `sample_table({ table, limit })` — small sample for the model to inspect shape.
+4. **System prompt rules** (enforced every call):
+   - Only answer from tool results actually returned in this turn.
+   - If tools return zero rows or the answer can't be grounded, reply exactly: *"I don't know based on the data I can see."*
+   - Keep responses to 1–3 short sentences unless the user asks for detail.
+   - Never invent SKUs, customer names, totals, dates.
+   - Cite the table(s) used in a trailing `_sources:_` line (small, muted).
+5. **Escalation** — if `escalate=true` (user clicked "Dig deeper" or asked a challenge phrase), rerun with gpt-5.4 + `reasoning.effort: "high"`, allow up to 8 tool calls instead of 4, and broaden default limits.
+6. Persist user message, assistant reply, and tool-call trace into `chat_messages`. Auto-title the conversation from the first user message via a one-shot Flash call.
 
-`source` is set to `'p21_sql'` on every synced row. After sync, `recomputeFamilies()` runs to refresh `item_short`.
+### Table whitelist (read-only, exposed to the tools)
+All current `public` tables except `user_roles` and `profiles.email` (PII trim). Includes: `orders`, `inbound_emails`, `price_list`, `inventory_snapshots`, `e2g_inventory_snapshot`, `ar_aging`, `collection_emails`, `damage_reports`, `fleet_loads`, `fleet_routes`, `design_quotes`, `design_quote_lines`, `spiff_calculations`, `spiff_rules`, `catalogs`, `catalog_items`, `website_items`, `website_crawls`, `sku_crossref`, `pricer_publications`, `activity_events`, `app_settings`, `sales_cache`, `report_runs`, `report_schedules`, `p21_bridge_jobs`, `p21_bridge_agents`.
 
-If `dealer_cost`, `cat_number`, or `mfg` are wrong targets, say so before approving and I'll adjust.
+### UI
+- **`src/routes/_app.ask.tsx`** — two-pane chat: left = conversation list with "New chat", right = messages rendered with `react-markdown`, input box, "Dig deeper" button visible on the last assistant message.
+- **`src/components/ask-nelson/AskNelsonBubble.tsx`** — floating button + popover panel, mounted from `src/routes/_app.tsx`. Reuses the same hooks/server fns.
+- **`src/hooks/useAskNelson.ts`** — TanStack Query wrapper: `useConversations`, `useConversation(id)`, `useSendMessage` (mutation, invalidates conversation).
+- Sidebar: add new "Assistant" group → `Ask Nelson` → `/ask` (icon: `Sparkles`).
 
-## Phases
+### Anti-hallucination summary
+- Whitelisted tool surface (model can't query arbitrary SQL).
+- Tool-grounded responses only; explicit "I don't know" fallback.
+- Prompt-rewrite pre-pass narrows scope before tool selection.
+- Source citation per answer.
+- Escalation path uses stronger reasoning + more tool budget, not more freedom to guess.
 
-### Phase 1 — Database
-
-Add one column to `price_list`:
-
-```sql
-ALTER TABLE public.price_list ADD COLUMN IF NOT EXISTS price_showroom numeric;
-```
-
-### Phase 2 — Bridge handler (Node agent)
-
-New file `agent/handlers/pricer-sync.js` containing the supplied SQL verbatim. Returns `{ rows, count }`. Registered in `agent/handlers/index.js` under kind `"pricer.sync"`. The agent must be redeployed via the existing GitHub release workflow for the new handler to be available.
-
-### Phase 3 — Server function
-
-New `syncPricerFromP21` in `src/lib/p21.functions.ts`:
-1. Admin-only.
-2. `runJob("pricer.sync", {}, 120000)` — bridge fetches rows from P21.
-3. Upsert into `price_list` on `item` (unique index already exists), mapping columns per the table above, setting `source = 'p21_sql'`.
-4. Delete rows where `source = 'p21_sql'` and `item NOT IN (synced items)` so removed SKUs disappear.
-5. Call `recomputeFamilies()`.
-6. Insert an `activity_events` row: `pricer.synced` with row count.
-7. Return `{ imported, removed, families_updated }`.
-
-### Phase 4 — UI
-
-On `/pricer` (admin only): add a "Sync from P21" button next to the existing header actions. Uses TanStack Query mutation + Sonner toast. Disables while running. Invalidates pricer queries on success.
-
-### Phase 5 — Scheduled sync
-
-New public route `src/routes/api/public/hooks/sync-pricer.ts`:
-- Validates `apikey` header against `SUPABASE_ANON_KEY`.
-- Calls `applyPricerSyncServerOnly()` (a `createServerOnlyFn` wrapper around the same logic).
-- Returns `{ imported, removed }`.
-
-Cron job (created via `supabase--insert`, not migration — stable URL pattern):
-```sql
-select cron.schedule(
-  'sync-pricer-nightly',
-  '0 6 * * *',  -- 06:00 UTC nightly
-  $$ select net.http_post(
-       url := 'https://project--8f98c139-aabe-4588-ba0d-f1c274f9fea8.lovable.app/api/public/hooks/sync-pricer',
-       headers := '{"Content-Type":"application/json","apikey":"<ANON_KEY>"}'::jsonb,
-       body := '{}'::jsonb
-     ) $$
-);
-```
-
-## Out of scope
-
-- No changes to pricer family logic, image cache, PDF export, or order pricing lookups.
-- No removal of existing `price_list` rows from other sources unless they happen to share an `item` value (upserted).
-- No new admin role; reuses existing `admin` checks.
-
-## Files touched
-
-- `supabase/migrations/<new>.sql` — add `price_showroom`
-- `agent/handlers/pricer-sync.js` (new)
-- `agent/handlers/index.js` — register `pricer.sync`
-- `src/lib/p21.functions.ts` — `syncPricerFromP21`, `applyPricerSyncServerOnly`
-- `src/lib/p21.server.ts` — `applyPricerSync()` helper
-- `src/routes/_app.pricer.tsx` — Sync button
-- `src/routes/api/public/hooks/sync-pricer.ts` (new) — cron endpoint
-- Cron job inserted via `supabase--insert`
+### Out of scope (v1)
+- Streaming responses (can add later).
+- Writes/mutations from chat.
+- Cross-tenant scoping (single-tenant app today).
