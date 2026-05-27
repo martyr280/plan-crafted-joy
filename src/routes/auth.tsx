@@ -24,7 +24,12 @@ function AuthPage() {
   const [magicEmail, setMagicEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [magicLoading, setMagicLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  const sendMagicLink = useServerFn(requestMagicLink);
+  const sendPasswordReset = useServerFn(requestPasswordReset);
+
 
   useEffect(() => {
     setMounted(true);
