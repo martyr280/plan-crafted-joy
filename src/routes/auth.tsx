@@ -70,14 +70,29 @@ function AuthPage() {
   async function magicLink(e: React.FormEvent) {
     e.preventDefault();
     setMagicLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: magicEmail,
-      options: { emailRedirectTo: `${window.location.origin}/` },
-    });
-    setMagicLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Check your email for the magic link.");
+    try {
+      await sendMagicLink({ data: { email: magicEmail } });
+      toast.success("Check your email for the sign-in link.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to send magic link.");
+    } finally {
+      setMagicLoading(false);
+    }
   }
+
+  async function forgotPassword() {
+    if (!email) return toast.error("Enter your email above first.");
+    setResetLoading(true);
+    try {
+      await sendPasswordReset({ data: { email } });
+      toast.success("If an account exists, a reset link has been sent.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to send reset email.");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
 
   async function googleSignIn() {
     const { lovable } = await import("@/integrations/lovable/index");
