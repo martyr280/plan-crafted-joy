@@ -65,8 +65,9 @@ export async function fetchTrips(opts: { startMs: number; endMs: number; vehicle
     });
     let after: string | null = null;
     do {
-      const url = `/trips/stream?${params.toString()}${after ? `&after=${encodeURIComponent(after)}` : ""}`;
-      const data = await samsaraFetch<{ data: any[]; pagination?: { endCursor?: string; hasNextPage?: boolean } }>(url);
+      const url: string = `/trips/stream?${params.toString()}${after ? `&after=${encodeURIComponent(after)}` : ""}`;
+      const data: { data?: any[]; pagination?: { endCursor?: string; hasNextPage?: boolean } } =
+        await samsaraFetch(url);
       all.push(...(data.data ?? []));
       after = data.pagination?.hasNextPage ? data.pagination.endCursor ?? null : null;
     } while (after);
