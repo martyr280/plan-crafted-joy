@@ -240,18 +240,50 @@ function UsersAndRoles({ isAdmin, currentUserId, currentRoles }: { isAdmin: bool
     }
   }
 
+  function generatePassword() {
+    const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
+    const arr = new Uint32Array(16);
+    crypto.getRandomValues(arr);
+    const pw = Array.from(arr, (n) => charset[n % charset.length]).join("");
+    setInvitePassword(pw);
+  }
+
   async function submitInvite() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      await inviteFn({ data: { email: inviteEmail.trim(), roles: inviteRoles } });
-      toast.success(`Invite sent to ${inviteEmail.trim()}`);
+      if (inviteMode === "password") {
+        if (invitePassword.length < 8) {
+          toast.error("Password must be at least 8 characters");
+          setInviting(false);
+          return;
+        }
+        await createUserFn({
+          data: {
+            email: inviteEmail.trim(),
+            password: invitePassword,
+            displayName: inviteDisplayName.trim() || undefined,
+            roles: inviteRoles,
+            sendEmail: inviteEmailCreds,
+          },
+        });
+        toast.success(
+          inviteEmailCreds
+            ? `Account created and credentials emailed to ${inviteEmail.trim()}`
+            : `Account created for ${inviteEmail.trim()}`
+        );
+      } else {
+        await inviteFn({ data: { email: inviteEmail.trim(), roles: inviteRoles } });
+        toast.success(`Invite sent to ${inviteEmail.trim()}`);
+      }
       setInviteOpen(false);
       setInviteEmail("");
+      setInviteDisplayName("");
+      setInvitePassword("");
       setInviteRoles(["ops_orders"]);
       load();
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to send invite");
+      toast.error(e.message ?? "Failed to add user");
     } finally {
       setInviting(false);
     }
