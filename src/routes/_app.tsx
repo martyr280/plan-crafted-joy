@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { AskNelsonBubble } from "@/components/ask-nelson/AskNelsonBubble";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
