@@ -167,12 +167,17 @@ function UsersAndRoles({ isAdmin, currentUserId, currentRoles }: { isAdmin: bool
   const [claiming, setClaiming] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteDisplayName, setInviteDisplayName] = useState("");
   const [inviteRoles, setInviteRoles] = useState<AppRole[]>(["ops_orders"]);
+  const [inviteMode, setInviteMode] = useState<"email" | "password">("password");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [inviteEmailCreds, setInviteEmailCreds] = useState(true);
   const [inviting, setInviting] = useState(false);
   const [confirm, setConfirm] = useState<null | { title: string; description: string; action: () => Promise<void> }>(null);
 
   const listFn = useServerFn(listManagedUsers);
   const inviteFn = useServerFn(inviteUser);
+  const createUserFn = useServerFn(createUserWithPassword);
   const resetFn = useServerFn(sendPasswordReset);
   const revokeAllFn = useServerFn(revokeAllRoles);
   const disableFn = useServerFn(setUserDisabled);
