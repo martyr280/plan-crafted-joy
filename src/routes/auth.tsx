@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { requestMagicLink, requestPasswordReset } from "@/lib/auth-emails.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
+
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -21,7 +24,12 @@ function AuthPage() {
   const [magicEmail, setMagicEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [magicLoading, setMagicLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  const sendMagicLink = useServerFn(requestMagicLink);
+  const sendPasswordReset = useServerFn(requestPasswordReset);
+
 
   useEffect(() => {
     setMounted(true);
@@ -62,14 +70,29 @@ function AuthPage() {
   async function magicLink(e: React.FormEvent) {
     e.preventDefault();
     setMagicLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: magicEmail,
-      options: { emailRedirectTo: `${window.location.origin}/` },
-    });
-    setMagicLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Check your email for the magic link.");
+    try {
+      await sendMagicLink({ data: { email: magicEmail } });
+      toast.success("Check your email for the sign-in link.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to send magic link.");
+    } finally {
+      setMagicLoading(false);
+    }
   }
+
+  async function forgotPassword() {
+    if (!email) return toast.error("Enter your email above first.");
+    setResetLoading(true);
+    try {
+      await sendPasswordReset({ data: { email } });
+      toast.success("If an account exists, a reset link has been sent.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to send reset email.");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
 
   async function googleSignIn() {
     const { lovable } = await import("@/integrations/lovable/index");
@@ -128,8 +151,17 @@ function AuthPage() {
                   <div><Label>Email</Label><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
                   <div><Label>Password</Label><Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
                   <Button className="w-full" disabled={loading}>{loading ? "Signing in…" : "Sign in"}</Button>
+                  <button
+                    type="button"
+                    onClick={forgotPassword}
+                    disabled={resetLoading}
+                    className="text-xs text-muted-foreground hover:text-foreground underline w-full text-center"
+                  >
+                    {resetLoading ? "Sending…" : "Forgot password?"}
+                  </button>
                 </form>
               </TabsContent>
+
               <TabsContent value="signup">
                 <form onSubmit={signUp} className="space-y-4 mt-4">
                   <div><Label>Display name</Label><Input required value={name} onChange={(e) => setName(e.target.value)} /></div>

@@ -92,3 +92,18 @@ export async function sendNelsonPasswordResetEmail(to: string, actionUrl: string
     })
   );
 }
+
+export async function sendNelsonMagicLinkEmail(to: string, actionUrl: string) {
+  return sendResend(
+    to,
+    "Your Nelson AI sign-in link",
+    brandedHtml({
+      heading: "Sign in to Nelson AI",
+      intro: "Click the button below to sign in. If you didn't request this, you can safely ignore this email.",
+      ctaLabel: "Sign in",
+      ctaUrl: actionUrl,
+      footnote: "This link will expire in 1 hour and can only be used once.",
+    })
+  );
+}
+
