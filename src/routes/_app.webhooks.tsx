@@ -131,7 +131,7 @@ function WebhooksPage() {
               </TableCell></TableRow>
             )}
             {rows.map((r) => (
-              <TableRow key={r.id} className="cursor-pointer" onClick={() => setSelected(r)}>
+              <TableRow key={r.id} className="cursor-pointer" onClick={() => openDetail(r)}>
                 <TableCell className="text-sm text-muted-foreground" suppressHydrationWarning>
                   {formatDistanceToNow(new Date(r.received_at), { addSuffix: true })}
                 </TableCell>
