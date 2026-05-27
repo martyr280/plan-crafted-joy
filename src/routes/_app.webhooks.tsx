@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listWebhookDeliveries } from "@/lib/webhook-debug.functions";
+import { listWebhookDeliveries, getWebhookDelivery } from "@/lib/webhook-debug.functions";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
 import { RefreshCw, Webhook, CheckCircle2, AlertCircle, Clock, Mail } from "lucide-react";
