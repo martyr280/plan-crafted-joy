@@ -602,6 +602,7 @@ export type Database = {
           attachments: Json
           body_html: string | null
           body_text: string | null
+          change_type: string | null
           classification: string
           confidence: number | null
           created_record_id: string | null
@@ -611,10 +612,12 @@ export type Database = {
           from_name: string | null
           headers: Json
           id: string
+          is_internal: boolean
           message_id: string | null
           processed_at: string | null
           raw_payload: Json | null
           received_at: string
+          referenced_order_id: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: string
@@ -628,6 +631,7 @@ export type Database = {
           attachments?: Json
           body_html?: string | null
           body_text?: string | null
+          change_type?: string | null
           classification?: string
           confidence?: number | null
           created_record_id?: string | null
@@ -637,10 +641,12 @@ export type Database = {
           from_name?: string | null
           headers?: Json
           id?: string
+          is_internal?: boolean
           message_id?: string | null
           processed_at?: string | null
           raw_payload?: Json | null
           received_at?: string
+          referenced_order_id?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -654,6 +660,7 @@ export type Database = {
           attachments?: Json
           body_html?: string | null
           body_text?: string | null
+          change_type?: string | null
           classification?: string
           confidence?: number | null
           created_record_id?: string | null
@@ -663,10 +670,12 @@ export type Database = {
           from_name?: string | null
           headers?: Json
           id?: string
+          is_internal?: boolean
           message_id?: string | null
           processed_at?: string | null
           raw_payload?: Json | null
           received_at?: string
+          referenced_order_id?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -769,6 +778,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      order_change_requests: {
+        Row: {
+          change_type: string
+          created_at: string
+          id: string
+          inbound_email_id: string | null
+          notes: string | null
+          order_id: string | null
+          p21_order_id: string | null
+          payload: Json
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          change_type: string
+          created_at?: string
+          id?: string
+          inbound_email_id?: string | null
+          notes?: string | null
+          order_id?: string | null
+          p21_order_id?: string | null
+          payload?: Json
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          change_type?: string
+          created_at?: string
+          id?: string
+          inbound_email_id?: string | null
+          notes?: string | null
+          order_id?: string | null
+          p21_order_id?: string | null
+          payload?: Json
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: []
       }
       orders: {
         Row: {
@@ -1054,6 +1105,48 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_requests: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          id: string
+          inbound_email_id: string | null
+          line_items: Json
+          notes: string | null
+          resolved_at: string | null
+          status: string
+          subject: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          id?: string
+          inbound_email_id?: string | null
+          line_items?: Json
+          notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          subject?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          id?: string
+          inbound_email_id?: string | null
+          line_items?: Json
+          notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          subject?: string | null
+        }
+        Relationships: []
+      }
       report_runs: {
         Row: {
           completed_at: string | null
@@ -1143,6 +1236,54 @@ export type Database = {
           schedule_cron?: string
           template?: string | null
           type?: string
+        }
+        Relationships: []
+      }
+      rma_requests: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          id: string
+          inbound_email_id: string | null
+          items: Json
+          notes: string | null
+          original_invoice: string | null
+          original_order_id: string | null
+          reason: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          id?: string
+          inbound_email_id?: string | null
+          items?: Json
+          notes?: string | null
+          original_invoice?: string | null
+          original_order_id?: string | null
+          reason?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          id?: string
+          inbound_email_id?: string | null
+          items?: Json
+          notes?: string | null
+          original_invoice?: string | null
+          original_order_id?: string | null
+          reason?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
         }
         Relationships: []
       }
