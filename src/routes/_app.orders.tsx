@@ -265,8 +265,20 @@ function StatusBadge({ s }: { s: string }) {
                   </Table>
                 </div>
                 {selected.status === "pending_review" && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button onClick={() => approve(selected)} className="flex-1"><CheckCircle2 className="w-4 h-4 mr-2" /> Approve & Submit to P21</Button>
+                    <Button variant="outline" disabled={reExtracting} onClick={async () => {
+                      setReExtracting(true);
+                      try {
+                        const r: any = await reExtractFn({ data: { orderId: selected.id } });
+                        toast.success(`Re-extracted ${r.line_count} line item(s)`);
+                        setSelected(null); load();
+                      } catch (e: any) { toast.error(e?.message ?? "Re-extract failed"); }
+                      finally { setReExtracting(false); }
+                    }}>
+                      <RefreshCw className={`w-4 h-4 mr-2 ${reExtracting ? "animate-spin" : ""}`} />
+                      Re-extract line items
+                    </Button>
                     <Button variant="outline" onClick={() => reject(selected)}><X className="w-4 h-4 mr-2" /> Reject</Button>
                   </div>
                 )}
