@@ -40,8 +40,8 @@ function StatusBadge({ s }: { s: string }) {
   return <Badge className={map[s] ?? ""}>{s.replace(/_/g, " ")}</Badge>;
 }
 
-function OrdersPage() {
   const submitOrderToP21Fn = useServerFn(submitOrderToP21);
+  const reExtractFn = useServerFn(reExtractOrderLineItems);
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
@@ -49,7 +49,9 @@ function OrdersPage() {
   const [emailText, setEmailText] = useState("");
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [parsing, setParsing] = useState(false);
-  const [stats, setStats] = useState({ today: 0, approved: 0, pending: 0 });
+  const [reExtracting, setReExtracting] = useState(false);
+  const [missingOnly, setMissingOnly] = useState(false);
+  const [stats, setStats] = useState({ today: 0, approved: 0, pending: 0, missing: 0 });
 
   async function load() {
     const { data } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
