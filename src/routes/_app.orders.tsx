@@ -160,10 +160,18 @@ function StatusBadge({ s }: { s: string }) {
         }
       />
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6">
         <Card className="p-4"><p className="text-sm text-muted-foreground">Today received</p><p className="text-2xl font-bold">{stats.today}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Pending review</p><p className="text-2xl font-bold">{stats.pending}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Submitted</p><p className="text-2xl font-bold">{stats.approved}</p></Card>
+        <Card
+          className={`p-4 cursor-pointer transition ${missingOnly ? "border-warning bg-warning/5" : "hover:bg-muted/40"}`}
+          onClick={() => setMissingOnly((v) => !v)}
+        >
+          <p className="text-sm text-muted-foreground">Missing line items</p>
+          <p className="text-2xl font-bold text-warning">{stats.missing}</p>
+          <p className="text-xs text-muted-foreground mt-1">{missingOnly ? "Filtering" : "Click to filter"}</p>
+        </Card>
       </div>
 
       <Card>
@@ -176,21 +184,28 @@ function StatusBadge({ s }: { s: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orders.map((o) => (
-              <TableRow key={o.id} className="cursor-pointer" onClick={() => setSelected(o)}>
-                <TableCell className="text-sm text-muted-foreground">{formatDistanceToNow(new Date(o.created_at), { addSuffix: true })}</TableCell>
-                <TableCell className="font-medium">{o.customer_name}</TableCell>
-                <TableCell>{o.po_number ?? "—"}</TableCell>
-                <TableCell>{(o.line_items as any[])?.length ?? 0}</TableCell>
-                <TableCell><ConfBadge v={o.ai_confidence} /></TableCell>
-                <TableCell>{(o.ai_flags as any[])?.length ? <span className="inline-flex items-center gap-1 text-warning text-sm"><AlertCircle className="w-3 h-3" />{(o.ai_flags as any[]).length}</span> : "—"}</TableCell>
-                <TableCell><StatusBadge s={o.status} /></TableCell>
-                <TableCell><Button size="sm" variant="ghost">Review</Button></TableCell>
-              </TableRow>
-            ))}
+            {orders
+              .filter((o) => !missingOnly || (o.status === "pending_review" && ((o.line_items as any[])?.length ?? 0) === 0))
+              .map((o) => {
+                const lines = (o.line_items as any[])?.length ?? 0;
+                const missing = o.status === "pending_review" && lines === 0;
+                return (
+                  <TableRow key={o.id} className="cursor-pointer" onClick={() => setSelected(o)}>
+                    <TableCell className="text-sm text-muted-foreground">{formatDistanceToNow(new Date(o.created_at), { addSuffix: true })}</TableCell>
+                    <TableCell className="font-medium">{o.customer_name}</TableCell>
+                    <TableCell>{o.po_number ?? "—"}</TableCell>
+                    <TableCell>{missing ? <span className="text-warning font-medium">0 ⚠</span> : lines}</TableCell>
+                    <TableCell><ConfBadge v={o.ai_confidence} /></TableCell>
+                    <TableCell>{(o.ai_flags as any[])?.length ? <span className="inline-flex items-center gap-1 text-warning text-sm"><AlertCircle className="w-3 h-3" />{(o.ai_flags as any[]).length}</span> : "—"}</TableCell>
+                    <TableCell><StatusBadge s={o.status} /></TableCell>
+                    <TableCell><Button size="sm" variant="ghost">Review</Button></TableCell>
+                  </TableRow>
+                );
+              })}
           </TableBody>
         </Table>
       </Card>
+
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
