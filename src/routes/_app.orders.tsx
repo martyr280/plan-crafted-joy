@@ -61,6 +61,7 @@ function StatusBadge({ s }: { s: string }) {
       today: (data ?? []).filter((o) => new Date(o.created_at) >= today).length,
       approved: (data ?? []).filter((o) => ["submitted_to_p21", "acknowledged"].includes(o.status)).length,
       pending: (data ?? []).filter((o) => o.status === "pending_review").length,
+      missing: (data ?? []).filter((o) => o.status === "pending_review" && ((o.line_items as any[])?.length ?? 0) === 0).length,
     });
   }
   useEffect(() => { load(); }, []);
