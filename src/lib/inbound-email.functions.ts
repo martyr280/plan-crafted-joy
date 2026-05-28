@@ -92,4 +92,52 @@ export const dismissInboundEmail = createServerFn({ method: "POST" })
       reviewed_at: new Date().toISOString(),
     }).eq("id", data.id);
     return { ok: true };
+    return { ok: true };
+  });
+
+// Re-run parse-po against an order's source inbound email and overwrite the order's line items.
+// Used to recover orders that came in with 0 line items because the first extraction missed the PDF.
+export const reExtractOrderLineItems = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ orderId: z.string().uuid() }).parse)
+  .handler(async ({ data }) => {
+    const { data: order, error: oErr } = await supabaseAdmin
+      .from("orders").select("id, raw_input").eq("id", data.orderId).single();
+    if (oErr || !order) throw new Error(oErr?.message ?? "Order not found");
+
+    // Find the linking inbound email (created_record_id = this order id).
+    const { data: inbound } = await supabaseAdmin
+      .from("inbound_emails")
+      .select("id, from_addr, subject, body_text, attachments")
+      .eq("created_record_id", data.orderId)
+      .eq("created_record_type", "order")
+      .maybeSingle();
+
+    const attachments = Array.isArray(inbound?.attachments) ? inbound!.attachments : [];
+    const email_content = inbound
+      ? `From: ${inbound.from_addr}\nSubject: ${inbound.subject ?? ""}\n\n${inbound.body_text ?? ""}`
+      : (order.raw_input ?? "");
+
+    const url = `${process.env.SUPABASE_URL}/functions/v1/parse-po`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ email_content, attachments }),
+    });
+    if (!r.ok) throw new Error(`parse-po ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    const po = await r.json();
+    if (po?.error) throw new Error(po.error);
+
+    const lineItems = Array.isArray(po.line_items) ? po.line_items : [];
+    const flags = Array.isArray(po.flags) ? po.flags : [];
+    await supabaseAdmin.from("orders").update({
+      line_items: lineItems,
+      ai_confidence: typeof po.confidence === "number" ? po.confidence : undefined,
+      ai_flags: flags,
+      ...(po.customer_name ? { customer_name: po.customer_name } : {}),
+      ...(po.po_number ? { po_number: po.po_number } : {}),
+      ...(po.ship_to ? { ship_to: po.ship_to } : {}),
+    }).eq("id", data.orderId);
+
+    return { ok: true, line_count: lineItems.length, flags: flags.length };
   });
