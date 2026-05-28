@@ -56,7 +56,8 @@ function BridgeAdminPage() {
   const enqueueP21JobFn = useServerFn(enqueueP21Job);
   const retryBridgeJobFn = useServerFn(retryBridgeJob);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [retrying, setRetrying] = useState<string | null>(null);
+  const [recent, setRecent] = useState<Job[]>([]);
+
 
   // SQL console state
   const runP21SqlFn = useServerFn(runP21Sql);
