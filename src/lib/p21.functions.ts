@@ -269,3 +269,38 @@ export const submitOrderToP21 = createServerFn({ method: "POST" })
 
     return { p21OrderId };
   });
+
+const SqlSchema = z.object({
+  sql: z.string().min(1).max(20000),
+  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+  maxRows: z.number().int().min(1).max(50000).optional(),
+});
+
+export const runP21Sql = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => SqlSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const trimmed = data.sql.trim().replace(/;\s*$/, "");
+    const head = trimmed.replace(/^;\s*/, "").slice(0, 6).toLowerCase();
+    if (!head.startsWith("select") && !head.startsWith("with")) {
+      throw new Error("Only SELECT or WITH queries are allowed.");
+    }
+    if (trimmed.includes(";")) {
+      throw new Error("Only a single statement is allowed (remove ';').");
+    }
+    const { result } = await runJob(
+      "sql.select",
+      { sql: data.sql, params: data.params ?? {}, slug: "adhoc" },
+      60000
+    );
+    const r = result as { rows?: any[]; count?: number; truncated?: boolean };
+    const rows = Array.isArray(r?.rows) ? r.rows : [];
+    const sliced = data.maxRows ? rows.slice(0, data.maxRows) : rows;
+    return {
+      rows: sliced,
+      count: typeof r?.count === "number" ? r.count : rows.length,
+      truncated: Boolean(r?.truncated) || sliced.length < rows.length,
+    };
+  });
+
