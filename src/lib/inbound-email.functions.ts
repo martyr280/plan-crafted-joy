@@ -35,7 +35,7 @@ export const listInboundEmails = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     let q = supabaseAdmin
       .from("inbound_emails")
-      .select("id, from_addr, from_name, subject, classification, confidence, status, ai_summary, created_record_type, created_record_id, received_at, processed_at, error")
+      .select("id, from_addr, from_name, subject, classification, confidence, status, ai_summary, created_record_type, created_record_id, received_at, processed_at, error, referenced_order_id, change_type, is_internal")
       .order("received_at", { ascending: false })
       .limit(data.limit);
     if (data.status && data.status !== "all") q = q.eq("status", data.status);
