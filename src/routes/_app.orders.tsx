@@ -39,7 +39,7 @@ function StatusBadge({ s }: { s: string }) {
   };
   return <Badge className={map[s] ?? ""}>{s.replace(/_/g, " ")}</Badge>;
 }
-
+function OrdersPage() {
   const submitOrderToP21Fn = useServerFn(submitOrderToP21);
   const reExtractFn = useServerFn(reExtractOrderLineItems);
   const { user } = useAuth();
