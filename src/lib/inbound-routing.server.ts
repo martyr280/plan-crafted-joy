@@ -8,6 +8,7 @@ type Row = {
   subject: string | null;
   body_text: string | null;
   attachments: any;
+  headers: any;
 };
 
 async function callEdge(name: string, body: any): Promise<any> {
@@ -27,10 +28,21 @@ async function callEdge(name: string, body: any): Promise<any> {
   return r.json();
 }
 
+// Resolve a referenced order id (P21 SO#) to a local orders row, if we have one.
+async function findLocalOrderByP21Id(p21OrderId: string | null): Promise<string | null> {
+  if (!p21OrderId) return null;
+  const { data } = await supabaseAdmin
+    .from("orders")
+    .select("id")
+    .eq("p21_order_id", p21OrderId)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 export async function classifyAndRouteInbound(id: string): Promise<{ status: string; classification: string }> {
   const { data: row, error: loadErr } = await supabaseAdmin
     .from("inbound_emails")
-    .select("id, from_addr, from_name, to_addr, subject, body_text, attachments")
+    .select("id, from_addr, from_name, to_addr, subject, body_text, attachments, headers")
     .eq("id", id)
     .single();
   if (loadErr || !row) throw new Error(loadErr?.message ?? "Inbound row not found");
@@ -42,25 +54,39 @@ export async function classifyAndRouteInbound(id: string): Promise<{ status: str
   };
 
   try {
-    // 1. Classify
+    // 1. Classify (with pre-filter inside the edge function for cheap noise rejection)
     const c = await callEdge("classify-inbound-email", {
       from_addr: r.from_addr,
+      to_addr: r.to_addr,
       subject: r.subject,
       body_text: r.body_text,
+      headers: r.headers ?? {},
     });
     const classification: string = c.classification ?? "unknown";
     const conf: number = Number(c.confidence ?? 0);
     let extracted: any = c.extracted ?? {};
     let flags: any[] = Array.isArray(c.flags) ? c.flags : [];
-    let summary: string | null = c.summary ?? null;
+    const summary: string | null = c.summary ?? null;
+    const referencedOrderId: string | null = c.referenced_order_id ?? extracted.p21_order_id ?? null;
+    const isInternal: boolean = !!c.is_internal;
 
     update.classification = classification;
     update.confidence = conf;
     update.ai_summary = summary;
     update.ai_extracted = extracted;
     update.ai_flags = flags;
+    update.referenced_order_id = referencedOrderId;
+    update.change_type = extracted?.change_type ?? null;
+    update.is_internal = isInternal;
 
-    // 2. For purchase orders, run parse-po (PDFs + price verification) for richer extraction.
+    // 2. Auto-dismiss noise categories without further routing.
+    if (c.auto_dismiss || ["auto_reply", "marketing", "internal"].includes(classification)) {
+      update.status = "dismissed";
+      await persistAndLog(id, r, update);
+      return { status: update.status, classification };
+    }
+
+    // 3. For purchase orders, run parse-po (PDFs + price verification) for richer extraction.
     if (classification === "purchase_order") {
       const attachments = Array.isArray(r.attachments) ? r.attachments : [];
       try {
@@ -68,7 +94,6 @@ export async function classifyAndRouteInbound(id: string): Promise<{ status: str
           email_content: `From: ${r.from_addr}\nSubject: ${r.subject ?? ""}\n\n${r.body_text ?? ""}`,
           attachments,
         });
-        // Merge: prefer parse-po line items / fields when present.
         if (po && !po.error) {
           extracted = {
             ...extracted,
@@ -89,11 +114,18 @@ export async function classifyAndRouteInbound(id: string): Promise<{ status: str
       }
     }
 
-    // 3. Route
-    const lowConf = (update.confidence ?? 0) < 0.75;
+    // 4. Route by classification
+    const lowConf = (update.confidence ?? 0) < 0.7;
+    const linkedOrderId = await findLocalOrderByP21Id(referencedOrderId);
+
     if (lowConf || classification === "unknown") {
       update.status = "needs_review";
     } else if (classification === "purchase_order") {
+      const lineItems = Array.isArray(extracted.line_items) ? extracted.line_items : [];
+      if (lineItems.length === 0) {
+        flags.push({ field: "line_items", issue: "no line items extracted", suggestion: "re-run extraction or enter manually" });
+        update.ai_flags = flags;
+      }
       const { data: ord } = await supabaseAdmin
         .from("orders")
         .insert({
@@ -104,7 +136,7 @@ export async function classifyAndRouteInbound(id: string): Promise<{ status: str
           source: "email_inbound",
           raw_input: `From: ${r.from_addr}\nSubject: ${r.subject ?? ""}\n\n${r.body_text ?? ""}`,
           status: "pending_review",
-          line_items: Array.isArray(extracted.line_items) ? extracted.line_items : [],
+          line_items: lineItems,
           ai_confidence: update.confidence,
           ai_flags: flags,
         })
@@ -113,6 +145,84 @@ export async function classifyAndRouteInbound(id: string): Promise<{ status: str
       update.status = "routed";
       update.created_record_type = "order";
       update.created_record_id = ord?.id ?? null;
+    } else if (classification === "order_change") {
+      const { data: ocr } = await supabaseAdmin
+        .from("order_change_requests")
+        .insert({
+          order_id: linkedOrderId,
+          p21_order_id: referencedOrderId,
+          inbound_email_id: id,
+          change_type: extracted.change_type ?? "other",
+          payload: {
+            details: extracted.change_details ?? null,
+            from: r.from_addr,
+            subject: r.subject,
+            ...extracted,
+          },
+          status: "open",
+        })
+        .select("id")
+        .single();
+      update.status = "routed";
+      update.created_record_type = "order_change_request";
+      update.created_record_id = ocr?.id ?? null;
+    } else if (classification === "quote_request") {
+      const { data: q } = await supabaseAdmin
+        .from("quote_requests")
+        .insert({
+          inbound_email_id: id,
+          customer_name: extracted.customer_name ?? r.from_name ?? r.from_addr,
+          customer_id: extracted.customer_id ?? null,
+          subject: r.subject,
+          line_items: Array.isArray(extracted.line_items) ? extracted.line_items : [],
+          notes: extracted.notes ?? null,
+          status: "open",
+        })
+        .select("id")
+        .single();
+      update.status = "routed";
+      update.created_record_type = "quote_request";
+      update.created_record_id = q?.id ?? null;
+    } else if (classification === "return_request") {
+      const { data: rma } = await supabaseAdmin
+        .from("rma_requests")
+        .insert({
+          inbound_email_id: id,
+          customer_name: extracted.customer_name ?? r.from_name ?? r.from_addr,
+          customer_id: extracted.customer_id ?? null,
+          original_invoice: extracted.invoice_number ?? null,
+          original_order_id: referencedOrderId,
+          items: Array.isArray(extracted.line_items) ? extracted.line_items : [],
+          reason: extracted.notes ?? null,
+          status: "open",
+        })
+        .select("id")
+        .single();
+      update.status = "routed";
+      update.created_record_type = "rma_request";
+      update.created_record_id = rma?.id ?? null;
+    } else if (classification === "tracking_request") {
+      // Surface as a change request of type "tracking" against the referenced order;
+      // actual P21 lookup + reply drafting is out of scope for this pass.
+      const { data: ocr } = await supabaseAdmin
+        .from("order_change_requests")
+        .insert({
+          order_id: linkedOrderId,
+          p21_order_id: referencedOrderId,
+          inbound_email_id: id,
+          change_type: "tracking",
+          payload: {
+            details: extracted.notes ?? "Customer requested tracking / POD",
+            from: r.from_addr,
+            subject: r.subject,
+          },
+          status: "open",
+        })
+        .select("id")
+        .single();
+      update.status = referencedOrderId ? "routed" : "needs_review";
+      update.created_record_type = "order_change_request";
+      update.created_record_id = ocr?.id ?? null;
     } else if (classification === "ar_reply") {
       let arId: string | null = null;
       if (extracted.invoice_number) {
@@ -141,7 +251,8 @@ export async function classifyAndRouteInbound(id: string): Promise<{ status: str
       const { data: dmg } = await supabaseAdmin
         .from("damage_reports")
         .insert({
-          p21_order_id: extracted.p21_order_id ?? null,
+          p21_order_id: referencedOrderId ?? extracted.p21_order_id ?? null,
+          order_id: linkedOrderId,
           route_code: extracted.route_code ?? null,
           stage: "delivery",
           severity: extracted.damage_severity ?? "minor",
@@ -165,21 +276,44 @@ export async function classifyAndRouteInbound(id: string): Promise<{ status: str
     } else {
       update.status = "needs_review";
     }
+
+    // 5. Thread the email body onto the referenced order's activity feed (any classification).
+    if (linkedOrderId) {
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "order.inbound_email",
+        entity_type: "order",
+        entity_id: linkedOrderId,
+        actor_name: r.from_name ?? r.from_addr,
+        message: `${classification.replace(/_/g, " ")}: ${r.subject ?? "(no subject)"}`,
+        metadata: {
+          inbound_email_id: id,
+          from: r.from_addr,
+          classification,
+          referenced_order_id: referencedOrderId,
+        },
+      });
+    }
   } catch (e: any) {
     update.status = "error";
     update.error = String(e?.message ?? e);
   }
 
-  await supabaseAdmin.from("inbound_emails").update(update).eq("id", id);
+  await persistAndLog(id, r, update);
+  return { status: update.status, classification: update.classification ?? "unknown" };
+}
 
+async function persistAndLog(id: string, r: Row, update: any) {
+  await supabaseAdmin.from("inbound_emails").update(update).eq("id", id);
   await supabaseAdmin.from("activity_events").insert({
     event_type: "inbound_email.processed",
     entity_type: "inbound_email",
     entity_id: id,
     actor_name: "system",
     message: `Inbound email from ${r.from_addr} → ${update.classification ?? "?"} (${update.status})`,
-    metadata: { confidence: update.confidence ?? null, created: update.created_record_type ?? null },
+    metadata: {
+      confidence: update.confidence ?? null,
+      created: update.created_record_type ?? null,
+      referenced_order_id: update.referenced_order_id ?? null,
+    },
   });
-
-  return { status: update.status, classification: update.classification ?? "unknown" };
 }
