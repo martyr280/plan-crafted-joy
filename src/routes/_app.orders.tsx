@@ -11,12 +11,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Plus, Sparkles, CheckCircle2, X, AlertCircle } from "lucide-react";
+import { Plus, Sparkles, CheckCircle2, X, AlertCircle, RefreshCw } from "lucide-react";
 import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { submitOrderToP21 } from "@/lib/p21.functions";
+import { reExtractOrderLineItems } from "@/lib/inbound-email.functions";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/orders")({ component: OrdersPage });
