@@ -56,7 +56,75 @@ function BridgeAdminPage() {
   const enqueueP21JobFn = useServerFn(enqueueP21Job);
   const retryBridgeJobFn = useServerFn(retryBridgeJob);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [recent, setRecent] = useState<Job[]>([]);
+  const [retrying, setRetrying] = useState<string | null>(null);
+
+  // SQL console state
+  const runP21SqlFn = useServerFn(runP21Sql);
+  const [sql, setSql] = useState<string>("SELECT TOP 50 * FROM inv_mast WHERE item_id = @item");
+  const [paramsJson, setParamsJson] = useState<string>('{\n  "item": ""\n}');
+  const [maxRows, setMaxRows] = useState<number>(200);
+  const [running, setRunning] = useState(false);
+  const [sqlError, setSqlError] = useState<string | null>(null);
+  const [sqlResult, setSqlResult] = useState<{ rows: any[]; count: number; truncated: boolean; ms: number } | null>(null);
+  const [recentSql, setRecentSql] = useState<string[]>([]);
+  const sqlTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("p21.sql.recent");
+      if (raw) setRecentSql(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  function pushRecent(q: string) {
+    const next = [q, ...recentSql.filter((s) => s !== q)].slice(0, 10);
+    setRecentSql(next);
+    try { localStorage.setItem("p21.sql.recent", JSON.stringify(next)); } catch {}
+  }
+
+  const columns = useMemo(() => {
+    if (!sqlResult?.rows?.length) return [] as string[];
+    return Object.keys(sqlResult.rows[0]);
+  }, [sqlResult]);
+
+  function buildCsv(): string {
+    if (!sqlResult?.rows?.length) return "";
+    const esc = (v: any) => {
+      const s = v === null || v === undefined ? "" : String(v);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = columns.join(",");
+    const lines = sqlResult.rows.map((r) => columns.map((c) => esc(r[c])).join(","));
+    return [header, ...lines].join("\n");
+  }
+
+  async function runSql() {
+    setSqlError(null);
+    let params: Record<string, any> | undefined;
+    const trimmedParams = paramsJson.trim();
+    if (trimmedParams && trimmedParams !== "{}") {
+      try {
+        params = JSON.parse(trimmedParams);
+      } catch (e: any) {
+        setSqlError(`Invalid params JSON: ${e.message}`);
+        return;
+      }
+    }
+    setRunning(true);
+    const t0 = performance.now();
+    try {
+      const res = await runP21SqlFn({ data: { sql, params, maxRows } });
+      setSqlResult({ ...(res as any), ms: Math.round(performance.now() - t0) });
+      pushRecent(sql);
+      refresh();
+    } catch (e: any) {
+      setSqlError(e.message ?? "Query failed");
+      setSqlResult(null);
+    } finally {
+      setRunning(false);
+    }
+  }
+
   const [pendingCount, setPendingCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
   const [loading, setLoading] = useState(false);
