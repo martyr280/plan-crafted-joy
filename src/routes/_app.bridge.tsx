@@ -263,6 +263,149 @@ function BridgeAdminPage() {
 
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 className="font-semibold flex items-center gap-2">
+            <Database className="w-4 h-4" /> SQL console
+          </h3>
+          {recentSql.length > 0 && (
+            <Select onValueChange={(v) => setSql(v)}>
+              <SelectTrigger className="w-[220px] h-8 text-xs">
+                <SelectValue placeholder="Recent queries" />
+              </SelectTrigger>
+              <SelectContent>
+                {recentSql.map((q, i) => (
+                  <SelectItem key={i} value={q} className="font-mono text-xs">
+                    {q.length > 60 ? q.slice(0, 60) + "…" : q}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mb-2">
+          Read-only (SELECT/WITH). Bind values with <code>@name</code> and supply them in the params JSON. Single statement only.
+        </p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="lg:col-span-2">
+            <Label className="text-xs">Query</Label>
+            <Textarea
+              ref={sqlTextareaRef}
+              value={sql}
+              onChange={(e) => setSql(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  if (!running) runSql();
+                }
+              }}
+              placeholder="SELECT TOP 50 * FROM inv_mast WHERE item_id = @item"
+              className="font-mono text-xs min-h-[180px]"
+            />
+          </div>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Params (JSON)</Label>
+              <Textarea
+                value={paramsJson}
+                onChange={(e) => setParamsJson(e.target.value)}
+                className="font-mono text-xs min-h-[120px]"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Max rows</Label>
+              <Input
+                type="number"
+                min={1}
+                max={50000}
+                value={maxRows}
+                onChange={(e) => setMaxRows(Math.max(1, Math.min(50000, Number(e.target.value) || 1)))}
+              />
+            </div>
+            <Button onClick={runSql} disabled={running} className="w-full">
+              {running ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+              Run query <span className="ml-2 text-[10px] opacity-70">⌘/Ctrl+↵</span>
+            </Button>
+          </div>
+        </div>
+
+        {sqlError && (
+          <pre className="mt-3 bg-destructive/10 text-destructive p-3 rounded text-xs whitespace-pre-wrap">{sqlError}</pre>
+        )}
+
+        {sqlResult && !sqlError && (
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="text-xs text-muted-foreground">
+                {sqlResult.count} row{sqlResult.count === 1 ? "" : "s"}
+                {sqlResult.truncated ? " (truncated)" : ""} · {sqlResult.ms}ms
+                {sqlResult.rows.length !== sqlResult.count ? ` · showing ${sqlResult.rows.length}` : ""}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(buildCsv());
+                      toast.success("CSV copied to clipboard");
+                    } catch {
+                      toast.error("Clipboard unavailable");
+                    }
+                  }}
+                  disabled={!sqlResult.rows.length}
+                >
+                  <Copy className="w-4 h-4 mr-1" /> Copy CSV
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const blob = new Blob([buildCsv()], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `p21-query-${Date.now()}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  disabled={!sqlResult.rows.length}
+                >
+                  <Download className="w-4 h-4 mr-1" /> Download .csv
+                </Button>
+              </div>
+            </div>
+            {sqlResult.rows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No rows returned.</p>
+            ) : (
+              <div className="border rounded max-h-[400px] overflow-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background">
+                    <TableRow>
+                      {columns.map((c) => (
+                        <TableHead key={c} className="text-xs whitespace-nowrap">{c}</TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sqlResult.rows.map((row, i) => (
+                      <TableRow key={i}>
+                        {columns.map((c) => (
+                          <TableCell key={c} className="text-xs font-mono whitespace-nowrap max-w-[300px] truncate" title={String(row[c] ?? "")}>
+                            {row[c] === null || row[c] === undefined ? <span className="text-muted-foreground">null</span> : String(row[c])}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
           <h3 className="font-semibold">Recent jobs</h3>
           <div className="flex gap-1 flex-wrap">
             {(["all", "pending", "claimed", "done", "error"] as const).map((f) => (
