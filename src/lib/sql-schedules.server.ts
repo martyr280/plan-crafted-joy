@@ -39,9 +39,12 @@ export function computeNextRun(cron: string, tz: string, from: Date = new Date()
   return it.next().toDate();
 }
 
-function toCsv(rows: any[]): string {
+function toCsv(rows: any[], columns?: string[]): string {
   if (!rows.length) return "";
-  const cols = Object.keys(rows[0]);
+  // Prefer explicit column order from the agent (preserves SELECT order).
+  // Falling back to Object.keys is unreliable because jsonb round-tripping
+  // does not preserve object-key order.
+  const cols = columns && columns.length ? columns : Object.keys(rows[0]);
   const esc = (v: any) => {
     const s = v === null || v === undefined ? "" : String(v);
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
