@@ -49,14 +49,7 @@ type Schedule = {
   last_error: string | null;
 };
 
-const CRON_PRESETS = [
-  { label: "Every hour", value: "0 * * * *" },
-  { label: "Daily at 06:00", value: "0 6 * * *" },
-  { label: "Daily at 08:00", value: "0 8 * * *" },
-  { label: "Weekdays 08:00", value: "0 8 * * 1-5" },
-  { label: "Mondays 08:00", value: "0 8 * * 1" },
-  { label: "1st of month 06:00", value: "0 6 1 * *" },
-];
+import { describeCron, defaultHuman, fromCron, toCron, WEEKDAYS, type HumanSchedule } from "@/lib/cron-human";
 
 function blankSchedule(): Schedule {
   return {
@@ -96,6 +89,11 @@ function SqlSchedulesPage() {
     try {
       const res = await list();
       setRows(((res as any).rows ?? []) as Schedule[]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => { refresh(); }, []);
 
   useEffect(() => {
@@ -112,11 +110,6 @@ function SqlSchedulesPage() {
       localStorage.removeItem("sql.schedule.prefill");
     } catch {}
   }, []);
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => { refresh(); }, []);
 
   async function handleRunNow(s: Schedule) {
     setRunningId(s.id);
@@ -150,6 +143,7 @@ function SqlSchedulesPage() {
       </div>
     );
   }
+
 
   return (
     <div className="space-y-6">
@@ -197,7 +191,10 @@ function SqlSchedulesPage() {
                     {s.action === "email" ? <><Mail className="w-3 h-3 mr-1 inline" /> email</> : <><Database className="w-3 h-3 mr-1 inline" /> price_list</>}
                   </Badge>
                 </TableCell>
-                <TableCell className="font-mono text-xs">{s.schedule_cron}<div className="text-[10px] text-muted-foreground">{s.timezone}</div></TableCell>
+                <TableCell className="text-xs">
+                  {describeCron(s.schedule_cron)}
+                  <div className="text-[10px] text-muted-foreground font-mono">{s.schedule_cron} · {s.timezone}</div>
+                </TableCell>
                 <TableCell className="text-xs">{s.next_run_at ? formatDistanceToNow(new Date(s.next_run_at), { addSuffix: true }) : "—"}</TableCell>
                 <TableCell className="text-xs">
                   {s.last_run_at ? formatDistanceToNow(new Date(s.last_run_at), { addSuffix: true }) : "Never"}
@@ -346,17 +343,14 @@ function ScheduleEditor({
             )}
           </div>
 
-          <div>
-            <Label>Cron schedule</Label>
-            <Input value={s.schedule_cron} onChange={(e) => setS({ ...s, schedule_cron: e.target.value })} placeholder="0 8 * * 1" className="font-mono" />
-            <div className="flex flex-wrap gap-1 mt-1">
-              {CRON_PRESETS.map((p) => (
-                <Button key={p.value} size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => setS({ ...s, schedule_cron: p.value })}>
-                  {p.label}
-                </Button>
-              ))}
-            </div>
+          <div className="md:col-span-2">
+            <Label>Schedule</Label>
+            <ScheduleBuilder
+              cron={s.schedule_cron}
+              onChange={(cron) => setS({ ...s, schedule_cron: cron })}
+            />
           </div>
+
 
           <div>
             <Label>Timezone</Label>
@@ -439,3 +433,107 @@ function ScheduleEditor({
     </Dialog>
   );
 }
+
+function ScheduleBuilder({ cron, onChange }: { cron: string; onChange: (cron: string) => void }) {
+  const [h, setH] = useState<HumanSchedule>(() => fromCron(cron || "0 8 * * 1"));
+
+  // Keep internal state in sync if parent cron changes (e.g. preset click)
+  useEffect(() => {
+    const next = fromCron(cron);
+    setH((prev) => (toCron(prev) === cron ? prev : next));
+  }, [cron]);
+
+  function update(patch: Partial<HumanSchedule>) {
+    const merged = { ...h, ...patch };
+    setH(merged);
+    onChange(toCron(merged));
+  }
+
+  const showTime = h.frequency === "daily" || h.frequency === "weekly" || h.frequency === "monthly";
+  const showMinuteOnly = h.frequency === "hourly";
+
+  return (
+    <div className="space-y-2 rounded-md border p-3 bg-muted/30">
+      <div className="grid gap-2 sm:grid-cols-[160px_1fr] items-center">
+        <Label className="text-xs">Run</Label>
+        <Select value={h.frequency} onValueChange={(v) => update({ frequency: v as HumanSchedule["frequency"] })}>
+          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="minutely">Every minute</SelectItem>
+            <SelectItem value="hourly">Every hour</SelectItem>
+            <SelectItem value="daily">Every day</SelectItem>
+            <SelectItem value="weekly">Every week</SelectItem>
+            <SelectItem value="monthly">Every month</SelectItem>
+            <SelectItem value="custom">Custom cron…</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {h.frequency === "weekly" && (
+          <>
+            <Label className="text-xs">On</Label>
+            <Select value={String(h.weekday)} onValueChange={(v) => update({ weekday: Number(v) })}>
+              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {WEEKDAYS.map((d) => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+
+        {h.frequency === "monthly" && (
+          <>
+            <Label className="text-xs">Day of month</Label>
+            <Input
+              type="number" min={1} max={31} className="h-8 w-24"
+              value={h.day}
+              onChange={(e) => update({ day: Number(e.target.value) || 1 })}
+            />
+          </>
+        )}
+
+        {showTime && (
+          <>
+            <Label className="text-xs">At</Label>
+            <Input
+              type="time" className="h-8 w-32"
+              value={`${String(h.hour).padStart(2, "0")}:${String(h.minute).padStart(2, "0")}`}
+              onChange={(e) => {
+                const [hh, mm] = e.target.value.split(":").map(Number);
+                update({ hour: hh || 0, minute: mm || 0 });
+              }}
+            />
+          </>
+        )}
+
+        {showMinuteOnly && (
+          <>
+            <Label className="text-xs">At minute</Label>
+            <Input
+              type="number" min={0} max={59} className="h-8 w-24"
+              value={h.minute}
+              onChange={(e) => update({ minute: Number(e.target.value) || 0 })}
+            />
+          </>
+        )}
+
+        {h.frequency === "custom" && (
+          <>
+            <Label className="text-xs">Cron expression</Label>
+            <Input
+              className="h-8 font-mono"
+              value={h.cron}
+              placeholder="0 8 * * 1"
+              onChange={(e) => update({ cron: e.target.value })}
+            />
+          </>
+        )}
+      </div>
+
+      <div className="text-xs text-muted-foreground flex items-center justify-between pt-1">
+        <span>{describeCron(toCron(h))}</span>
+        <span className="font-mono text-[10px]">{toCron(h)}</span>
+      </div>
+    </div>
+  );
+}
+
