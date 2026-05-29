@@ -128,6 +128,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
         120_000
       );
       const rows = ((result as any)?.rows ?? []) as any[];
+      const columns = ((result as any)?.columns ?? undefined) as string[] | undefined;
       rowCount = rows.length;
 
       if (schedule.recipients.length === 0) {
@@ -145,7 +146,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
         subject,
         htmlIntro: html,
         filename,
-        csv: toCsv(rows),
+        csv: toCsv(rows, columns),
       });
     }
   } catch (e: any) {
