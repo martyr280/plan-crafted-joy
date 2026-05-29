@@ -96,8 +96,22 @@ function SqlSchedulesPage() {
     try {
       const res = await list();
       setRows(((res as any).rows ?? []) as Schedule[]);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load schedules");
+  useEffect(() => { refresh(); }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!new URLSearchParams(window.location.search).get("prefill")) return;
+    try {
+      const raw = localStorage.getItem("sql.schedule.prefill");
+      if (!raw) return;
+      const { sql, params } = JSON.parse(raw);
+      const s = blankSchedule();
+      s.sql = sql ?? s.sql;
+      try { s.params = params ? JSON.parse(params) : {}; } catch { s.params = {}; }
+      setEditing(s);
+      localStorage.removeItem("sql.schedule.prefill");
+    } catch {}
+  }, []);
     } finally {
       setLoading(false);
     }
