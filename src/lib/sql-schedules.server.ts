@@ -23,8 +23,9 @@ export type ScheduleRow = {
 };
 
 export function validateSelectSql(text: string) {
-  const trimmed = text.trim().replace(/;\s*$/, "");
-  const head = trimmed.replace(/^;\s*/, "").slice(0, 6).toLowerCase();
+  // Strip leading/trailing semicolons (T-SQL `;WITH` idiom is common).
+  const trimmed = text.trim().replace(/^;\s*/, "").replace(/;\s*$/, "");
+  const head = trimmed.slice(0, 6).toLowerCase();
   if (!head.startsWith("select") && !head.startsWith("with")) {
     throw new Error("Only SELECT or WITH queries are allowed.");
   }
