@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWebhooksRouteImport } from './routes/_app.webhooks'
+import { Route as AppSqlSchedulesRouteImport } from './routes/_app.sql-schedules'
 import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
@@ -61,6 +62,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppWebhooksRoute = AppWebhooksRouteImport.update({
   id: '/webhooks',
   path: '/webhooks',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSqlSchedulesRoute = AppSqlSchedulesRouteImport.update({
+  id: '/sql-schedules',
+  path: '/sql-schedules',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSpiffRoute = AppSpiffRouteImport.update({
@@ -206,6 +212,7 @@ export interface FileRoutesByFullPath {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
+  '/sql-schedules': typeof AppSqlSchedulesRoute
   '/webhooks': typeof AppWebhooksRoute
   '/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
@@ -235,6 +242,7 @@ export interface FileRoutesByTo {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
+  '/sql-schedules': typeof AppSqlSchedulesRoute
   '/webhooks': typeof AppWebhooksRoute
   '/': typeof AppIndexRoute
   '/reports/e2g': typeof AppReportsE2gRoute
@@ -267,6 +275,7 @@ export interface FileRoutesById {
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/spiff': typeof AppSpiffRoute
+  '/_app/sql-schedules': typeof AppSqlSchedulesRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/_app/': typeof AppIndexRoute
   '/_app/reports/e2g': typeof AppReportsE2gRoute
@@ -300,6 +309,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/spiff'
+    | '/sql-schedules'
     | '/webhooks'
     | '/reports/e2g'
     | '/api/public/inbound-email'
@@ -329,6 +339,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/spiff'
+    | '/sql-schedules'
     | '/webhooks'
     | '/'
     | '/reports/e2g'
@@ -360,6 +371,7 @@ export interface FileRouteTypes {
     | '/_app/sales'
     | '/_app/settings'
     | '/_app/spiff'
+    | '/_app/sql-schedules'
     | '/_app/webhooks'
     | '/_app/'
     | '/_app/reports/e2g'
@@ -417,6 +429,13 @@ declare module '@tanstack/react-router' {
       path: '/webhooks'
       fullPath: '/webhooks'
       preLoaderRoute: typeof AppWebhooksRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sql-schedules': {
+      id: '/_app/sql-schedules'
+      path: '/sql-schedules'
+      fullPath: '/sql-schedules'
+      preLoaderRoute: typeof AppSqlSchedulesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/spiff': {
@@ -608,6 +627,7 @@ interface AppRouteChildren {
   AppSalesRoute: typeof AppSalesRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSpiffRoute: typeof AppSpiffRoute
+  AppSqlSchedulesRoute: typeof AppSqlSchedulesRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
   AppReportsE2gRoute: typeof AppReportsE2gRoute
@@ -632,6 +652,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSalesRoute: AppSalesRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSpiffRoute: AppSpiffRoute,
+  AppSqlSchedulesRoute: AppSqlSchedulesRoute,
   AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,
   AppReportsE2gRoute: AppReportsE2gRoute,
