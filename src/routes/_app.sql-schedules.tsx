@@ -433,3 +433,107 @@ function ScheduleEditor({
     </Dialog>
   );
 }
+
+function ScheduleBuilder({ cron, onChange }: { cron: string; onChange: (cron: string) => void }) {
+  const [h, setH] = useState<HumanSchedule>(() => fromCron(cron || "0 8 * * 1"));
+
+  // Keep internal state in sync if parent cron changes (e.g. preset click)
+  useEffect(() => {
+    const next = fromCron(cron);
+    setH((prev) => (toCron(prev) === cron ? prev : next));
+  }, [cron]);
+
+  function update(patch: Partial<HumanSchedule>) {
+    const merged = { ...h, ...patch };
+    setH(merged);
+    onChange(toCron(merged));
+  }
+
+  const showTime = h.frequency === "daily" || h.frequency === "weekly" || h.frequency === "monthly";
+  const showMinuteOnly = h.frequency === "hourly";
+
+  return (
+    <div className="space-y-2 rounded-md border p-3 bg-muted/30">
+      <div className="grid gap-2 sm:grid-cols-[160px_1fr] items-center">
+        <Label className="text-xs">Run</Label>
+        <Select value={h.frequency} onValueChange={(v) => update({ frequency: v as HumanSchedule["frequency"] })}>
+          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="minutely">Every minute</SelectItem>
+            <SelectItem value="hourly">Every hour</SelectItem>
+            <SelectItem value="daily">Every day</SelectItem>
+            <SelectItem value="weekly">Every week</SelectItem>
+            <SelectItem value="monthly">Every month</SelectItem>
+            <SelectItem value="custom">Custom cron…</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {h.frequency === "weekly" && (
+          <>
+            <Label className="text-xs">On</Label>
+            <Select value={String(h.weekday)} onValueChange={(v) => update({ weekday: Number(v) })}>
+              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {WEEKDAYS.map((d) => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+
+        {h.frequency === "monthly" && (
+          <>
+            <Label className="text-xs">Day of month</Label>
+            <Input
+              type="number" min={1} max={31} className="h-8 w-24"
+              value={h.day}
+              onChange={(e) => update({ day: Number(e.target.value) || 1 })}
+            />
+          </>
+        )}
+
+        {showTime && (
+          <>
+            <Label className="text-xs">At</Label>
+            <Input
+              type="time" className="h-8 w-32"
+              value={`${String(h.hour).padStart(2, "0")}:${String(h.minute).padStart(2, "0")}`}
+              onChange={(e) => {
+                const [hh, mm] = e.target.value.split(":").map(Number);
+                update({ hour: hh || 0, minute: mm || 0 });
+              }}
+            />
+          </>
+        )}
+
+        {showMinuteOnly && (
+          <>
+            <Label className="text-xs">At minute</Label>
+            <Input
+              type="number" min={0} max={59} className="h-8 w-24"
+              value={h.minute}
+              onChange={(e) => update({ minute: Number(e.target.value) || 0 })}
+            />
+          </>
+        )}
+
+        {h.frequency === "custom" && (
+          <>
+            <Label className="text-xs">Cron expression</Label>
+            <Input
+              className="h-8 font-mono"
+              value={h.cron}
+              placeholder="0 8 * * 1"
+              onChange={(e) => update({ cron: e.target.value })}
+            />
+          </>
+        )}
+      </div>
+
+      <div className="text-xs text-muted-foreground flex items-center justify-between pt-1">
+        <span>{describeCron(toCron(h))}</span>
+        <span className="font-mono text-[10px]">{toCron(h)}</span>
+      </div>
+    </div>
+  );
+}
+
