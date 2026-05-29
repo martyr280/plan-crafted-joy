@@ -1,4 +1,4 @@
-import { query } from "../sql.js";
+import { queryWithColumns } from "../sql.js";
 
 // payload: { sql, params?, slug?, maxRows? }
 // Read-only SELECT/WITH against P21. The DB login (P21_SQL_USER) should be
@@ -18,9 +18,12 @@ export async function sqlSelect(payload) {
     throw new Error("Only a single statement is allowed");
   }
 
-  const rows = await query(text, params);
+  const { rows, columns } = await queryWithColumns(text, params);
   const cap = Number.isFinite(maxRows) ? Math.max(1, Number(maxRows)) : 50000;
   const truncated = rows.length > cap;
   const out = truncated ? rows.slice(0, cap) : rows;
-  return { rows: out, count: out.length, truncated };
+  // `columns` preserves SELECT order; rows are an array (order preserved
+  // through jsonb). Object keys inside each row will NOT survive jsonb
+  // round-trip — consumers must use `columns` for column ordering.
+  return { rows: out, columns, count: out.length, truncated };
 }

@@ -39,9 +39,12 @@ export function computeNextRun(cron: string, tz: string, from: Date = new Date()
   return it.next().toDate();
 }
 
-function toCsv(rows: any[]): string {
+function toCsv(rows: any[], columns?: string[]): string {
   if (!rows.length) return "";
-  const cols = Object.keys(rows[0]);
+  // Prefer explicit column order from the agent (preserves SELECT order).
+  // Falling back to Object.keys is unreliable because jsonb round-tripping
+  // does not preserve object-key order.
+  const cols = columns && columns.length ? columns : Object.keys(rows[0]);
   const esc = (v: any) => {
     const s = v === null || v === undefined ? "" : String(v);
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -125,6 +128,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
         120_000
       );
       const rows = ((result as any)?.rows ?? []) as any[];
+      const columns = ((result as any)?.columns ?? undefined) as string[] | undefined;
       rowCount = rows.length;
 
       if (schedule.recipients.length === 0) {
@@ -142,7 +146,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
         subject,
         htmlIntro: html,
         filename,
-        csv: toCsv(rows),
+        csv: toCsv(rows, columns),
       });
     }
   } catch (e: any) {
