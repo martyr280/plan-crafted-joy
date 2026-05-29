@@ -27,3 +27,16 @@ export async function query(text, params = {}) {
   const result = await req.query(text);
   return result.recordset;
 }
+
+// Same as query() but also returns the column names in SELECT order. Use this
+// when the consumer needs to preserve column order (e.g. CSV exports), since
+// passing rows through Postgres jsonb loses object-key order.
+export async function queryWithColumns(text, params = {}) {
+  const pool = await getPool();
+  const req = pool.request();
+  for (const [k, v] of Object.entries(params)) req.input(k, v);
+  const result = await req.query(text);
+  const rs = result.recordset;
+  const cols = rs && rs.columns ? Object.keys(rs.columns) : (rs && rs[0] ? Object.keys(rs[0]) : []);
+  return { rows: rs ?? [], columns: cols };
+}
