@@ -130,6 +130,7 @@ export const previewSqlSchedule = createServerFn({ method: "POST" })
       60_000
     );
     const rows = ((result as any)?.rows ?? []) as any[];
+    const columns = ((result as any)?.columns ?? undefined) as string[] | undefined;
     const cap = data.maxRows ?? 100;
-    return { rows: rows.slice(0, cap), total: rows.length };
+    return { rows: rows.slice(0, cap), total: rows.length, columns };
   });
