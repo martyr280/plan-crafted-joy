@@ -49,14 +49,7 @@ type Schedule = {
   last_error: string | null;
 };
 
-const CRON_PRESETS = [
-  { label: "Every hour", value: "0 * * * *" },
-  { label: "Daily at 06:00", value: "0 6 * * *" },
-  { label: "Daily at 08:00", value: "0 8 * * *" },
-  { label: "Weekdays 08:00", value: "0 8 * * 1-5" },
-  { label: "Mondays 08:00", value: "0 8 * * 1" },
-  { label: "1st of month 06:00", value: "0 6 1 * *" },
-];
+import { describeCron, defaultHuman, fromCron, toCron, WEEKDAYS, type HumanSchedule } from "@/lib/cron-human";
 
 function blankSchedule(): Schedule {
   return {
@@ -96,6 +89,11 @@ function SqlSchedulesPage() {
     try {
       const res = await list();
       setRows(((res as any).rows ?? []) as Schedule[]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => { refresh(); }, []);
 
   useEffect(() => {
@@ -112,11 +110,6 @@ function SqlSchedulesPage() {
       localStorage.removeItem("sql.schedule.prefill");
     } catch {}
   }, []);
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => { refresh(); }, []);
 
   async function handleRunNow(s: Schedule) {
     setRunningId(s.id);
@@ -150,6 +143,7 @@ function SqlSchedulesPage() {
       </div>
     );
   }
+
 
   return (
     <div className="space-y-6">
