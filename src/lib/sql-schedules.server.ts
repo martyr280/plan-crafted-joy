@@ -115,7 +115,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
       // Re-use the pricer.sync handler (canonical 9-supplier query) regardless
       // of stored SQL. The schedule row simply controls timing.
       const res = await applyPricerSync();
-      rowCount = res.upserted ?? 0;
+      rowCount = res.imported ?? 0;
     } else {
       validateSelectSql(schedule.sql);
       const { result } = await runJob(
