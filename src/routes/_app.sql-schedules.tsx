@@ -343,17 +343,14 @@ function ScheduleEditor({
             )}
           </div>
 
-          <div>
-            <Label>Cron schedule</Label>
-            <Input value={s.schedule_cron} onChange={(e) => setS({ ...s, schedule_cron: e.target.value })} placeholder="0 8 * * 1" className="font-mono" />
-            <div className="flex flex-wrap gap-1 mt-1">
-              {CRON_PRESETS.map((p) => (
-                <Button key={p.value} size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => setS({ ...s, schedule_cron: p.value })}>
-                  {p.label}
-                </Button>
-              ))}
-            </div>
+          <div className="md:col-span-2">
+            <Label>Schedule</Label>
+            <ScheduleBuilder
+              cron={s.schedule_cron}
+              onChange={(cron) => setS({ ...s, schedule_cron: cron })}
+            />
           </div>
+
 
           <div>
             <Label>Timezone</Label>
