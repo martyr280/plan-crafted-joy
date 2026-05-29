@@ -1,0 +1,206 @@
+// Server-only helpers for scheduled SQL queries.
+import { CronExpressionParser } from "cron-parser";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { runJob, applyPricerSync } from "./p21.server";
+
+export type ScheduleRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  sql: string;
+  params: Record<string, any>;
+  action: "email" | "upsert_price_list";
+  recipients: string[];
+  email_subject: string | null;
+  schedule_cron: string;
+  timezone: string;
+  active: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_status: string | null;
+  last_row_count: number | null;
+  last_error: string | null;
+};
+
+export function validateSelectSql(text: string) {
+  const trimmed = text.trim().replace(/;\s*$/, "");
+  const head = trimmed.replace(/^;\s*/, "").slice(0, 6).toLowerCase();
+  if (!head.startsWith("select") && !head.startsWith("with")) {
+    throw new Error("Only SELECT or WITH queries are allowed.");
+  }
+  if (trimmed.includes(";")) {
+    throw new Error("Only a single statement is allowed (remove ';').");
+  }
+}
+
+export function computeNextRun(cron: string, tz: string, from: Date = new Date()): Date {
+  const it = CronExpressionParser.parse(cron, { tz, currentDate: from });
+  return it.next().toDate();
+}
+
+function toCsv(rows: any[]): string {
+  if (!rows.length) return "";
+  const cols = Object.keys(rows[0]);
+  const esc = (v: any) => {
+    const s = v === null || v === undefined ? "" : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [cols.join(",")];
+  for (const r of rows) lines.push(cols.map((c) => esc(r[c])).join(","));
+  return lines.join("\n");
+}
+
+function renderTemplate(tpl: string, vars: Record<string, string | number>): string {
+  return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => String(vars[k] ?? ""));
+}
+
+async function sendEmailWithCsv(opts: {
+  to: string[];
+  subject: string;
+  htmlIntro: string;
+  filename: string;
+  csv: string;
+}) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
+  const from = process.env.NELSON_FROM_EMAIL || "Nelson AI <noreply@nelsonbot.ai>";
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.htmlIntro,
+      attachments: [
+        {
+          filename: opts.filename,
+          content: Buffer.from(opts.csv, "utf8").toString("base64"),
+        },
+      ],
+    }),
+  });
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`Resend send failed [${r.status}]: ${body.slice(0, 300)}`);
+  }
+  return r.json();
+}
+
+export async function executeSchedule(scheduleId: string): Promise<{
+  status: "success" | "error";
+  rowCount: number;
+  error?: string;
+}> {
+  const { data: row, error } = await supabaseAdmin
+    .from("sql_schedules")
+    .select("*")
+    .eq("id", scheduleId)
+    .single();
+  if (error || !row) throw new Error("Schedule not found");
+
+  const schedule = {
+    ...row,
+    params: (row.params as any) ?? {},
+    recipients: Array.isArray(row.recipients) ? (row.recipients as string[]) : [],
+  } as ScheduleRow;
+
+  const startedAt = new Date();
+  let status: "success" | "error" = "success";
+  let rowCount = 0;
+  let lastError: string | null = null;
+
+  try {
+    if (schedule.action === "upsert_price_list") {
+      // Re-use the pricer.sync handler (canonical 9-supplier query) regardless
+      // of stored SQL. The schedule row simply controls timing.
+      const res = await applyPricerSync();
+      rowCount = res.upserted ?? 0;
+    } else {
+      validateSelectSql(schedule.sql);
+      const { result } = await runJob(
+        "sql.select",
+        { sql: schedule.sql, params: schedule.params, slug: `schedule:${schedule.id}` },
+        120_000
+      );
+      const rows = ((result as any)?.rows ?? []) as any[];
+      rowCount = rows.length;
+
+      if (schedule.recipients.length === 0) {
+        throw new Error("No recipients configured");
+      }
+      const dateStr = startedAt.toISOString().slice(0, 10);
+      const subject = renderTemplate(
+        schedule.email_subject || "{{name}} — {{date}} ({{rows}} rows)",
+        { name: schedule.name, date: dateStr, rows: rowCount }
+      );
+      const html = `<p>Scheduled report <strong>${schedule.name}</strong> ran at ${startedAt.toISOString()} and returned <strong>${rowCount}</strong> row${rowCount === 1 ? "" : "s"}.</p><p>Results are attached as CSV.</p>`;
+      const filename = `${schedule.name.replace(/[^a-z0-9-_]+/gi, "_")}-${dateStr}.csv`;
+      await sendEmailWithCsv({
+        to: schedule.recipients,
+        subject,
+        htmlIntro: html,
+        filename,
+        csv: toCsv(rows),
+      });
+    }
+  } catch (e: any) {
+    status = "error";
+    lastError = e?.message ?? String(e);
+  }
+
+  let nextRunAt: string | null = null;
+  try {
+    nextRunAt = computeNextRun(schedule.schedule_cron, schedule.timezone, new Date()).toISOString();
+  } catch {
+    nextRunAt = null;
+  }
+
+  await supabaseAdmin
+    .from("sql_schedules")
+    .update({
+      last_run_at: startedAt.toISOString(),
+      last_status: status,
+      last_row_count: rowCount,
+      last_error: lastError,
+      next_run_at: nextRunAt,
+    })
+    .eq("id", schedule.id);
+
+  await supabaseAdmin.from("activity_events").insert({
+    event_type: status === "success" ? "sql_schedule.ran" : "sql_schedule.failed",
+    entity_type: "sql_schedule",
+    entity_id: schedule.id,
+    message:
+      status === "success"
+        ? `Schedule "${schedule.name}" ran (${rowCount} rows, action=${schedule.action})`
+        : `Schedule "${schedule.name}" failed: ${lastError}`,
+    metadata: { rowCount, action: schedule.action },
+  });
+
+  return { status, rowCount, error: lastError ?? undefined };
+}
+
+export async function executeDueSchedules(): Promise<{
+  processed: number;
+  results: Array<{ id: string; name: string; status: string; rowCount: number; error?: string }>;
+}> {
+  const nowIso = new Date().toISOString();
+  const { data: due } = await supabaseAdmin
+    .from("sql_schedules")
+    .select("id, name")
+    .eq("active", true)
+    .lte("next_run_at", nowIso)
+    .limit(50);
+
+  const results: Array<{ id: string; name: string; status: string; rowCount: number; error?: string }> = [];
+  for (const s of due ?? []) {
+    try {
+      const r = await executeSchedule(s.id);
+      results.push({ id: s.id, name: s.name, status: r.status, rowCount: r.rowCount, error: r.error });
+    } catch (e: any) {
+      results.push({ id: s.id, name: s.name, status: "error", rowCount: 0, error: e?.message ?? String(e) });
+    }
+  }
+  return { processed: results.length, results };
+}
