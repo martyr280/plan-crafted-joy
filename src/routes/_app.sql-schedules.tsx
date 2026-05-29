@@ -191,7 +191,10 @@ function SqlSchedulesPage() {
                     {s.action === "email" ? <><Mail className="w-3 h-3 mr-1 inline" /> email</> : <><Database className="w-3 h-3 mr-1 inline" /> price_list</>}
                   </Badge>
                 </TableCell>
-                <TableCell className="font-mono text-xs">{s.schedule_cron}<div className="text-[10px] text-muted-foreground">{s.timezone}</div></TableCell>
+                <TableCell className="text-xs">
+                  {describeCron(s.schedule_cron)}
+                  <div className="text-[10px] text-muted-foreground font-mono">{s.schedule_cron} · {s.timezone}</div>
+                </TableCell>
                 <TableCell className="text-xs">{s.next_run_at ? formatDistanceToNow(new Date(s.next_run_at), { addSuffix: true }) : "—"}</TableCell>
                 <TableCell className="text-xs">
                   {s.last_run_at ? formatDistanceToNow(new Date(s.last_run_at), { addSuffix: true }) : "Never"}
