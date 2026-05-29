@@ -9,8 +9,8 @@ export async function sqlSelect(payload) {
   if (typeof text !== "string" || !text.trim()) {
     throw new Error("sql is required");
   }
-  const trimmed = text.trim().replace(/;\s*$/, "");
-  const head = trimmed.replace(/^;\s*/, "").slice(0, 6).toLowerCase();
+  const trimmed = text.trim().replace(/^;\s*/, "").replace(/;\s*$/, "");
+  const head = trimmed.slice(0, 6).toLowerCase();
   if (!head.startsWith("select") && !head.startsWith("with")) {
     throw new Error("Only SELECT or WITH queries are allowed");
   }
