@@ -324,6 +324,15 @@ function BridgeAdminPage() {
               {running ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
               Run query <span className="ml-2 text-[10px] opacity-70">⌘/Ctrl+↵</span>
             </Button>
+            <Link
+              to="/sql-schedules"
+              search={{ sql, params: paramsJson } as any}
+              className="block"
+            >
+              <Button variant="outline" className="w-full" size="sm">
+                <Clock className="w-3 h-3 mr-1" /> Schedule this query
+              </Button>
+            </Link>
           </div>
         </div>
 
