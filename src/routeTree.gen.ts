@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWebhooksRouteImport } from './routes/_app.webhooks'
+import { Route as AppSqlSchedulesRouteImport } from './routes/_app.sql-schedules'
 import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
@@ -34,6 +35,7 @@ import { Route as AppArRouteImport } from './routes/_app.ar'
 import { Route as AppReportsIndexRouteImport } from './routes/_app.reports.index'
 import { Route as ApiPublicSyncPricerRouteImport } from './routes/api/public/sync-pricer'
 import { Route as ApiPublicSyncE2gRouteImport } from './routes/api/public/sync-e2g'
+import { Route as ApiPublicRunSqlSchedulesRouteImport } from './routes/api/public/run-sql-schedules'
 import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-bridge'
 import { Route as ApiPublicInboundEmailRouteImport } from './routes/api/public/inbound-email'
 import { Route as AppReportsE2gRouteImport } from './routes/_app.reports.e2g'
@@ -60,6 +62,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppWebhooksRoute = AppWebhooksRouteImport.update({
   id: '/webhooks',
   path: '/webhooks',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSqlSchedulesRoute = AppSqlSchedulesRouteImport.update({
+  id: '/sql-schedules',
+  path: '/sql-schedules',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSpiffRoute = AppSpiffRouteImport.update({
@@ -162,6 +169,12 @@ const ApiPublicSyncE2gRoute = ApiPublicSyncE2gRouteImport.update({
   path: '/api/public/sync-e2g',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicRunSqlSchedulesRoute =
+  ApiPublicRunSqlSchedulesRouteImport.update({
+    id: '/api/public/run-sql-schedules',
+    path: '/api/public/run-sql-schedules',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicP21BridgeRoute = ApiPublicP21BridgeRouteImport.update({
   id: '/api/public/p21-bridge',
   path: '/api/public/p21-bridge',
@@ -199,10 +212,12 @@ export interface FileRoutesByFullPath {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
+  '/sql-schedules': typeof AppSqlSchedulesRoute
   '/webhooks': typeof AppWebhooksRoute
   '/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
+  '/api/public/run-sql-schedules': typeof ApiPublicRunSqlSchedulesRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
   '/api/public/sync-pricer': typeof ApiPublicSyncPricerRoute
   '/reports/': typeof AppReportsIndexRoute
@@ -227,11 +242,13 @@ export interface FileRoutesByTo {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
+  '/sql-schedules': typeof AppSqlSchedulesRoute
   '/webhooks': typeof AppWebhooksRoute
   '/': typeof AppIndexRoute
   '/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
+  '/api/public/run-sql-schedules': typeof ApiPublicRunSqlSchedulesRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
   '/api/public/sync-pricer': typeof ApiPublicSyncPricerRoute
   '/reports': typeof AppReportsIndexRoute
@@ -258,11 +275,13 @@ export interface FileRoutesById {
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/spiff': typeof AppSpiffRoute
+  '/_app/sql-schedules': typeof AppSqlSchedulesRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/_app/': typeof AppIndexRoute
   '/_app/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
+  '/api/public/run-sql-schedules': typeof ApiPublicRunSqlSchedulesRoute
   '/api/public/sync-e2g': typeof ApiPublicSyncE2gRoute
   '/api/public/sync-pricer': typeof ApiPublicSyncPricerRoute
   '/_app/reports/': typeof AppReportsIndexRoute
@@ -290,10 +309,12 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/spiff'
+    | '/sql-schedules'
     | '/webhooks'
     | '/reports/e2g'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
+    | '/api/public/run-sql-schedules'
     | '/api/public/sync-e2g'
     | '/api/public/sync-pricer'
     | '/reports/'
@@ -318,11 +339,13 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/spiff'
+    | '/sql-schedules'
     | '/webhooks'
     | '/'
     | '/reports/e2g'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
+    | '/api/public/run-sql-schedules'
     | '/api/public/sync-e2g'
     | '/api/public/sync-pricer'
     | '/reports'
@@ -348,11 +371,13 @@ export interface FileRouteTypes {
     | '/_app/sales'
     | '/_app/settings'
     | '/_app/spiff'
+    | '/_app/sql-schedules'
     | '/_app/webhooks'
     | '/_app/'
     | '/_app/reports/e2g'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
+    | '/api/public/run-sql-schedules'
     | '/api/public/sync-e2g'
     | '/api/public/sync-pricer'
     | '/_app/reports/'
@@ -364,6 +389,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicInboundEmailRoute: typeof ApiPublicInboundEmailRoute
   ApiPublicP21BridgeRoute: typeof ApiPublicP21BridgeRoute
+  ApiPublicRunSqlSchedulesRoute: typeof ApiPublicRunSqlSchedulesRoute
   ApiPublicSyncE2gRoute: typeof ApiPublicSyncE2gRoute
   ApiPublicSyncPricerRoute: typeof ApiPublicSyncPricerRoute
 }
@@ -403,6 +429,13 @@ declare module '@tanstack/react-router' {
       path: '/webhooks'
       fullPath: '/webhooks'
       preLoaderRoute: typeof AppWebhooksRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sql-schedules': {
+      id: '/_app/sql-schedules'
+      path: '/sql-schedules'
+      fullPath: '/sql-schedules'
+      preLoaderRoute: typeof AppSqlSchedulesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/spiff': {
@@ -545,6 +578,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSyncE2gRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/run-sql-schedules': {
+      id: '/api/public/run-sql-schedules'
+      path: '/api/public/run-sql-schedules'
+      fullPath: '/api/public/run-sql-schedules'
+      preLoaderRoute: typeof ApiPublicRunSqlSchedulesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/p21-bridge': {
       id: '/api/public/p21-bridge'
       path: '/api/public/p21-bridge'
@@ -587,6 +627,7 @@ interface AppRouteChildren {
   AppSalesRoute: typeof AppSalesRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSpiffRoute: typeof AppSpiffRoute
+  AppSqlSchedulesRoute: typeof AppSqlSchedulesRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
   AppReportsE2gRoute: typeof AppReportsE2gRoute
@@ -611,6 +652,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSalesRoute: AppSalesRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSpiffRoute: AppSpiffRoute,
+  AppSqlSchedulesRoute: AppSqlSchedulesRoute,
   AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,
   AppReportsE2gRoute: AppReportsE2gRoute,
@@ -625,19 +667,10 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicInboundEmailRoute: ApiPublicInboundEmailRoute,
   ApiPublicP21BridgeRoute: ApiPublicP21BridgeRoute,
+  ApiPublicRunSqlSchedulesRoute: ApiPublicRunSqlSchedulesRoute,
   ApiPublicSyncE2gRoute: ApiPublicSyncE2gRoute,
   ApiPublicSyncPricerRoute: ApiPublicSyncPricerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

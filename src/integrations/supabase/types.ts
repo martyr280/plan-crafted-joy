@@ -1467,6 +1467,72 @@ export type Database = {
         }
         Relationships: []
       }
+      sql_schedules: {
+        Row: {
+          action: string
+          active: boolean
+          created_at: string
+          created_by: string | null
+          description: string | null
+          email_subject: string | null
+          id: string
+          last_error: string | null
+          last_row_count: number | null
+          last_run_at: string | null
+          last_status: string | null
+          name: string
+          next_run_at: string | null
+          params: Json
+          recipients: Json
+          schedule_cron: string
+          sql: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          action?: string
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          email_subject?: string | null
+          id?: string
+          last_error?: string | null
+          last_row_count?: number | null
+          last_run_at?: string | null
+          last_status?: string | null
+          name: string
+          next_run_at?: string | null
+          params?: Json
+          recipients?: Json
+          schedule_cron: string
+          sql: string
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          email_subject?: string | null
+          id?: string
+          last_error?: string | null
+          last_row_count?: number | null
+          last_run_at?: string | null
+          last_status?: string | null
+          name?: string
+          next_run_at?: string | null
+          params?: Json
+          recipients?: Json
+          schedule_cron?: string
+          sql?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

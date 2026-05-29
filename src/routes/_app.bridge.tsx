@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -323,6 +323,19 @@ function BridgeAdminPage() {
             <Button onClick={runSql} disabled={running} className="w-full">
               {running ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
               Run query <span className="ml-2 text-[10px] opacity-70">⌘/Ctrl+↵</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                try {
+                  localStorage.setItem("sql.schedule.prefill", JSON.stringify({ sql, params: paramsJson }));
+                } catch {}
+                window.location.assign("/sql-schedules?prefill=1");
+              }}
+            >
+              <Clock className="w-3 h-3 mr-1" /> Schedule this query
             </Button>
           </div>
         </div>

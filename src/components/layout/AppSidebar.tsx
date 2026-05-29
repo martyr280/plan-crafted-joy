@@ -54,6 +54,7 @@ const groups = [
     label: "System",
     items: [
       { title: "P21 Bridge", url: "/bridge", icon: Network },
+      { title: "Scheduled Queries", url: "/sql-schedules", icon: Network },
       { title: "Webhook Debug", url: "/webhooks", icon: Webhook },
       { title: "Settings", url: "/settings", icon: Settings },
     ],

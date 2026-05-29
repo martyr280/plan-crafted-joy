@@ -1,76 +1,98 @@
-# What the inbound traffic is telling us
+# Scheduled SQL Queries
 
-## Data I looked at
-- **63 inbound emails**: 23 `unknown` / 17 `logistics_update` (all needs_review) / 17 `purchase_order` (routed) / 4 `damage_report` / 1 `ar_reply`
-- **23 orders**: all `pending_review`, ~7 of them with **0 line items** despite high AI confidence — extraction is silently failing on a third of POs
+Add a unified scheduling layer on top of the existing P21 SQL console so admins can:
 
-## Pattern 1 — The classifier is missing 4 real categories
-The 23 `unknown` and a chunk of the `logistics_update` bucket aren't noise; they're work the system doesn't have a slot for.
+1. **Schedule the pricer query** (or any SQL) to run on a cron and push results into `price_list`.
+2. **Schedule arbitrary report queries** to run on a cron and email the results (CSV) to a recipient list.
 
-| New category | Real examples in the inbox |
-|---|---|
-| **quote_request** | "Match Price Please", "specialbid quote", "26588 \| LAW OFFICES" |
-| **return_request / RMA** | 3 separate "RE: RETURN" threads — wrong item + slight damage on replacement |
-| **order_change** (mutates existing SO#) | "add a leg to 1382598", "ship complete instead of partial 1382582", "cancel 1382251", "remove liftgate + update ship-to 1382534" |
-| **tracking_request / POD_request** | Walmart/FedEx tracking pings, "send PODs for SO# 1380952" |
+Today the pricer query *is* scheduled via GitHub Actions (nightly 06:30 UTC) hitting `/api/public/sync-pricer`, but it's invisible in the app and not editable. The other half (arbitrary report SQL + email) doesn't exist.
 
-Plus two auto-dismiss buckets: **auto_reply** (OOO from `gacuna@office-revolution.com`) and **marketing** (`reply@email.belnickinc.com` NRA invite).
+## New table — `sql_schedules`
 
-## Pattern 2 — Internal email is being treated like external
-Many `@ndiof.com` → `@ndiof.com` threads are landing in the queue ("Cubes from downtown Greenville", "2nd Dallas transfer", "Metal Finishes"). These are internal chatter, not customer requests. Need a sender-domain rule that flags `from @ndiof.com` as `internal` and routes to a separate view (or auto-dismisses unless a customer is CC'd).
+| column | type | notes |
+|---|---|---|
+| id | uuid pk | |
+| name | text | "Nightly pricer sync", "AR > 90 weekly", etc. |
+| description | text | optional |
+| sql | text | single SELECT/WITH, validated like the console |
+| params | jsonb | bound `@name` values |
+| action | text | `email` \| `upsert_price_list` |
+| recipients | jsonb (text[]) | only used when action='email' |
+| email_subject | text | template; `{{name}}`, `{{rows}}`, `{{date}}` |
+| schedule_cron | text | standard 5-field cron |
+| timezone | text | default `America/New_York` |
+| active | boolean | |
+| next_run_at | timestamptz | computed from cron on save / after each run |
+| last_run_at, last_status, last_row_count, last_error | | |
+| created_at/updated_at/created_by | | |
 
-## Pattern 3 — PO extraction is incomplete
-7 of 23 orders have `ai_confidence ≥ 0.8` but **0 line items** (Crawford, Addus, Worthington x2, Wallace, Sheppard's, Tamela Byrd, officePRO). The classifier is happy but `parse-po` either didn't find attachments or couldn't read them. Needs a "missing line items" flag in the order review UI and a re-run button.
+RLS: admin-only (matches existing P21 patterns). GRANT to authenticated + service_role.
 
-## Pattern 4 — Replies to acknowledgements aren't threading
-Many subjects are `RE: NDI Office Furniture, LLC - Acknowledgement# 1382XXX`. We have the P21 SO# right there but we don't link the inbound email to the originating order. Should regex `Acknowledgement# (\d+)` / `SO# (\d+)` and attach the email to that order's history.
+`next_run_at` computed via `cron-parser` (new dep) in server fns.
 
----
+## Server functions — `src/lib/sql-schedules.functions.ts`
 
-# Proposed changes
+- `listSqlSchedules()` – admin only
+- `upsertSqlSchedule({...})` – validates SQL (SELECT/WITH, single statement, no `;`), computes `next_run_at`
+- `deleteSqlSchedule({id})`
+- `runSqlScheduleNow({id})` – executes immediately, records result
+- `previewSqlSchedule({sql, params})` – dry-run via the existing `sql.select` bridge job
 
-### A. Classifier (`supabase/functions/classify-inbound-email`)
-1. Expand the enum: add `quote_request`, `return_request`, `order_change`, `tracking_request`, `auto_reply`, `marketing`, `internal`.
-2. Extract `referenced_order_id` (P21 SO# / Acknowledgement#) and `change_type` (`add_line`, `cancel`, `ship_complete`, `address_change`, `remove_accessory`) when classification is `order_change`.
-3. Pre-filter before AI: if `from_addr` ends `@ndiof.com` AND no external recipient → `internal`; if subject contains "Automatic reply" / "Out of office" → `auto_reply`; if `List-Unsubscribe` header present → `marketing`. Skip the LLM call for these — saves tokens.
+Shared executor (`src/lib/sql-schedules.server.ts`):
+- `executeSchedule(scheduleId)` → run `sql.select` job → branch on action:
+  - **upsert_price_list**: re-use the existing `applyPricerSync()` path (which already maps the pricer columns into `price_list`). For the canonical pricer query we just call `applyPricerSync()`; for any other future `upsert_price_list` schedule the SQL must return the same columns the handler expects.
+  - **email**: render rows to CSV, attach, POST to Resend via `process.env.RESEND_API_KEY`. Subject template gets `{{name}}`, `{{date}}`, `{{rows}}` interpolation. Skip send if `rows.length === 0` unless `send_when_empty` flag (defer for now — always send).
+- Records `last_run_at/last_status/last_row_count/last_error`, recomputes `next_run_at`, logs `activity_events`.
 
-### B. Routing (`src/lib/inbound-routing.server.ts`)
-- `quote_request` → new `quotes` table (or reuse `design_quotes`), status `pending_review`.
-- `return_request` → new `rma_requests` table.
-- `order_change` → if `referenced_order_id` resolves to a P21 order, create an `order_change_requests` row linked to it; surface in Orders page as a yellow banner on that order.
-- `tracking_request` → auto-respond: enqueue a P21 bridge `sql.select` for `oe_pick_ticket`/`shipping` info by SO#, draft a reply with tracking + POD link, queue for human send.
-- `auto_reply` / `marketing` / `internal` → auto-dismiss, don't show in the main inbox view.
-- All classifications: if `referenced_order_id` extracted, always append the email body to that order's activity feed.
+## Public cron tick endpoint — `src/routes/api/public/run-sql-schedules.ts`
 
-### C. Order intake (`src/routes/_app.orders.tsx`)
-- New filter chip: "Missing line items" (`jsonb_array_length(line_items) = 0`).
-- Per-order "Re-run extraction" button → re-invokes `parse-po` with the original attachments.
-- Show `ai_flags` count prominently — TRIANGLE/Tamela Byrd/officePRO/Sheppard's all have flags that are currently invisible.
+- `POST` with `Authorization: Bearer $CRON_SECRET`
+- Selects `active=true AND next_run_at <= now()`, runs each through `executeSchedule`, returns summary.
+- Scheduled via pg_cron every minute (set up via the supabase insert tool).
 
-### D. Inbox UI (`src/routes/_app.inbox.tsx`)
-- Add tabs: **Needs review** (default) / **Auto-handled** / **Internal** / **Dismissed**.
-- Add the new classification filters.
-- On each row, if `referenced_order_id` is set, show a chip linking to that order.
+```sql
+SELECT cron.schedule(
+  'sql-schedules-tick','* * * * *',
+  $$ SELECT net.http_post(
+    url:='https://project--8f98c139-...lovable.app/api/public/run-sql-schedules',
+    headers:='{"Authorization":"Bearer <CRON_SECRET>","Content-Type":"application/json"}'::jsonb,
+    body:='{}'::jsonb
+  ); $$
+);
+```
 
-### E. Schema
-New migration:
-- Extend `inbound_emails.classification` enum check (it's currently free text, so just docs).
-- Add `inbound_emails.referenced_order_id text`, `inbound_emails.change_type text`, `inbound_emails.is_internal boolean default false`.
-- New `order_change_requests` table (id, order_id, inbound_email_id, change_type, payload jsonb, status, created_at) with admin+ops_orders RLS + GRANTs.
-- New `rma_requests` table (id, inbound_email_id, customer_name, original_invoice, items jsonb, reason, status) with same RLS pattern.
+(The existing GitHub Actions pricer cron can stay or be retired once a `sql_schedules` row exists for it — I'll seed that row and leave both wired for now to avoid a coverage gap.)
 
-### F. Out of scope for this pass
-- Actually executing the order changes against P21 (just capture + surface for now)
-- Auto-sending tracking replies (just draft + queue)
-- Full RMA workflow beyond capture
+## UI
 
----
+New route `src/routes/_app.bridge.schedules.tsx` (or a tab inside Bridge), reachable from the SQL console with a **"Save as scheduled query"** button that prefills name/SQL/params.
 
-# Suggested rollout order
-1. **Pre-filter rules** (internal / auto_reply / marketing) — instant 30% noise reduction, no schema change.
-2. **Missing-line-items filter + re-run button** on Orders page — unblocks the 7 stuck orders today.
-3. **Reference-order extraction** + attach to order activity feed — high-value, low-risk.
-4. **New classifications + routing tables** (quote / RMA / order_change / tracking).
-5. **Inbox UI tabs and chips**.
+Table columns: name · action · cron · next run · last run / status · recipients · row count · actions (Run now / Edit / Delete / pause toggle).
 
-Want me to implement all five, or start with just the noise reduction + stuck-orders fixes (#1 and #2) and see the impact first?
+Editor dialog: name, description, action, recipients (chip input — only when action=email), cron + helper presets (hourly, 06:00 daily, Monday 08:00), timezone, the SQL + params editors (re-using the existing console fields), "Test run" button (calls `previewSqlSchedule`).
+
+Also add a small **"Schedules"** card on `/bridge` showing the next 5 upcoming runs.
+
+## Dependency
+
+`bun add cron-parser` (pure JS, Worker-safe).
+
+## Out of scope (this pass)
+
+- Webhook delivery / Slack
+- Per-recipient role filtering (recipients are explicit emails)
+- HTML formatted report bodies beyond CSV attachment
+- Result history retention / drill-down beyond the last run
+
+## Files touched
+
+- migration: `sql_schedules` table + RLS + grants
+- `src/lib/sql-schedules.functions.ts` (new)
+- `src/lib/sql-schedules.server.ts` (new)
+- `src/routes/api/public/run-sql-schedules.ts` (new)
+- `src/routes/_app.bridge.schedules.tsx` (new)
+- `src/routes/_app.bridge.tsx` (link + "Save as schedule" button on console)
+- `package.json` (`cron-parser`)
+- supabase insert for pg_cron job
+
+After approval I'll run the migration first, then build the rest.
