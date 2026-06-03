@@ -92,10 +92,18 @@ export const Route = createFileRoute("/api/public/inbound-email")({
         const toMeta = Array.isArray(d.to) ? d.to[0] : d.to;
         const toAddr = parseAddr(toMeta).email;
 
-        // Only accept mail addressed to the ndi.apexblueprint.ai domain.
-        const ALLOWED_DOMAIN = "ndi.apexblueprint.ai";
-        if (!toAddr.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)) {
-          return Response.json({ ok: true, ignored: "domain_not_allowed", to: toAddr });
+        // Accept mail addressed to the ndi.apexblueprint.ai domain,
+        // or specific explicit addresses on other domains we own.
+        const ALLOWED_DOMAINS = ["ndi.apexblueprint.ai"];
+        const ALLOWED_ADDRESSES = [
+          "toorders@nelsonbot.ai",
+          "toorders@ndi.apexblueprint.ai",
+        ];
+        const toLower = toAddr.toLowerCase();
+        const domainOk = ALLOWED_DOMAINS.some((d) => toLower.endsWith(`@${d}`));
+        const addrOk = ALLOWED_ADDRESSES.includes(toLower);
+        if (!domainOk && !addrOk) {
+          return Response.json({ ok: true, ignored: "recipient_not_allowed", to: toAddr });
         }
 
         const resendKey = process.env.RESEND_API_KEY;
