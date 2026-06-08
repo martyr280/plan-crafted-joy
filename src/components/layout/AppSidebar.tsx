@@ -15,6 +15,7 @@ const groups = [
     label: "Intake",
     items: [
       { title: "Inbound Email", url: "/inbox", icon: Inbox },
+      { title: "Email Monitor", url: "/email-monitor", icon: MailWarning },
       { title: "Order Intake", url: "/orders", icon: FileInput },
       { title: "Design Quotes", url: "/quotes", icon: Layers },
     ],
