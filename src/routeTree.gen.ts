@@ -26,6 +26,7 @@ import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
 import { Route as AppInventorySyncRouteImport } from './routes/_app.inventory-sync'
 import { Route as AppInventoryRouteImport } from './routes/_app.inventory'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
+import { Route as AppEmailMonitorRouteImport } from './routes/_app.email-monitor'
 import { Route as AppDamageRouteImport } from './routes/_app.damage'
 import { Route as AppCatalogsRouteImport } from './routes/_app.catalogs'
 import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
@@ -124,6 +125,11 @@ const AppInboxRoute = AppInboxRouteImport.update({
   path: '/inbox',
   getParentRoute: () => AppRoute,
 } as any)
+const AppEmailMonitorRoute = AppEmailMonitorRouteImport.update({
+  id: '/email-monitor',
+  path: '/email-monitor',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDamageRoute = AppDamageRouteImport.update({
   id: '/damage',
   path: '/damage',
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/bridge': typeof AppBridgeRoute
   '/catalogs': typeof AppCatalogsRoute
   '/damage': typeof AppDamageRoute
+  '/email-monitor': typeof AppEmailMonitorRoute
   '/inbox': typeof AppInboxRoute
   '/inventory': typeof AppInventoryRoute
   '/inventory-sync': typeof AppInventorySyncRoute
@@ -231,6 +238,7 @@ export interface FileRoutesByTo {
   '/bridge': typeof AppBridgeRoute
   '/catalogs': typeof AppCatalogsRoute
   '/damage': typeof AppDamageRoute
+  '/email-monitor': typeof AppEmailMonitorRoute
   '/inbox': typeof AppInboxRoute
   '/inventory': typeof AppInventoryRoute
   '/inventory-sync': typeof AppInventorySyncRoute
@@ -264,6 +272,7 @@ export interface FileRoutesById {
   '/_app/bridge': typeof AppBridgeRoute
   '/_app/catalogs': typeof AppCatalogsRoute
   '/_app/damage': typeof AppDamageRoute
+  '/_app/email-monitor': typeof AppEmailMonitorRoute
   '/_app/inbox': typeof AppInboxRoute
   '/_app/inventory': typeof AppInventoryRoute
   '/_app/inventory-sync': typeof AppInventorySyncRoute
@@ -298,6 +307,7 @@ export interface FileRouteTypes {
     | '/bridge'
     | '/catalogs'
     | '/damage'
+    | '/email-monitor'
     | '/inbox'
     | '/inventory'
     | '/inventory-sync'
@@ -328,6 +338,7 @@ export interface FileRouteTypes {
     | '/bridge'
     | '/catalogs'
     | '/damage'
+    | '/email-monitor'
     | '/inbox'
     | '/inventory'
     | '/inventory-sync'
@@ -360,6 +371,7 @@ export interface FileRouteTypes {
     | '/_app/bridge'
     | '/_app/catalogs'
     | '/_app/damage'
+    | '/_app/email-monitor'
     | '/_app/inbox'
     | '/_app/inventory'
     | '/_app/inventory-sync'
@@ -515,6 +527,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppInboxRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/email-monitor': {
+      id: '/_app/email-monitor'
+      path: '/email-monitor'
+      fullPath: '/email-monitor'
+      preLoaderRoute: typeof AppEmailMonitorRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/damage': {
       id: '/_app/damage'
       path: '/damage'
@@ -616,6 +635,7 @@ interface AppRouteChildren {
   AppBridgeRoute: typeof AppBridgeRoute
   AppCatalogsRoute: typeof AppCatalogsRoute
   AppDamageRoute: typeof AppDamageRoute
+  AppEmailMonitorRoute: typeof AppEmailMonitorRoute
   AppInboxRoute: typeof AppInboxRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppInventorySyncRoute: typeof AppInventorySyncRoute
@@ -641,6 +661,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBridgeRoute: AppBridgeRoute,
   AppCatalogsRoute: AppCatalogsRoute,
   AppDamageRoute: AppDamageRoute,
+  AppEmailMonitorRoute: AppEmailMonitorRoute,
   AppInboxRoute: AppInboxRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppInventorySyncRoute: AppInventorySyncRoute,
