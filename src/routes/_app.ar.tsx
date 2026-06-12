@@ -99,6 +99,12 @@ function ArPage() {
   useEffect(() => { load(); }, []);
 
   const filtered = bucket === "all" ? rows : rows.filter((r) => bucketKeyForDays(Number(r.days_past_due ?? 0)) === bucket);
+  const totalCount = filtered.length;
+  const pages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const currentPage = Math.min(page, pages - 1);
+  const pageStart = currentPage * pageSize;
+  const pageRows = filtered.slice(pageStart, pageStart + pageSize);
+  useEffect(() => { setPage(0); }, [bucket, pageSize]);
   const totals = BUCKETS.map((b) => ({
     ...b,
     total: rows
