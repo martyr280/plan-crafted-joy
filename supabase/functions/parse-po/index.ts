@@ -563,6 +563,24 @@ serve(async (req) => {
           return;
         }
 
+        // Step 6: description fallback candidates (never auto-applied).
+        const descCands = descCandsByIdx[i];
+        if (descCands?.length) {
+          li.price_list_match = {
+            source: "candidates",
+            match_method: "description",
+            candidates: descCands,
+          };
+          parsed.flags.push({
+            field: `line[${i}].sku`,
+            issue: `SKU ${li.sku} not found — best description matches: ${descCands.map((c) => c.item).join(", ")}`,
+            suggestion: "Pick the correct item or add a sku_crossref mapping",
+            severity: "warning",
+          });
+          return;
+        }
+
+
         // Fallback: catalog_items
         const cat = catalogMap[normalizeSku(li.sku)];
         if (cat) {
