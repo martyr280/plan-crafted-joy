@@ -95,6 +95,63 @@ export const dismissInboundEmail = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Resolve an ambiguous line by writing the chosen mapping into orders.line_items
+// and (optionally) remembering it as a sku_crossref entry for future POs.
+export const resolveOrderLineSku = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({
+      orderId: z.string().uuid(),
+      lineIndex: z.number().int().min(0),
+      chosenSku: z.string().min(1),
+      rememberMapping: z.boolean().default(false),
+    }).parse,
+  )
+  .handler(async ({ data }) => {
+    const { data: order, error } = await supabaseAdmin
+      .from("orders").select("id, line_items").eq("id", data.orderId).single();
+    if (error || !order) throw new Error(error?.message ?? "Order not found");
+    const lines = Array.isArray(order.line_items) ? [...(order.line_items as any[])] : [];
+    const li = lines[data.lineIndex];
+    if (!li) throw new Error("Line not found");
+
+    // Look up the chosen price record.
+    const { data: pr } = await supabaseAdmin
+      .from("price_list")
+      .select("item, description, list_price, dealer_cost, er_cost, mfg, price_l1, price_l2, price_l3, price_l4, price_l5, price_showroom")
+      .eq("item", data.chosenSku)
+      .maybeSingle();
+    if (!pr) throw new Error(`SKU ${data.chosenSku} not in price_list`);
+
+    li.price_list_match = {
+      list_price: pr.list_price,
+      dealer_cost: pr.dealer_cost,
+      er_cost: pr.er_cost,
+      mfg: pr.mfg,
+      description: pr.description,
+      source: "contract",
+      matched_sku: pr.item,
+      match_method: "manual",
+      match_confidence: 1.0,
+      price_l1: pr.price_l1, price_l2: pr.price_l2, price_l3: pr.price_l3,
+      price_l4: pr.price_l4, price_l5: pr.price_l5, price_showroom: pr.price_showroom,
+    };
+
+    lines[data.lineIndex] = li;
+    await supabaseAdmin.from("orders").update({ line_items: lines as any }).eq("id", data.orderId);
+
+    if (data.rememberMapping && li.sku && li.sku !== pr.item) {
+      const competitor = String(li.sku).toUpperCase().replace(/\s+/g, "").replace(/-/g, "");
+      await supabaseAdmin
+        .from("sku_crossref")
+        .upsert(
+          { competitor_sku: competitor, ndi_sku: pr.item, source: "manual", confidence: 1.0 },
+          { onConflict: "competitor_sku,ndi_sku" },
+        );
+    }
+    return { ok: true };
+  });
+
 // Re-run parse-po against an order's source inbound email and overwrite the order's line items.
 // Used to recover orders that came in with 0 line items because the first extraction missed the PDF.
 export const reExtractOrderLineItems = createServerFn({ method: "POST" })
