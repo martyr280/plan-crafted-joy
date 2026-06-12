@@ -156,6 +156,8 @@ async function ingest(catalogId: string) {
 
   let chunksThisInvocation = 0;
   let nextStart = resumeFromPage;
+  let consecutiveChunkFailures = 0;
+  const MAX_CONSECUTIVE_CHUNK_FAILURES = 3;
 
   for (let start = resumeFromPage; start < totalPages; start += PAGES_PER_CHUNK) {
     if (chunksThisInvocation >= MAX_CHUNKS_PER_INVOCATION) {
@@ -173,12 +175,19 @@ async function ingest(catalogId: string) {
     let rows: any[] = [];
     try {
       rows = await extractChunk(apiKey, b64, start + 1);
+      consecutiveChunkFailures = 0;
     } catch (e) {
-      console.error(`chunk ${start}-${end} failed`, e);
+      consecutiveChunkFailures++;
+      console.error(`chunk ${start}-${end} failed (${consecutiveChunkFailures}/${MAX_CONSECUTIVE_CHUNK_FAILURES})`, e);
+      if (consecutiveChunkFailures >= MAX_CONSECUTIVE_CHUNK_FAILURES) {
+        // Bail out so the catalog row exits the "parsing" state instead of silently looping.
+        throw new Error(`Aborting ingest after ${consecutiveChunkFailures} consecutive chunk failures at page ${start + 1}: ${String((e as any)?.message ?? e)}`);
+      }
       chunksThisInvocation++;
       nextStart = start + PAGES_PER_CHUNK;
       continue;
     }
+
 
     const inserts: any[] = [];
     for (const row of rows) {
