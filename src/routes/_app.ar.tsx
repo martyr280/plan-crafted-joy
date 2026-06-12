@@ -8,8 +8,9 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Mail, AlertOctagon, RefreshCw, Loader2 } from "lucide-react";
+import { Mail, AlertOctagon, RefreshCw, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { syncArAging } from "@/lib/p21.functions";
@@ -43,6 +44,8 @@ function ArPage() {
   const [automation, setAutomation] = useState(true);
   const [template, setTemplate] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
 
   async function syncFromP21() {
     if (!hasRole("admin")) { toast.error("Admin role required"); return; }
@@ -96,6 +99,12 @@ function ArPage() {
   useEffect(() => { load(); }, []);
 
   const filtered = bucket === "all" ? rows : rows.filter((r) => bucketKeyForDays(Number(r.days_past_due ?? 0)) === bucket);
+  const totalCount = filtered.length;
+  const pages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const currentPage = Math.min(page, pages - 1);
+  const pageStart = currentPage * pageSize;
+  const pageRows = filtered.slice(pageStart, pageStart + pageSize);
+  useEffect(() => { setPage(0); }, [bucket, pageSize]);
   const totals = BUCKETS.map((b) => ({
     ...b,
     total: rows
@@ -175,7 +184,7 @@ function ArPage() {
                 <TableRow><TableHead>Customer</TableHead><TableHead>Invoice</TableHead><TableHead>Amount</TableHead><TableHead>Days</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((r) => (
+                {pageRows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">{r.customer_name}</TableCell>
                     <TableCell>{r.invoice_number}</TableCell>
@@ -193,6 +202,22 @@ function ArPage() {
                 ))}
               </TableBody>
             </Table>
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-t">
+              <span className="text-xs text-muted-foreground">
+                {totalCount === 0 ? 0 : pageStart + 1}–{Math.min(totalCount, pageStart + pageSize)} of {totalCount.toLocaleString()} · Page {currentPage + 1} of {pages}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Rows per page</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[25, 50, 100, 200, 500].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" disabled={currentPage === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft className="w-4 h-4" /></Button>
+                <Button size="sm" variant="outline" disabled={currentPage >= pages - 1} onClick={() => setPage((p) => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
+              </div>
+            </div>
           </Card>
         </TabsContent>
 
