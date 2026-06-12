@@ -1,5 +1,6 @@
 // Server-only helpers for scheduled SQL queries.
 import { CronExpressionParser } from "cron-parser";
+import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob, applyPricerSync } from "./p21.server";
 
