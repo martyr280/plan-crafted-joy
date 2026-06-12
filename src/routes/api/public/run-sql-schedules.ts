@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { timingSafeEqual } from "crypto";
 import { executeDueSchedules } from "@/lib/sql-schedules.server";
+import { runSpiffAutomationTick } from "@/lib/spiff.server";
 
 function checkSecret(provided: string | null | undefined, expected: string): boolean {
   if (!provided) return false;
