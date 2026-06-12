@@ -18,6 +18,8 @@ function CatalogsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   // catalog_id -> highest page extracted so far
   const [progress, setProgress] = useState<Record<string, number>>({});
+  // catalog_id -> ISO timestamp of last catalog_items insert
+  const [lastInsert, setLastInsert] = useState<Record<string, string | null>>({});
 
   async function load() {
     const { data } = await supabase.from("catalogs").select("*").order("published_date", { ascending: false });
