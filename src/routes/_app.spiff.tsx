@@ -423,7 +423,30 @@ function SpiffPage() {
               ))}
             </select>
             {currentRun && (
-              <Badge variant={isLocked ? "default" : "secondary"}>{currentRun.status}</Badge>
+              <>
+                <Badge variant={isLocked ? "default" : "secondary"}>{currentRun.status}</Badge>
+                <Button variant="outline" size="sm" onClick={handleDownload} title="Download workbook">
+                  <Download className="w-4 h-4 mr-1" /> Workbook
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendApproval}
+                  disabled={currentRun.status === "approved" || currentRun.status === "sent_to_ap"}
+                  title="Email each rep org their customer sheets"
+                >
+                  <Mail className="w-4 h-4 mr-1" /> Send for approval
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendAp}
+                  disabled={currentRun.status !== "approved"}
+                  title="Email full workbook to AP (run must be approved)"
+                >
+                  <Send className="w-4 h-4 mr-1" /> Send to AP
+                </Button>
+              </>
             )}
           </>
         }
