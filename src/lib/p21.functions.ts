@@ -128,7 +128,6 @@ export const syncArAging = createServerFn({ method: "POST" })
       JOIN dbo.customer    c ON c.customer_id = ih.customer_id
       WHERE ISNULL(ih.total_amount, 0) > ISNULL(ih.amount_paid, 0)
         AND DATEDIFF(day, ih.net_due_date, GETDATE()) <= 120
-      ORDER BY DATEDIFF(day, ih.net_due_date, GETDATE()) DESC
     `;
     const { result } = await runJob("sql.select", { sql }, 120000);
     const rows = ((result as any)?.rows ?? []) as Array<{
