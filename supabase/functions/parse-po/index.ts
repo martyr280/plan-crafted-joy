@@ -48,12 +48,14 @@ function normalizeSku(s: any): string {
     .trim();
 }
 
-function detectFinishFromText(text: string): string | null {
-  if (!text) return null;
+function detectFinishSuffixesFromText(text: string, allowedSuffixes?: string[]): string[] {
+  if (!text) return [];
+  const allowed = allowedSuffixes ? new Set(allowedSuffixes) : null;
+  const detected = new Set<string>();
   for (const [re, suf] of COLOR_WORD_TO_SUFFIX) {
-    if (re.test(text)) return suf;
+    if (re.test(text) && (!allowed || allowed.has(suf))) detected.add(suf);
   }
-  return null;
+  return Array.from(detected);
 }
 
 function priceLevelMatch(unit: number, p: Record<string, any>) {
@@ -252,12 +254,9 @@ async function resolveSkus(supabase: any, lineItems: any[], emailText: string) {
       // Multiple: try color/finish resolution with ambiguity guard.
       // Only auto-resolve when EXACTLY ONE of the candidates' suffixes is mentioned in text.
       const candSuffixes = Array.from(new Set(labeled.map((x) => x.suffix).filter(Boolean) as string[]));
-      const mentioned = new Set<string>();
-      for (const [re, suf] of COLOR_WORD_TO_SUFFIX) {
-        if (re.test(text) && candSuffixes.includes(suf)) mentioned.add(suf);
-      }
-      if (mentioned.size === 1 && !opts.trimmed) {
-        const suf = Array.from(mentioned)[0];
+      const mentioned = detectFinishSuffixesFromText(text, candSuffixes);
+      if (mentioned.length === 1 && !opts.trimmed) {
+        const suf = mentioned[0];
         const hit = labeled.find((x) => x.suffix === suf);
         if (hit) {
           out.matched_sku = hit.row.item;
@@ -429,14 +428,40 @@ serve(async (req) => {
       ]);
       function lineTokens(desc: string): string[] {
         if (!desc) return [];
-        const tokens = new Set<string>();
-        // Dimension patterns: 71"W, 36"D, 29"H, 71"W/36"D, 5'10", etc.
-        const dims = desc.match(/\d+(?:\.\d+)?\s*["']\s*[WDHwdh]?/g) || [];
-        for (const d of dims) tokens.add(d.replace(/\s+/g, "").toUpperCase());
-        // 4+ char words (alphanumeric).
-        const words = desc.toUpperCase().match(/[A-Z][A-Z0-9-]{3,}/g) || [];
-        for (const w of words) if (!STOPWORDS.has(w) && w.length >= 4) tokens.add(w);
-        return Array.from(tokens).slice(0, 6);
+        const upper = desc.toUpperCase();
+        const ranked: Array<{ token: string; score: number }> = [];
+        const seen = new Set<string>();
+        const push = (token: string, score: number) => {
+          const cleaned = token.replace(/\s+/g, " ").trim().toUpperCase();
+          if (!cleaned || seen.has(cleaned)) return;
+          seen.add(cleaned);
+          ranked.push({ token: cleaned, score });
+        };
+
+        const compositeDims = upper.match(/\d+(?:\.\d+)?\s*["']\s*[WDH]?\s*\/\s*\d+(?:\.\d+)?\s*["']\s*[WDH]?/g) || [];
+        for (const d of compositeDims) push(d.replace(/\s+/g, ""), 100);
+
+        const singleDims = upper.match(/\d+(?:\.\d+)?\s*["']\s*[WDH]?/g) || [];
+        for (const d of singleDims) push(d.replace(/\s+/g, ""), 90);
+
+        for (const suf of detectFinishSuffixesFromText(upper)) push(suf, 80);
+
+        const words = (upper.match(/[A-Z0-9]+/g) || []).filter((w) => {
+          if (STOPWORDS.has(w)) return false;
+          if (/^\d+$/.test(w)) return false;
+          return w.length >= 3;
+        });
+
+        for (let i = 0; i < words.length; i++) {
+          const tri = words.slice(i, i + 3);
+          if (tri.length === 3) push(tri.join(" "), 70 - i);
+          const bi = words.slice(i, i + 2);
+          if (bi.length === 2) push(bi.join(" "), 60 - i);
+          push(words[i], 40 - i);
+        }
+
+        ranked.sort((a, b) => b.score - a.score || b.token.length - a.token.length);
+        return ranked.slice(0, 3).map((x) => x.token);
       }
       const lineTokensByIdx: Record<number, string[]> = {};
       const allTokens = new Set<string>();
