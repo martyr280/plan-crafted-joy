@@ -217,7 +217,9 @@ export async function generateSpiffRunCore(opts: {
 
       for (const r of rawLines) {
         const inScope = isInScope(r.product_group_id, program.product_scope);
-        const isSpecial = String(r.validation_status ?? "").toUpperCase().includes("SPECIAL");
+        const vs = String(r.validation_status ?? "").trim();
+        const vsUpper = vs.toUpperCase();
+        const isSpecial = vsUpper.includes("SPECIAL");
         const excludedSpecial = program.exclude_special_orders && isSpecial;
         const included = inScope && !excludedSpecial;
         const exclusion_reason = !inScope
@@ -225,6 +227,12 @@ export async function generateSpiffRunCore(opts: {
           : excludedSpecial
             ? "special_order"
             : null;
+
+        // Flag (don't exclude) when validation_status is suspicious.
+        const flags: Record<string, any> = {};
+        if (vs && (vsUpper.includes("CANCEL") || vsUpper.includes("UNAPPROV") || vsUpper.includes("HOLD") || vsUpper.includes("REJECT"))) {
+          flags.validation_warning = vs;
+        }
 
         const ext = num(r.extended_price);
         const spiff = included ? +(ext * Number(program.rate)).toFixed(6) : 0;
@@ -250,7 +258,7 @@ export async function generateSpiffRunCore(opts: {
           rep_parse_confidence: parsed.confidence,
           included,
           exclusion_reason,
-          flags: {},
+          flags,
         });
       }
 
