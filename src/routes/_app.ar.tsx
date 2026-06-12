@@ -49,7 +49,7 @@ function ArPage() {
   }
 
   async function load() {
-    const { data } = await supabase.from("ar_aging").select("*").order("days_past_due", { ascending: false });
+    const { data } = await supabase.from("ar_aging").select("*").order("days_past_due", { ascending: false }).range(0, 19999);
     setRows(data ?? []);
     const { data: settings } = await supabase.from("app_settings").select("*").in("key", ["ar_automation_enabled", "ar_reminder_template"]);
     settings?.forEach((s: any) => {
