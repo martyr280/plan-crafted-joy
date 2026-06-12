@@ -301,6 +301,7 @@ export async function generateSpiffRunCore(opts: {
         rows: toInsert.length,
         spiff: spiffSum,
         unmatched,
+        missing_product_group: missingProductGroup,
       };
     } catch (e: any) {
       const msg = e?.message ?? "unknown error";
