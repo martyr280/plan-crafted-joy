@@ -115,7 +115,7 @@ export const syncArAging = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
-    const sql = `
+    const buildSql = (whereClause: string) => `
       SELECT
         ih.customer_id,
         c.customer_name,
@@ -127,10 +127,10 @@ export const syncArAging = createServerFn({ method: "POST" })
       FROM dbo.invoice_hdr ih
       JOIN dbo.customer    c ON c.customer_id = ih.customer_id
       WHERE ISNULL(ih.total_amount, 0) > ISNULL(ih.amount_paid, 0)
-        AND DATEDIFF(day, ih.net_due_date, GETDATE()) <= 120
+        AND ${whereClause}
     `;
-    const { result } = await runJob("sql.select", { sql }, 120000);
-    const rows = ((result as any)?.rows ?? []) as Array<{
+
+    const allRows: Array<{
       customer_id: string;
       customer_name: string;
       customer_email: string | null;
@@ -138,13 +138,34 @@ export const syncArAging = createServerFn({ method: "POST" })
       amount_due: number;
       due_date: string;
       days_past_due: number;
-    }>;
+    }> = [];
 
-    if (rows.length === 0) return { imported: 0 };
+    const clauses = ["DATEDIFF(day, ih.net_due_date, GETDATE()) <= 0"];
+    for (let startDay = 1; startDay <= 120; startDay += 10) {
+      const endDay = Math.min(startDay + 9, 120);
+      clauses.push(`DATEDIFF(day, ih.net_due_date, GETDATE()) BETWEEN ${startDay} AND ${endDay}`);
+    }
+
+    for (const whereClause of clauses) {
+      const sql = buildSql(whereClause);
+      const { result } = await runJob("sql.select", { sql }, 120000);
+      const batchRows = ((result as any)?.rows ?? []) as Array<{
+        customer_id: string;
+        customer_name: string;
+        customer_email: string | null;
+        invoice_number: string;
+        amount_due: number;
+        due_date: string;
+        days_past_due: number;
+      }>;
+      allRows.push(...batchRows);
+    }
+
+    if (allRows.length === 0) return { imported: 0 };
 
     await supabaseAdmin.from("ar_aging").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
-    const toInsert = rows.map((r) => ({
+    const toInsert = allRows.map((r) => ({
       customer_id: String(r.customer_id),
       customer_name: r.customer_name,
       customer_email: r.customer_email,
