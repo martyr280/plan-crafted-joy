@@ -1078,3 +1078,239 @@ function ProgramsEditor({
     </Card>
   );
 }
+
+// ====== Contacts CRUD ======
+
+type Contact = {
+  id: string;
+  kind: "salesrep_approver" | "ap";
+  label: string;
+  email: string;
+  active: boolean;
+};
+
+function ContactsEditor() {
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [draft, setDraft] = useState<{ kind: Contact["kind"]; label: string; email: string }>({
+    kind: "salesrep_approver",
+    label: "",
+    email: "",
+  });
+
+  async function load() {
+    const { data } = await supabase.from("spiff_contacts").select("*").order("kind").order("label");
+    setContacts((data ?? []) as Contact[]);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function add() {
+    if (!draft.email.trim()) return toast.error("Email is required");
+    if (!draft.label.trim()) return toast.error("Label is required");
+    const { error } = await supabase
+      .from("spiff_contacts")
+      .insert({ kind: draft.kind, label: draft.label.trim(), email: draft.email.trim(), active: true });
+    if (error) return toast.error(error.message);
+    setDraft({ kind: draft.kind, label: "", email: "" });
+    load();
+  }
+  async function toggle(c: Contact) {
+    await supabase.from("spiff_contacts").update({ active: !c.active }).eq("id", c.id);
+    load();
+  }
+  async function remove(c: Contact) {
+    if (!confirm(`Remove ${c.email}?`)) return;
+    await supabase.from("spiff_contacts").delete().eq("id", c.id);
+    load();
+  }
+
+  return (
+    <Card>
+      <div className="px-4 py-3 border-b flex items-center justify-between">
+        <div>
+          <div className="font-semibold">Distribution Contacts</div>
+          <div className="text-xs text-muted-foreground">
+            Salesrep approvers (label = rep_org, must match Programs exactly) and AP recipients.
+          </div>
+        </div>
+      </div>
+      <div className="p-4 flex flex-wrap items-end gap-2 border-b">
+        <select
+          className="border rounded-md px-2 py-1.5 text-sm bg-card"
+          value={draft.kind}
+          onChange={(e) => setDraft({ ...draft, kind: e.target.value as any })}
+        >
+          <option value="salesrep_approver">salesrep_approver</option>
+          <option value="ap">ap</option>
+        </select>
+        <Input
+          placeholder={draft.kind === "ap" ? "AP" : "rep_org (e.g. IAI Joe Perry)"}
+          value={draft.label}
+          onChange={(e) => setDraft({ ...draft, label: e.target.value })}
+          className="w-[240px]"
+        />
+        <Input
+          type="email"
+          placeholder="email@example.com"
+          value={draft.email}
+          onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+          className="w-[260px]"
+        />
+        <Button size="sm" onClick={add}>
+          Add contact
+        </Button>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Kind</TableHead>
+            <TableHead>Label</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Active</TableHead>
+            <TableHead></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {contacts.map((c) => (
+            <TableRow key={c.id}>
+              <TableCell className="text-xs">{c.kind}</TableCell>
+              <TableCell>{c.label}</TableCell>
+              <TableCell className="text-xs">{c.email}</TableCell>
+              <TableCell>
+                <button onClick={() => toggle(c)}>
+                  {c.active ? <Badge>Active</Badge> : <Badge variant="outline">Off</Badge>}
+                </button>
+              </TableCell>
+              <TableCell>
+                <Button size="sm" variant="ghost" onClick={() => remove(c)}>
+                  Remove
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {contacts.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">
+                No contacts yet.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
+// ====== Automation ======
+
+type Automation = {
+  id: string;
+  enabled: boolean;
+  day_of_month: number;
+  send_hour: number;
+  timezone: string;
+  send_approvals: boolean;
+  last_auto_quarter: string | null;
+  last_auto_run_at: string | null;
+  last_auto_status: string | null;
+  last_auto_error: string | null;
+};
+
+function AutomationCard() {
+  const [cfg, setCfg] = useState<Automation | null>(null);
+
+  async function load() {
+    const { data } = await supabase.from("spiff_automation").select("*").limit(1).maybeSingle();
+    setCfg((data as Automation) ?? null);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function update(patch: Partial<Automation>) {
+    if (!cfg) return;
+    const { error } = await supabase.from("spiff_automation").update(patch).eq("id", cfg.id);
+    if (error) return toast.error(error.message);
+    setCfg({ ...cfg, ...patch } as Automation);
+  }
+
+  if (!cfg) {
+    return (
+      <Card className="p-4 text-sm text-muted-foreground">Automation settings unavailable.</Card>
+    );
+  }
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-semibold">Automation</div>
+          <div className="text-xs text-muted-foreground">
+            Auto-generates the just-ended quarter's SPIFF and (optionally) emails approvals.
+            Runs through the existing scheduler — fires when it's the configured day-of-month at the configured hour
+            in the configured timezone, and skips if it already ran for that quarter. Never auto-sends to AP.
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={cfg.enabled}
+            onChange={(e) => update({ enabled: e.target.checked })}
+          />
+          Enabled
+        </label>
+      </div>
+      <div className="flex flex-wrap items-end gap-3 text-sm">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Day of month</span>
+          <Input
+            type="number"
+            min={1}
+            max={28}
+            className="w-[100px]"
+            value={cfg.day_of_month}
+            onChange={(e) => update({ day_of_month: Number(e.target.value) })}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Hour (0-23)</span>
+          <Input
+            type="number"
+            min={0}
+            max={23}
+            className="w-[100px]"
+            value={cfg.send_hour}
+            onChange={(e) => update({ send_hour: Number(e.target.value) })}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Timezone</span>
+          <Input
+            className="w-[200px]"
+            value={cfg.timezone}
+            onChange={(e) => update({ timezone: e.target.value })}
+          />
+        </label>
+        <label className="flex items-center gap-2 mb-1">
+          <input
+            type="checkbox"
+            checked={cfg.send_approvals}
+            onChange={(e) => update({ send_approvals: e.target.checked })}
+          />
+          Also send approval emails
+        </label>
+      </div>
+      <div className="text-xs text-muted-foreground">
+        Last auto run:{" "}
+        {cfg.last_auto_run_at
+          ? `${new Date(cfg.last_auto_run_at).toLocaleString()} · ${cfg.last_auto_quarter ?? "?"} · ${cfg.last_auto_status ?? "?"}`
+          : "never"}
+        {cfg.last_auto_error && (
+          <span className="text-red-600"> · {cfg.last_auto_error}</span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
