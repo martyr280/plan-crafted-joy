@@ -1,5 +1,6 @@
 // Server-only helpers for scheduled SQL queries.
 import { CronExpressionParser } from "cron-parser";
+import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob, applyPricerSync } from "./p21.server";
 
@@ -58,12 +59,62 @@ function renderTemplate(tpl: string, vars: Record<string, string | number>): str
   return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => String(vars[k] ?? ""));
 }
 
-async function sendEmailWithCsv(opts: {
+// Detect ISO-8601 date/datetime strings coming back from MSSQL via jsonb.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+function coerceCell(v: any): { value: any; numFmt?: string } {
+  if (v === null || v === undefined || v === "") return { value: null };
+  if (v instanceof Date) return { value: v, numFmt: "m/d/yyyy h:mm:ss" };
+  if (typeof v === "number") return { value: v };
+  if (typeof v === "boolean") return { value: v };
+  if (typeof v === "string") {
+    if (/^-?\d+(\.\d+)?$/.test(v)) {
+      const n = Number(v);
+      if (Number.isFinite(n)) return { value: n };
+    }
+    if (ISO_DATE_RE.test(v)) {
+      const d = new Date(v);
+      if (!Number.isNaN(d.getTime())) {
+        return { value: d, numFmt: v.length <= 10 ? "m/d/yyyy" : "m/d/yyyy h:mm:ss" };
+      }
+    }
+    return { value: v };
+  }
+  return { value: String(v) };
+}
+
+async function buildXlsx(rows: any[], columns: string[] | undefined, sheetName: string): Promise<Buffer> {
+  const cols = columns && columns.length ? columns : (rows[0] ? Object.keys(rows[0]) : []);
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Nelson AI";
+  wb.created = new Date();
+  const ws = wb.addWorksheet((sheetName || "Sheet1").slice(0, 31));
+  ws.columns = cols.map((c) => ({ header: c, key: c, width: Math.min(Math.max(c.length + 2, 12), 40) }));
+  ws.getRow(1).font = { bold: true };
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+
+  for (const r of rows) {
+    const out: Record<string, any> = {};
+    const fmts: Array<[string, string]> = [];
+    for (const c of cols) {
+      const { value, numFmt } = coerceCell(r[c]);
+      out[c] = value;
+      if (numFmt) fmts.push([c, numFmt]);
+    }
+    const added = ws.addRow(out);
+    for (const [c, fmt] of fmts) added.getCell(c).numFmt = fmt;
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  return Buffer.from(buf as ArrayBuffer);
+}
+
+async function sendEmailWithAttachment(opts: {
   to: string[];
   subject: string;
   htmlIntro: string;
   filename: string;
-  csv: string;
+  content: Buffer;
 }) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
@@ -77,10 +128,7 @@ async function sendEmailWithCsv(opts: {
       subject: opts.subject,
       html: opts.htmlIntro,
       attachments: [
-        {
-          filename: opts.filename,
-          content: Buffer.from(opts.csv, "utf8").toString("base64"),
-        },
+        { filename: opts.filename, content: opts.content.toString("base64") },
       ],
     }),
   });
@@ -139,14 +187,16 @@ export async function executeSchedule(scheduleId: string): Promise<{
         schedule.email_subject || "{{name}} — {{date}} ({{rows}} rows)",
         { name: schedule.name, date: dateStr, rows: rowCount }
       );
-      const html = `<p>Scheduled report <strong>${schedule.name}</strong> ran at ${startedAt.toISOString()} and returned <strong>${rowCount}</strong> row${rowCount === 1 ? "" : "s"}.</p><p>Results are attached as CSV.</p>`;
-      const filename = `${schedule.name.replace(/[^a-z0-9-_]+/gi, "_")}-${dateStr}.csv`;
-      await sendEmailWithCsv({
+      const html = `<p>Scheduled report <strong>${schedule.name}</strong> ran at ${startedAt.toISOString()} and returned <strong>${rowCount}</strong> row${rowCount === 1 ? "" : "s"}.</p><p>Results are attached as an Excel workbook.</p>`;
+      const safeName = schedule.name.replace(/[^a-z0-9-_]+/gi, "_");
+      const filename = `${safeName}-${dateStr}.xlsx`;
+      const content = await buildXlsx(rows, columns, schedule.name);
+      await sendEmailWithAttachment({
         to: schedule.recipients,
         subject,
         htmlIntro: html,
         filename,
-        csv: toCsv(rows, columns),
+        content,
       });
     }
   } catch (e: any) {

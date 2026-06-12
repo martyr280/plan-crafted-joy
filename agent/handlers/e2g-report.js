@@ -140,18 +140,18 @@ SELECT
     c.item_id,
     c.Today,
     c.item_desc,
-    ISNULL(c.Birm, '') AS Birm,
-    ISNULL(c.Dallas, '') AS Dallas,
-    ISNULL(c.Ocala, '') AS Ocala,
-    ISNULL(CAST(c.Total AS VARCHAR(20)), '') AS Total,
-    ISNULL(CAST(c.[E2G Price] AS VARCHAR(20)), '') AS [E2G Price],
-    ISNULL(CAST(c.[weight] AS VARCHAR(20)), '') AS [weight],
-    ISNULL(CAST(c.net_weight AS VARCHAR(20)), '') AS net_weight,
+    c.Birm,
+    c.Dallas,
+    c.Ocala,
+    c.Total,
+    c.[E2G Price],
+    c.[weight],
+    c.net_weight,
     -- Raw date for Supabase indexing/sorting (NULL when no due date).
     n.ReqdDate AS next_due_date,
-    -- Human display strings the report has always returned.
-    ISNULL(CONVERT(VARCHAR(10), n.ReqdDate, 101), '') AS [Next Due In],
-    ISNULL(CONVERT(VARCHAR(8), n.ReqdDate, 1), '') AS [Next Due In 2]
+    -- Human display strings the report has always returned (NULL when no due date).
+    CONVERT(VARCHAR(10), n.ReqdDate, 101) AS [Next Due In],
+    CONVERT(VARCHAR(8), n.ReqdDate, 1) AS [Next Due In 2]
 FROM combined_inventory c
 LEFT JOIN NextDue n
     ON c.item_id = n.item_id
