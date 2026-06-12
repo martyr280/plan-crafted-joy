@@ -187,14 +187,16 @@ export async function executeSchedule(scheduleId: string): Promise<{
         schedule.email_subject || "{{name}} — {{date}} ({{rows}} rows)",
         { name: schedule.name, date: dateStr, rows: rowCount }
       );
-      const html = `<p>Scheduled report <strong>${schedule.name}</strong> ran at ${startedAt.toISOString()} and returned <strong>${rowCount}</strong> row${rowCount === 1 ? "" : "s"}.</p><p>Results are attached as CSV.</p>`;
-      const filename = `${schedule.name.replace(/[^a-z0-9-_]+/gi, "_")}-${dateStr}.csv`;
-      await sendEmailWithCsv({
+      const html = `<p>Scheduled report <strong>${schedule.name}</strong> ran at ${startedAt.toISOString()} and returned <strong>${rowCount}</strong> row${rowCount === 1 ? "" : "s"}.</p><p>Results are attached as an Excel workbook.</p>`;
+      const safeName = schedule.name.replace(/[^a-z0-9-_]+/gi, "_");
+      const filename = `${safeName}-${dateStr}.xlsx`;
+      const content = await buildXlsx(rows, columns, schedule.name);
+      await sendEmailWithAttachment({
         to: schedule.recipients,
         subject,
         htmlIntro: html,
         filename,
-        csv: toCsv(rows, columns),
+        content,
       });
     }
   } catch (e: any) {
