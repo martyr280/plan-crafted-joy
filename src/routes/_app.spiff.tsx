@@ -705,7 +705,14 @@ function ReviewGroup({
           <TableCell className="whitespace-nowrap text-xs">
             {l.order_date ? new Date(l.order_date).toLocaleDateString() : "—"}
           </TableCell>
-          <TableCell className="text-xs">{l.order_no}</TableCell>
+          <TableCell className="text-xs">
+            {l.order_no}
+            {l.flags?.validation_warning && (
+              <Badge variant="outline" className="ml-1 text-[10px] border-amber-500 text-amber-700" title={String(l.flags.validation_warning)}>
+                ⚠ {String(l.flags.validation_warning).slice(0, 14)}
+              </Badge>
+            )}
+          </TableCell>
           <TableCell className="text-xs max-w-[200px] truncate" title={l.po_no ?? ""}>
             {l.po_no}
           </TableCell>
