@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Play, AlertTriangle, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Play, AlertTriangle, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { generateSpiffRun, rebuildSpiffChecks } from "@/lib/spiff.functions";
