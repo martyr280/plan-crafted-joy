@@ -204,7 +204,7 @@ export async function generateSpiffRunCore(opts: {
 
   const { id: runId } = await findOrCreateDraftRun(opts);
 
-  const perCustomerSummary: Record<string, { rows: number; spiff: number; unmatched: number; error?: string }> = {};
+  const perCustomerSummary: Record<string, { rows: number; spiff: number; unmatched: number; missing_product_group?: number; error?: string }> = {};
   const errors: Record<string, string> = {};
 
   // Sequential — 15 bridge jobs back-to-back is fine and easier to debug.
