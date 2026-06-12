@@ -421,8 +421,64 @@ serve(async (req) => {
         for (const e of e2g || []) e2gMap[String(e.item_id)] = e;
       }
 
-      // Step 6 — description fallback for the truly unresolved (top 3 by description ilike).
-      // Skipped for efficiency unless useful; only flag with candidates if there is a non-empty description.
+      // Step 6 — description fallback for lines unresolved after suffix + trimmed-prefix retries.
+      // One batched query: OR together distinctive tokens (dimensions + 4+ char content words)
+      // from every unresolved line, then score each result by per-line token overlap.
+      const STOPWORDS = new Set([
+        "WITH","AND","FOR","THE","FROM","INTO","FRONT","BACK","SIDE","TOP","NEW","ITEM","PART","COLOR","COLOUR","FINISH","FRAME","BASE","UNIT","INCLUDED","STD","STANDARD",
+      ]);
+      function lineTokens(desc: string): string[] {
+        if (!desc) return [];
+        const tokens = new Set<string>();
+        // Dimension patterns: 71"W, 36"D, 29"H, 71"W/36"D, 5'10", etc.
+        const dims = desc.match(/\d+(?:\.\d+)?\s*["']\s*[WDHwdh]?/g) || [];
+        for (const d of dims) tokens.add(d.replace(/\s+/g, "").toUpperCase());
+        // 4+ char words (alphanumeric).
+        const words = desc.toUpperCase().match(/[A-Z][A-Z0-9-]{3,}/g) || [];
+        for (const w of words) if (!STOPWORDS.has(w) && w.length >= 4) tokens.add(w);
+        return Array.from(tokens).slice(0, 6);
+      }
+      const lineTokensByIdx: Record<number, string[]> = {};
+      const allTokens = new Set<string>();
+      for (const { i } of stillUnresolved) {
+        if (matches[i].candidates?.length) continue; // already has prefix candidates — skip
+        const desc = String((parsed.line_items[i] as any).description || "");
+        const toks = lineTokens(desc);
+        if (toks.length) {
+          lineTokensByIdx[i] = toks;
+          for (const t of toks) allTokens.add(t);
+        }
+      }
+      const descCandsByIdx: Record<number, Array<{ item: string; description?: string }>> = {};
+      if (allTokens.size) {
+        const orExpr = Array.from(allTokens).slice(0, 30).map((t) => {
+          // Escape PostgREST commas / parens inside the pattern by replacing them — safest: drop
+          const safe = t.replace(/[(),%]/g, "");
+          return `description.ilike.%${safe}%`;
+        }).join(",");
+        const { data: descRows } = await supabase
+          .from("price_list")
+          .select("item, description")
+          .or(orExpr)
+          .limit(500);
+        // Score per line.
+        for (const idx of Object.keys(lineTokensByIdx)) {
+          const i = Number(idx);
+          const toks = lineTokensByIdx[i];
+          const scored: Array<{ item: string; description?: string; score: number }> = [];
+          for (const r of descRows || []) {
+            const d = String(r.description || "").toUpperCase();
+            let score = 0;
+            for (const t of toks) if (d.includes(t)) score++;
+            if (score > 0) scored.push({ item: r.item, description: r.description, score });
+          }
+          scored.sort((a, b) => b.score - a.score);
+          if (scored.length) {
+            descCandsByIdx[i] = scored.slice(0, 3).map((s) => ({ item: s.item, description: s.description }));
+          }
+        }
+      }
+
 
       let observedLevels: string[] = [];
       let unknownCount = 0;
