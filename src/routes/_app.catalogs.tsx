@@ -38,20 +38,25 @@ function CatalogsPage() {
       const ids = items.map((c) => c.id);
       if (!ids.length) return;
       const next: Record<string, number> = {};
+      const nextLast: Record<string, string | null> = {};
       // One round-trip per catalog (small N — typically a handful of catalogs).
       await Promise.all(
         ids.map(async (id) => {
           const { data } = await supabase
             .from("catalog_items")
-            .select("page")
+            .select("page, created_at")
             .eq("catalog_id", id)
-            .order("page", { ascending: false })
+            .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
           next[id] = Number(data?.page ?? 0);
+          nextLast[id] = (data?.created_at as string | undefined) ?? null;
         }),
       );
-      if (!cancelled) setProgress(next);
+      if (!cancelled) {
+        setProgress(next);
+        setLastInsert(nextLast);
+      }
     }
     fetchProgress();
     const anyParsing = items.some((c) => c.parse_status === "parsing");
