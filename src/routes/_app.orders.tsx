@@ -42,6 +42,7 @@ function StatusBadge({ s }: { s: string }) {
 function OrdersPage() {
   const submitOrderToP21Fn = useServerFn(submitOrderToP21);
   const reExtractFn = useServerFn(reExtractOrderLineItems);
+  const resolveSkuFn = useServerFn(resolveOrderLineSku);
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
