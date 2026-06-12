@@ -25,6 +25,16 @@ const BUCKETS = [
   { key: "90_plus", label: "90+ days" },
 ];
 
+const AR_PAGE_SIZE = 1000;
+
+function bucketKeyForDays(daysPastDue: number) {
+  if (daysPastDue <= 0) return "current";
+  if (daysPastDue <= 30) return "1_30";
+  if (daysPastDue <= 60) return "31_60";
+  if (daysPastDue <= 90) return "61_90";
+  return "90_plus";
+}
+
 function ArPage() {
   const syncArAgingFn = useServerFn(syncArAging);
   const { user, hasRole } = useAuth();
@@ -49,18 +59,50 @@ function ArPage() {
   }
 
   async function load() {
-    const { data } = await supabase.from("ar_aging").select("*").order("days_past_due", { ascending: false }).range(0, 19999);
-    setRows(data ?? []);
-    const { data: settings } = await supabase.from("app_settings").select("*").in("key", ["ar_automation_enabled", "ar_reminder_template"]);
-    settings?.forEach((s: any) => {
-      if (s.key === "ar_automation_enabled") setAutomation(!!s.value);
-      if (s.key === "ar_reminder_template") setTemplate(typeof s.value === "string" ? s.value : JSON.stringify(s.value));
-    });
+    try {
+      const settingsPromise = supabase
+        .from("app_settings")
+        .select("*")
+        .in("key", ["ar_automation_enabled", "ar_reminder_template"]);
+
+      const allRows: any[] = [];
+      for (let from = 0; ; from += AR_PAGE_SIZE) {
+        const { data, error } = await supabase
+          .from("ar_aging")
+          .select("*")
+          .order("days_past_due", { ascending: false })
+          .range(from, from + AR_PAGE_SIZE - 1);
+
+        if (error) throw error;
+        if (!data?.length) break;
+
+        allRows.push(...data);
+        if (data.length < AR_PAGE_SIZE) break;
+      }
+
+      setRows(allRows);
+
+      const { data: settings, error: settingsError } = await settingsPromise;
+      if (settingsError) throw settingsError;
+
+      settings?.forEach((s: any) => {
+        if (s.key === "ar_automation_enabled") setAutomation(!!s.value);
+        if (s.key === "ar_reminder_template") setTemplate(typeof s.value === "string" ? s.value : JSON.stringify(s.value));
+      });
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to load AR aging");
+    }
   }
   useEffect(() => { load(); }, []);
 
-  const filtered = bucket === "all" ? rows : rows.filter((r) => r.bucket === bucket);
-  const totals = BUCKETS.map((b) => ({ ...b, total: rows.filter((r) => r.bucket === b.key).reduce((a, r) => a + Number(r.amount_due), 0), count: rows.filter((r) => r.bucket === b.key).length }));
+  const filtered = bucket === "all" ? rows : rows.filter((r) => bucketKeyForDays(Number(r.days_past_due ?? 0)) === bucket);
+  const totals = BUCKETS.map((b) => ({
+    ...b,
+    total: rows
+      .filter((r) => bucketKeyForDays(Number(r.days_past_due ?? 0)) === b.key)
+      .reduce((a, r) => a + Number(r.amount_due ?? 0), 0),
+    count: rows.filter((r) => bucketKeyForDays(Number(r.days_past_due ?? 0)) === b.key).length,
+  }));
 
   async function sendReminder(r: any) {
     try {
