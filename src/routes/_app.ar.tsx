@@ -184,7 +184,7 @@ function ArPage() {
                 <TableRow><TableHead>Customer</TableHead><TableHead>Invoice</TableHead><TableHead>Amount</TableHead><TableHead>Days</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((r) => (
+                {pageRows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">{r.customer_name}</TableCell>
                     <TableCell>{r.invoice_number}</TableCell>
@@ -202,6 +202,22 @@ function ArPage() {
                 ))}
               </TableBody>
             </Table>
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-t">
+              <span className="text-xs text-muted-foreground">
+                {totalCount === 0 ? 0 : pageStart + 1}–{Math.min(totalCount, pageStart + pageSize)} of {totalCount.toLocaleString()} · Page {currentPage + 1} of {pages}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Rows per page</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[25, 50, 100, 200, 500].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" disabled={currentPage === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}><ChevronLeft className="w-4 h-4" /></Button>
+                <Button size="sm" variant="outline" disabled={currentPage >= pages - 1} onClick={() => setPage((p) => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
+              </div>
+            </div>
           </Card>
         </TabsContent>
 
