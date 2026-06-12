@@ -18,6 +18,8 @@ function CatalogsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   // catalog_id -> highest page extracted so far
   const [progress, setProgress] = useState<Record<string, number>>({});
+  // catalog_id -> ISO timestamp of last catalog_items insert
+  const [lastInsert, setLastInsert] = useState<Record<string, string | null>>({});
 
   async function load() {
     const { data } = await supabase.from("catalogs").select("*").order("published_date", { ascending: false });
@@ -36,20 +38,25 @@ function CatalogsPage() {
       const ids = items.map((c) => c.id);
       if (!ids.length) return;
       const next: Record<string, number> = {};
+      const nextLast: Record<string, string | null> = {};
       // One round-trip per catalog (small N — typically a handful of catalogs).
       await Promise.all(
         ids.map(async (id) => {
           const { data } = await supabase
             .from("catalog_items")
-            .select("page")
+            .select("page, created_at")
             .eq("catalog_id", id)
-            .order("page", { ascending: false })
+            .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
           next[id] = Number(data?.page ?? 0);
+          nextLast[id] = (data?.created_at as string | undefined) ?? null;
         }),
       );
-      if (!cancelled) setProgress(next);
+      if (!cancelled) {
+        setProgress(next);
+        setLastInsert(nextLast);
+      }
     }
     fetchProgress();
     const anyParsing = items.some((c) => c.parse_status === "parsing");
@@ -109,6 +116,18 @@ function CatalogsPage() {
           const status = c.parse_status ?? "pending";
           const prog = progressFor(c);
           const showProgress = prog && (status === "parsing" || status === "ready");
+          // Stalled detection: status says "parsing" but no catalog_items insert in the last 3 minutes.
+          const last = lastInsert[c.id];
+          const ageMs = last ? Date.now() - new Date(last).getTime() : Infinity;
+          const isStalled = status === "parsing" && ageMs > 3 * 60 * 1000;
+          const buttonLabel =
+            status === "ready"
+              ? "Re-parse"
+              : isStalled
+                ? "Resume parsing"
+                : status === "parsing"
+                  ? "Parsing…"
+                  : "Parse PDF";
           return (
             <Card key={c.id} className="p-4 flex flex-col gap-3">
               <div className="aspect-[3/4] bg-muted rounded-md flex items-center justify-center">
@@ -119,10 +138,18 @@ function CatalogsPage() {
                 <div className="mt-1 flex gap-2 flex-wrap text-xs items-center">
                   <Badge variant="outline">{c.kind}</Badge>
                   {c.published_date && <Badge variant="outline">{c.published_date}</Badge>}
-                  <Badge variant={statusVariant(status)}>{status}{status === "ready" && c.sku_count ? ` · ${c.sku_count} SKUs` : ""}</Badge>
+                  <Badge variant={isStalled ? "destructive" : statusVariant(status)}>
+                    {isStalled ? "stalled" : status}
+                    {status === "ready" && c.sku_count ? ` · ${c.sku_count} SKUs` : ""}
+                  </Badge>
                   {c.size_bytes && <span className="text-muted-foreground">{size(c.size_bytes)}</span>}
                 </div>
                 {c.parse_error && <p className="text-xs text-destructive mt-1 truncate" title={c.parse_error}>{c.parse_error}</p>}
+                {isStalled && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    No progress for {Math.round(ageMs / 60000)} min. The background job stopped — click Resume to continue from page {Number(progress[c.id] ?? 0)}.
+                  </p>
+                )}
               </div>
               {showProgress && prog && (
                 <div className="space-y-1">
@@ -145,9 +172,14 @@ function CatalogsPage() {
                   <a href={url} download><Download className="w-4 h-4 mr-2" />Download</a>
                 </Button>
               </div>
-              <Button size="sm" onClick={() => reparse(c)} disabled={busy === c.id || status === "parsing"}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${status === "parsing" ? "animate-spin" : ""}`} />
-                {status === "ready" ? "Re-parse" : status === "parsing" ? "Parsing…" : "Parse PDF"}
+              <Button
+                size="sm"
+                onClick={() => reparse(c)}
+                disabled={busy === c.id || (status === "parsing" && !isStalled)}
+                variant={isStalled ? "default" : undefined}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${status === "parsing" && !isStalled ? "animate-spin" : ""}`} />
+                {buttonLabel}
               </Button>
             </Card>
           );
