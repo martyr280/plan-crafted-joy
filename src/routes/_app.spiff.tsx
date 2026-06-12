@@ -71,6 +71,7 @@ type Line = {
   rep_parse_confidence: "parsed" | "unmatched" | "manual";
   included: boolean;
   exclusion_reason: string | null;
+  flags: any;
 };
 type Check = {
   id: string;
