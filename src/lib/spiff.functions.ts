@@ -104,3 +104,41 @@ export const rebuildSpiffChecks = createServerFn({ method: "POST" })
     }
     return { rebuilt: inserts.length };
   });
+
+// ===== Phase 2: workbook + distribution =====
+
+const RunIdSchema = z.object({ runId: z.string().uuid() });
+
+export const downloadSpiffWorkbook = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => RunIdSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { buildSpiffWorkbook } = await import("./spiff/workbook.server");
+    const { filename, buffer } = await buildSpiffWorkbook(data.runId);
+    return {
+      filename,
+      contentBase64: buffer.toString("base64"),
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    };
+  });
+
+export const sendSpiffForApproval = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => RunIdSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { sendForApprovalCore } = await import("./spiff.server");
+    return sendForApprovalCore({ runId: data.runId, userId: context.userId });
+  });
+
+export const sendSpiffToAp = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => RunIdSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { sendToApCore } = await import("./spiff.server");
+    return sendToApCore({ runId: data.runId, userId: context.userId });
+  });
+
