@@ -127,7 +127,6 @@ export const syncArAging = createServerFn({ method: "POST" })
       FROM dbo.invoice_hdr ih
       JOIN dbo.customer    c ON c.customer_id = ih.customer_id
       WHERE ISNULL(ih.total_amount, 0) > ISNULL(ih.amount_paid, 0)
-        AND ih.delete_flag = 'N'
     `;
     const { result } = await runJob("sql.select", { sql }, 120000);
     const rows = ((result as any)?.rows ?? []) as Array<{
