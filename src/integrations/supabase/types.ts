@@ -308,6 +308,36 @@ export type Database = {
           },
         ]
       }
+      customer_price_levels: {
+        Row: {
+          created_at: string
+          customer_id: string
+          customer_name: string | null
+          last_seen_at: string
+          observed_count: number
+          price_level: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          customer_name?: string | null
+          last_seen_at?: string
+          observed_count?: number
+          price_level: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          customer_name?: string | null
+          last_seen_at?: string
+          observed_count?: number
+          price_level?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       damage_reports: {
         Row: {
           created_at: string
@@ -1952,6 +1982,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      backfill_sku_crossref_from_formerly: { Args: never; Returns: number }
       claim_admin_if_none: { Args: never; Returns: boolean }
       has_role: {
         Args: {
