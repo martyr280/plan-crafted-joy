@@ -44,6 +44,8 @@ function ArPage() {
   const [automation, setAutomation] = useState(true);
   const [template, setTemplate] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
 
   async function syncFromP21() {
     if (!hasRole("admin")) { toast.error("Admin role required"); return; }
