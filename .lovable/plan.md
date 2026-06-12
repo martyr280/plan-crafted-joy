@@ -1,34 +1,55 @@
-## Goal
+## Problem
 
-Add the E2G Combined Report (the verbatim SQL used by `agent/handlers/e2g-report.js`) as a row in `sql_schedules` so it shows up at `/sql-schedules`, ready to be turned on with a schedule + recipients.
+The scheduled "E2G Combined Report" emails a **CSV** attachment, but the canonical/expected format (per the uploaded `NDI-E2G-20260528.xlsx`) is an **XLSX** with proper data types:
 
-## What I'll do
+- `Today` → real datetime cell
+- `Birm`, `Dallas`, `Ocala`, `Total` → numeric cells (currently the SQL CASTs them to VARCHAR, so even the CSV is all-strings)
+- `E2G Price`, `weight`, `net_weight` → numeric
+- `Next Due In` / `Next Due In 2` → blank when no due date (not `""`)
+- 12 columns in this exact order: `item_id, Today, item_desc, Birm, Dallas, Ocala, Total, E2G Price, weight, net_weight, Next Due In, Next Due In 2`
 
-1. Insert a new `sql_schedules` row via the data tool (not a migration — this is data, not schema):
-   - **name:** `E2G Combined Report`
-   - **description:** "Per-item on-hand by branch (Birm/Dallas/Ocala), E2G price, weight, and next-due date from open POs. Source: agent/handlers/e2g-report.js."
-   - **sql:** the full CTE from `e2g-report.js`, with `USE P21;` and the trailing `;` stripped so it passes `validateSelectSql` (single statement, must start with `select`/`with`). The agent's SQL connection is already pinned to the P21 database, so `USE P21;` is redundant.
-   - **action:** `email`
-   - **recipients:** `[]` (you left this blank — fill in at `/sql-schedules` before activating)
-   - **email_subject:** `E2G Combined Report — {{date}}`
-   - **schedule_cron:** `0 7 * * 1-5` (placeholder; you'll pick the real cadence in the UI)
-   - **timezone:** `America/New_York`
-   - **active:** `false` — won't run until you set recipients and toggle it on
-   - **next_run_at:** `null`
-   - **created_by:** your user id
+The SQL itself already produces the right columns in the right order, so the fix is on the email/output side, not the query.
 
-2. No code changes. The existing builder UI in `/sql-schedules` already supports editing every field (schedule, recipients, run-now, activate).
+## Fix
 
-## How to finish
+Update `src/lib/sql-schedules.server.ts` to emit an **XLSX** attachment for email schedules, with proper cell types, and drop the SQL-side `CAST … AS VARCHAR` for the numeric location columns so they arrive as numbers.
 
-Open `/sql-schedules`, click the new "E2G Combined Report" row:
-- Add recipients
-- Pick frequency in the builder (weekday/daily/etc.)
-- Optionally "Run now" to verify it returns rows and emails out
-- Flip Active on
+### Changes
 
-## Technical notes
+1. **`src/lib/sql-schedules.server.ts`**
+   - Add `exceljs` (or `xlsx`) based workbook builder `toXlsx(rows, columns)`:
+     - Header row = `columns` (preserves SELECT order).
+     - For each cell: if value is a JS `Date` or ISO date string → write as date with `mm/dd/yyyy` or `m/d/yy h:mm` number format (matching the sample); if value is numeric (or numeric-looking string) → write as number; otherwise string; `null`/`undefined` → empty cell.
+     - Auto-size columns roughly (max(header, sample widths)).
+     - Freeze header row, bold header.
+   - Replace the `sendEmailWithCsv` call with `sendEmailWithXlsx`:
+     - `filename`: `${name}-${YYYY-MM-DD}.xlsx`
+     - `content-type` handled by Resend via filename extension; base64 body unchanged.
+   - Keep CSV helper for now but stop using it from `executeSchedule`.
 
-- `validateSelectSql` allows queries starting with `select` or `with` and forbids embedded `;`. The E2G query starts with `;WITH` — the leading `;` is stripped by the validator, and there are no other semicolons in the body, so it will pass once `USE P21;` and the trailing `;` are removed.
-- Preview/Run goes through `runJob("sql.select", ...)` → the local P21 agent's `sql-select` handler, same path used by the SQL Console.
-- Result set is ~all SKUs (likely 10k+ rows) → emitted as a CSV attachment by `sendEmailWithCsv`. No row-cap concerns.
+2. **`agent/handlers/e2g-report.js`**
+   - Remove the `CAST(... AS VARCHAR(20))` wrappers for `Birm`, `Dallas`, `Ocala`, `Total`, `E2G Price`, `weight`, `net_weight` so those come back as real numbers from MSSQL.
+   - Keep the `'Kit - NA'` literal for kit rows — that column will then be mixed (number for regular, string for kits), which matches the uploaded xlsx exactly (where Birm/Dallas/Ocala show numbers for regular rows and would show `Kit - NA` for kit rows).
+   - Keep `Next Due In` / `Next Due In 2` as the existing `CONVERT(VARCHAR…)` display strings; just stop coercing `''` — let SQL return `NULL` when no due date so the xlsx cell is blank (sample shows `NaN`/blank, not `""`).
+
+3. **Dependency**
+   - Add `exceljs` via `bun add exceljs` (pure JS, Workers-compatible, supports streaming write to Buffer).
+
+4. **Verification**
+   - Trigger the schedule via the existing "Run now" button on `/sql-schedules` and open the resulting email attachment to confirm:
+     - File extension `.xlsx`
+     - Numeric columns sortable as numbers
+     - `Today` shows as a real date
+     - `Next Due In` blank when not applicable
+     - Column order matches the sample exactly.
+
+### Non-goals
+
+- No changes to the SQL logic (joins, filters, kit math) — only the trailing `CAST`s for presentation.
+- No changes to the `upsert_price_list` action.
+- No UI changes on `/sql-schedules`.
+
+### Technical notes
+
+- `exceljs` works in the Cloudflare Worker runtime (pure JS, no native deps) and can produce a Buffer via `workbook.xlsx.writeBuffer()` which we base64 for Resend attachments.
+- Agent change ships via the next `agent-release.yml` build; the bridge is on-prem so the customer will need to update the agent for the numeric columns to flow through. Until then, the xlsx will still render — values just stay as strings in the four location columns. We can ship the email-side XLSX change immediately and the agent change in the same PR.
