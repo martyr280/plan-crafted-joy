@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { submitOrderToP21 } from "@/lib/p21.functions";
-import { reExtractOrderLineItems } from "@/lib/inbound-email.functions";
+import { reExtractOrderLineItems, resolveOrderLineSku } from "@/lib/inbound-email.functions";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/orders")({ component: OrdersPage });
@@ -42,6 +42,7 @@ function StatusBadge({ s }: { s: string }) {
 function OrdersPage() {
   const submitOrderToP21Fn = useServerFn(submitOrderToP21);
   const reExtractFn = useServerFn(reExtractOrderLineItems);
+  const resolveSkuFn = useServerFn(resolveOrderLineSku);
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
@@ -215,17 +216,27 @@ function OrdersPage() {
               <div className="mt-4 space-y-4">
                 <div className="flex gap-2"><StatusBadge s={selected.status} /><ConfBadge v={selected.ai_confidence} /></div>
                 {(selected.ai_flags as any[])?.length > 0 && (
-                  <Card className="p-3 bg-warning/10 border-warning">
+                  <Card className="p-3">
                     <p className="font-semibold text-sm mb-2">AI flags</p>
-                    {(selected.ai_flags as any[]).map((f, i) => (
-                      <p key={i} className="text-xs"><strong>{f.field}:</strong> {f.issue} — <em>{f.suggestion}</em></p>
-                    ))}
+                    {(selected.ai_flags as any[]).map((f, i) => {
+                      const sev = f.severity ?? (f.type === "contract_or_price_match" ? "info" : "warning");
+                      const cls = sev === "error"
+                        ? "text-destructive"
+                        : sev === "info"
+                          ? "text-warning"
+                          : "text-foreground";
+                      return (
+                        <p key={i} className={`text-xs ${cls}`}>
+                          <strong>{f.field}:</strong> {f.issue}{f.suggestion ? <> — <em>{f.suggestion}</em></> : null}
+                        </p>
+                      );
+                    })}
                   </Card>
                 )}
                 <div>
                   <p className="font-semibold text-sm mb-2">Line items</p>
                   <Table>
-                    <TableHeader><TableRow><TableHead>SKU</TableHead><TableHead>Description</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>List</TableHead><TableHead>Total</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>SKU</TableHead><TableHead>Description</TableHead><TableHead>Qty</TableHead><TableHead>Unit</TableHead><TableHead>Match / List</TableHead><TableHead>Total</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {(selected.line_items as any[]).map((li, i) => {
                         const m = li.price_list_match;
@@ -233,28 +244,53 @@ function OrdersPage() {
                         const list = m?.list_price;
                         const unit = Number(li.unit_price);
                         const unknown = !m;
-                        const catalogOnly = source === "catalog";
-                        const mismatch = source === "contract" && list != null && Number.isFinite(unit) && Math.abs(Number(list) - unit) > 0.01;
-                        const cls = unknown ? "bg-destructive/10" : (mismatch || catalogOnly) ? "bg-warning/10" : "";
+                        const catalogOnly = source === "catalog" || source === "e2g";
+                        const ambiguous = source === "candidates";
+                        const cls = unknown
+                          ? "bg-destructive/10"
+                          : (catalogOnly || ambiguous)
+                            ? "bg-warning/10"
+                            : "";
                         return (
                           <TableRow key={i} className={cls}>
-                            <TableCell>{li.sku}</TableCell>
+                            <TableCell>
+                              <div className="font-mono text-xs">{li.sku}</div>
+                              {m?.matched_sku && m.matched_sku !== li.sku && (
+                                <div className="text-[10px] text-muted-foreground">→ {m.matched_sku}</div>
+                              )}
+                              <div className="flex gap-1 mt-1 flex-wrap">
+                                {m?.match_method && (
+                                  <Badge variant="outline" className="text-[10px]">{m.match_method}</Badge>
+                                )}
+                                {m?.price_level && (
+                                  <Badge className="text-[10px] bg-primary/15 text-primary border-primary/30">{m.price_level}</Badge>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>{li.description}</TableCell>
                             <TableCell>{li.qty}</TableCell>
                             <TableCell>${li.unit_price}</TableCell>
                             <TableCell className="text-xs">
                               {unknown ? (
                                 <span className="text-destructive">not found</span>
+                              ) : ambiguous ? (
+                                <CandidatePicker
+                                  candidates={m.candidates ?? []}
+                                  onPick={async (sku, remember) => {
+                                    try {
+                                      await resolveSkuFn({ data: { orderId: selected.id, lineIndex: i, chosenSku: sku, rememberMapping: remember } });
+                                      toast.success(remember ? "Mapped and remembered" : "Line resolved");
+                                      const { data } = await supabase.from("orders").select("*").eq("id", selected.id).single();
+                                      setSelected(data); load();
+                                    } catch (e: any) { toast.error(e?.message ?? "Failed"); }
+                                  }}
+                                />
                               ) : catalogOnly ? (
-                                <span title={`From catalog (page ${m.page ?? "?"})`}>
-                                  ${list != null ? Number(list).toFixed(2) : "—"} <span className="text-muted-foreground">(catalog)</span>
-                                </span>
-                              ) : source === "e2g" ? (
-                                <span title="From E2G inventory upload">
-                                  ${list != null ? Number(list).toFixed(2) : "—"} <span className="text-muted-foreground">(E2G)</span>
+                                <span title={source === "e2g" ? "From E2G inventory upload" : `From catalog (page ${m.page ?? "?"})`}>
+                                  ${list != null ? Number(list).toFixed(2) : "—"} <span className="text-muted-foreground">({source})</span>
                                 </span>
                               ) : (
-                                `$${Number(list).toFixed(2)}`
+                                `$${list != null ? Number(list).toFixed(2) : "—"}`
                               )}
                             </TableCell>
                             <TableCell>${li.line_total ?? li.qty * li.unit_price}</TableCell>
@@ -288,6 +324,38 @@ function OrdersPage() {
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+function CandidatePicker({
+  candidates,
+  onPick,
+}: {
+  candidates: Array<{ item: string; description?: string }>;
+  onPick: (sku: string, remember: boolean) => void | Promise<void>;
+}) {
+  const [choice, setChoice] = useState<string>(candidates[0]?.item ?? "");
+  const [remember, setRemember] = useState(false);
+  if (!candidates.length) return <span className="text-warning">ambiguous</span>;
+  return (
+    <div className="space-y-1">
+      <div className="text-warning text-[11px]">Pick a finish:</div>
+      <select
+        value={choice}
+        onChange={(e) => setChoice(e.target.value)}
+        className="w-full border rounded px-1 py-0.5 text-xs bg-background"
+      >
+        {candidates.map((c) => (
+          <option key={c.item} value={c.item}>{c.item}{c.description ? ` — ${c.description.slice(0, 40)}` : ""}</option>
+        ))}
+      </select>
+      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> remember this mapping
+      </label>
+      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => choice && onPick(choice, remember)}>
+        Apply
+      </Button>
     </div>
   );
 }
