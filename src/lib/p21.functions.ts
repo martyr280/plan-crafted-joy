@@ -119,7 +119,7 @@ export const syncArAging = createServerFn({ method: "POST" })
       SELECT
         ih.customer_id,
         c.customer_name,
-        c.email_address                           AS customer_email,
+        CAST(NULL AS VARCHAR(255))                AS customer_email,
         ih.invoice_no                             AS invoice_number,
         ISNULL(ih.total_amount, 0) - ISNULL(ih.amount_paid, 0) AS amount_due,
         ih.net_due_date                           AS due_date,
