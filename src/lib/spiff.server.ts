@@ -214,24 +214,37 @@ export async function generateSpiffRunCore(opts: {
       const toInsert: any[] = [];
       let unmatched = 0;
       let spiffSum = 0;
+      let missingProductGroup = 0;
+
+      const scoped =
+        program.product_scope === "pl_ryker_jax" ||
+        program.product_scope === "pl_ryker_jax_no_seating";
 
       for (const r of rawLines) {
-        const inScope = isInScope(r.product_group_id, program.product_scope);
+        const pg = r.product_group_id != null ? String(r.product_group_id).trim() : "";
+        const missingPg = scoped && pg === "";
+        const inScope = missingPg ? false : isInScope(r.product_group_id, program.product_scope);
         const vs = String(r.validation_status ?? "").trim();
         const vsUpper = vs.toUpperCase();
         const isSpecial = vsUpper.includes("SPECIAL");
         const excludedSpecial = program.exclude_special_orders && isSpecial;
         const included = inScope && !excludedSpecial;
-        const exclusion_reason = !inScope
-          ? "out_of_scope"
-          : excludedSpecial
-            ? "special_order"
-            : null;
+        const exclusion_reason = missingPg
+          ? "missing_product_group"
+          : !inScope
+            ? "out_of_scope"
+            : excludedSpecial
+              ? "special_order"
+              : null;
 
         // Flag (don't exclude) when validation_status is suspicious.
         const flags: Record<string, any> = {};
         if (vs && (vsUpper.includes("CANCEL") || vsUpper.includes("UNAPPROV") || vsUpper.includes("HOLD") || vsUpper.includes("REJECT"))) {
           flags.validation_warning = vs;
+        }
+        if (missingPg) {
+          flags.missing_product_group = true;
+          missingProductGroup++;
         }
 
         const ext = num(r.extended_price);
