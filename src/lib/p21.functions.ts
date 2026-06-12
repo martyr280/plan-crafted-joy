@@ -121,12 +121,12 @@ export const syncArAging = createServerFn({ method: "POST" })
         c.customer_name,
         c.email_address                           AS customer_email,
         ih.invoice_no                             AS invoice_number,
-        ih.invoice_balance                        AS amount_due,
+        ISNULL(ih.total_amount, 0) - ISNULL(ih.amount_paid, 0) AS amount_due,
         ih.net_due_date                           AS due_date,
         DATEDIFF(day, ih.net_due_date, GETDATE()) AS days_past_due
       FROM dbo.invoice_hdr ih
       JOIN dbo.customer    c ON c.customer_id = ih.customer_id
-      WHERE ih.invoice_balance > 0
+      WHERE ISNULL(ih.total_amount, 0) > ISNULL(ih.amount_paid, 0)
         AND ih.delete_flag = 'N'
     `;
     const { result } = await runJob("sql.select", { sql }, 120000);
