@@ -106,13 +106,22 @@ async function ingest(catalogId: string) {
     .from("catalogs").select("id, name, file_path, parse_status, sku_count").eq("id", catalogId).single();
   if (catErr || !cat) throw new Error(catErr?.message ?? "catalog not found");
 
-  // Resume support: if status is already 'parsing', keep existing rows and continue from max(page).
-  // Otherwise this is a fresh ingest — clear prior rows.
-  const isResume = cat.parse_status === "parsing";
+  // Resume support: resume whenever we already have rows for this catalog
+  // (covers status='parsing' AND status='error' from a prior failed chain).
+  // Only wipe and start fresh when there is nothing to resume.
+  const { count: existingCount } = await supabase
+    .from("catalog_items")
+    .select("sku", { count: "exact", head: true })
+    .eq("catalog_id", catalogId);
+  const isResume = (existingCount ?? 0) > 0;
   if (!isResume) {
     await supabase.from("catalog_items").delete().eq("catalog_id", catalogId);
     await supabase.from("catalogs").update({ parse_status: "parsing", parse_error: null, sku_count: 0 }).eq("id", catalogId);
+  } else {
+    // Clear any prior error and mark as parsing again.
+    await supabase.from("catalogs").update({ parse_status: "parsing", parse_error: null }).eq("id", catalogId);
   }
+
 
   // Download PDF (signed URL works for private buckets too)
   const { data: signed, error: signErr } = await supabase.storage.from("catalogs").createSignedUrl(cat.file_path, 600);
