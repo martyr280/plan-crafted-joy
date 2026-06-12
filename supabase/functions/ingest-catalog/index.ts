@@ -106,13 +106,22 @@ async function ingest(catalogId: string) {
     .from("catalogs").select("id, name, file_path, parse_status, sku_count").eq("id", catalogId).single();
   if (catErr || !cat) throw new Error(catErr?.message ?? "catalog not found");
 
-  // Resume support: if status is already 'parsing', keep existing rows and continue from max(page).
-  // Otherwise this is a fresh ingest — clear prior rows.
-  const isResume = cat.parse_status === "parsing";
+  // Resume support: resume whenever we already have rows for this catalog
+  // (covers status='parsing' AND status='error' from a prior failed chain).
+  // Only wipe and start fresh when there is nothing to resume.
+  const { count: existingCount } = await supabase
+    .from("catalog_items")
+    .select("sku", { count: "exact", head: true })
+    .eq("catalog_id", catalogId);
+  const isResume = (existingCount ?? 0) > 0;
   if (!isResume) {
     await supabase.from("catalog_items").delete().eq("catalog_id", catalogId);
     await supabase.from("catalogs").update({ parse_status: "parsing", parse_error: null, sku_count: 0 }).eq("id", catalogId);
+  } else {
+    // Clear any prior error and mark as parsing again.
+    await supabase.from("catalogs").update({ parse_status: "parsing", parse_error: null }).eq("id", catalogId);
   }
+
 
   // Download PDF (signed URL works for private buckets too)
   const { data: signed, error: signErr } = await supabase.storage.from("catalogs").createSignedUrl(cat.file_path, 600);
@@ -156,6 +165,8 @@ async function ingest(catalogId: string) {
 
   let chunksThisInvocation = 0;
   let nextStart = resumeFromPage;
+  let consecutiveChunkFailures = 0;
+  const MAX_CONSECUTIVE_CHUNK_FAILURES = 3;
 
   for (let start = resumeFromPage; start < totalPages; start += PAGES_PER_CHUNK) {
     if (chunksThisInvocation >= MAX_CHUNKS_PER_INVOCATION) {
@@ -173,12 +184,19 @@ async function ingest(catalogId: string) {
     let rows: any[] = [];
     try {
       rows = await extractChunk(apiKey, b64, start + 1);
+      consecutiveChunkFailures = 0;
     } catch (e) {
-      console.error(`chunk ${start}-${end} failed`, e);
+      consecutiveChunkFailures++;
+      console.error(`chunk ${start}-${end} failed (${consecutiveChunkFailures}/${MAX_CONSECUTIVE_CHUNK_FAILURES})`, e);
+      if (consecutiveChunkFailures >= MAX_CONSECUTIVE_CHUNK_FAILURES) {
+        // Bail out so the catalog row exits the "parsing" state instead of silently looping.
+        throw new Error(`Aborting ingest after ${consecutiveChunkFailures} consecutive chunk failures at page ${start + 1}: ${String((e as any)?.message ?? e)}`);
+      }
       chunksThisInvocation++;
       nextStart = start + PAGES_PER_CHUNK;
       continue;
     }
+
 
     const inserts: any[] = [];
     for (const row of rows) {
@@ -210,20 +228,44 @@ async function ingest(catalogId: string) {
   if (nextStart < totalPages) {
     // More work to do — chain a fresh invocation so we keep making progress without timing out.
     console.log(`Catalog ${catalogId}: processed up to page ${nextStart}/${totalPages}, chaining next invocation`);
-    try {
-      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ingest-catalog`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ catalog_id: catalogId }),
-      });
-    } catch (e) {
-      console.error("self-chain fetch failed", e);
+    const chainUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ingest-catalog`;
+    const chainHeaders = {
+      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      "Content-Type": "application/json",
+    };
+    const chainBody = JSON.stringify({ catalog_id: catalogId });
+
+    let chainOk = false;
+    let chainErr = "";
+    // Try up to 2 times — transient network blips shouldn't strand the catalog.
+    for (let attempt = 1; attempt <= 2 && !chainOk; attempt++) {
+      try {
+        const resp = await fetch(chainUrl, { method: "POST", headers: chainHeaders, body: chainBody });
+        if (resp.ok) {
+          chainOk = true;
+        } else {
+          chainErr = `chain HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`;
+          console.error(`self-chain attempt ${attempt} non-OK: ${chainErr}`);
+        }
+      } catch (e: any) {
+        chainErr = String(e?.message ?? e);
+        console.error(`self-chain attempt ${attempt} threw: ${chainErr}`);
+      }
+      if (!chainOk && attempt < 2) await new Promise((r) => setTimeout(r, 1000));
     }
-    return { totalPages, totalSkus, partial: true, nextStart };
+
+    if (!chainOk) {
+      // Flip the row out of "parsing" so the UI shows an error instead of an eternal spinner.
+      // The "Re-parse" / "Resume" button can still pick up from where we left off (isResume path).
+      await supabase.from("catalogs").update({
+        parse_status: "error",
+        parse_error: `Background chaining failed at page ${nextStart}/${totalPages}: ${chainErr || "unknown"}. Click Re-parse to resume.`,
+      }).eq("id", catalogId);
+    }
+    return { totalPages, totalSkus, partial: true, nextStart, chainOk };
   }
+
+
 
   await supabase.from("catalogs").update({
     parse_status: "ready",
