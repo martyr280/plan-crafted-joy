@@ -115,7 +115,21 @@ export const syncArAging = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { result } = await runJob("ar.aging", {}, 60000);
+    const sql = `
+      SELECT
+        ih.customer_id,
+        c.customer_name,
+        c.email_address                       AS customer_email,
+        ih.invoice_no                         AS invoice_number,
+        ih.invoice_balance                    AS amount_due,
+        ih.due_date,
+        DATEDIFF(day, ih.due_date, GETDATE()) AS days_past_due
+      FROM dbo.invoice_hdr ih
+      JOIN dbo.customer    c ON c.customer_id = ih.customer_id
+      WHERE ih.invoice_balance > 0
+        AND ih.delete_flag = 'N'
+    `;
+    const { result } = await runJob("sql.select", { sql }, 120000);
     const rows = ((result as any)?.rows ?? []) as Array<{
       customer_id: string;
       customer_name: string;
