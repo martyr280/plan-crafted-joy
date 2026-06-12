@@ -26,26 +26,24 @@ export function isInScope(productGroupId: string | null | undefined, scope: Prod
 }
 
 // Canonical line-detail query — exactly the SSMS query accounting runs today,
-// with product_group_id added so we can scope app-side. dateTo is EXCLUSIVE.
+// with product_group_id derived from dbo.inv_loc (it does NOT exist on
+// dbo.inv_mast in this P21 database). Grouped subquery avoids duplicating
+// order lines when an item exists at multiple locations. dateTo is EXCLUSIVE.
 export const SPIFF_LINES_SQL = `
 SELECT
-  b.order_date,
-  b.customer_id,
-  a.order_no,
-  b.po_no,
-  a.inv_mast_uid,
-  d.item_id,
-  d.item_desc,
-  d.product_group_id,
-  a.qty_ordered,
-  a.unit_price,
-  a.extended_price,
-  a.disposition,
-  b.validation_status,
-  e.inv_mast_uid AS kit
+  b.order_date, b.customer_id, a.order_no, b.po_no, a.inv_mast_uid,
+  d.item_id, d.item_desc,
+  pg.product_group_id,
+  a.qty_ordered, a.unit_price, a.extended_price, a.disposition,
+  b.validation_status, e.inv_mast_uid AS kit
 FROM dbo.oe_line a
 JOIN dbo.oe_hdr b ON a.order_no = b.order_no
 JOIN dbo.inv_mast d ON a.inv_mast_uid = d.inv_mast_uid
+LEFT JOIN (
+  SELECT inv_mast_uid, MAX(product_group_id) AS product_group_id
+  FROM dbo.inv_loc
+  GROUP BY inv_mast_uid
+) pg ON a.inv_mast_uid = pg.inv_mast_uid
 LEFT JOIN dbo.assembly_hdr e ON a.inv_mast_uid = e.inv_mast_uid
 WHERE b.order_date >= @dateFrom
   AND b.order_date < @dateTo
