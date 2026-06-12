@@ -139,30 +139,63 @@ async function resolveSkus(supabase: any, lineItems: any[], emailText: string) {
   }
 
   // STEP 4/5 — suffix completion + option-code insertion via single batched LIKE queries.
+  // We additionally build trimmed variants of each normalized SKU (drop 1–4 trailing chars, min 5 remaining)
+  // so junk trailing fragments like "-A3" don't blow up matching against PLTRBPOST28BRU.
   const unmatchedAfterCx = unmatchedAfterExact.filter((s) => !crossrefMap[s]);
-  const prefixMatches: Record<string, any[]> = {};
-  if (unmatchedAfterCx.length) {
-    // Build OR of ilike clauses on item.
-    const orExpr = unmatchedAfterCx.map((s) => `item.ilike.${s}%`).join(",");
+  const trimVariants: Record<string, string[]> = {}; // nsku -> [trim1, trim2, ...]
+  const allPrefixKeys = new Set<string>();
+  for (const s of unmatchedAfterCx) {
+    allPrefixKeys.add(s);
+    const trims: string[] = [];
+    for (let k = 1; k <= 4; k++) {
+      const t = s.slice(0, s.length - k);
+      if (t.length >= 5) { trims.push(t); allPrefixKeys.add(t); }
+    }
+    trimVariants[s] = trims;
+  }
+
+  const prefixMatchesByKey: Record<string, any[]> = {};
+  if (allPrefixKeys.size) {
+    const orExpr = Array.from(allPrefixKeys).map((s) => `item.ilike.${s}%`).join(",");
     const { data: cand } = await supabase
       .from("price_list")
       .select("item, description, list_price, dealer_cost, er_cost, weight, mfg, price_l1, price_l2, price_l3, price_l4, price_l5, price_showroom")
       .or(orExpr)
-      .limit(2000);
+      .limit(4000);
     for (const r of cand || []) {
       const it = String(r.item).toUpperCase();
-      for (const s of unmatchedAfterCx) {
-        if (it.startsWith(s)) {
-          if (!prefixMatches[s]) prefixMatches[s] = [];
-          prefixMatches[s].push(r);
+      for (const key of allPrefixKeys) {
+        if (it.startsWith(key)) {
+          if (!prefixMatchesByKey[key]) prefixMatchesByKey[key] = [];
+          prefixMatchesByKey[key].push(r);
         }
       }
     }
   }
 
+  const sortedSuf = [...FINISH_SUFFIXES].sort((a, b) => b.length - a.length);
+  function labelCandidates(key: string, cands: any[]) {
+    return cands.map((r) => {
+      const item = String(r.item).toUpperCase();
+      const tail = item.slice(key.length);
+      let method: "suffix_unique" | "option_code" | null = null;
+      let suffix: string | null = null;
+      for (const suf of sortedSuf) {
+        if (tail === suf) { method = "suffix_unique"; suffix = suf; break; }
+      }
+      if (!method) {
+        for (const suf of sortedSuf) {
+          if (tail.length > suf.length && tail.length <= suf.length + 3 && tail.endsWith(suf)) {
+            method = "option_code"; suffix = suf; break;
+          }
+        }
+      }
+      return { row: r, item, tail, method, suffix };
+    }).filter((x) => x.method != null);
+  }
+
   // Build per-line result.
   return lineItems.map((li, idx) => {
-    const rawSku = String(li.sku || "");
     const nsku = norm[idx];
     const description = String(li.description || "");
     const out: any = {
@@ -184,87 +217,84 @@ async function resolveSkus(supabase: any, lineItems: any[], emailText: string) {
     // Step 2: exact
     const exact = exactMap[nsku];
     if (exact) {
-      out.matched_sku = exact.item;
-      out.match_method = "exact";
-      out.match_confidence = 1.0;
-      out.price_record = exact;
-      out.price_source = "contract";
+      out.matched_sku = exact.item; out.match_method = "exact"; out.match_confidence = 1.0;
+      out.price_record = exact; out.price_source = "contract";
       return out;
     }
 
     // Step 3: crossref
     const cx = crossrefMap[nsku];
     if (cx) {
-      out.matched_sku = cx.ndi_sku;
-      out.match_method = "crossref";
-      out.match_confidence = cx.confidence;
-      out.price_record = cx.price;
-      out.price_source = "contract";
+      out.matched_sku = cx.ndi_sku; out.match_method = "crossref"; out.match_confidence = cx.confidence;
+      out.price_record = cx.price; out.price_source = "contract";
       return out;
     }
 
-    // Step 4/5: suffix + option-code completion
-    const cands = prefixMatches[nsku] || [];
-    if (cands.length) {
-      // Filter to plausible completions: extra chars must match `(.{0,3})(suffix)$`
-      // Sort suffixes by length desc so VBLK matches before BLK.
-      const sortedSuf = [...FINISH_SUFFIXES].sort((a, b) => b.length - a.length);
-      const labeled = cands.map((r) => {
-        const item = String(r.item).toUpperCase();
-        const tail = item.slice(nsku.length);
-        let method: "suffix_unique" | "option_code" | null = null;
-        let suffix: string | null = null;
-        for (const suf of sortedSuf) {
-          if (tail === suf) { method = "suffix_unique"; suffix = suf; break; }
-        }
-        if (!method) {
-          for (const suf of sortedSuf) {
-            const m = tail.match(new RegExp(`^.{1,3}${suf}$`));
-            if (m) { method = "option_code"; suffix = suf; break; }
-          }
-        }
-        return { row: r, item, tail, method, suffix };
-      }).filter((x) => x.method != null);
-
+    // Helper: from a labeled set, decide whether to auto-apply or surface candidates.
+    // `confidenceTable` returns confidence per match_method for the chosen suffix.
+    const text = `${description} ${emailText || ""}`;
+    function applyOrCandidates(
+      labeled: ReturnType<typeof labelCandidates>,
+      opts: { uniqueMethod?: "suffix_unique" | "option_code" | "trimmed_prefix"; trimmed?: boolean },
+    ): "applied" | "ambiguous" | "empty" {
+      if (labeled.length === 0) return "empty";
       if (labeled.length === 1) {
         const only = labeled[0];
         out.matched_sku = only.row.item;
-        out.match_method = only.method!;
-        out.match_confidence = only.method === "suffix_unique" ? 0.9 : 0.8;
+        out.match_method = opts.trimmed ? "trimmed_prefix" : only.method!;
+        out.match_confidence = opts.trimmed
+          ? 0.7
+          : only.method === "suffix_unique" ? 0.9 : 0.8;
         out.price_record = only.row;
         out.price_source = "contract";
-        return out;
+        return "applied";
       }
-
-      if (labeled.length > 1) {
-        // Try color/finish resolution from description + email body.
-        const text = `${description} ${emailText || ""}`;
-        const detected = detectFinishFromText(text);
-        if (detected) {
-          const sortedSuf2 = [...FINISH_SUFFIXES].sort((a, b) => b.length - a.length);
-          const matchSuf = sortedSuf2.find((s) => s === detected) ?? detected;
-          const hit = labeled.find((x) => x.suffix === matchSuf);
-          if (hit) {
-            out.matched_sku = hit.row.item;
-            out.match_method = "suffix_color_resolved";
-            out.match_confidence = 0.85;
-            out.price_record = hit.row;
-            out.price_source = "contract";
-            return out;
-          }
+      // Multiple: try color/finish resolution with ambiguity guard.
+      // Only auto-resolve when EXACTLY ONE of the candidates' suffixes is mentioned in text.
+      const candSuffixes = Array.from(new Set(labeled.map((x) => x.suffix).filter(Boolean) as string[]));
+      const mentioned = new Set<string>();
+      for (const [re, suf] of COLOR_WORD_TO_SUFFIX) {
+        if (re.test(text) && candSuffixes.includes(suf)) mentioned.add(suf);
+      }
+      if (mentioned.size === 1 && !opts.trimmed) {
+        const suf = Array.from(mentioned)[0];
+        const hit = labeled.find((x) => x.suffix === suf);
+        if (hit) {
+          out.matched_sku = hit.row.item;
+          out.match_method = "suffix_color_resolved";
+          out.match_confidence = 0.85;
+          out.price_record = hit.row;
+          out.price_source = "contract";
+          return "applied";
         }
-        out.candidates = labeled.slice(0, 6).map((x) => ({ item: x.row.item, description: x.row.description }));
-        out.flags.push({
-          field: `line[${idx}].sku`,
-          issue: `Finish required — candidates: ${out.candidates.map((c) => c.item).join(", ")}`,
-          suggestion: "Pick the correct finish/option to resolve",
-          severity: "warning",
-        });
-        return out;
       }
+      // Ambiguous — surface candidates.
+      out.candidates = labeled.slice(0, 6).map((x) => ({ item: x.row.item, description: x.row.description }));
+      const why = opts.trimmed
+        ? `Finish required (after trimming "${nsku}" → "${labeled[0].item.slice(0, labeled[0].item.length - (labeled[0].tail.length))}*") — candidates: ${out.candidates.map((c) => c.item).join(", ")}`
+        : `Finish required — candidates: ${out.candidates.map((c) => c.item).join(", ")}`;
+      out.flags.push({
+        field: `line[${idx}].sku`,
+        issue: why,
+        suggestion: "Pick the correct finish/option to resolve",
+        severity: "warning",
+      });
+      return "ambiguous";
     }
 
-    return out; // unresolved; downstream stages (catalog/e2g/description) handled below.
+    // Step 4/5 on the original normalized SKU.
+    const originalLabeled = labelCandidates(nsku, prefixMatchesByKey[nsku] || []);
+    const res = applyOrCandidates(originalLabeled, {});
+    if (res !== "empty") return out;
+
+    // Step 4b — trimmed-prefix retry (drop 1–4 trailing chars, longest first).
+    for (const trimKey of trimVariants[nsku] || []) {
+      const labeled = labelCandidates(trimKey, prefixMatchesByKey[trimKey] || []);
+      const r2 = applyOrCandidates(labeled, { trimmed: true });
+      if (r2 !== "empty") return out;
+    }
+
+    return out; // still unresolved; description / catalog / e2g handled downstream.
   });
 }
 
