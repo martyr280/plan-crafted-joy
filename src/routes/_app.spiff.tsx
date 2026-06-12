@@ -242,6 +242,27 @@ function SpiffPage() {
     }
   }
 
+  // Debounced auto-rebuild of checks after line edits.
+  const rebuildTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function scheduleRebuild() {
+    if (!currentRunId || isLocked) return;
+    if (rebuildTimer.current) clearTimeout(rebuildTimer.current);
+    rebuildTimer.current = setTimeout(async () => {
+      try {
+        await rebuild({ data: { runId: currentRunId } });
+        // Re-fetch just the checks (cheap) so the payee card updates.
+        const { data: cks } = await supabase
+          .from("spiff_checks")
+          .select("*")
+          .eq("run_id", currentRunId)
+          .limit(5000);
+        setChecks((cks ?? []) as Check[]);
+      } catch (e: any) {
+        toast.error(e?.message ?? "Auto-rebuild failed");
+      }
+    }, 400);
+  }
+
   async function updateLine(lineId: string, patch: Partial<Line>) {
     if (isLocked || !currentRunId) return;
     const { error } = await supabase.from("spiff_run_lines").update(patch).eq("id", lineId);
@@ -250,6 +271,7 @@ function SpiffPage() {
       return;
     }
     setLines((ls) => ls.map((l) => (l.id === lineId ? { ...l, ...patch } : l)));
+    scheduleRebuild();
   }
 
   async function reassignRep(line: Line, newRep: string) {
@@ -302,6 +324,53 @@ function SpiffPage() {
     await supabase.from("spiff_runs").update({ status: "approved" }).eq("id", currentRunId);
     toast.success("Run approved");
     loadProgramsAndRuns();
+  }
+
+  async function handleDownload() {
+    if (!currentRunId) return;
+    try {
+      const res = await downloadFn({ data: { runId: currentRunId } });
+      const bin = atob(res.contentBase64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: res.contentType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Download failed");
+    }
+  }
+
+  async function handleSendApproval() {
+    if (!currentRunId) return;
+    if (!confirm(`Email approval requests to each rep org's contacts for ${currentRun?.quarter_label}?`)) return;
+    try {
+      const res = await sendApprovalFn({ data: { runId: currentRunId } });
+      const skippedTxt = res.skipped.length
+        ? ` · skipped: ${res.skipped.map((s) => `${s.rep_org} (${s.reason})`).join(", ")}`
+        : "";
+      toast.success(`Approval emails sent to ${res.sent.length} rep org${res.sent.length === 1 ? "" : "s"}${skippedTxt}`);
+      loadProgramsAndRuns();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Send failed");
+    }
+  }
+
+  async function handleSendAp() {
+    if (!currentRunId) return;
+    if (!confirm(`Send the approved ${currentRun?.quarter_label} SPIFF run to AP?`)) return;
+    try {
+      const res = await sendApFn({ data: { runId: currentRunId } });
+      toast.success(`Sent to AP (${res.to.length} recipient${res.to.length === 1 ? "" : "s"}, ${res.payeeCount} payees)`);
+      loadProgramsAndRuns();
+      if (currentRunId) loadRunDetail(currentRunId);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Send failed");
+    }
   }
 
   return (
