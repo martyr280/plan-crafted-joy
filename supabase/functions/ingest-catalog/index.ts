@@ -219,20 +219,44 @@ async function ingest(catalogId: string) {
   if (nextStart < totalPages) {
     // More work to do — chain a fresh invocation so we keep making progress without timing out.
     console.log(`Catalog ${catalogId}: processed up to page ${nextStart}/${totalPages}, chaining next invocation`);
-    try {
-      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ingest-catalog`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ catalog_id: catalogId }),
-      });
-    } catch (e) {
-      console.error("self-chain fetch failed", e);
+    const chainUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ingest-catalog`;
+    const chainHeaders = {
+      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      "Content-Type": "application/json",
+    };
+    const chainBody = JSON.stringify({ catalog_id: catalogId });
+
+    let chainOk = false;
+    let chainErr = "";
+    // Try up to 2 times — transient network blips shouldn't strand the catalog.
+    for (let attempt = 1; attempt <= 2 && !chainOk; attempt++) {
+      try {
+        const resp = await fetch(chainUrl, { method: "POST", headers: chainHeaders, body: chainBody });
+        if (resp.ok) {
+          chainOk = true;
+        } else {
+          chainErr = `chain HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`;
+          console.error(`self-chain attempt ${attempt} non-OK: ${chainErr}`);
+        }
+      } catch (e: any) {
+        chainErr = String(e?.message ?? e);
+        console.error(`self-chain attempt ${attempt} threw: ${chainErr}`);
+      }
+      if (!chainOk && attempt < 2) await new Promise((r) => setTimeout(r, 1000));
     }
-    return { totalPages, totalSkus, partial: true, nextStart };
+
+    if (!chainOk) {
+      // Flip the row out of "parsing" so the UI shows an error instead of an eternal spinner.
+      // The "Re-parse" / "Resume" button can still pick up from where we left off (isResume path).
+      await supabase.from("catalogs").update({
+        parse_status: "error",
+        parse_error: `Background chaining failed at page ${nextStart}/${totalPages}: ${chainErr || "unknown"}. Click Re-parse to resume.`,
+      }).eq("id", catalogId);
+    }
+    return { totalPages, totalSkus, partial: true, nextStart, chainOk };
   }
+
+
 
   await supabase.from("catalogs").update({
     parse_status: "ready",
