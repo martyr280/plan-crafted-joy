@@ -327,3 +327,35 @@ function OrdersPage() {
     </div>
   );
 }
+
+function CandidatePicker({
+  candidates,
+  onPick,
+}: {
+  candidates: Array<{ item: string; description?: string }>;
+  onPick: (sku: string, remember: boolean) => void | Promise<void>;
+}) {
+  const [choice, setChoice] = useState<string>(candidates[0]?.item ?? "");
+  const [remember, setRemember] = useState(false);
+  if (!candidates.length) return <span className="text-warning">ambiguous</span>;
+  return (
+    <div className="space-y-1">
+      <div className="text-warning text-[11px]">Pick a finish:</div>
+      <select
+        value={choice}
+        onChange={(e) => setChoice(e.target.value)}
+        className="w-full border rounded px-1 py-0.5 text-xs bg-background"
+      >
+        {candidates.map((c) => (
+          <option key={c.item} value={c.item}>{c.item}{c.description ? ` — ${c.description.slice(0, 40)}` : ""}</option>
+        ))}
+      </select>
+      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> remember this mapping
+      </label>
+      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => choice && onPick(choice, remember)}>
+        Apply
+      </Button>
+    </div>
+  );
+}
