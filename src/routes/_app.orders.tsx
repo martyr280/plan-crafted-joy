@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { submitOrderToP21 } from "@/lib/p21.functions";
-import { reExtractOrderLineItems } from "@/lib/inbound-email.functions";
+import { reExtractOrderLineItems, resolveOrderLineSku } from "@/lib/inbound-email.functions";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_app/orders")({ component: OrdersPage });
