@@ -1428,6 +1428,120 @@ export type Database = {
         }
         Relationships: []
       }
+      spiff_checks: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          below_minimum: boolean
+          created_at: string
+          customer_id: string
+          id: string
+          line_count: number
+          payee: string
+          program_id: string
+          run_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          below_minimum?: boolean
+          created_at?: string
+          customer_id: string
+          id?: string
+          line_count?: number
+          payee: string
+          program_id: string
+          run_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          below_minimum?: boolean
+          created_at?: string
+          customer_id?: string
+          id?: string
+          line_count?: number
+          payee?: string
+          program_id?: string
+          run_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spiff_checks_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "spiff_programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spiff_checks_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "spiff_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spiff_programs: {
+        Row: {
+          active: boolean
+          created_at: string
+          customer_id: string
+          customer_name: string
+          exclude_special_orders: boolean
+          id: string
+          min_check_amount: number
+          notes: string | null
+          payee_name: string | null
+          payout_mode: string
+          product_scope: string
+          rate: number
+          rep_org: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          customer_id: string
+          customer_name: string
+          exclude_special_orders?: boolean
+          id?: string
+          min_check_amount?: number
+          notes?: string | null
+          payee_name?: string | null
+          payout_mode: string
+          product_scope?: string
+          rate: number
+          rep_org: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          customer_id?: string
+          customer_name?: string
+          exclude_special_orders?: boolean
+          id?: string
+          min_check_amount?: number
+          notes?: string | null
+          payee_name?: string | null
+          payout_mode?: string
+          product_scope?: string
+          rate?: number
+          rep_org?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       spiff_rules: {
         Row: {
           active: boolean
@@ -1464,6 +1578,126 @@ export type Database = {
           rate_value?: number
           sales_rep_split?: boolean
           sku_filter?: string | null
+        }
+        Relationships: []
+      }
+      spiff_run_lines: {
+        Row: {
+          created_at: string
+          customer_id: string
+          exclusion_reason: string | null
+          extended_price: number | null
+          flags: Json
+          id: string
+          included: boolean
+          item_desc: string | null
+          item_id: string | null
+          order_date: string | null
+          order_no: string | null
+          po_no: string | null
+          product_group_id: string | null
+          program_id: string
+          qty_ordered: number | null
+          rep_parse_confidence: string
+          run_id: string
+          spiff_amount: number
+          unit_price: number | null
+          writing_rep: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          exclusion_reason?: string | null
+          extended_price?: number | null
+          flags?: Json
+          id?: string
+          included?: boolean
+          item_desc?: string | null
+          item_id?: string | null
+          order_date?: string | null
+          order_no?: string | null
+          po_no?: string | null
+          product_group_id?: string | null
+          program_id: string
+          qty_ordered?: number | null
+          rep_parse_confidence?: string
+          run_id: string
+          spiff_amount?: number
+          unit_price?: number | null
+          writing_rep?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          exclusion_reason?: string | null
+          extended_price?: number | null
+          flags?: Json
+          id?: string
+          included?: boolean
+          item_desc?: string | null
+          item_id?: string | null
+          order_date?: string | null
+          order_no?: string | null
+          po_no?: string | null
+          product_group_id?: string | null
+          program_id?: string
+          qty_ordered?: number | null
+          rep_parse_confidence?: string
+          run_id?: string
+          spiff_amount?: number
+          unit_price?: number | null
+          writing_rep?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spiff_run_lines_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "spiff_programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spiff_run_lines_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "spiff_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spiff_runs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          date_from: string
+          date_to: string
+          id: string
+          quarter_label: string
+          status: string
+          totals: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          date_from: string
+          date_to: string
+          id?: string
+          quarter_label: string
+          status?: string
+          totals?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          date_from?: string
+          date_to?: string
+          id?: string
+          quarter_label?: string
+          status?: string
+          totals?: Json
+          updated_at?: string
         }
         Relationships: []
       }
