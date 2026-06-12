@@ -217,7 +217,9 @@ export async function generateSpiffRunCore(opts: {
 
       for (const r of rawLines) {
         const inScope = isInScope(r.product_group_id, program.product_scope);
-        const isSpecial = String(r.validation_status ?? "").toUpperCase().includes("SPECIAL");
+        const vs = String(r.validation_status ?? "").trim();
+        const vsUpper = vs.toUpperCase();
+        const isSpecial = vsUpper.includes("SPECIAL");
         const excludedSpecial = program.exclude_special_orders && isSpecial;
         const included = inScope && !excludedSpecial;
         const exclusion_reason = !inScope
@@ -225,6 +227,12 @@ export async function generateSpiffRunCore(opts: {
           : excludedSpecial
             ? "special_order"
             : null;
+
+        // Flag (don't exclude) when validation_status is suspicious.
+        const flags: Record<string, any> = {};
+        if (vs && (vsUpper.includes("CANCEL") || vsUpper.includes("UNAPPROV") || vsUpper.includes("HOLD") || vsUpper.includes("REJECT"))) {
+          flags.validation_warning = vs;
+        }
 
         const ext = num(r.extended_price);
         const spiff = included ? +(ext * Number(program.rate)).toFixed(6) : 0;
@@ -250,7 +258,7 @@ export async function generateSpiffRunCore(opts: {
           rep_parse_confidence: parsed.confidence,
           included,
           exclusion_reason,
-          flags: {},
+          flags,
         });
       }
 
@@ -320,3 +328,357 @@ export async function generateSpiffRunCore(opts: {
 
   return { runId, programsProcessed: progs.length, errors };
 }
+
+// =====================================================================
+// Email distribution
+// =====================================================================
+
+async function sendResendEmail(opts: {
+  to: string[];
+  subject: string;
+  html: string;
+  filename: string;
+  content: Buffer;
+}) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
+  const from = process.env.NELSON_FROM_EMAIL || "Nelson AI <noreply@nelsonbot.ai>";
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      attachments: [{ filename: opts.filename, content: opts.content.toString("base64") }],
+    }),
+  });
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`Resend send failed [${r.status}]: ${body.slice(0, 300)}`);
+  }
+  return r.json();
+}
+
+function appUrl(): string {
+  return (
+    process.env.APP_URL ||
+    process.env.PUBLIC_APP_URL ||
+    "https://nelsonbot.ai"
+  ).replace(/\/$/, "");
+}
+
+function money(n: number): string {
+  return Number(n || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+export async function sendForApprovalCore(opts: {
+  runId: string;
+  userId: string;
+}): Promise<{
+  sent: Array<{ rep_org: string; emails: string[]; customers: string[] }>;
+  skipped: Array<{ rep_org: string; reason: string }>;
+}> {
+  const { buildSpiffWorkbook } = await import("./spiff/workbook.server");
+
+  const { data: run } = await supabaseAdmin
+    .from("spiff_runs")
+    .select("*")
+    .eq("id", opts.runId)
+    .single();
+  if (!run) throw new Error("Run not found");
+
+  const { data: checks } = await supabaseAdmin
+    .from("spiff_checks")
+    .select("payee, customer_id")
+    .eq("run_id", opts.runId);
+  if ((checks ?? []).some((c) => c.payee === "(Unassigned)")) {
+    throw new Error("Resolve all (Unassigned) payees before sending for approval.");
+  }
+
+  const { data: programs } = await supabaseAdmin.from("spiff_programs").select("*").eq("active", true);
+  const { data: contacts } = await supabaseAdmin
+    .from("spiff_contacts")
+    .select("*")
+    .eq("kind", "salesrep_approver")
+    .eq("active", true);
+
+  // Group programs by rep_org
+  const byOrg = new Map<string, any[]>();
+  for (const p of programs ?? []) {
+    const arr = byOrg.get(p.rep_org) ?? [];
+    arr.push(p);
+    byOrg.set(p.rep_org, arr);
+  }
+
+  const sent: Array<{ rep_org: string; emails: string[]; customers: string[] }> = [];
+  const skipped: Array<{ rep_org: string; reason: string }> = [];
+
+  for (const [rep_org, progs] of byOrg) {
+    const emails = (contacts ?? [])
+      .filter((c) => c.label.trim().toLowerCase() === rep_org.trim().toLowerCase())
+      .map((c) => c.email);
+    if (emails.length === 0) {
+      skipped.push({ rep_org, reason: "no contact configured" });
+      continue;
+    }
+    const customerIds = progs.map((p) => p.customer_id);
+
+    // Per-customer totals (included only)
+    const { data: lines } = await supabaseAdmin
+      .from("spiff_run_lines")
+      .select("customer_id, spiff_amount, included")
+      .eq("run_id", opts.runId)
+      .in("customer_id", customerIds)
+      .limit(50000);
+    const totals = new Map<string, number>();
+    for (const l of lines ?? []) {
+      if (!l.included) continue;
+      totals.set(l.customer_id, (totals.get(l.customer_id) ?? 0) + Number(l.spiff_amount || 0));
+    }
+
+    const wb = await buildSpiffWorkbook(opts.runId, { customerIds });
+    const safeOrg = rep_org.replace(/[^A-Za-z0-9._-]+/g, "_");
+    const filename = `SPIFF-${run.quarter_label}-${safeOrg}.xlsx`;
+
+    const rows = progs
+      .map((p) => {
+        const t = totals.get(p.customer_id) ?? 0;
+        return `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee">${p.customer_name}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right;font-family:monospace">${money(t)}</td></tr>`;
+      })
+      .join("");
+
+    const html = `
+      <p>Hi,</p>
+      <p>The <b>${run.quarter_label}</b> SPIFF run is ready for your review. Your customers and totals are listed below; the attached workbook has the line-level detail and payee breakdown.</p>
+      <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+        <thead><tr><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #333">Customer</th><th style="text-align:right;padding:4px 8px;border-bottom:2px solid #333">SPIFF</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p>Please review and reply to approve, or open <a href="${appUrl()}/spiff">${appUrl()}/spiff</a> for the live view.</p>
+      <p style="color:#777;font-size:12px">— Nelson AI · SPIFF</p>
+    `;
+
+    await sendResendEmail({
+      to: emails,
+      subject: `SPIFF ${run.quarter_label} — please review and approve`,
+      html,
+      filename,
+      content: wb.buffer,
+    });
+    sent.push({ rep_org, emails, customers: progs.map((p) => p.customer_name) });
+  }
+
+  await supabaseAdmin.from("spiff_runs").update({ status: "in_review" }).eq("id", opts.runId);
+  await supabaseAdmin.from("activity_events").insert({
+    event_type: "spiff.sent_for_approval",
+    entity_type: "spiff_run",
+    entity_id: opts.runId,
+    actor_id: opts.userId,
+    message: `SPIFF ${run.quarter_label} sent for approval (${sent.length} rep orgs, ${skipped.length} skipped)`,
+    metadata: { sent, skipped },
+  });
+
+  return { sent, skipped };
+}
+
+export async function sendToApCore(opts: {
+  runId: string;
+  userId: string;
+}): Promise<{ to: string[]; payeeCount: number }> {
+  const { buildSpiffWorkbook } = await import("./spiff/workbook.server");
+
+  const { data: run } = await supabaseAdmin
+    .from("spiff_runs")
+    .select("*")
+    .eq("id", opts.runId)
+    .single();
+  if (!run) throw new Error("Run not found");
+  if (run.status !== "approved") {
+    throw new Error("Run must be approved before sending to AP.");
+  }
+
+  const { data: contacts } = await supabaseAdmin
+    .from("spiff_contacts")
+    .select("email")
+    .eq("kind", "ap")
+    .eq("active", true);
+  const to = (contacts ?? []).map((c) => c.email);
+  if (to.length === 0) throw new Error("No active AP contacts configured.");
+
+  const { data: programs } = await supabaseAdmin.from("spiff_programs").select("*");
+  const progById = new Map((programs ?? []).map((p) => [p.id, p as any]));
+
+  const { data: checks } = await supabaseAdmin
+    .from("spiff_checks")
+    .select("*")
+    .eq("run_id", opts.runId)
+    .order("customer_id");
+
+  // Group by customer for HTML payee table
+  const byCust = new Map<string, any[]>();
+  for (const c of checks ?? []) {
+    const arr = byCust.get(c.customer_id) ?? [];
+    arr.push(c);
+    byCust.set(c.customer_id, arr);
+  }
+
+  let html = `<p>The <b>${run.quarter_label}</b> SPIFF run is approved. Below are the payees and amounts to cut checks for; the workbook is attached for line-level detail.</p>`;
+  for (const [custId, list] of byCust) {
+    const p = list[0] ? progById.get(list[0].program_id) : null;
+    const name = p?.customer_name ?? custId;
+    html += `<h3 style="margin:18px 0 4px;font-family:sans-serif">${name} <span style="color:#888;font-weight:normal">(${custId})</span></h3>`;
+    html += `<table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;margin-bottom:8px"><thead><tr><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #333">Payee</th><th style="text-align:right;padding:4px 8px;border-bottom:2px solid #333">Amount</th><th style="padding:4px 8px;border-bottom:2px solid #333">Note</th></tr></thead><tbody>`;
+    for (const c of list) {
+      const note = c.below_minimum ? "no check — under minimum" : "";
+      const greyed = c.below_minimum
+        ? "color:#888;font-style:italic"
+        : "";
+      html += `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;${greyed}">${c.payee}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right;font-family:monospace;${greyed}">${money(Number(c.amount))}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;color:#a36c00">${note}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  html += `<p style="color:#777;font-size:12px">— Nelson AI · SPIFF</p>`;
+
+  const wb = await buildSpiffWorkbook(opts.runId);
+  await sendResendEmail({
+    to,
+    subject: `SPIFF ${run.quarter_label} — checks for payment`,
+    html,
+    filename: wb.filename,
+    content: wb.buffer,
+  });
+
+  await supabaseAdmin.from("spiff_runs").update({ status: "sent_to_ap" }).eq("id", opts.runId);
+  await supabaseAdmin
+    .from("spiff_checks")
+    .update({ status: "sent" })
+    .eq("run_id", opts.runId)
+    .eq("status", "approved");
+  await supabaseAdmin.from("activity_events").insert({
+    event_type: "spiff.sent_to_ap",
+    entity_type: "spiff_run",
+    entity_id: opts.runId,
+    actor_id: opts.userId,
+    message: `SPIFF ${run.quarter_label} sent to AP (${to.length} recipients)`,
+    metadata: { to, payees: (checks ?? []).length },
+  });
+
+  return { to, payeeCount: (checks ?? []).length };
+}
+
+// =====================================================================
+// Quarterly automation hook (called from /api/public/run-sql-schedules)
+// =====================================================================
+
+function quarterLabelForDate(d: Date): { quarter: string; from: string; toExclusive: string } {
+  // Returns the JUST-ENDED quarter relative to d (i.e. the one we should generate now).
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1; // 1..12
+  // Determine which quarter we are currently IN, then walk back one.
+  let qIn: number;
+  if (m <= 3) qIn = 1;
+  else if (m <= 6) qIn = 2;
+  else if (m <= 9) qIn = 3;
+  else qIn = 4;
+  let pQ = qIn - 1;
+  let pY = y;
+  if (pQ === 0) {
+    pQ = 4;
+    pY = y - 1;
+  }
+  const startMonth = (pQ - 1) * 3 + 1; // 1,4,7,10
+  const endMonthExclusive = startMonth + 3; // 4,7,10,13
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const from = `${pY}-${pad(startMonth)}-01`;
+  const toExclusive =
+    endMonthExclusive === 13
+      ? `${pY + 1}-01-01`
+      : `${pY}-${pad(endMonthExclusive)}-01`;
+  return { quarter: `Q${pQ}-${pY}`, from, toExclusive };
+}
+
+export async function runSpiffAutomationTick(now: Date = new Date()): Promise<{
+  ran: boolean;
+  reason?: string;
+  runId?: string;
+  quarter?: string;
+}> {
+  const { data: cfg } = await supabaseAdmin
+    .from("spiff_automation")
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+  if (!cfg || !cfg.enabled) return { ran: false, reason: "disabled" };
+
+  // Compute "now" in the configured timezone, day/hour.
+  const tz = cfg.timezone || "America/Chicago";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? "0");
+  const day = get("day");
+  const hour = get("hour");
+  if (day !== Number(cfg.day_of_month)) return { ran: false, reason: "wrong day" };
+  if (hour < Number(cfg.send_hour)) return { ran: false, reason: "too early" };
+
+  const { quarter, from, toExclusive } = quarterLabelForDate(now);
+  if (cfg.last_auto_quarter === quarter) return { ran: false, reason: "already ran for this quarter" };
+
+  try {
+    const { runId } = await generateSpiffRunCore({
+      quarterLabel: quarter,
+      dateFrom: from,
+      dateTo: toExclusive,
+      userId: "00000000-0000-0000-0000-000000000000",
+    });
+
+    let approvalsResult: any = null;
+    if (cfg.send_approvals) {
+      try {
+        approvalsResult = await sendForApprovalCore({
+          runId,
+          userId: "00000000-0000-0000-0000-000000000000",
+        });
+      } catch (e: any) {
+        approvalsResult = { error: e?.message ?? String(e) };
+      }
+    }
+
+    await supabaseAdmin
+      .from("spiff_automation")
+      .update({
+        last_auto_quarter: quarter,
+        last_auto_run_at: new Date().toISOString(),
+        last_auto_status: "success",
+        last_auto_error: approvalsResult?.error ?? null,
+      })
+      .eq("id", cfg.id);
+
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "spiff.auto_generated",
+      entity_type: "spiff_run",
+      entity_id: runId,
+      message: `Auto-generated SPIFF run for ${quarter}${cfg.send_approvals ? " and sent approvals" : ""}`,
+      metadata: { quarter, approvalsResult },
+    });
+    return { ran: true, runId, quarter };
+  } catch (e: any) {
+    await supabaseAdmin
+      .from("spiff_automation")
+      .update({
+        last_auto_run_at: new Date().toISOString(),
+        last_auto_status: "error",
+        last_auto_error: e?.message ?? String(e),
+      })
+      .eq("id", cfg.id);
+    return { ran: false, reason: e?.message ?? String(e) };
+  }
+}
+

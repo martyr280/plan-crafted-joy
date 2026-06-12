@@ -1386,6 +1386,48 @@ export type Database = {
         }
         Relationships: []
       }
+      spiff_automation: {
+        Row: {
+          day_of_month: number
+          enabled: boolean
+          id: string
+          last_auto_error: string | null
+          last_auto_quarter: string | null
+          last_auto_run_at: string | null
+          last_auto_status: string | null
+          send_approvals: boolean
+          send_hour: number
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          day_of_month?: number
+          enabled?: boolean
+          id?: string
+          last_auto_error?: string | null
+          last_auto_quarter?: string | null
+          last_auto_run_at?: string | null
+          last_auto_status?: string | null
+          send_approvals?: boolean
+          send_hour?: number
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          day_of_month?: number
+          enabled?: boolean
+          id?: string
+          last_auto_error?: string | null
+          last_auto_quarter?: string | null
+          last_auto_run_at?: string | null
+          last_auto_status?: string | null
+          send_approvals?: boolean
+          send_hour?: number
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       spiff_calculations: {
         Row: {
           approved_at: string | null
@@ -1490,6 +1532,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      spiff_contacts: {
+        Row: {
+          active: boolean
+          created_at: string
+          email: string
+          id: string
+          kind: string
+          label: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          email: string
+          id?: string
+          kind: string
+          label: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          email?: string
+          id?: string
+          kind?: string
+          label?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       spiff_programs: {
         Row: {

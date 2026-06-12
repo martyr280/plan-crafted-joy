@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -16,10 +16,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Play, AlertTriangle, Loader2, Pencil } from "lucide-react";
+import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { generateSpiffRun, rebuildSpiffChecks } from "@/lib/spiff.functions";
+import {
+  generateSpiffRun,
+  rebuildSpiffChecks,
+  downloadSpiffWorkbook,
+  sendSpiffForApproval,
+  sendSpiffToAp,
+} from "@/lib/spiff.functions";
 
 export const Route = createFileRoute("/_app/spiff")({ component: SpiffPage });
 
@@ -65,6 +71,7 @@ type Line = {
   rep_parse_confidence: "parsed" | "unmatched" | "manual";
   included: boolean;
   exclusion_reason: string | null;
+  flags: any;
 };
 type Check = {
   id: string;
@@ -99,6 +106,9 @@ function SpiffPage() {
   const { user } = useAuth();
   const generate = useServerFn(generateSpiffRun);
   const rebuild = useServerFn(rebuildSpiffChecks);
+  const downloadFn = useServerFn(downloadSpiffWorkbook);
+  const sendApprovalFn = useServerFn(sendSpiffForApproval);
+  const sendApFn = useServerFn(sendSpiffToAp);
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [runs, setRuns] = useState<RunRow[]>([]);
@@ -232,6 +242,27 @@ function SpiffPage() {
     }
   }
 
+  // Debounced auto-rebuild of checks after line edits.
+  const rebuildTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function scheduleRebuild() {
+    if (!currentRunId || isLocked) return;
+    if (rebuildTimer.current) clearTimeout(rebuildTimer.current);
+    rebuildTimer.current = setTimeout(async () => {
+      try {
+        await rebuild({ data: { runId: currentRunId } });
+        // Re-fetch just the checks (cheap) so the payee card updates.
+        const { data: cks } = await supabase
+          .from("spiff_checks")
+          .select("*")
+          .eq("run_id", currentRunId)
+          .limit(5000);
+        setChecks((cks ?? []) as Check[]);
+      } catch (e: any) {
+        toast.error(e?.message ?? "Auto-rebuild failed");
+      }
+    }, 400);
+  }
+
   async function updateLine(lineId: string, patch: Partial<Line>) {
     if (isLocked || !currentRunId) return;
     const { error } = await supabase.from("spiff_run_lines").update(patch).eq("id", lineId);
@@ -240,6 +271,7 @@ function SpiffPage() {
       return;
     }
     setLines((ls) => ls.map((l) => (l.id === lineId ? { ...l, ...patch } : l)));
+    scheduleRebuild();
   }
 
   async function reassignRep(line: Line, newRep: string) {
@@ -294,6 +326,53 @@ function SpiffPage() {
     loadProgramsAndRuns();
   }
 
+  async function handleDownload() {
+    if (!currentRunId) return;
+    try {
+      const res = await downloadFn({ data: { runId: currentRunId } });
+      const bin = atob(res.contentBase64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: res.contentType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Download failed");
+    }
+  }
+
+  async function handleSendApproval() {
+    if (!currentRunId) return;
+    if (!confirm(`Email approval requests to each rep org's contacts for ${currentRun?.quarter_label}?`)) return;
+    try {
+      const res = await sendApprovalFn({ data: { runId: currentRunId } });
+      const skippedTxt = res.skipped.length
+        ? ` · skipped: ${res.skipped.map((s) => `${s.rep_org} (${s.reason})`).join(", ")}`
+        : "";
+      toast.success(`Approval emails sent to ${res.sent.length} rep org${res.sent.length === 1 ? "" : "s"}${skippedTxt}`);
+      loadProgramsAndRuns();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Send failed");
+    }
+  }
+
+  async function handleSendAp() {
+    if (!currentRunId) return;
+    if (!confirm(`Send the approved ${currentRun?.quarter_label} SPIFF run to AP?`)) return;
+    try {
+      const res = await sendApFn({ data: { runId: currentRunId } });
+      toast.success(`Sent to AP (${res.to.length} recipient${res.to.length === 1 ? "" : "s"}, ${res.payeeCount} payees)`);
+      loadProgramsAndRuns();
+      if (currentRunId) loadRunDetail(currentRunId);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Send failed");
+    }
+  }
+
   return (
     <div>
       <ModuleHeader
@@ -344,7 +423,30 @@ function SpiffPage() {
               ))}
             </select>
             {currentRun && (
-              <Badge variant={isLocked ? "default" : "secondary"}>{currentRun.status}</Badge>
+              <>
+                <Badge variant={isLocked ? "default" : "secondary"}>{currentRun.status}</Badge>
+                <Button variant="outline" size="sm" onClick={handleDownload} title="Download workbook">
+                  <Download className="w-4 h-4 mr-1" /> Workbook
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendApproval}
+                  disabled={currentRun.status === "approved" || currentRun.status === "sent_to_ap"}
+                  title="Email each rep org their customer sheets"
+                >
+                  <Mail className="w-4 h-4 mr-1" /> Send for approval
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendAp}
+                  disabled={currentRun.status !== "approved"}
+                  title="Email full workbook to AP (run must be approved)"
+                >
+                  <Send className="w-4 h-4 mr-1" /> Send to AP
+                </Button>
+              </>
             )}
           </>
         }
@@ -491,8 +593,10 @@ function SpiffPage() {
             />
           </TabsContent>
 
-          <TabsContent value="programs">
+          <TabsContent value="programs" className="space-y-4">
             <ProgramsEditor programs={programs} onChanged={loadProgramsAndRuns} />
+            <ContactsEditor />
+            <AutomationCard />
           </TabsContent>
         </Tabs>
       )}
@@ -603,7 +707,14 @@ function ReviewGroup({
           <TableCell className="whitespace-nowrap text-xs">
             {l.order_date ? new Date(l.order_date).toLocaleDateString() : "—"}
           </TableCell>
-          <TableCell className="text-xs">{l.order_no}</TableCell>
+          <TableCell className="text-xs">
+            {l.order_no}
+            {l.flags?.validation_warning && (
+              <Badge variant="outline" className="ml-1 text-[10px] border-amber-500 text-amber-700" title={String(l.flags.validation_warning)}>
+                ⚠ {String(l.flags.validation_warning).slice(0, 14)}
+              </Badge>
+            )}
+          </TableCell>
           <TableCell className="text-xs max-w-[200px] truncate" title={l.po_no ?? ""}>
             {l.po_no}
           </TableCell>
@@ -967,3 +1078,239 @@ function ProgramsEditor({
     </Card>
   );
 }
+
+// ====== Contacts CRUD ======
+
+type Contact = {
+  id: string;
+  kind: "salesrep_approver" | "ap";
+  label: string;
+  email: string;
+  active: boolean;
+};
+
+function ContactsEditor() {
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [draft, setDraft] = useState<{ kind: Contact["kind"]; label: string; email: string }>({
+    kind: "salesrep_approver",
+    label: "",
+    email: "",
+  });
+
+  async function load() {
+    const { data } = await supabase.from("spiff_contacts").select("*").order("kind").order("label");
+    setContacts((data ?? []) as Contact[]);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function add() {
+    if (!draft.email.trim()) return toast.error("Email is required");
+    if (!draft.label.trim()) return toast.error("Label is required");
+    const { error } = await supabase
+      .from("spiff_contacts")
+      .insert({ kind: draft.kind, label: draft.label.trim(), email: draft.email.trim(), active: true });
+    if (error) return toast.error(error.message);
+    setDraft({ kind: draft.kind, label: "", email: "" });
+    load();
+  }
+  async function toggle(c: Contact) {
+    await supabase.from("spiff_contacts").update({ active: !c.active }).eq("id", c.id);
+    load();
+  }
+  async function remove(c: Contact) {
+    if (!confirm(`Remove ${c.email}?`)) return;
+    await supabase.from("spiff_contacts").delete().eq("id", c.id);
+    load();
+  }
+
+  return (
+    <Card>
+      <div className="px-4 py-3 border-b flex items-center justify-between">
+        <div>
+          <div className="font-semibold">Distribution Contacts</div>
+          <div className="text-xs text-muted-foreground">
+            Salesrep approvers (label = rep_org, must match Programs exactly) and AP recipients.
+          </div>
+        </div>
+      </div>
+      <div className="p-4 flex flex-wrap items-end gap-2 border-b">
+        <select
+          className="border rounded-md px-2 py-1.5 text-sm bg-card"
+          value={draft.kind}
+          onChange={(e) => setDraft({ ...draft, kind: e.target.value as any })}
+        >
+          <option value="salesrep_approver">salesrep_approver</option>
+          <option value="ap">ap</option>
+        </select>
+        <Input
+          placeholder={draft.kind === "ap" ? "AP" : "rep_org (e.g. IAI Joe Perry)"}
+          value={draft.label}
+          onChange={(e) => setDraft({ ...draft, label: e.target.value })}
+          className="w-[240px]"
+        />
+        <Input
+          type="email"
+          placeholder="email@example.com"
+          value={draft.email}
+          onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+          className="w-[260px]"
+        />
+        <Button size="sm" onClick={add}>
+          Add contact
+        </Button>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Kind</TableHead>
+            <TableHead>Label</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Active</TableHead>
+            <TableHead></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {contacts.map((c) => (
+            <TableRow key={c.id}>
+              <TableCell className="text-xs">{c.kind}</TableCell>
+              <TableCell>{c.label}</TableCell>
+              <TableCell className="text-xs">{c.email}</TableCell>
+              <TableCell>
+                <button onClick={() => toggle(c)}>
+                  {c.active ? <Badge>Active</Badge> : <Badge variant="outline">Off</Badge>}
+                </button>
+              </TableCell>
+              <TableCell>
+                <Button size="sm" variant="ghost" onClick={() => remove(c)}>
+                  Remove
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {contacts.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">
+                No contacts yet.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
+// ====== Automation ======
+
+type Automation = {
+  id: string;
+  enabled: boolean;
+  day_of_month: number;
+  send_hour: number;
+  timezone: string;
+  send_approvals: boolean;
+  last_auto_quarter: string | null;
+  last_auto_run_at: string | null;
+  last_auto_status: string | null;
+  last_auto_error: string | null;
+};
+
+function AutomationCard() {
+  const [cfg, setCfg] = useState<Automation | null>(null);
+
+  async function load() {
+    const { data } = await supabase.from("spiff_automation").select("*").limit(1).maybeSingle();
+    setCfg((data as Automation) ?? null);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function update(patch: Partial<Automation>) {
+    if (!cfg) return;
+    const { error } = await supabase.from("spiff_automation").update(patch).eq("id", cfg.id);
+    if (error) return toast.error(error.message);
+    setCfg({ ...cfg, ...patch } as Automation);
+  }
+
+  if (!cfg) {
+    return (
+      <Card className="p-4 text-sm text-muted-foreground">Automation settings unavailable.</Card>
+    );
+  }
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-semibold">Automation</div>
+          <div className="text-xs text-muted-foreground">
+            Auto-generates the just-ended quarter's SPIFF and (optionally) emails approvals.
+            Runs through the existing scheduler — fires when it's the configured day-of-month at the configured hour
+            in the configured timezone, and skips if it already ran for that quarter. Never auto-sends to AP.
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={cfg.enabled}
+            onChange={(e) => update({ enabled: e.target.checked })}
+          />
+          Enabled
+        </label>
+      </div>
+      <div className="flex flex-wrap items-end gap-3 text-sm">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Day of month</span>
+          <Input
+            type="number"
+            min={1}
+            max={28}
+            className="w-[100px]"
+            value={cfg.day_of_month}
+            onChange={(e) => update({ day_of_month: Number(e.target.value) })}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Hour (0-23)</span>
+          <Input
+            type="number"
+            min={0}
+            max={23}
+            className="w-[100px]"
+            value={cfg.send_hour}
+            onChange={(e) => update({ send_hour: Number(e.target.value) })}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Timezone</span>
+          <Input
+            className="w-[200px]"
+            value={cfg.timezone}
+            onChange={(e) => update({ timezone: e.target.value })}
+          />
+        </label>
+        <label className="flex items-center gap-2 mb-1">
+          <input
+            type="checkbox"
+            checked={cfg.send_approvals}
+            onChange={(e) => update({ send_approvals: e.target.checked })}
+          />
+          Also send approval emails
+        </label>
+      </div>
+      <div className="text-xs text-muted-foreground">
+        Last auto run:{" "}
+        {cfg.last_auto_run_at
+          ? `${new Date(cfg.last_auto_run_at).toLocaleString()} · ${cfg.last_auto_quarter ?? "?"} · ${cfg.last_auto_status ?? "?"}`
+          : "never"}
+        {cfg.last_auto_error && (
+          <span className="text-red-600"> · {cfg.last_auto_error}</span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
