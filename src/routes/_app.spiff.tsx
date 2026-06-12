@@ -106,6 +106,9 @@ function SpiffPage() {
   const { user } = useAuth();
   const generate = useServerFn(generateSpiffRun);
   const rebuild = useServerFn(rebuildSpiffChecks);
+  const downloadFn = useServerFn(downloadSpiffWorkbook);
+  const sendApprovalFn = useServerFn(sendSpiffForApproval);
+  const sendApFn = useServerFn(sendSpiffToAp);
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [runs, setRuns] = useState<RunRow[]>([]);
