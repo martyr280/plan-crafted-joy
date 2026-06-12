@@ -593,8 +593,10 @@ function SpiffPage() {
             />
           </TabsContent>
 
-          <TabsContent value="programs">
+          <TabsContent value="programs" className="space-y-4">
             <ProgramsEditor programs={programs} onChanged={loadProgramsAndRuns} />
+            <ContactsEditor />
+            <AutomationCard />
           </TabsContent>
         </Tabs>
       )}
