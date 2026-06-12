@@ -27,7 +27,13 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
 
         try {
           const result = await executeDueSchedules();
-          return Response.json({ ok: true, ...result, ranAt: new Date().toISOString() });
+          let spiff: any = null;
+          try {
+            spiff = await runSpiffAutomationTick(new Date());
+          } catch (e: any) {
+            spiff = { ran: false, error: e?.message ?? String(e) };
+          }
+          return Response.json({ ok: true, ...result, spiff, ranAt: new Date().toISOString() });
         } catch (e: any) {
           return Response.json(
             { ok: false, error: e?.message ?? String(e) },
