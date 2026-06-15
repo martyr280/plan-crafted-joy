@@ -7,13 +7,14 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
 import {
   SPIFF_LINES_SQL,
+  SPIFF_LINES_ALL_SQL,
   SPIFF_AGING_SQL,
   isInScope,
   type ProductScope,
 } from "./spiff/constants";
 import { parseWritingRep } from "./spiff/parser";
 
-const LINES_TIMEOUT_MS = 120_000;
+const LINES_TIMEOUT_MS = 180_000;
 const AGING_TIMEOUT_MS = 60_000;
 const UNASSIGNED_PAYEE = "(Unassigned)";
 
