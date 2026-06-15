@@ -54,6 +54,36 @@ WHERE b.order_date >= @dateFrom
 ORDER BY b.order_date
 `.trim();
 
+// Same as SPIFF_LINES_SQL but pulls ALL programs in one round-trip. The
+// per-program variant above triggers 15+ sequential bridge polls per run,
+// which routinely blew past the Worker request budget and surfaced to the
+// user as "Failed to fetch". Collapsing into one IN-list query keeps the
+// whole generate call comfortably under the edge timeout.
+export const SPIFF_LINES_ALL_SQL = `
+SELECT
+  b.order_date, b.customer_id, a.order_no, b.po_no, a.inv_mast_uid,
+  d.item_id, d.item_desc,
+  pg.product_group_id,
+  a.qty_ordered, a.unit_price, a.extended_price, a.disposition,
+  b.validation_status, e.inv_mast_uid AS kit
+FROM dbo.oe_line a
+JOIN dbo.oe_hdr b ON a.order_no = b.order_no
+JOIN dbo.inv_mast d ON a.inv_mast_uid = d.inv_mast_uid
+LEFT JOIN (
+  SELECT inv_mast_uid, MAX(product_group_id) AS product_group_id
+  FROM dbo.inv_loc
+  GROUP BY inv_mast_uid
+) pg ON a.inv_mast_uid = pg.inv_mast_uid
+LEFT JOIN dbo.assembly_hdr e ON a.inv_mast_uid = e.inv_mast_uid
+WHERE b.order_date >= @dateFrom
+  AND b.order_date < @dateTo
+  AND b.customer_id IN ({customer_ids})
+  AND a.delete_flag = 'N'
+  AND a.disposition IS NULL
+  AND e.inv_mast_uid IS NULL
+ORDER BY b.customer_id, b.order_date
+`.trim();
+
 // AR aging gate query. If schema guess fails at runtime, we surface
 // the error gracefully and flag the run as "aging_unavailable".
 export const SPIFF_AGING_SQL = `
