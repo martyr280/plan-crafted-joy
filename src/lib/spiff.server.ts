@@ -7,13 +7,14 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
 import {
   SPIFF_LINES_SQL,
+  SPIFF_LINES_ALL_SQL,
   SPIFF_AGING_SQL,
   isInScope,
   type ProductScope,
 } from "./spiff/constants";
 import { parseWritingRep } from "./spiff/parser";
 
-const LINES_TIMEOUT_MS = 120_000;
+const LINES_TIMEOUT_MS = 180_000;
 const AGING_TIMEOUT_MS = 60_000;
 const UNASSIGNED_PAYEE = "(Unassigned)";
 
@@ -118,6 +119,37 @@ async function fetchProgramLines(
   return rows;
 }
 
+// Pulls every program's lines in ONE bridge job to stay within the edge
+// request budget. Returns a map keyed by customer_id.
+async function fetchAllProgramLines(
+  customerIds: string[],
+  dateFrom: string,
+  dateTo: string
+): Promise<Map<string, RawLine[]>> {
+  const out = new Map<string, RawLine[]>();
+  if (customerIds.length === 0) return out;
+  // Whitelist customer ids — they come from spiff_programs (admin seed) but
+  // are interpolated into SQL, so defensively constrain the alphabet.
+  const safe = customerIds.filter((c) => /^[A-Za-z0-9_-]+$/.test(c));
+  for (const c of safe) out.set(c, []);
+  if (safe.length === 0) return out;
+  const inList = safe.map((c) => `'${c}'`).join(",");
+  const sql = SPIFF_LINES_ALL_SQL.replace("{customer_ids}", inList);
+  const { result } = await runJob(
+    "sql.select",
+    { sql, params: { dateFrom, dateTo }, slug: "spiff-all" },
+    LINES_TIMEOUT_MS
+  );
+  const rows = ((result as any)?.rows ?? []) as RawLine[];
+  for (const r of rows) {
+    const key = String(r.customer_id);
+    const arr = out.get(key) ?? [];
+    arr.push(r);
+    out.set(key, arr);
+  }
+  return out;
+}
+
 async function fetchAging(customerIds: string[]): Promise<{
   byCustomer: Record<string, number>;
   error: string | null;
@@ -207,10 +239,18 @@ export async function generateSpiffRunCore(opts: {
   const perCustomerSummary: Record<string, { rows: number; spiff: number; unmatched: number; missing_product_group?: number; error?: string }> = {};
   const errors: Record<string, string> = {};
 
-  // Sequential — 15 bridge jobs back-to-back is fine and easier to debug.
+  // ONE bridge call pulls every program's lines. Previously we polled the
+  // agent once per program, which routinely exceeded the edge request budget
+  // and surfaced to the user as "Failed to fetch".
+  const linesByCustomer = await fetchAllProgramLines(
+    progs.map((p) => p.customer_id),
+    opts.dateFrom,
+    opts.dateTo
+  );
+
   for (const program of progs) {
     try {
-      const rawLines = await fetchProgramLines(program, opts.dateFrom, opts.dateTo);
+      const rawLines = linesByCustomer.get(program.customer_id) ?? [];
       const toInsert: any[] = [];
       let unmatched = 0;
       let spiffSum = 0;
