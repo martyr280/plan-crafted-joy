@@ -239,10 +239,18 @@ export async function generateSpiffRunCore(opts: {
   const perCustomerSummary: Record<string, { rows: number; spiff: number; unmatched: number; missing_product_group?: number; error?: string }> = {};
   const errors: Record<string, string> = {};
 
-  // Sequential — 15 bridge jobs back-to-back is fine and easier to debug.
+  // ONE bridge call pulls every program's lines. Previously we polled the
+  // agent once per program, which routinely exceeded the edge request budget
+  // and surfaced to the user as "Failed to fetch".
+  const linesByCustomer = await fetchAllProgramLines(
+    progs.map((p) => p.customer_id),
+    opts.dateFrom,
+    opts.dateTo
+  );
+
   for (const program of progs) {
     try {
-      const rawLines = await fetchProgramLines(program, opts.dateFrom, opts.dateTo);
+      const rawLines = linesByCustomer.get(program.customer_id) ?? [];
       const toInsert: any[] = [];
       let unmatched = 0;
       let spiffSum = 0;
