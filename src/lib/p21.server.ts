@@ -1,10 +1,15 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { recomputeFamilies } from "./pricer.server";
 
-export async function assertAdmin(supabase: any, userId: string) {
-  const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  const isAdmin = (roles ?? []).some((r: any) => r.role === "admin");
-  if (!isAdmin) throw new Error("Admin role required");
+export async function assertAdmin(_supabase: any, userId: string) {
+  // Use service-role client + security-definer RPC so RLS on user_roles
+  // can't mask the check (user-context reads may be filtered to zero rows).
+  const { data, error } = await supabaseAdmin.rpc("has_role", {
+    _user_id: userId,
+    _role: "admin",
+  });
+  if (error) throw new Error(`Role check failed: ${error.message}`);
+  if (!data) throw new Error("Admin role required");
 }
 
 export async function runJob(kind: string, payload: any, timeoutMs = 30000) {
