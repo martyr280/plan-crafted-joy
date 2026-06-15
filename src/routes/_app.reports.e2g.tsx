@@ -34,11 +34,30 @@ type Row = {
 
 type SortKey = keyof Row;
 
-function csvDownload(name: string, rows: any[]) {
+const EXPORT_COLUMNS: { key: keyof Row | "Today"; label: string }[] = [
+  { key: "item_id", label: "item_id" },
+  { key: "Today", label: "Today" },
+  { key: "item_desc", label: "item_desc" },
+  { key: "birm", label: "Birm" },
+  { key: "dallas", label: "Dallas" },
+  { key: "ocala", label: "Ocala" },
+  { key: "total", label: "Total" },
+  { key: "e2g_price", label: "E2G Price" },
+  { key: "weight", label: "weight" },
+  { key: "net_weight", label: "net_weight" },
+  { key: "next_due_in_display", label: "Next Due In" },
+  { key: "next_due_in_2", label: "Next Due In 2" },
+];
+
+function csvDownload(name: string, rows: Row[]) {
   if (!rows.length) return;
-  const headers = Object.keys(rows[0]);
   const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+  const today = new Date().toLocaleDateString("en-US");
+  const headerLine = EXPORT_COLUMNS.map((c) => esc(c.label)).join(",");
+  const body = rows.map((r) =>
+    EXPORT_COLUMNS.map((c) => esc(c.key === "Today" ? today : (r as any)[c.key])).join(",")
+  );
+  const csv = [headerLine, ...body].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
