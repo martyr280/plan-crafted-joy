@@ -119,6 +119,37 @@ async function fetchProgramLines(
   return rows;
 }
 
+// Pulls every program's lines in ONE bridge job to stay within the edge
+// request budget. Returns a map keyed by customer_id.
+async function fetchAllProgramLines(
+  customerIds: string[],
+  dateFrom: string,
+  dateTo: string
+): Promise<Map<string, RawLine[]>> {
+  const out = new Map<string, RawLine[]>();
+  if (customerIds.length === 0) return out;
+  // Whitelist customer ids — they come from spiff_programs (admin seed) but
+  // are interpolated into SQL, so defensively constrain the alphabet.
+  const safe = customerIds.filter((c) => /^[A-Za-z0-9_-]+$/.test(c));
+  for (const c of safe) out.set(c, []);
+  if (safe.length === 0) return out;
+  const inList = safe.map((c) => `'${c}'`).join(",");
+  const sql = SPIFF_LINES_ALL_SQL.replace("{customer_ids}", inList);
+  const { result } = await runJob(
+    "sql.select",
+    { sql, params: { dateFrom, dateTo }, slug: "spiff-all" },
+    LINES_TIMEOUT_MS
+  );
+  const rows = ((result as any)?.rows ?? []) as RawLine[];
+  for (const r of rows) {
+    const key = String(r.customer_id);
+    const arr = out.get(key) ?? [];
+    arr.push(r);
+    out.set(key, arr);
+  }
+  return out;
+}
+
 async function fetchAging(customerIds: string[]): Promise<{
   byCustomer: Record<string, number>;
   error: string | null;
