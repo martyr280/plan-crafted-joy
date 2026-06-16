@@ -49,17 +49,35 @@ function findTopLevelToken(text: string, token: string, start = 0, last = false)
     if (ch === "'" || ch === '"') {
       const quote = ch;
       for (i++; i < text.length; i++) {
-        if (text[i] === quote && text[i + 1] === quote) { i++; continue; }
+        if (text[i] === quote && text[i + 1] === quote) {
+          i++;
+          continue;
+        }
         if (text[i] === quote) break;
       }
       continue;
     }
-    if (ch === "[") { for (i++; i < text.length && text[i] !== "]"; i++); continue; }
-    if (ch === "-" && next === "-") { for (i += 2; i < text.length && text[i] !== "\n"; i++); continue; }
-    if (ch === "/" && next === "*") { for (i += 2; i < text.length && !(text[i] === "*" && text[i + 1] === "/"); i++); i++; continue; }
+    if (ch === "[") {
+      for (i++; i < text.length && text[i] !== "]"; i++);
+      continue;
+    }
+    if (ch === "-" && next === "-") {
+      for (i += 2; i < text.length && text[i] !== "\n"; i++);
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      for (i += 2; i < text.length && !(text[i] === "*" && text[i + 1] === "/"); i++);
+      i++;
+      continue;
+    }
     if (ch === "(") depth++;
     else if (ch === ")") depth = Math.max(0, depth - 1);
-    else if (depth === 0 && text.slice(i, i + needle.length).toLowerCase() === needle && !isIdentifierChar(text[i - 1]) && !isIdentifierChar(text[i + needle.length])) {
+    else if (
+      depth === 0 &&
+      text.slice(i, i + needle.length).toLowerCase() === needle &&
+      !isIdentifierChar(text[i - 1]) &&
+      !isIdentifierChar(text[i + needle.length])
+    ) {
       found = i;
       if (!last) return found;
     }
