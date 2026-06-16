@@ -1,106 +1,29 @@
-# Rework the Inventory Sync page
+## Problem
 
-## Why change it
+Two real bugs with scheduled SQL queries:
 
-The current page shows three tabs derived from raw set-differences:
+1. **Multiple statements are blocked.** Both `validateSelectSql` (server) and `sqlSelect` (agent) reject any SQL containing `;`. That blocks legitimate multi-statement scripts that work in the editor — e.g. `DECLARE @x ...; WITH cte AS (...) SELECT ...;` or a setup SELECT followed by a final output SELECT.
+2. **Column order in the preview table is wrong.** The agent already returns `columns` in SELECT order, and the CSV/XLSX path honors it — but the preview table in `ScheduleEditor` builds its header from `Object.keys(previewRows[0])`, which loses order when rows round-trip through Postgres `jsonb`. So the preview shows columns in scrambled order even though the email attachment is already correct.
 
-- **Missing pricing** — useful but unranked.
-- **Missing on web** — dumps thousands of SKUs the company never intended to sell online (discontinued, special-order, internal items). Mostly noise.
-- **Description mismatch** — uses a loose word-overlap score that fires on real differences and on benign rewording alike. Mostly false positives.
+The user wants: allow multiple statements; the LAST recordset is treated as the output; preview honors the server-declared column order.
 
-Every row weighs the same. Nothing tells you what to fix first, and there's no price-vs-pricer signal at all.
+## Changes
 
-## What the page should do
+### A. Allow multiple statements (agent + server)
+- `agent/handlers/sql-select.js`: drop the `if (trimmed.includes(";"))` check. Keep the head check (first non-whitespace token must be `SELECT` or `WITH`). Safety boundary remains the DB user (`db_datareader` only), as the comment already notes.
+- `src/lib/sql-schedules.server.ts` → `validateSelectSql`: same — remove the `;` check, keep the head check.
 
-A single ranked worklist — "items most worth acting on, top first" — with two pivots:
+### B. Return the LAST recordset (agent)
+- `agent/sql.js` → `queryWithColumns`: when `result.recordsets` has length > 1, pick the last recordset that has a `columns` metadata bag (or the last non-empty one as fallback). Use `Object.keys(rs.columns)` from that specific recordset for `columns`, and that recordset's rows for `rows`. This matches the user's mental model — "the second query outputs the data" — and is how SSMS shows the final grid.
 
-1. **Add to website** — SKUs you sell, are flagged web-sellable, and are not on ndiof.com.
-2. **Review pricing** — SKUs where the website price disagrees with the current pricer list price.
+### C. Fix preview column order (UI)
+- `src/routes/_app.sql-schedules.tsx` → `ScheduleEditor`:
+  - Track `previewColumns` from the server response (`previewSqlSchedule` already returns `columns`).
+  - Replace `const columns = useMemo(... Object.keys(previewRows[0]))` with the server-provided `previewColumns` (fallback to `Object.keys` only if the server didn't send any).
 
-Both lists ranked by **sales velocity** (last 90 days revenue) so the top of the page is always the items losing real money.
+No DB schema changes. No cron changes. The CSV/XLSX email attachment path is already correct — this just makes the preview and multi-statement support match.
 
-## Page layout
+## Technical notes
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│ Inventory Sync                                  [Run full crawl]│
-│ Last crawl: 2h ago · 4,812 SKUs on web · 18,330 in pricer       │
-├─────────────────────────────────────────────────────────────────┤
-│  KPI strip                                                      │
-│  ┌──────────────┬──────────────┬──────────────┬──────────────┐  │
-│  │ Missing from │ Price        │ Out of stock │ Stale (no    │  │
-│  │ website      │ mismatches   │ on web       │ image/desc)  │  │
-│  │  142         │  37          │  88          │  61          │  │
-│  │ $1.2M/yr     │ $480K/yr     │ $310K/yr     │ $90K/yr      │  │
-│  └──────────────┴──────────────┴──────────────┴──────────────┘  │
-│  (each card = annualized revenue at risk from top-90d sales)    │
-├─────────────────────────────────────────────────────────────────┤
-│  Tabs: [Add to website (142)] [Price review (37)]               │
-│        [Stock & content (149)]                                  │
-│                                                                 │
-│  Filters: [Manufacturer ▾] [Category ▾] [Min 90-day sales ▾]    │
-│           [✓ Only web-sellable]  [Search…]      [Export CSV]    │
-│                                                                 │
-│  Table (sortable, paginated, 50/page):                          │
-│  Rank│ SKU      │ Description       │ 90d sales │ List $ │Action│
-│   1  │ ABC-123  │ 1/2" Brass elbow  │   $14,210 │ $42.50 │ View │
-│   2  │ DEF-456  │ …                 │ …         │ …      │ View │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Tabs
-
-### 1. Add to website (primary)
-- Source: in `price_list`, **not** in `website_items`, AND `web_sellable = true`.
-- Columns: SKU, Description, Mfg, Category, 90-day units sold, 90-day revenue, List price, Last sold date, "View in pricer" link.
-- Default sort: 90-day revenue ↓.
-
-### 2. Price review
-- Source: SKUs present in both, where `abs(website_price − list_price) > $1 OR > 2%`.
-- **Blocked today** — `website_items` has no price column. The page renders an empty state with a "Re-crawl with prices" CTA until phase 2 ships.
-
-### 3. Stock & content
-- One unified list of "listing is broken" rows ranked by 90-day revenue:
-  - Out of stock on web (`in_stock = false`)
-  - Missing image (`image_url is null`)
-  - Missing/short description (< 20 chars)
-  - Stale crawl (> 30 days old) — informational badge
-- One row per SKU with a chip set showing which problems apply.
-
-## Removed
-- The "Description mismatch" tab — Jaccard < 0.3 is noise. If we want this back later, it should be reframed as "website description shorter than catalog" or use embeddings.
-- The undifferentiated "missing on web" dump — replaced by the web-sellable filtered Add-to-website tab.
-
-## Data we need to add
-
-Two small backend additions, both required for the velocity ranking that the user picked:
-
-1. **`price_list.web_sellable boolean default true`** with an admin toggle. Migration adds the column; bulk-edit UI is a follow-up — for v1 we treat all rows as sellable unless category matches a blocklist (e.g. "Special Order", "Discontinued", "Internal").
-2. **`sku_sales_rollup` materialized view / table** keyed by `sku`, with `units_90d`, `revenue_90d`, `last_sold_at`. Refreshed daily by a small server function that reads the same P21 source the sales page already uses. Without this, "rank by sales velocity" can't render.
-
-If either is unavailable at runtime, the page falls back to ranking by list price and shows a banner explaining sales data isn't loaded yet.
-
-## Implementation phases
-
-1. **Phase 1 — UI restructure on existing data**
-   - New KPI strip (counts only, no $ until rollup exists).
-   - Tab 1 ("Add to website") and Tab 3 ("Stock & content") wired to existing tables.
-   - Drop the mismatch tab.
-   - Filters, pagination, sortable columns, CSV export per tab.
-2. **Phase 2 — Sales velocity**
-   - Migration: create `sku_sales_rollup` + refresh server function.
-   - Add 90-day sales/revenue columns and switch default sort to revenue.
-   - Annualized $-at-risk in KPI cards.
-3. **Phase 3 — Web-sellable flag**
-   - Migration: add `web_sellable` column + category-based seed.
-   - Inline toggle on each row to mark "not for web" and remove it from the list.
-4. **Phase 4 — Price discrepancy**
-   - Update the Firecrawl extractor to pull list price from product pages.
-   - Wire Tab 2 once `website_items.price` exists.
-
-## Files touched (phase 1)
-- `src/routes/_app.inventory-sync.tsx` — rewrite (keep crawl trigger + load logic, replace memoized diff and render).
-- No backend changes in phase 1.
-
-## Open question for the user before build
-- For phase 1's "web-sellable" exclusion, is there a **category name list** you want hard-coded as the initial blocklist (e.g. "Special Order", "Discontinued")? If unsure, I'll start with no blocklist and we'll tune after seeing the first run.
+- `mssql` exposes all result sets on `result.recordsets` (array of recordsets, each with its own `.columns` metadata). `result.recordset` is just `recordsets[recordsets.length - 1]` historically, but for safety we'll iterate `recordsets` and prefer the last one whose `columns` is populated.
+- Removing the `;` ban does not weaken security: the SQL bridge connects with a read-only login, and `validateSelectSql` still requires the script to begin with `SELECT` or `WITH`. Any `INSERT/UPDATE/DELETE/EXEC` issued by the user would fail at the DB with a permissions error.

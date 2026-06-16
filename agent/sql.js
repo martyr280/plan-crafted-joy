@@ -36,7 +36,28 @@ export async function queryWithColumns(text, params = {}) {
   const req = pool.request();
   for (const [k, v] of Object.entries(params)) req.input(k, v);
   const result = await req.query(text);
-  const rs = result.recordset;
-  const cols = rs && rs.columns ? Object.keys(rs.columns) : (rs && rs[0] ? Object.keys(rs[0]) : []);
-  return { rows: rs ?? [], columns: cols };
+
+  // For multi-statement queries, mssql returns every recordset in
+  // `result.recordsets`. Treat the LAST recordset that has column metadata
+  // as the output (matches SSMS's "final grid" behavior). Fall back to the
+  // last non-empty recordset, then to `result.recordset`.
+  const sets = Array.isArray(result.recordsets) ? result.recordsets : [];
+  let chosen = null;
+  for (let i = sets.length - 1; i >= 0; i--) {
+    if (sets[i] && sets[i].columns && Object.keys(sets[i].columns).length) {
+      chosen = sets[i];
+      break;
+    }
+  }
+  if (!chosen) {
+    for (let i = sets.length - 1; i >= 0; i--) {
+      if (sets[i] && sets[i].length) { chosen = sets[i]; break; }
+    }
+  }
+  if (!chosen) chosen = result.recordset ?? [];
+
+  const cols = chosen && chosen.columns
+    ? Object.keys(chosen.columns)
+    : (chosen && chosen[0] ? Object.keys(chosen[0]) : []);
+  return { rows: chosen ?? [], columns: cols };
 }

@@ -277,10 +277,14 @@ function ScheduleEditor({
   const [recipientText, setRecipientText] = useState((s.recipients ?? []).join(", "));
   const [previewing, setPreviewing] = useState(false);
   const [previewRows, setPreviewRows] = useState<any[] | null>(null);
+  const [previewColumns, setPreviewColumns] = useState<string[]>([]);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const preview = useServerFn(previewSqlSchedule);
 
-  const columns = useMemo(() => (previewRows?.length ? Object.keys(previewRows[0]) : []), [previewRows]);
+  const columns = useMemo(
+    () => (previewColumns.length ? previewColumns : (previewRows?.length ? Object.keys(previewRows[0]) : [])),
+    [previewColumns, previewRows]
+  );
 
   function parseParams(): Record<string, any> {
     const t = paramsJson.trim();
@@ -289,11 +293,12 @@ function ScheduleEditor({
   }
 
   async function runPreview() {
-    setPreviewing(true); setPreviewErr(null); setPreviewRows(null);
+    setPreviewing(true); setPreviewErr(null); setPreviewRows(null); setPreviewColumns([]);
     try {
       const params = parseParams();
       const res = (await preview({ data: { sql: s.sql, params, maxRows: 20 } })) as any;
       setPreviewRows(res.rows ?? []);
+      setPreviewColumns(Array.isArray(res.columns) ? res.columns : []);
       toast.success(`Preview ok — ${res.total} rows (showing ${(res.rows ?? []).length})`);
     } catch (e: any) {
       setPreviewErr(e?.message ?? "Preview failed");
