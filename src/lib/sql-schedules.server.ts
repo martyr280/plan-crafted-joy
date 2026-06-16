@@ -35,6 +35,104 @@ export function validateSelectSql(text: string) {
   }
 }
 
+function isIdentifierChar(ch: string | undefined) {
+  return !!ch && /[A-Za-z0-9_@$#]/.test(ch);
+}
+
+function findTopLevelToken(text: string, token: string, start = 0, last = false) {
+  const needle = token.toLowerCase();
+  let depth = 0;
+  let found = -1;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      for (i++; i < text.length; i++) {
+        if (text[i] === quote && text[i + 1] === quote) { i++; continue; }
+        if (text[i] === quote) break;
+      }
+      continue;
+    }
+    if (ch === "[") { for (i++; i < text.length && text[i] !== "]"; i++); continue; }
+    if (ch === "-" && next === "-") { for (i += 2; i < text.length && text[i] !== "\n"; i++); continue; }
+    if (ch === "/" && next === "*") { for (i += 2; i < text.length && !(text[i] === "*" && text[i + 1] === "/"); i++); i++; continue; }
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && text.slice(i, i + needle.length).toLowerCase() === needle && !isIdentifierChar(text[i - 1]) && !isIdentifierChar(text[i + needle.length])) {
+      found = i;
+      if (!last) return found;
+    }
+  }
+  return found;
+}
+
+function splitTopLevelSelectList(text: string) {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      for (i++; i < text.length; i++) {
+        if (text[i] === quote && text[i + 1] === quote) { i++; continue; }
+        if (text[i] === quote) break;
+      }
+      continue;
+    }
+    if (ch === "[") { for (i++; i < text.length && text[i] !== "]"; i++); continue; }
+    if (ch === "-" && next === "-") { for (i += 2; i < text.length && text[i] !== "\n"; i++); continue; }
+    if (ch === "/" && next === "*") { for (i += 2; i < text.length && !(text[i] === "*" && text[i + 1] === "/"); i++); i++; continue; }
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if (ch === "," && depth === 0) {
+      parts.push(text.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  const tail = text.slice(start).trim();
+  if (tail) parts.push(tail);
+  return parts;
+}
+
+function cleanIdentifier(text: string) {
+  const s = text.trim().replace(/[;\s]+$/g, "");
+  const bracket = s.match(/^\[([^\]]+)]$/);
+  if (bracket) return bracket[1];
+  const quoted = s.match(/^["']([^"']+)["']$/);
+  if (quoted) return quoted[1];
+  return s.replace(/^.*\./, "");
+}
+
+export function extractFinalSelectColumns(sql: string): string[] {
+  const selectAt = findTopLevelToken(sql, "select", 0, true);
+  if (selectAt < 0) return [];
+  const fromAt = findTopLevelToken(sql, "from", selectAt + 6);
+  const list = sql.slice(selectAt + 6, fromAt > selectAt ? fromAt : undefined);
+  return splitTopLevelSelectList(list)
+    .map((expr) => {
+      if (expr === "*" || /\.\s*\*$/.test(expr)) return "";
+      const asAt = findTopLevelToken(expr, "as", 0, true);
+      if (asAt >= 0) return cleanIdentifier(expr.slice(asAt + 2));
+      const bracket = expr.match(/\[([^\]]+)]\s*$/);
+      if (bracket) return bracket[1];
+      const plain = expr.match(/(?:^|\.)([A-Za-z_][\w@$#]*)\s*$/);
+      return plain ? plain[1] : "";
+    })
+    .filter(Boolean);
+}
+
+export function resolveOutputColumns(sql: string, rows: any[], agentColumns?: string[]): string[] | undefined {
+  const parsed = extractFinalSelectColumns(sql);
+  if (parsed.length) {
+    const first = rows[0];
+    if (!first || parsed.every((c) => Object.prototype.hasOwnProperty.call(first, c))) return parsed;
+  }
+  return agentColumns && agentColumns.length ? agentColumns : (parsed.length ? parsed : undefined);
+}
+
 export function computeNextRun(cron: string, tz: string, from: Date = new Date()): Date {
   const it = CronExpressionParser.parse(cron, { tz, currentDate: from });
   return it.next().toDate();
