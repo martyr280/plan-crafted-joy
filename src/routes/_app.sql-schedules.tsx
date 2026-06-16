@@ -293,11 +293,12 @@ function ScheduleEditor({
   }
 
   async function runPreview() {
-    setPreviewing(true); setPreviewErr(null); setPreviewRows(null);
+    setPreviewing(true); setPreviewErr(null); setPreviewRows(null); setPreviewColumns([]);
     try {
       const params = parseParams();
       const res = (await preview({ data: { sql: s.sql, params, maxRows: 20 } })) as any;
       setPreviewRows(res.rows ?? []);
+      setPreviewColumns(Array.isArray(res.columns) ? res.columns : []);
       toast.success(`Preview ok — ${res.total} rows (showing ${(res.rows ?? []).length})`);
     } catch (e: any) {
       setPreviewErr(e?.message ?? "Preview failed");
