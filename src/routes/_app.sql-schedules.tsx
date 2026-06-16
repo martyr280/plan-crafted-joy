@@ -381,7 +381,7 @@ function ScheduleEditor({
           )}
 
           <div className="md:col-span-2">
-            <Label>SQL query (SELECT/WITH only, single statement)</Label>
+            <Label>SQL query (SELECT/WITH/DECLARE, final SELECT is the report)</Label>
             <Textarea
               value={s.sql}
               onChange={(e) => setS({ ...s, sql: e.target.value })}
