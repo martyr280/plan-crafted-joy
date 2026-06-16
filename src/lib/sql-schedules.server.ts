@@ -274,7 +274,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
         120_000
       );
       const rows = ((result as any)?.rows ?? []) as any[];
-      const columns = ((result as any)?.columns ?? undefined) as string[] | undefined;
+      const columns = resolveOutputColumns(schedule.sql, rows, ((result as any)?.columns ?? undefined) as string[] | undefined);
       rowCount = rows.length;
 
       if (schedule.recipients.length === 0) {
