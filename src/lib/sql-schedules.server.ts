@@ -317,7 +317,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
       if (schedule.recipients.length === 0) {
         throw new Error("No recipients configured");
       }
-      const dateStr = startedAt.toISOString().slice(0, 10);
+      const dateStr = startedAt.toISOString().slice(0, 10).replace(/-/g, "");
       const subject = renderTemplate(
         schedule.email_subject || "{{name}} — {{date}} ({{rows}} rows)",
         { name: schedule.name, date: dateStr, rows: rowCount }
