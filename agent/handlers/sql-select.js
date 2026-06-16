@@ -11,12 +11,12 @@ export async function sqlSelect(payload) {
   }
   const trimmed = text.trim().replace(/^;\s*/, "").replace(/;\s*$/, "");
   const head = trimmed.slice(0, 6).toLowerCase();
-  if (!head.startsWith("select") && !head.startsWith("with")) {
-    throw new Error("Only SELECT or WITH queries are allowed");
+  if (!head.startsWith("select") && !head.startsWith("with") && !head.startsWith("declar")) {
+    throw new Error("Query must begin with SELECT, WITH, or DECLARE");
   }
-  if (trimmed.includes(";")) {
-    throw new Error("Only a single statement is allowed");
-  }
+  // Multiple statements are allowed — the DB user is db_datareader-only,
+  // so any write attempt fails at the server. The last recordset is treated
+  // as the output (matches SSMS behavior).
 
   const { rows, columns } = await queryWithColumns(text, params);
   const cap = Number.isFinite(maxRows) ? Math.max(1, Number(maxRows)) : 50000;
