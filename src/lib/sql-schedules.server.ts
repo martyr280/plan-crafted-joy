@@ -25,13 +25,13 @@ export type ScheduleRow = {
 
 export function validateSelectSql(text: string) {
   // Strip leading/trailing semicolons (T-SQL `;WITH` idiom is common).
+  // Multiple statements are allowed (e.g. DECLARE + SELECT, or setup +
+  // final output SELECT). The DB user is db_datareader-only, so writes
+  // would fail at the server regardless.
   const trimmed = text.trim().replace(/^;\s*/, "").replace(/;\s*$/, "");
   const head = trimmed.slice(0, 6).toLowerCase();
-  if (!head.startsWith("select") && !head.startsWith("with")) {
-    throw new Error("Only SELECT or WITH queries are allowed.");
-  }
-  if (trimmed.includes(";")) {
-    throw new Error("Only a single statement is allowed (remove ';').");
+  if (!head.startsWith("select") && !head.startsWith("with") && !head.startsWith("declar")) {
+    throw new Error("Query must begin with SELECT, WITH, or DECLARE.");
   }
 }
 
