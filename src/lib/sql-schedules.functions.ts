@@ -6,6 +6,7 @@ import { assertAdmin, runJob } from "./p21.server";
 import {
   computeNextRun,
   executeSchedule,
+  resolveOutputColumns,
   validateSelectSql,
 } from "./sql-schedules.server";
 
@@ -130,7 +131,7 @@ export const previewSqlSchedule = createServerFn({ method: "POST" })
       60_000
     );
     const rows = ((result as any)?.rows ?? []) as any[];
-    const columns = ((result as any)?.columns ?? undefined) as string[] | undefined;
+    const columns = resolveOutputColumns(data.sql, rows, ((result as any)?.columns ?? undefined) as string[] | undefined);
     const cap = data.maxRows ?? 100;
     return { rows: rows.slice(0, cap), total: rows.length, columns };
   });
