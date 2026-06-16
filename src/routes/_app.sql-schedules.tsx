@@ -277,10 +277,14 @@ function ScheduleEditor({
   const [recipientText, setRecipientText] = useState((s.recipients ?? []).join(", "));
   const [previewing, setPreviewing] = useState(false);
   const [previewRows, setPreviewRows] = useState<any[] | null>(null);
+  const [previewColumns, setPreviewColumns] = useState<string[]>([]);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const preview = useServerFn(previewSqlSchedule);
 
-  const columns = useMemo(() => (previewRows?.length ? Object.keys(previewRows[0]) : []), [previewRows]);
+  const columns = useMemo(
+    () => (previewColumns.length ? previewColumns : (previewRows?.length ? Object.keys(previewRows[0]) : [])),
+    [previewColumns, previewRows]
+  );
 
   function parseParams(): Record<string, any> {
     const t = paramsJson.trim();
