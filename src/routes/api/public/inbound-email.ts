@@ -98,6 +98,7 @@ export const Route = createFileRoute("/api/public/inbound-email")({
         const ALLOWED_ADDRESSES = [
           "toorders@nelsonbot.ai",
           "toorders@ndi.apexblueprint.ai",
+          "noreply@nelsonbot.ai",
         ];
         const toLower = toAddr.toLowerCase();
         const domainOk = ALLOWED_DOMAINS.some((d) => toLower.endsWith(`@${d}`));
