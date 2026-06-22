@@ -74,7 +74,7 @@ export function fromCron(cron: string): HumanSchedule {
 
 export function describeCron(cron: string): string {
   const h = fromCron(cron);
-  const time = `${pad(h.hour)}:${pad(h.minute)}`;
+  const time = format12(h.hour, h.minute);
   switch (h.frequency) {
     case "minutely": return "Every minute";
     case "hourly":   return `Every hour at :${pad(h.minute)}`;
@@ -83,6 +83,12 @@ export function describeCron(cron: string): string {
     case "monthly":  return `Day ${h.day} of each month at ${time}`;
     case "custom":   return `Custom (${cron})`;
   }
+}
+
+function format12(hour: number, minute: number) {
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const h12 = ((hour + 11) % 12) + 1;
+  return `${h12}:${pad(minute)} ${ampm}`;
 }
 
 function clamp(n: number, lo: number, hi: number) {
