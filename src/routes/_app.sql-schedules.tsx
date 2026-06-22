@@ -499,14 +499,45 @@ function ScheduleBuilder({ cron, onChange }: { cron: string; onChange: (cron: st
         {showTime && (
           <>
             <Label className="text-xs">At</Label>
-            <Input
-              type="time" className="h-8 w-32"
-              value={`${String(h.hour).padStart(2, "0")}:${String(h.minute).padStart(2, "0")}`}
-              onChange={(e) => {
-                const [hh, mm] = e.target.value.split(":").map(Number);
-                update({ hour: hh || 0, minute: mm || 0 });
-              }}
-            />
+            <div className="flex items-center gap-1">
+              <Select
+                value={String(((h.hour + 11) % 12) + 1)}
+                onValueChange={(v) => {
+                  const hour12 = Number(v);
+                  const isPm = h.hour >= 12;
+                  update({ hour: (hour12 % 12) + (isPm ? 12 : 0) });
+                }}
+              >
+                <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-sm">:</span>
+              <Select value={String(h.minute)} onValueChange={(v) => update({ minute: Number(v) })}>
+                <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                    <SelectItem key={m} value={String(m)}>{String(m).padStart(2, "0")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={h.hour >= 12 ? "pm" : "am"}
+                onValueChange={(v) => {
+                  const hour12 = ((h.hour + 11) % 12) + 1;
+                  update({ hour: (hour12 % 12) + (v === "pm" ? 12 : 0) });
+                }}
+              >
+                <SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="am">AM</SelectItem>
+                  <SelectItem value="pm">PM</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </>
         )}
 
