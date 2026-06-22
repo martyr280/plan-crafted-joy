@@ -12,6 +12,7 @@ export type ScheduleRow = {
   params: Record<string, any>;
   action: "email" | "upsert_price_list";
   recipients: string[];
+  bcc_recipients: string[];
   email_subject: string | null;
   schedule_cron: string;
   timezone: string;
