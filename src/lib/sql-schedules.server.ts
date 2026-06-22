@@ -295,6 +295,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
     ...row,
     params: (row.params as any) ?? {},
     recipients: Array.isArray(row.recipients) ? (row.recipients as string[]) : [],
+    bcc_recipients: Array.isArray((row as any).bcc_recipients) ? ((row as any).bcc_recipients as string[]) : [],
   } as ScheduleRow;
 
   const startedAt = new Date();
