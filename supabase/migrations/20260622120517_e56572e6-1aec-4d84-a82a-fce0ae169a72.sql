@@ -1,0 +1,1 @@
+ALTER TABLE public.sql_schedules ADD COLUMN IF NOT EXISTS bcc_recipients text[] NOT NULL DEFAULT '{}'::text[];
