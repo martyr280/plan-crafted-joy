@@ -170,7 +170,7 @@ function SqlSchedulesPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Action</TableHead>
-              <TableHead>Cron</TableHead>
+              <TableHead>Schedule</TableHead>
               <TableHead>Next run</TableHead>
               <TableHead>Last run</TableHead>
               <TableHead>Rows</TableHead>
@@ -193,7 +193,7 @@ function SqlSchedulesPage() {
                 </TableCell>
                 <TableCell className="text-xs">
                   {describeCron(s.schedule_cron)}
-                  <div className="text-[10px] text-muted-foreground font-mono">{s.schedule_cron} · {s.timezone}</div>
+                  <div className="text-[10px] text-muted-foreground">{s.timezone}</div>
                 </TableCell>
                 <TableCell className="text-xs">{s.next_run_at ? formatDistanceToNow(new Date(s.next_run_at), { addSuffix: true }) : "—"}</TableCell>
                 <TableCell className="text-xs">
@@ -469,7 +469,7 @@ function ScheduleBuilder({ cron, onChange }: { cron: string; onChange: (cron: st
             <SelectItem value="daily">Every day</SelectItem>
             <SelectItem value="weekly">Every week</SelectItem>
             <SelectItem value="monthly">Every month</SelectItem>
-            <SelectItem value="custom">Custom cron…</SelectItem>
+            
           </SelectContent>
         </Select>
 
@@ -521,22 +521,10 @@ function ScheduleBuilder({ cron, onChange }: { cron: string; onChange: (cron: st
           </>
         )}
 
-        {h.frequency === "custom" && (
-          <>
-            <Label className="text-xs">Cron expression</Label>
-            <Input
-              className="h-8 font-mono"
-              value={h.cron}
-              placeholder="0 8 * * 1"
-              onChange={(e) => update({ cron: e.target.value })}
-            />
-          </>
-        )}
       </div>
 
-      <div className="text-xs text-muted-foreground flex items-center justify-between pt-1">
-        <span>{describeCron(toCron(h))}</span>
-        <span className="font-mono text-[10px]">{toCron(h)}</span>
+      <div className="text-xs text-muted-foreground pt-1">
+        {describeCron(toCron(h))}
       </div>
     </div>
   );
