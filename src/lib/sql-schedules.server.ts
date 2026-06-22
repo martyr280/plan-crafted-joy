@@ -334,6 +334,7 @@ export async function executeSchedule(scheduleId: string): Promise<{
       const content = await buildXlsx(rows, columns, schedule.name);
       await sendEmailWithAttachment({
         to: schedule.recipients,
+        bcc: schedule.bcc_recipients,
         subject,
         htmlIntro: html,
         filename,
