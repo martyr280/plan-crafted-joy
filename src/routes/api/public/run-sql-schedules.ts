@@ -15,13 +15,17 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
     handlers: {
       POST: async ({ request }) => {
         const secret = process.env.CRON_SECRET;
-        if (!secret) return new Response("CRON_SECRET not configured", { status: 500 });
+        const anonKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
 
         const auth = request.headers.get("authorization");
         const bearer = auth?.toLowerCase().startsWith("bearer ") ? auth.slice(7) : null;
         const xCron = request.headers.get("x-cron-secret");
+        const apikey = request.headers.get("apikey");
 
-        if (!checkSecret(bearer, secret) && !checkSecret(xCron, secret)) {
+        const okBySecret = !!secret && (checkSecret(bearer, secret) || checkSecret(xCron, secret));
+        const okByAnon = !!anonKey && (checkSecret(apikey, anonKey) || checkSecret(bearer, anonKey));
+
+        if (!okBySecret && !okByAnon) {
           return new Response("unauthorized", { status: 401 });
         }
 
