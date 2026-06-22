@@ -359,8 +359,9 @@ function ScheduleEditor({
 
           <div>
             <Label>Timezone</Label>
-            <Input value={s.timezone} onChange={(e) => setS({ ...s, timezone: e.target.value })} placeholder="America/New_York" />
+            <TimezoneSelect value={s.timezone} onChange={(tz) => setS({ ...s, timezone: tz })} />
           </div>
+
 
           <div className="flex items-center gap-2 self-end pb-2">
             <Switch checked={s.active} onCheckedChange={(v) => setS({ ...s, active: v })} id="active" />
