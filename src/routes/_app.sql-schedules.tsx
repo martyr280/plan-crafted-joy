@@ -562,3 +562,79 @@ function ScheduleBuilder({ cron, onChange }: { cron: string; onChange: (cron: st
   );
 }
 
+const COMMON_TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Toronto",
+  "America/Vancouver",
+  "America/Mexico_City",
+  "America/Sao_Paulo",
+  "UTC",
+  "Europe/London",
+  "Europe/Dublin",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Madrid",
+  "Europe/Rome",
+  "Europe/Amsterdam",
+  "Europe/Stockholm",
+  "Europe/Athens",
+  "Europe/Istanbul",
+  "Africa/Johannesburg",
+  "Asia/Dubai",
+  "Asia/Karachi",
+  "Asia/Kolkata",
+  "Asia/Bangkok",
+  "Asia/Singapore",
+  "Asia/Hong_Kong",
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Asia/Seoul",
+  "Australia/Perth",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+];
+
+function tzLabel(tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      timeZoneName: "shortOffset",
+    }).formatToParts(new Date());
+    const offset = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+    const city = tz.split("/").pop()?.replace(/_/g, " ") ?? tz;
+    return `${city} (${offset})`;
+  } catch {
+    return tz;
+  }
+}
+
+function TimezoneSelect({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
+  const options = useMemo(() => {
+    const set = new Set<string>(COMMON_TIMEZONES);
+    if (value) set.add(value);
+    try {
+      const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (browser) set.add(browser);
+    } catch {}
+    return Array.from(set).sort();
+  }, [value]);
+
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+      <SelectContent className="max-h-72">
+        {options.map((tz) => (
+          <SelectItem key={tz} value={tz}>{tzLabel(tz)}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+
