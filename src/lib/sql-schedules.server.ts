@@ -246,6 +246,7 @@ async function buildXlsx(rows: any[], columns: string[] | undefined, sheetName: 
 
 async function sendEmailWithAttachment(opts: {
   to: string[];
+  bcc?: string[];
   subject: string;
   htmlIntro: string;
   filename: string;
@@ -254,18 +255,20 @@ async function sendEmailWithAttachment(opts: {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
   const from = process.env.NELSON_FROM_EMAIL || "Nelson AI <noreply@nelsonbot.ai>";
+  const payload: Record<string, unknown> = {
+    from,
+    to: opts.to,
+    subject: opts.subject,
+    html: opts.htmlIntro,
+    attachments: [
+      { filename: opts.filename, content: opts.content.toString("base64") },
+    ],
+  };
+  if (opts.bcc && opts.bcc.length > 0) payload.bcc = opts.bcc;
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from,
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.htmlIntro,
-      attachments: [
-        { filename: opts.filename, content: opts.content.toString("base64") },
-      ],
-    }),
+    body: JSON.stringify(payload),
   });
   if (!r.ok) {
     const body = await r.text();
@@ -273,6 +276,7 @@ async function sendEmailWithAttachment(opts: {
   }
   return r.json();
 }
+
 
 export async function executeSchedule(scheduleId: string): Promise<{
   status: "success" | "error";
