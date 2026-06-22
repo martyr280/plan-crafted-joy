@@ -1807,6 +1807,7 @@ export type Database = {
         Row: {
           action: string
           active: boolean
+          bcc_recipients: string[]
           created_at: string
           created_by: string | null
           description: string | null
@@ -1828,6 +1829,7 @@ export type Database = {
         Insert: {
           action?: string
           active?: boolean
+          bcc_recipients?: string[]
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -1849,6 +1851,7 @@ export type Database = {
         Update: {
           action?: string
           active?: boolean
+          bcc_recipients?: string[]
           created_at?: string
           created_by?: string | null
           description?: string | null
