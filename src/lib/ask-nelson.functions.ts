@@ -207,6 +207,7 @@ export const createConversation = createServerFn({ method: "POST" })
         .select("id, title, created_at, updated_at")
         .single();
       throwIfDbError(res.error);
+      if (!res.data) throw new Error("Failed to create conversation");
       return res;
     });
     return { conversation: data };
