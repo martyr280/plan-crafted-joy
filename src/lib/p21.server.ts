@@ -4,12 +4,28 @@ import { recomputeFamilies } from "./pricer.server";
 export async function assertAdmin(_supabase: any, userId: string) {
   // Use service-role client + security-definer RPC so RLS on user_roles
   // can't mask the check (user-context reads may be filtered to zero rows).
-  const { data, error } = await supabaseAdmin.rpc("has_role", {
-    _user_id: userId,
-    _role: "admin",
-  });
-  if (error) throw new Error(`Role check failed: ${error.message}`);
-  if (!data) throw new Error("Admin role required");
+  // Retry on transient upstream errors (Cloudflare 520/521, network blips).
+  let lastErrMsg = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data, error } = await supabaseAdmin.rpc("has_role", {
+        _user_id: userId,
+        _role: "admin",
+      });
+      if (error) {
+        lastErrMsg = error.message ?? String(error);
+      } else {
+        if (!data) throw new Error("Admin role required");
+        return;
+      }
+    } catch (e: any) {
+      if (e?.message === "Admin role required") throw e;
+      lastErrMsg = e?.message ?? String(e);
+    }
+    await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+  }
+  const short = lastErrMsg.length > 200 ? lastErrMsg.slice(0, 200) + "…" : lastErrMsg;
+  throw new Error(`Role check failed (backend unreachable): ${short}`);
 }
 
 export async function runJob(kind: string, payload: any, timeoutMs = 30000) {
