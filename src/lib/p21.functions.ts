@@ -317,12 +317,20 @@ export const runP21Sql = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
     const trimmed = data.sql.trim().replace(/;\s*$/, "");
-    const head = trimmed.replace(/^;\s*/, "").slice(0, 6).toLowerCase();
-    if (!head.startsWith("select") && !head.startsWith("with")) {
-      throw new Error("Only SELECT or WITH queries are allowed.");
+    // Strip string literals and line/block comments before scanning for
+    // forbidden write keywords, so a SELECT that mentions "delete" in a
+    // string or comment still passes.
+    const scrubbed = trimmed
+      .replace(/'(?:''|[^'])*'/g, "''")
+      .replace(/--[^\n]*/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const FORBIDDEN = /\b(insert|update|delete|drop|alter|create|truncate|merge|exec|execute|grant|revoke|backup|restore|bulk)\b/i;
+    if (FORBIDDEN.test(scrubbed)) {
+      throw new Error("Only read-only queries are allowed (SELECT / WITH / DECLARE).");
     }
-    if (trimmed.includes(";")) {
-      throw new Error("Only a single statement is allowed (remove ';').");
+    const head = scrubbed.replace(/^;\s*/, "").trimStart().slice(0, 8).toLowerCase();
+    if (!head.startsWith("select") && !head.startsWith("with") && !head.startsWith("declare")) {
+      throw new Error("Query must start with SELECT, WITH, or DECLARE.");
     }
     const { result } = await runJob(
       "sql.select",
