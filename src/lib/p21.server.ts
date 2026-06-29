@@ -27,7 +27,7 @@ function errorMessage(error: unknown) {
   }
 }
 
-function isTransientBackendError(message: string) {
+export function isTransientBackendError(message: string) {
   return TRANSIENT_BACKEND_PATTERNS.some((pattern) => pattern.test(message));
 }
 
