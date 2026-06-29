@@ -95,7 +95,7 @@ function throwIfDbError(error: unknown) {
   if (error) throw new Error(backendErrorMessage(error));
 }
 
-async function retrySupabase<T>(label: string, operation: () => PromiseLike<{ data: T; error: unknown }>) {
+async function retrySupabase<T>(label: string, operation: () => any): Promise<T> {
   const { data } = await retryTransient(label, async () => {
     const res = await operation();
     throwIfDbError(res.error);
