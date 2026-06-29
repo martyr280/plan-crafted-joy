@@ -332,11 +332,26 @@ export const runP21Sql = createServerFn({ method: "POST" })
     if (!head.startsWith("select") && !head.startsWith("with") && !head.startsWith("declare")) {
       throw new Error("Query must start with SELECT, WITH, or DECLARE.");
     }
-    const { result } = await runJob(
-      "sql.select",
-      { sql: data.sql, params: data.params ?? {}, slug: "adhoc" },
-      60000
-    );
+    let result: any;
+    try {
+      const out = await runJob(
+        "sql.select",
+        { sql: data.sql, params: data.params ?? {}, slug: "adhoc" },
+        60000
+      );
+      result = out.result;
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      // Log full SQL + params server-side for debugging.
+      console.error("[runP21Sql] bridge job failed", {
+        error: msg,
+        sql: data.sql,
+        params: data.params ?? {},
+      });
+      // Surface the offending SQL (truncated) in the UI error message.
+      const preview = data.sql.length > 1200 ? data.sql.slice(0, 1200) + "\n…[truncated]" : data.sql;
+      throw new Error(`${msg}\n\n--- SQL sent to bridge ---\n${preview}`);
+    }
     const r = result as { rows?: any[]; count?: number; truncated?: boolean };
     const rows = Array.isArray(r?.rows) ? r.rows : [];
     const sliced = data.maxRows ? rows.slice(0, data.maxRows) : rows;
