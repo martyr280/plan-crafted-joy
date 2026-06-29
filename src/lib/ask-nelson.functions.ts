@@ -200,17 +200,17 @@ export const getConversation = createServerFn({ method: "POST" })
 export const createConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data } = await retryTransient("createConversation", async () => {
-      const res = await context.supabase
+    const conversation = await retryTransient("createConversation", async () => {
+      const { data, error } = await context.supabase
         .from("chat_conversations")
         .insert({ user_id: context.userId, title: "New chat" })
         .select("id, title, created_at, updated_at")
         .single();
-      throwIfDbError(res.error);
-      if (!res.data) throw new Error("Failed to create conversation");
-      return res;
+      throwIfDbError(error);
+      if (!data) throw new Error("Failed to create conversation");
+      return data;
     });
-    return { conversation: data };
+    return { conversation };
   });
 
 export const deleteConversation = createServerFn({ method: "POST" })
