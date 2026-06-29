@@ -9,6 +9,9 @@
 // The literal token __REPCODE__ is left in the template body; the schedule
 // author replaces it with the rep's P21 salesrep_id when creating the row.
 //
+// Keep this as a single WITH/SELECT statement. Some deployed P21 bridge agents
+// still enforce an older "SELECT or WITH only" guard and reject DECLARE batches.
+//
 // NOTE on P21 column names: this codebase consistently uses customer_id,
 // customer_name, salesrep_id, invoice_hdr, invoice_line, extended_price,
 // extended_cost. The price-level and business-group columns on dbo.customer
@@ -16,20 +19,26 @@
 // the standard P21 customer-classification columns. Verify against the live
 // schema before seeding production schedules.
 
-export const SALES_ANNUALIZED_SQL = `DECLARE @repCode varchar(20) = '__REPCODE__';
-DECLARE @today date = CAST(GETDATE() AS date);
-DECLARE @prevMonthStart date = DATEADD(month, DATEDIFF(month, 0, @today) - 1, 0);
-DECLARE @prevMonthEnd   date = DATEADD(month, DATEDIFF(month, 0, @today),     0);
-DECLARE @cy int = YEAR(@today);
-DECLARE @yrStart date = DATEFROMPARTS(@cy, 1, 1);
-DECLARE @daysElapsed int = DATEDIFF(day, @yrStart, @today) + 1;
-
-WITH scope AS (
-  SELECT customer_id FROM dbo.customer WHERE salesrep_id = @repCode
+export const SALES_ANNUALIZED_SQL = `WITH ctx AS (
+  SELECT
+    CAST('__REPCODE__' AS varchar(20)) AS rep_code,
+    CAST(GETDATE() AS date) AS today,
+    DATEADD(month, DATEDIFF(month, 0, GETDATE()) - 1, 0) AS prev_month_start,
+    DATEADD(month, DATEDIFF(month, 0, GETDATE()),     0) AS prev_month_end,
+    YEAR(GETDATE()) AS cy,
+    DATEFROMPARTS(YEAR(GETDATE()), 1, 1) AS yr_start,
+    DATEDIFF(day, DATEFROMPARTS(YEAR(GETDATE()), 1, 1), CAST(GETDATE() AS date)) + 1 AS days_elapsed
+),
+scope AS (
+  SELECT c.customer_id
+  FROM dbo.customer c
+  CROSS JOIN ctx
+  WHERE c.salesrep_id = ctx.rep_code
   UNION
   SELECT DISTINCT ih.customer_id
   FROM dbo.invoice_hdr ih
-  WHERE ih.salesrep_id = @repCode
+  CROSS JOIN ctx
+  WHERE ih.salesrep_id = ctx.rep_code
     AND ih.invoice_date >= '2022-01-01'
 ),
 inv AS (
@@ -51,11 +60,12 @@ agg AS (
     SUM(CASE WHEN YEAR(invoice_date)=2023   THEN net END)                 AS y2023,
     SUM(CASE WHEN YEAR(invoice_date)=2024   THEN net END)                 AS y2024,
     SUM(CASE WHEN YEAR(invoice_date)=2025   THEN net END)                 AS y2025,
-    SUM(CASE WHEN YEAR(invoice_date)=@cy    THEN net END)                 AS y_cy,
-    SUM(CASE WHEN YEAR(invoice_date)=@cy-1  THEN net END)                 AS y_py,
-    SUM(CASE WHEN invoice_date>=@prevMonthStart AND invoice_date<@prevMonthEnd THEN net END) AS m_sales,
-    SUM(CASE WHEN invoice_date>=@prevMonthStart AND invoice_date<@prevMonthEnd THEN gp  END) AS m_profit
+    SUM(CASE WHEN YEAR(invoice_date)=ctx.cy    THEN net END)              AS y_cy,
+    SUM(CASE WHEN YEAR(invoice_date)=ctx.cy-1  THEN net END)              AS y_py,
+    SUM(CASE WHEN invoice_date>=ctx.prev_month_start AND invoice_date<ctx.prev_month_end THEN net END) AS m_sales,
+    SUM(CASE WHEN invoice_date>=ctx.prev_month_start AND invoice_date<ctx.prev_month_end THEN gp  END) AS m_profit
   FROM inv
+  CROSS JOIN ctx
   GROUP BY customer_id
 )
 SELECT
@@ -71,9 +81,9 @@ SELECT
   agg.y2024                                                                     AS [Year 2024],
   agg.y2025                                                                     AS [Year 2025],
   agg.y_cy                                                                      AS [Year {cy}],
-  CAST(agg.y_cy * 365.0 / NULLIF(@daysElapsed, 0) AS decimal(18,2))             AS [Ann {cy}],
+  CAST(agg.y_cy * 365.0 / NULLIF(ctx.days_elapsed, 0) AS decimal(18,2))         AS [Ann {cy}],
   CASE WHEN agg.y_py IS NULL OR agg.y_py = 0 THEN NULL
-       ELSE CAST((agg.y_cy * 365.0 / NULLIF(@daysElapsed, 0) - agg.y_py) / agg.y_py AS decimal(18,4))
+       ELSE CAST((agg.y_cy * 365.0 / NULLIF(ctx.days_elapsed, 0) - agg.y_py) / agg.y_py AS decimal(18,4))
   END                                                                           AS [Pct],
   agg.m_sales                                                                   AS [{Mon} Sales],
   agg.m_profit                                                                  AS [{Mon} Profit],
@@ -86,6 +96,7 @@ SELECT
   END                                                                           AS [Keep Lvl]
 FROM dbo.customer c
 JOIN agg ON agg.customer_id = c.customer_id
+CROSS JOIN ctx
 ORDER BY agg.m_sales DESC, agg.y_cy DESC;
 `;
 
