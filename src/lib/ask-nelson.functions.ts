@@ -170,31 +170,45 @@ export const getConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
-    const { data: conv, error: cErr } = await context.supabase
-      .from("chat_conversations")
-      .select("id, title, created_at, updated_at")
-      .eq("id", data.id)
-      .maybeSingle();
-    if (cErr) throw new Error(cErr.message);
-    if (!conv) return { conversation: null, messages: [] };
-    const { data: msgs, error: mErr } = await context.supabase
-      .from("chat_messages")
-      .select("id, role, content, model, created_at")
-      .eq("conversation_id", data.id)
-      .order("created_at", { ascending: true });
-    if (mErr) throw new Error(mErr.message);
-    return { conversation: conv, messages: (msgs ?? []).filter((m) => m.role !== "tool") };
+    try {
+      return await retryTransient("getConversation", async () => {
+        const { data: conv, error: cErr } = await context.supabase
+          .from("chat_conversations")
+          .select("id, title, created_at, updated_at")
+          .eq("id", data.id)
+          .maybeSingle();
+        throwIfDbError(cErr);
+        if (!conv) return { conversation: null, messages: [] };
+        const { data: msgs, error: mErr } = await context.supabase
+          .from("chat_messages")
+          .select("id, role, content, model, created_at")
+          .eq("conversation_id", data.id)
+          .order("created_at", { ascending: true });
+        throwIfDbError(mErr);
+        return { conversation: conv, messages: (msgs ?? []).filter((m) => m.role !== "tool") };
+      });
+    } catch (error) {
+      const message = backendErrorMessage(error);
+      if (!isTransientBackendError(message)) throw error;
+      console.warn("getConversation transient backend error; returning safe fallback", {
+        message: message.slice(0, 300),
+      });
+      return { conversation: null, messages: [], transientError: message.slice(0, 300) };
+    }
   });
 
 export const createConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("chat_conversations")
-      .insert({ user_id: context.userId, title: "New chat" })
-      .select("id, title, created_at, updated_at")
-      .single();
-    if (error) throw new Error(error.message);
+    const { data } = await retryTransient("createConversation", async () => {
+      const res = await context.supabase
+        .from("chat_conversations")
+        .insert({ user_id: context.userId, title: "New chat" })
+        .select("id, title, created_at, updated_at")
+        .single();
+      throwIfDbError(res.error);
+      return res;
+    });
     return { conversation: data };
   });
 
@@ -202,8 +216,11 @@ export const deleteConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("chat_conversations").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
+    await retryTransient("deleteConversation", async () => {
+      const { error } = await context.supabase.from("chat_conversations").delete().eq("id", data.id);
+      throwIfDbError(error);
+      return true;
+    });
     return { ok: true };
   });
 
@@ -218,12 +235,15 @@ export const askNelson = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     // Verify ownership via user-scoped client
-    const { data: conv, error: cErr } = await context.supabase
-      .from("chat_conversations")
-      .select("id, title")
-      .eq("id", data.conversationId)
-      .maybeSingle();
-    if (cErr) throw new Error(cErr.message);
+    const { data: conv } = await retryTransient("askNelson.verifyConversation", async () => {
+      const res = await context.supabase
+        .from("chat_conversations")
+        .select("id, title")
+        .eq("id", data.conversationId)
+        .maybeSingle();
+      throwIfDbError(res.error);
+      return res;
+    });
     if (!conv) throw new Error("Conversation not found");
 
     const escalate = shouldEscalate(data.message, data.escalate);
