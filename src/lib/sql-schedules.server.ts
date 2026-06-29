@@ -387,13 +387,32 @@ export async function executeDueSchedules(): Promise<{
   const nowIso = new Date().toISOString();
   const { data: due } = await supabaseAdmin
     .from("sql_schedules")
-    .select("id, name")
+    .select("id, name, schedule_cron, timezone, next_run_at")
     .eq("active", true)
     .lte("next_run_at", nowIso)
     .limit(50);
 
   const results: Array<{ id: string; name: string; status: string; rowCount: number; error?: string }> = [];
   for (const s of due ?? []) {
+    // Atomically claim by advancing next_run_at past now. Concurrent runners
+    // racing on the same row serialize in Postgres: the loser's filter
+    // (next_run_at <= nowIso) no longer matches, so it gets zero rows back
+    // and skips. Prevents double sends when two cron ticks overlap.
+    let claimedNext: string;
+    try {
+      claimedNext = computeNextRun(s.schedule_cron, (s as any).timezone ?? "UTC", new Date()).toISOString();
+    } catch {
+      claimedNext = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    }
+    const { data: claimed } = await supabaseAdmin
+      .from("sql_schedules")
+      .update({ next_run_at: claimedNext })
+      .eq("id", s.id)
+      .eq("active", true)
+      .lte("next_run_at", nowIso)
+      .select("id");
+    if (!claimed || claimed.length === 0) continue;
+
     try {
       const r = await executeSchedule(s.id);
       results.push({ id: s.id, name: s.name, status: r.status, rowCount: r.rowCount, error: r.error });
