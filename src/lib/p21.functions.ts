@@ -21,8 +21,8 @@ export const enqueueP21Job = createServerFn({ method: "POST" })
 export const getBridgeStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context.supabase, context.userId);
     try {
+      await assertAdmin(context.supabase, context.userId);
       const { data: agents, error: agentsError } = await supabaseAdmin
         .from("p21_bridge_agents")
         .select("*")
@@ -56,7 +56,7 @@ export const getBridgeStatus = createServerFn({ method: "GET" })
         counts,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : (error as any)?.message ?? String(error);
       if (!isTransientBackendError(message)) throw error;
       console.warn("getBridgeStatus transient backend error; returning safe fallback", {
         message: message.slice(0, 300),
