@@ -1,12 +1,42 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { recomputeFamilies } from "./pricer.server";
 
+const TRANSIENT_BACKEND_PATTERNS = [
+  /schema cache/i,
+  /retrying/i,
+  /timeout/i,
+  /timed out/i,
+  /temporarily unavailable/i,
+  /backend unreachable/i,
+  /fetch failed/i,
+  /network/i,
+  /520|521|522|523|524/,
+];
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+export function isTransientBackendError(message: string) {
+  return TRANSIENT_BACKEND_PATTERNS.some((pattern) => pattern.test(message));
+}
+
 export async function assertAdmin(_supabase: any, userId: string) {
   // Use service-role client + security-definer RPC so RLS on user_roles
   // can't mask the check (user-context reads may be filtered to zero rows).
-  // Retry on transient upstream errors (Cloudflare 520/521, network blips).
+  // Retry on transient backend/Data API errors (schema-cache reloads, gateway blips).
   let lastErrMsg = "";
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     try {
       const { data, error } = await supabaseAdmin.rpc("has_role", {
         _user_id: userId,
@@ -14,15 +44,17 @@ export async function assertAdmin(_supabase: any, userId: string) {
       });
       if (error) {
         lastErrMsg = error.message ?? String(error);
+        if (!isTransientBackendError(lastErrMsg)) break;
       } else {
         if (!data) throw new Error("Admin role required");
         return;
       }
     } catch (e: any) {
       if (e?.message === "Admin role required") throw e;
-      lastErrMsg = e?.message ?? String(e);
+      lastErrMsg = errorMessage(e);
+      if (!isTransientBackendError(lastErrMsg)) break;
     }
-    await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    await sleep(Math.min(5000, 400 * 2 ** attempt));
   }
   const short = lastErrMsg.length > 200 ? lastErrMsg.slice(0, 200) + "…" : lastErrMsg;
   throw new Error(`Role check failed (backend unreachable): ${short}`);

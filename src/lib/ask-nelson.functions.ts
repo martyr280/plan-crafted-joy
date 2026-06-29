@@ -13,6 +13,29 @@ import {
 const FLASH = "google/gemini-3-flash-preview";
 const STRONG = "openai/gpt-5.4";
 
+type ConversationSummary = { id: string; title: string; created_at: string; updated_at: string };
+type ConversationHeader = { id: string; title: string };
+type ChatMessageRow = {
+  id: string;
+  role: string;
+  content: string | null;
+  model: string | null;
+  created_at: string;
+};
+type ChatHistoryRow = { role: string; content: string | null };
+
+const TRANSIENT_BACKEND_PATTERNS = [
+  /schema cache/i,
+  /retrying/i,
+  /timeout/i,
+  /timed out/i,
+  /temporarily unavailable/i,
+  /backend unreachable/i,
+  /fetch failed/i,
+  /network/i,
+  /520|521|522|523|524/,
+];
+
 const CHALLENGE_PATTERNS = [
   /are you sure/i,
   /double[- ]?check/i,
@@ -29,6 +52,56 @@ const CHALLENGE_PATTERNS = [
 function shouldEscalate(message: string, explicit?: boolean) {
   if (explicit) return true;
   return CHALLENGE_PATTERNS.some((r) => r.test(message));
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function backendErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isTransientBackendError(message: string) {
+  return TRANSIENT_BACKEND_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+async function retryTransient<T>(label: string, operation: () => Promise<T>, attempts = 5): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const message = backendErrorMessage(error);
+      if (!isTransientBackendError(message) || attempt === attempts - 1) break;
+      console.warn(`${label} transient backend error; retrying`, {
+        attempt: attempt + 1,
+        message: message.slice(0, 300),
+      });
+      await sleep(Math.min(4000, 350 * 2 ** attempt));
+    }
+  }
+  throw lastError;
+}
+
+function throwIfDbError(error: unknown) {
+  if (error) throw new Error(backendErrorMessage(error));
+}
+
+async function retrySupabase<T>(label: string, operation: () => any): Promise<T> {
+  const { data } = await retryTransient(label, async () => {
+    const res = await operation();
+    throwIfDbError(res.error);
+    return res;
+  });
+  return data;
 }
 
 function systemPrompt(escalate: boolean) {
@@ -92,53 +165,82 @@ async function generateTitle(message: string) {
 export const listConversations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("chat_conversations")
-      .select("id, title, created_at, updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(100);
-    if (error) throw new Error(error.message);
-    return { conversations: data ?? [] };
+    try {
+      const data = await retrySupabase<ConversationSummary[]>("listConversations", () =>
+        context.supabase
+          .from("chat_conversations")
+          .select("id, title, created_at, updated_at")
+          .order("updated_at", { ascending: false })
+          .limit(100),
+      );
+      return { conversations: data ?? [] };
+    } catch (error) {
+      const message = backendErrorMessage(error);
+      if (!isTransientBackendError(message)) throw error;
+      console.warn("listConversations transient backend error; returning safe fallback", {
+        message: message.slice(0, 300),
+      });
+      return { conversations: [], transientError: message.slice(0, 300) };
+    }
   });
 
 export const getConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
-    const { data: conv, error: cErr } = await context.supabase
-      .from("chat_conversations")
-      .select("id, title, created_at, updated_at")
-      .eq("id", data.id)
-      .maybeSingle();
-    if (cErr) throw new Error(cErr.message);
-    if (!conv) return { conversation: null, messages: [] };
-    const { data: msgs, error: mErr } = await context.supabase
-      .from("chat_messages")
-      .select("id, role, content, model, created_at")
-      .eq("conversation_id", data.id)
-      .order("created_at", { ascending: true });
-    if (mErr) throw new Error(mErr.message);
-    return { conversation: conv, messages: (msgs ?? []).filter((m) => m.role !== "tool") };
+    try {
+      return await retryTransient("getConversation", async () => {
+        const conv = await retrySupabase<ConversationSummary | null>("getConversation.conversation", () =>
+          context.supabase
+            .from("chat_conversations")
+            .select("id, title, created_at, updated_at")
+            .eq("id", data.id)
+            .maybeSingle(),
+        );
+        if (!conv) return { conversation: null, messages: [] };
+        const msgs = await retrySupabase<ChatMessageRow[]>("getConversation.messages", () =>
+          context.supabase
+            .from("chat_messages")
+            .select("id, role, content, model, created_at")
+            .eq("conversation_id", data.id)
+            .order("created_at", { ascending: true }),
+        );
+        return { conversation: conv, messages: (msgs ?? []).filter((m) => m.role !== "tool") };
+      });
+    } catch (error) {
+      const message = backendErrorMessage(error);
+      if (!isTransientBackendError(message)) throw error;
+      console.warn("getConversation transient backend error; returning safe fallback", {
+        message: message.slice(0, 300),
+      });
+      return { conversation: null, messages: [], transientError: message.slice(0, 300) };
+    }
   });
 
 export const createConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("chat_conversations")
-      .insert({ user_id: context.userId, title: "New chat" })
-      .select("id, title, created_at, updated_at")
-      .single();
-    if (error) throw new Error(error.message);
-    return { conversation: data };
+    const conversation = await retrySupabase<ConversationSummary>("createConversation.insert", () =>
+      context.supabase
+        .from("chat_conversations")
+        .insert({ user_id: context.userId, title: "New chat" })
+        .select("id, title, created_at, updated_at")
+        .single(),
+    );
+    if (!conversation) throw new Error("Failed to create conversation");
+    return { conversation };
   });
 
 export const deleteConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("chat_conversations").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
+    await retryTransient("deleteConversation", async () => {
+      await retrySupabase<null>("deleteConversation.delete", () =>
+        context.supabase.from("chat_conversations").delete().eq("id", data.id),
+      );
+      return true;
+    });
     return { ok: true };
   });
 
@@ -153,12 +255,13 @@ export const askNelson = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     // Verify ownership via user-scoped client
-    const { data: conv, error: cErr } = await context.supabase
-      .from("chat_conversations")
-      .select("id, title")
-      .eq("id", data.conversationId)
-      .maybeSingle();
-    if (cErr) throw new Error(cErr.message);
+    const conv = await retrySupabase<ConversationHeader | null>("askNelson.verifyConversation", () =>
+      context.supabase
+        .from("chat_conversations")
+        .select("id, title")
+        .eq("id", data.conversationId)
+        .maybeSingle(),
+    );
     if (!conv) throw new Error("Conversation not found");
 
     const escalate = shouldEscalate(data.message, data.escalate);
@@ -166,23 +269,27 @@ export const askNelson = createServerFn({ method: "POST" })
     const maxToolCalls = escalate ? 8 : 4;
 
     // Load recent history
-    const { data: history } = await supabaseAdmin
-      .from("chat_messages")
-      .select("role, content")
-      .eq("conversation_id", data.conversationId)
-      .order("created_at", { ascending: true })
-      .limit(40);
+    const history = await retrySupabase<ChatHistoryRow[]>("askNelson.history", () =>
+      supabaseAdmin
+        .from("chat_messages")
+        .select("role, content")
+        .eq("conversation_id", data.conversationId)
+        .order("created_at", { ascending: true })
+        .limit(40),
+    );
 
     const historyMsgs: ChatMsg[] = (history ?? [])
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     // Persist user message immediately
-    await supabaseAdmin.from("chat_messages").insert({
-      conversation_id: data.conversationId,
-      role: "user",
-      content: data.message,
-    });
+    await retrySupabase<null>("askNelson.insertUserMessage", () =>
+      supabaseAdmin.from("chat_messages").insert({
+        conversation_id: data.conversationId,
+        role: "user",
+        content: data.message,
+      }),
+    );
 
     // Prompt-improvement pre-pass (not shown to user)
     const refined = await improvePrompt(data.message, historyMsgs);
@@ -236,22 +343,28 @@ export const askNelson = createServerFn({ method: "POST" })
       finalText = `Error: ${e instanceof Error ? e.message : String(e)}`;
     }
 
-    await supabaseAdmin.from("chat_messages").insert({
-      conversation_id: data.conversationId,
-      role: "assistant",
-      content: finalText,
-      model: usedModel,
-    });
+    await retrySupabase<null>("askNelson.insertAssistantMessage", () =>
+      supabaseAdmin.from("chat_messages").insert({
+        conversation_id: data.conversationId,
+        role: "assistant",
+        content: finalText,
+        model: usedModel,
+      }),
+    );
 
     // Auto-title on first turn
     if (conv.title === "New chat") {
       const title = await generateTitle(data.message);
-      await supabaseAdmin.from("chat_conversations").update({ title }).eq("id", data.conversationId);
+      await retrySupabase<null>("askNelson.updateTitle", () =>
+        supabaseAdmin.from("chat_conversations").update({ title }).eq("id", data.conversationId),
+      );
     } else {
-      await supabaseAdmin
-        .from("chat_conversations")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", data.conversationId);
+      await retrySupabase<null>("askNelson.touchConversation", () =>
+        supabaseAdmin
+          .from("chat_conversations")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", data.conversationId),
+      );
     }
 
     return { reply: finalText, model: usedModel, escalated: escalate };

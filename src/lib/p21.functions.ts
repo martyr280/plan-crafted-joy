@@ -1,7 +1,7 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { assertAdmin, runJob, bucketFor, applyE2GSnapshot, applyPricerSync } from "./p21.server";
+import { assertAdmin, runJob, bucketFor, applyE2GSnapshot, applyPricerSync, isTransientBackendError } from "./p21.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const EnqueueSchema = z.object({
@@ -21,34 +21,55 @@ export const enqueueP21Job = createServerFn({ method: "POST" })
 export const getBridgeStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { data: agents } = await supabaseAdmin
-      .from("p21_bridge_agents")
-      .select("*")
-      .order("last_seen_at", { ascending: false });
-    const { data: recent } = await supabaseAdmin
-      .from("p21_bridge_jobs")
-      .select("id, kind, status, created_at, claimed_at, completed_at, error, payload, result")
-      .order("created_at", { ascending: false })
-      .limit(50);
+    try {
+      await assertAdmin(context.supabase, context.userId);
+      const { data: agents, error: agentsError } = await supabaseAdmin
+        .from("p21_bridge_agents")
+        .select("*")
+        .order("last_seen_at", { ascending: false });
+      if (agentsError) throw agentsError;
 
-    const counts = { pending: 0, claimed: 0, done: 0, error: 0 };
-    for (const j of recent ?? []) {
-      if (j.status in counts) (counts as any)[j.status]++;
+      const { data: recent, error: recentError } = await supabaseAdmin
+        .from("p21_bridge_jobs")
+        .select("id, kind, status, created_at, claimed_at, completed_at, error, payload, result")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (recentError) throw recentError;
+
+      const counts = { pending: 0, claimed: 0, done: 0, error: 0 };
+      for (const j of recent ?? []) {
+        if (j.status in counts) (counts as any)[j.status]++;
+      }
+
+      const [{ count: pendingCount, error: pendingError }, { count: failedCount, error: failedError }] = await Promise.all([
+        supabaseAdmin.from("p21_bridge_jobs").select("id", { count: "exact", head: true }).eq("status", "pending"),
+        supabaseAdmin.from("p21_bridge_jobs").select("id", { count: "exact", head: true }).eq("status", "error"),
+      ]);
+      if (pendingError) throw pendingError;
+      if (failedError) throw failedError;
+
+      return {
+        agents: agents ?? [],
+        pendingCount: pendingCount ?? 0,
+        failedCount: failedCount ?? 0,
+        recent: recent ?? [],
+        counts,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : (error as any)?.message ?? String(error);
+      if (!isTransientBackendError(message)) throw error;
+      console.warn("getBridgeStatus transient backend error; returning safe fallback", {
+        message: message.slice(0, 300),
+      });
+      return {
+        agents: [],
+        pendingCount: 0,
+        failedCount: 0,
+        recent: [],
+        counts: { pending: 0, claimed: 0, done: 0, error: 0 },
+        transientError: message.slice(0, 300),
+      };
     }
-
-    const [{ count: pendingCount }, { count: failedCount }] = await Promise.all([
-      supabaseAdmin.from("p21_bridge_jobs").select("id", { count: "exact", head: true }).eq("status", "pending"),
-      supabaseAdmin.from("p21_bridge_jobs").select("id", { count: "exact", head: true }).eq("status", "error"),
-    ]);
-
-    return {
-      agents: agents ?? [],
-      pendingCount: pendingCount ?? 0,
-      failedCount: failedCount ?? 0,
-      recent: recent ?? [],
-      counts,
-    };
   });
 
 export const retryBridgeJob = createServerFn({ method: "POST" })

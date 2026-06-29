@@ -37,6 +37,7 @@ export function AskNelsonChat({ conversationId, setConversationId, compact }: Pr
   async function ensureConv() {
     if (conversationId) return conversationId;
     const r = await create.mutateAsync();
+    if (!r.conversation) throw new Error("Failed to create conversation");
     setConversationId(r.conversation.id);
     return r.conversation.id;
   }
@@ -66,6 +67,7 @@ export function AskNelsonChat({ conversationId, setConversationId, compact }: Pr
               className="w-full justify-start"
               onClick={async () => {
                 const r = await create.mutateAsync();
+                if (!r.conversation) throw new Error("Failed to create conversation");
                 setConversationId(r.conversation.id);
               }}
             >
