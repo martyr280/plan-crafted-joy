@@ -13,6 +13,17 @@ import {
 const FLASH = "google/gemini-3-flash-preview";
 const STRONG = "openai/gpt-5.4";
 
+type ConversationSummary = { id: string; title: string; created_at: string; updated_at: string };
+type ConversationHeader = { id: string; title: string };
+type ChatMessageRow = {
+  id: string;
+  role: string;
+  content: string | null;
+  model: string | null;
+  created_at: string;
+};
+type ChatHistoryRow = { role: string; content: string | null };
+
 const TRANSIENT_BACKEND_PATTERNS = [
   /schema cache/i,
   /retrying/i,
@@ -84,7 +95,7 @@ function throwIfDbError(error: unknown) {
   if (error) throw new Error(backendErrorMessage(error));
 }
 
-async function retrySupabase<T>(label: string, operation: () => Promise<{ data: T; error: unknown }>) {
+async function retrySupabase<T>(label: string, operation: () => PromiseLike<{ data: T; error: unknown }>) {
   const { data } = await retryTransient(label, async () => {
     const res = await operation();
     throwIfDbError(res.error);
@@ -155,7 +166,7 @@ export const listConversations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     try {
-      const data = await retrySupabase("listConversations", () =>
+      const data = await retrySupabase<ConversationSummary[]>("listConversations", () =>
         context.supabase
           .from("chat_conversations")
           .select("id, title, created_at, updated_at")
@@ -179,7 +190,7 @@ export const getConversation = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     try {
       return await retryTransient("getConversation", async () => {
-        const conv = await retrySupabase("getConversation.conversation", () =>
+        const conv = await retrySupabase<ConversationSummary | null>("getConversation.conversation", () =>
           context.supabase
             .from("chat_conversations")
             .select("id, title, created_at, updated_at")
@@ -187,7 +198,7 @@ export const getConversation = createServerFn({ method: "POST" })
             .maybeSingle(),
         );
         if (!conv) return { conversation: null, messages: [] };
-        const msgs = await retrySupabase("getConversation.messages", () =>
+        const msgs = await retrySupabase<ChatMessageRow[]>("getConversation.messages", () =>
           context.supabase
             .from("chat_messages")
             .select("id, role, content, model, created_at")
@@ -209,17 +220,14 @@ export const getConversation = createServerFn({ method: "POST" })
 export const createConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const conversation = await retryTransient("createConversation", async () => {
-      const data = await retrySupabase("createConversation.insert", () =>
-        context.supabase
+    const conversation = await retrySupabase<ConversationSummary>("createConversation.insert", () =>
+      context.supabase
         .from("chat_conversations")
         .insert({ user_id: context.userId, title: "New chat" })
         .select("id, title, created_at, updated_at")
         .single(),
-      );
-      if (!data) throw new Error("Failed to create conversation");
-      return data;
-    });
+    );
+    if (!conversation) throw new Error("Failed to create conversation");
     return { conversation };
   });
 
@@ -228,7 +236,7 @@ export const deleteConversation = createServerFn({ method: "POST" })
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
     await retryTransient("deleteConversation", async () => {
-      await retrySupabase("deleteConversation.delete", () =>
+      await retrySupabase<null>("deleteConversation.delete", () =>
         context.supabase.from("chat_conversations").delete().eq("id", data.id),
       );
       return true;
@@ -247,7 +255,7 @@ export const askNelson = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     // Verify ownership via user-scoped client
-    const conv = await retrySupabase("askNelson.verifyConversation", () =>
+    const conv = await retrySupabase<ConversationHeader | null>("askNelson.verifyConversation", () =>
       context.supabase
         .from("chat_conversations")
         .select("id, title")
@@ -261,7 +269,7 @@ export const askNelson = createServerFn({ method: "POST" })
     const maxToolCalls = escalate ? 8 : 4;
 
     // Load recent history
-    const history = await retrySupabase("askNelson.history", () =>
+    const history = await retrySupabase<ChatHistoryRow[]>("askNelson.history", () =>
       supabaseAdmin
         .from("chat_messages")
         .select("role, content")
@@ -275,7 +283,7 @@ export const askNelson = createServerFn({ method: "POST" })
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     // Persist user message immediately
-    await retrySupabase("askNelson.insertUserMessage", () =>
+    await retrySupabase<null>("askNelson.insertUserMessage", () =>
       supabaseAdmin.from("chat_messages").insert({
         conversation_id: data.conversationId,
         role: "user",
@@ -335,7 +343,7 @@ export const askNelson = createServerFn({ method: "POST" })
       finalText = `Error: ${e instanceof Error ? e.message : String(e)}`;
     }
 
-    await retrySupabase("askNelson.insertAssistantMessage", () =>
+    await retrySupabase<null>("askNelson.insertAssistantMessage", () =>
       supabaseAdmin.from("chat_messages").insert({
         conversation_id: data.conversationId,
         role: "assistant",
@@ -347,11 +355,11 @@ export const askNelson = createServerFn({ method: "POST" })
     // Auto-title on first turn
     if (conv.title === "New chat") {
       const title = await generateTitle(data.message);
-      await retrySupabase("askNelson.updateTitle", () =>
+      await retrySupabase<null>("askNelson.updateTitle", () =>
         supabaseAdmin.from("chat_conversations").update({ title }).eq("id", data.conversationId),
       );
     } else {
-      await retrySupabase("askNelson.touchConversation", () =>
+      await retrySupabase<null>("askNelson.touchConversation", () =>
         supabaseAdmin
           .from("chat_conversations")
           .update({ updated_at: new Date().toISOString() })
