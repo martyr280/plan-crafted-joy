@@ -145,16 +145,25 @@ async function generateTitle(message: string) {
 export const listConversations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await retryTransient("listConversations", async () => {
-      const res = await context.supabase
-        .from("chat_conversations")
-        .select("id, title, created_at, updated_at")
-        .order("updated_at", { ascending: false })
-        .limit(100);
-      throwIfDbError(res.error);
-      return res;
-    });
-    return { conversations: data ?? [] };
+    try {
+      const { data } = await retryTransient("listConversations", async () => {
+        const res = await context.supabase
+          .from("chat_conversations")
+          .select("id, title, created_at, updated_at")
+          .order("updated_at", { ascending: false })
+          .limit(100);
+        throwIfDbError(res.error);
+        return res;
+      });
+      return { conversations: data ?? [] };
+    } catch (error) {
+      const message = backendErrorMessage(error);
+      if (!isTransientBackendError(message)) throw error;
+      console.warn("listConversations transient backend error; returning safe fallback", {
+        message: message.slice(0, 300),
+      });
+      return { conversations: [], transientError: message.slice(0, 300) };
+    }
   });
 
 export const getConversation = createServerFn({ method: "POST" })
