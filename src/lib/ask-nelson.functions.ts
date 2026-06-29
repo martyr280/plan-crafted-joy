@@ -13,6 +13,18 @@ import {
 const FLASH = "google/gemini-3-flash-preview";
 const STRONG = "openai/gpt-5.4";
 
+const TRANSIENT_BACKEND_PATTERNS = [
+  /schema cache/i,
+  /retrying/i,
+  /timeout/i,
+  /timed out/i,
+  /temporarily unavailable/i,
+  /backend unreachable/i,
+  /fetch failed/i,
+  /network/i,
+  /520|521|522|523|524/,
+];
+
 const CHALLENGE_PATTERNS = [
   /are you sure/i,
   /double[- ]?check/i,
@@ -29,6 +41,47 @@ const CHALLENGE_PATTERNS = [
 function shouldEscalate(message: string, explicit?: boolean) {
   if (explicit) return true;
   return CHALLENGE_PATTERNS.some((r) => r.test(message));
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function backendErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isTransientBackendError(message: string) {
+  return TRANSIENT_BACKEND_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+async function retryTransient<T>(label: string, operation: () => Promise<T>, attempts = 5): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const message = backendErrorMessage(error);
+      if (!isTransientBackendError(message) || attempt === attempts - 1) break;
+      console.warn(`${label} transient backend error; retrying`, {
+        attempt: attempt + 1,
+        message: message.slice(0, 300),
+      });
+      await sleep(Math.min(4000, 350 * 2 ** attempt));
+    }
+  }
+  throw lastError;
+}
+
+function throwIfDbError(error: unknown) {
+  if (error) throw new Error(backendErrorMessage(error));
 }
 
 function systemPrompt(escalate: boolean) {
@@ -92,12 +145,15 @@ async function generateTitle(message: string) {
 export const listConversations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("chat_conversations")
-      .select("id, title, created_at, updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(100);
-    if (error) throw new Error(error.message);
+    const { data, error } = await retryTransient("listConversations", async () => {
+      const res = await context.supabase
+        .from("chat_conversations")
+        .select("id, title, created_at, updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(100);
+      throwIfDbError(res.error);
+      return res;
+    });
     return { conversations: data ?? [] };
   });
 
