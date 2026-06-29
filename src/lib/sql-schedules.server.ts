@@ -3,6 +3,7 @@ import { CronExpressionParser } from "cron-parser";
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob, applyPricerSync } from "./p21.server";
+import { interpolateScheduleTokens } from "./sales-annualized-template";
 
 export type ScheduleRow = {
   id: string;
@@ -310,14 +311,15 @@ export async function executeSchedule(scheduleId: string): Promise<{
       const res = await applyPricerSync();
       rowCount = res.imported ?? 0;
     } else {
-      validateSelectSql(schedule.sql);
+      const renderedSql = interpolateScheduleTokens(schedule.sql, startedAt);
+      validateSelectSql(renderedSql);
       const { result } = await runJob(
         "sql.select",
-        { sql: schedule.sql, params: schedule.params, slug: `schedule:${schedule.id}` },
+        { sql: renderedSql, params: schedule.params, slug: `schedule:${schedule.id}` },
         120_000
       );
       const rows = ((result as any)?.rows ?? []) as any[];
-      const columns = resolveOutputColumns(schedule.sql, rows, ((result as any)?.columns ?? undefined) as string[] | undefined);
+      const columns = resolveOutputColumns(renderedSql, rows, ((result as any)?.columns ?? undefined) as string[] | undefined);
       rowCount = rows.length;
 
       if (schedule.recipients.length === 0) {

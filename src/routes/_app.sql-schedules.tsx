@@ -26,6 +26,7 @@ import {
   runSqlScheduleNow,
   previewSqlSchedule,
 } from "@/lib/sql-schedules.functions";
+import { SALES_ANNUALIZED_SQL } from "@/lib/sales-annualized-template";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app/sql-schedules")({ component: SqlSchedulesPage });
@@ -158,6 +159,22 @@ function SqlSchedulesPage() {
             </Button>
             <Button size="sm" onClick={() => setEditing(blankSchedule())}>
               <Plus className="w-4 h-4 mr-2" /> New schedule
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const s = blankSchedule();
+                s.name = "Rep Sales Annualized";
+                s.description = "Per-rep customer scorecard. Replace __REPCODE__ with the rep's P21 salesrep_id.";
+                s.sql = SALES_ANNUALIZED_SQL;
+                s.email_subject = "{{name}} — {{date}}";
+                s.schedule_cron = "0 6 1 * *";
+                s.timezone = "America/Chicago";
+                setEditing(s);
+              }}
+            >
+              Sales Annualized template
             </Button>
             <Link to="/bridge"><Button variant="ghost" size="sm">SQL console</Button></Link>
           </div>
