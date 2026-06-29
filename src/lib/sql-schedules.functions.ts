@@ -9,6 +9,7 @@ import {
   resolveOutputColumns,
   validateSelectSql,
 } from "./sql-schedules.server";
+import { interpolateScheduleTokens } from "./sales-annualized-template";
 
 const RecipientsSchema = z.array(z.string().email()).max(20);
 const ParamsSchema = z
@@ -124,15 +125,16 @@ export const previewSqlSchedule = createServerFn({ method: "POST" })
   .inputValidator((input) => PreviewSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
-    validateSelectSql(data.sql);
+    const renderedSql = interpolateScheduleTokens(data.sql);
+    validateSelectSql(renderedSql);
     const { result } = await runJob(
       "sql.select",
-      { sql: data.sql, params: data.params ?? {}, slug: "preview" },
+      { sql: renderedSql, params: data.params ?? {}, slug: "preview" },
       60_000,
     );
     const rows = ((result as any)?.rows ?? []) as any[];
     const columns = resolveOutputColumns(
-      data.sql,
+      renderedSql,
       rows,
       ((result as any)?.columns ?? undefined) as string[] | undefined,
     );
