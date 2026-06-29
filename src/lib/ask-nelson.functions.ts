@@ -84,6 +84,15 @@ function throwIfDbError(error: unknown) {
   if (error) throw new Error(backendErrorMessage(error));
 }
 
+async function retrySupabase<T>(label: string, operation: () => Promise<{ data: T; error: unknown }>) {
+  const { data } = await retryTransient(label, async () => {
+    const res = await operation();
+    throwIfDbError(res.error);
+    return res;
+  });
+  return data;
+}
+
 function systemPrompt(escalate: boolean) {
   return [
     `You are Nelson, a database-grounded assistant for NDI Office Furniture's operations platform.`,
@@ -146,15 +155,13 @@ export const listConversations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     try {
-      const { data } = await retryTransient("listConversations", async () => {
-        const res = await context.supabase
+      const data = await retrySupabase("listConversations", () =>
+        context.supabase
           .from("chat_conversations")
           .select("id, title, created_at, updated_at")
           .order("updated_at", { ascending: false })
-          .limit(100);
-        throwIfDbError(res.error);
-        return res;
-      });
+          .limit(100),
+      );
       return { conversations: data ?? [] };
     } catch (error) {
       const message = backendErrorMessage(error);
@@ -172,19 +179,21 @@ export const getConversation = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     try {
       return await retryTransient("getConversation", async () => {
-        const { data: conv, error: cErr } = await context.supabase
-          .from("chat_conversations")
-          .select("id, title, created_at, updated_at")
-          .eq("id", data.id)
-          .maybeSingle();
-        throwIfDbError(cErr);
+        const conv = await retrySupabase("getConversation.conversation", () =>
+          context.supabase
+            .from("chat_conversations")
+            .select("id, title, created_at, updated_at")
+            .eq("id", data.id)
+            .maybeSingle(),
+        );
         if (!conv) return { conversation: null, messages: [] };
-        const { data: msgs, error: mErr } = await context.supabase
-          .from("chat_messages")
-          .select("id, role, content, model, created_at")
-          .eq("conversation_id", data.id)
-          .order("created_at", { ascending: true });
-        throwIfDbError(mErr);
+        const msgs = await retrySupabase("getConversation.messages", () =>
+          context.supabase
+            .from("chat_messages")
+            .select("id, role, content, model, created_at")
+            .eq("conversation_id", data.id)
+            .order("created_at", { ascending: true }),
+        );
         return { conversation: conv, messages: (msgs ?? []).filter((m) => m.role !== "tool") };
       });
     } catch (error) {
@@ -201,12 +210,13 @@ export const createConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const conversation = await retryTransient("createConversation", async () => {
-      const { data, error } = await context.supabase
+      const data = await retrySupabase("createConversation.insert", () =>
+        context.supabase
         .from("chat_conversations")
         .insert({ user_id: context.userId, title: "New chat" })
         .select("id, title, created_at, updated_at")
-        .single();
-      throwIfDbError(error);
+        .single(),
+      );
       if (!data) throw new Error("Failed to create conversation");
       return data;
     });
@@ -218,8 +228,9 @@ export const deleteConversation = createServerFn({ method: "POST" })
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
     await retryTransient("deleteConversation", async () => {
-      const { error } = await context.supabase.from("chat_conversations").delete().eq("id", data.id);
-      throwIfDbError(error);
+      await retrySupabase("deleteConversation.delete", () =>
+        context.supabase.from("chat_conversations").delete().eq("id", data.id),
+      );
       return true;
     });
     return { ok: true };
@@ -236,15 +247,13 @@ export const askNelson = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     // Verify ownership via user-scoped client
-    const { data: conv } = await retryTransient("askNelson.verifyConversation", async () => {
-      const res = await context.supabase
+    const conv = await retrySupabase("askNelson.verifyConversation", () =>
+      context.supabase
         .from("chat_conversations")
         .select("id, title")
         .eq("id", data.conversationId)
-        .maybeSingle();
-      throwIfDbError(res.error);
-      return res;
-    });
+        .maybeSingle(),
+    );
     if (!conv) throw new Error("Conversation not found");
 
     const escalate = shouldEscalate(data.message, data.escalate);
@@ -252,23 +261,27 @@ export const askNelson = createServerFn({ method: "POST" })
     const maxToolCalls = escalate ? 8 : 4;
 
     // Load recent history
-    const { data: history } = await supabaseAdmin
-      .from("chat_messages")
-      .select("role, content")
-      .eq("conversation_id", data.conversationId)
-      .order("created_at", { ascending: true })
-      .limit(40);
+    const history = await retrySupabase("askNelson.history", () =>
+      supabaseAdmin
+        .from("chat_messages")
+        .select("role, content")
+        .eq("conversation_id", data.conversationId)
+        .order("created_at", { ascending: true })
+        .limit(40),
+    );
 
     const historyMsgs: ChatMsg[] = (history ?? [])
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     // Persist user message immediately
-    await supabaseAdmin.from("chat_messages").insert({
-      conversation_id: data.conversationId,
-      role: "user",
-      content: data.message,
-    });
+    await retrySupabase("askNelson.insertUserMessage", () =>
+      supabaseAdmin.from("chat_messages").insert({
+        conversation_id: data.conversationId,
+        role: "user",
+        content: data.message,
+      }),
+    );
 
     // Prompt-improvement pre-pass (not shown to user)
     const refined = await improvePrompt(data.message, historyMsgs);
@@ -322,22 +335,28 @@ export const askNelson = createServerFn({ method: "POST" })
       finalText = `Error: ${e instanceof Error ? e.message : String(e)}`;
     }
 
-    await supabaseAdmin.from("chat_messages").insert({
-      conversation_id: data.conversationId,
-      role: "assistant",
-      content: finalText,
-      model: usedModel,
-    });
+    await retrySupabase("askNelson.insertAssistantMessage", () =>
+      supabaseAdmin.from("chat_messages").insert({
+        conversation_id: data.conversationId,
+        role: "assistant",
+        content: finalText,
+        model: usedModel,
+      }),
+    );
 
     // Auto-title on first turn
     if (conv.title === "New chat") {
       const title = await generateTitle(data.message);
-      await supabaseAdmin.from("chat_conversations").update({ title }).eq("id", data.conversationId);
+      await retrySupabase("askNelson.updateTitle", () =>
+        supabaseAdmin.from("chat_conversations").update({ title }).eq("id", data.conversationId),
+      );
     } else {
-      await supabaseAdmin
-        .from("chat_conversations")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", data.conversationId);
+      await retrySupabase("askNelson.touchConversation", () =>
+        supabaseAdmin
+          .from("chat_conversations")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", data.conversationId),
+      );
     }
 
     return { reply: finalText, model: usedModel, escalated: escalate };
