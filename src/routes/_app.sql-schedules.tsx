@@ -27,6 +27,7 @@ import {
   previewSqlSchedule,
 } from "@/lib/sql-schedules.functions";
 import { SALES_ANNUALIZED_SQL } from "@/lib/sales-annualized-template";
+import { seedSalesAnnualizedSchedules } from "@/lib/sales-annualized.functions";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app/sql-schedules")({ component: SqlSchedulesPage });
@@ -79,9 +80,11 @@ function SqlSchedulesPage() {
   const upsert = useServerFn(upsertSqlSchedule);
   const remove = useServerFn(deleteSqlSchedule);
   const runNow = useServerFn(runSqlScheduleNow);
+  const seedRepSchedules = useServerFn(seedSalesAnnualizedSchedules);
 
   const [rows, setRows] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [editing, setEditing] = useState<Schedule | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
 
@@ -175,6 +178,27 @@ function SqlSchedulesPage() {
               }}
             >
               Sales Annualized template
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={seeding}
+              onClick={async () => {
+                if (!confirm("Pull every active rep from P21 and create one PAUSED Sales Annualized schedule per rep?")) return;
+                setSeeding(true);
+                try {
+                  const r = (await seedRepSchedules()) as any;
+                  toast.success(`Seeded ${r.created.length} of ${r.reps} reps (${r.skipped.length} skipped). All paused — review and activate.`);
+                  refresh();
+                } catch (e: any) {
+                  toast.error(e?.message ?? "Seed failed");
+                } finally {
+                  setSeeding(false);
+                }
+              }}
+            >
+              {seeding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Seed for all reps
             </Button>
             <Link to="/bridge"><Button variant="ghost" size="sm">SQL console</Button></Link>
           </div>
