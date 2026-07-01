@@ -47,10 +47,14 @@ export function useAskNelson(conversationId: string | null) {
   const fn = useServerFn(askNelson);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { message: string; escalate?: boolean }) =>
-      fn({ data: { conversationId: conversationId!, message: vars.message, escalate: vars.escalate } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["ask-nelson", "conversation", conversationId] });
+    mutationFn: (vars: { message: string; escalate?: boolean; conversationId?: string }) => {
+      const id = vars.conversationId ?? conversationId;
+      if (!id) throw new Error("No conversation id");
+      return fn({ data: { conversationId: id, message: vars.message, escalate: vars.escalate } });
+    },
+    onSuccess: (_data, vars) => {
+      const id = vars.conversationId ?? conversationId;
+      qc.invalidateQueries({ queryKey: ["ask-nelson", "conversation", id] });
       qc.invalidateQueries({ queryKey: ["ask-nelson", "conversations"] });
     },
   });
