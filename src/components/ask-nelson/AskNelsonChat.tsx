@@ -45,9 +45,9 @@ export function AskNelsonChat({ conversationId, setConversationId, compact }: Pr
   async function send(escalate = false) {
     const text = input.trim();
     if (!text || ask.isPending) return;
-    await ensureConv();
+    const id = await ensureConv();
     setInput("");
-    ask.mutate({ message: text, escalate });
+    ask.mutate({ message: text, escalate, conversationId: id });
   }
 
   async function digDeeper() {
