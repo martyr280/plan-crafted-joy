@@ -121,6 +121,58 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
     } catch (e: any) { toast.error(e?.message ?? "Export failed"); }
   }
 
+  // Utilization heatmap: 12 weeks × routes, cell = mean(capacity_frac) for that week.
+  // Weeks are Sunday-anchored; leftmost is 11 weeks ago, rightmost is the current week.
+  const heat = useMemo(() => {
+    const weekStarts: string[] = [];
+    const today = new Date();
+    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const currentSunday = new Date(todayUtc);
+    currentSunday.setUTCDate(currentSunday.getUTCDate() - currentSunday.getUTCDay());
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(currentSunday);
+      d.setUTCDate(d.getUTCDate() - i * 7);
+      weekStarts.push(d.toISOString().slice(0, 10));
+    }
+    const weekOf = (iso: string): string => {
+      const d = new Date(iso + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+      return d.toISOString().slice(0, 10);
+    };
+    // routeId → weekStart → { sum, n }
+    const acc = new Map<string, Map<string, { sum: number; n: number }>>();
+    for (const r of runs) {
+      const wk = weekOf(r.run_date);
+      if (!weekStarts.includes(wk)) continue;
+      const perRoute = acc.get(r.route_id) ?? new Map();
+      const cell = perRoute.get(wk) ?? { sum: 0, n: 0 };
+      cell.sum += Number(r.capacity_frac);
+      cell.n += 1;
+      perRoute.set(wk, cell);
+      acc.set(r.route_id, perRoute);
+    }
+    return { weekStarts, acc };
+  }, [runs]);
+
+  function heatColor(mean: number | null): string {
+    if (mean == null) return "bg-muted/30";
+    if (mean >= FLAG_AT_CAPACITY) return "bg-red-500/80 text-white";
+    if (mean <= FLAG_CONSOLIDATION) return "bg-amber-500/80 text-white";
+    // Neutral gradient by intensity between 0.30 and 0.90.
+    const t = Math.max(0, Math.min(1, (mean - FLAG_CONSOLIDATION) / (FLAG_AT_CAPACITY - FLAG_CONSOLIDATION)));
+    if (t < 0.5) return "bg-emerald-500/40";
+    return "bg-emerald-500/70 text-white";
+  }
+
+  const sortedRoutes = useMemo(() => {
+    const order = new Map(HUB_ORDER.map((h, i) => [h, i]));
+    return [...routes].filter((r) => r.active).sort((a, b) => {
+      const ha = order.get(a.hub) ?? 99; const hb = order.get(b.hub) ?? 99;
+      if (ha !== hb) return ha - hb;
+      return a.sort_order - b.sort_order;
+    });
+  }, [routes]);
+
   const hubs = HUB_ORDER.filter((h) => routes.some((r) => r.hub === h));
   const flagLegend = (
     <div className="text-xs text-muted-foreground flex gap-4">
@@ -136,6 +188,49 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
         <Button variant="outline" size="sm" onClick={download}><Download className="w-4 h-4 mr-1" />Export workbook</Button>
       </div>
       {runsQ.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
+
+      {sortedRoutes.length > 0 && (
+        <Card className="p-4">
+          <div className="font-semibold text-sm mb-1">Utilization heatmap — last 12 weeks</div>
+          <div className="text-xs text-muted-foreground mb-3">Mean capacity per (route, week). Empty cell = no runs.</div>
+          <div className="overflow-x-auto">
+            <div
+              className="grid gap-[2px] text-[10px]"
+              style={{ gridTemplateColumns: `minmax(140px, 180px) repeat(${heat.weekStarts.length}, minmax(28px, 1fr))` }}
+            >
+              <div />
+              {heat.weekStarts.map((w) => (
+                <div key={w} className="text-center text-muted-foreground pb-1" title={`Week of ${w}`}>
+                  {w.slice(5)}
+                </div>
+              ))}
+              {sortedRoutes.map((r) => (
+                <>
+                  <div key={`lbl-${r.id}`} className="pr-2 truncate text-xs" title={`${r.hub} — ${r.name}`}>
+                    <span className="text-muted-foreground">{r.hub[0]}·</span>{r.code}
+                  </div>
+                  {heat.weekStarts.map((w) => {
+                    const cell = heat.acc.get(r.id)?.get(w);
+                    const m = cell && cell.n > 0 ? cell.sum / cell.n : null;
+                    return (
+                      <div
+                        key={`${r.id}-${w}`}
+                        className={`h-6 rounded-sm flex items-center justify-center ${heatColor(m)}`}
+                        title={m == null
+                          ? `${r.code} · ${w}: no runs`
+                          : `${r.code} · week of ${w}: ${(m * 100).toFixed(0)}% (n=${cell!.n})`}
+                      >
+                        {m == null ? "" : `${Math.round(m * 100)}`}
+                      </div>
+                    );
+                  })}
+                </>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
       {hubs.map((hub) => (
         <Card key={hub} className="p-4">
           <div className="font-semibold text-sm mb-3">{hub}</div>
@@ -178,6 +273,7 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
     </div>
   );
 }
+
 
 /* ============================== ROUTE ============================== */
 
