@@ -83,11 +83,10 @@ async function main() {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf as any);
 
-  // Fetch routes (code → id, hub)
-  const routesJson = execSync(`psql -At -c "select json_agg(json_build_object('code',code,'id',id,'hub',hub)) from public.truck_capacity_routes"`).toString().trim();
-  const routes = JSON.parse(routesJson) as Array<{ code: string; id: string; hub: string }>;
-  const codeToId = new Map(routes.map((r) => [r.code, r.id]));
-  const codeToHub = new Map(routes.map((r) => [r.code, r.hub]));
+  const { data: routes, error: rErr } = await sb.from("truck_capacity_routes").select("code,id,hub");
+  if (rErr) throw rErr;
+  const codeToId = new Map((routes ?? []).map((r) => [r.code, r.id]));
+  const codeToHub = new Map((routes ?? []).map((r) => [r.code, r.hub]));
 
   const rows: Array<any> = [];
   const perSheet: Array<{ sheet: string; status: string; ok: number; hub: string | null }> = [];
