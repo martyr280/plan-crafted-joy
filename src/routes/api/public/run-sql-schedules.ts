@@ -59,7 +59,26 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, ranAt: new Date().toISOString() });
+          // Nightly truck-capacity model retrain (dedup-guarded by trained_at ≥ todayUTC).
+          let truckCapacityRetrain: any = null;
+          if (now.getUTCHours() === 7 && now.getUTCMinutes() < 15) {
+            const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+            const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
+            const { data: alreadyRetrained } = await supabaseAdmin
+              .from("truck_capacity_model_versions")
+              .select("id").gte("trained_at", todayStart).limit(1);
+            if (alreadyRetrained && alreadyRetrained.length > 0) {
+              truckCapacityRetrain = { ok: true, skipped: true, reason: "already_trained_today" };
+            } else {
+              try {
+                const { trainAndMaybePromote } = await import("@/lib/truck-capacity/train");
+                truckCapacityRetrain = await trainAndMaybePromote();
+              } catch (e: any) { truckCapacityRetrain = { ok: false, error: e?.message ?? String(e) }; }
+            }
+          }
+
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, ranAt: new Date().toISOString() });
+
         } catch (e: any) {
           return Response.json(
             { ok: false, error: e?.message ?? String(e) },

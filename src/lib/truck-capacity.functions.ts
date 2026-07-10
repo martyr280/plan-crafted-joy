@@ -89,8 +89,47 @@ export const deleteTruckRun = createServerFn({ method: "POST" })
 
 export const getTruckForecast = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i) => z.object({ routeId: z.string().uuid(), horizonDays: z.number().int().min(1).max(60).optional() }).parse(i))
-  .handler(async ({ data }) => computeForecastForRoute(data.routeId, data.horizonDays ?? 28));
+  .inputValidator((i) => z.object({
+    routeId: z.string().uuid(),
+    horizonDays: z.number().int().min(1).max(60).optional(),
+    method: z.enum(["auto", "baseline", "model"]).optional(),
+  }).parse(i))
+  .handler(async ({ data }) => computeForecastForRoute(data.routeId, data.horizonDays ?? 28, data.method ?? "auto"));
+
+export const retrainTruckModel = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(null, context.userId);
+    const { trainAndMaybePromote } = await import("./truck-capacity/train");
+    return trainAndMaybePromote(context.userId);
+  });
+
+export const listTruckModelVersions = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const { data, error } = await supabaseAdmin
+      .from("truck_capacity_model_versions")
+      .select("id, trained_at, lambda, blend_w, train_rows, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, promoted, notes")
+      .order("trained_at", { ascending: false })
+      .limit(20);
+    if (error) throw new Error(error.message);
+    return { versions: data ?? [] };
+  });
+
+export const getTruckAccuracy = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const { data: promoted } = await supabaseAdmin
+      .from("truck_capacity_model_versions")
+      .select("id, trained_at, lambda, blend_w, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, per_route_mae, notes")
+      .eq("promoted", true).order("trained_at", { ascending: false }).limit(1).maybeSingle();
+    const { data: latest } = await supabaseAdmin
+      .from("truck_capacity_model_versions")
+      .select("id, trained_at, lambda, blend_w, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, per_route_mae, promoted, notes")
+      .order("trained_at", { ascending: false }).limit(1).maybeSingle();
+    return { promoted: promoted ?? null, latest: latest ?? null };
+  });
+
 
 export const getTruckSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -155,7 +194,14 @@ export const commitTruckImport = createServerFn({ method: "POST" })
   }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
-    return applyImportRows(data.rows);
+    const result = await applyImportRows(data.rows);
+    // Best-effort retrain after import so accuracy metrics reflect the new data.
+    let retrain: any = null;
+    try {
+      const { trainAndMaybePromote } = await import("./truck-capacity/train");
+      retrain = await trainAndMaybePromote(context.userId);
+    } catch (e: any) { retrain = { ok: false, error: e?.message ?? String(e) }; }
+    return { ...result, retrain };
   });
 
 
