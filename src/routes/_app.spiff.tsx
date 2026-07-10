@@ -602,7 +602,9 @@ function SpiffPage() {
             <AutomationCard />
           </TabsContent>
         </Tabs>
+        </>
       )}
+
     </div>
   );
 }
