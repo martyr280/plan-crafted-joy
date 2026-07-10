@@ -91,7 +91,8 @@ async function main() {
       const rawDate = row.getCell(colDate).value;
       const { iso, seq } = parseDateCell(rawDate);
       if (!iso) continue;
-      if (Number(iso.slice(0, 4)) < 2020) continue;
+      const y = Number(iso.slice(0, 4));
+      if (!(y >= 2020 && y <= 2100)) continue;
       const cap = toNum(row.getCell(colCap).value);
       if (cap == null) continue;
       const capClamped = Math.max(0, Math.min(1.25, cap));
