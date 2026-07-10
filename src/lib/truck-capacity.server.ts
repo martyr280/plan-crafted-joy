@@ -162,14 +162,18 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
   const routeMean = mean(routeValsAll);
   const overallMean = mean(runs.map((r) => r.cap));
 
-  // Monthly factor: raw = mean(this month) / mean(all), shrunk (n*raw + 4)/(n+4)
-  const monthNow = monthOf(today);
-  const thisMonthVals = runs.filter((r) => monthOf(r.date) === monthNow).map((r) => r.cap);
-  const rawMonth = overallMean && overallMean > 0 && thisMonthVals.length > 0
-    ? (mean(thisMonthVals)! / overallMean)
-    : 1.0;
-  const nMonth = thisMonthVals.length;
-  const seasonal = (nMonth * rawMonth + 4 * 1.0) / (nMonth + 4);
+  // Monthly factors — computed per calendar month from the trailing 84-day window,
+  // then indexed by each forecast day's own month so month-boundary crossings
+  // use the correct factor (and the explain label matches what was applied).
+  const monthFactor = new Map<number, { factor: number; n: number }>();
+  for (let m = 1; m <= 12; m++) {
+    const vals = runs.filter((r) => monthOf(r.date) === m).map((r) => r.cap);
+    const raw = overallMean && overallMean > 0 && vals.length > 0
+      ? (mean(vals)! / overallMean)
+      : 1.0;
+    const shrunk = (vals.length * raw + 4 * 1.0) / (vals.length + 4);
+    monthFactor.set(m, { factor: shrunk, n: vals.length });
+  }
 
   // P21 snapshot for horizon
   const horizonEnd = addDaysISO(today, horizonDays);
@@ -191,6 +195,9 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
   for (let i = 1; i <= horizonDays; i++) {
     const date = addDaysISO(today, i);
     const dw = dowOf(date);
+    const mo = monthOf(date);
+    const mf = monthFactor.get(mo) ?? { factor: 1.0, n: 0 };
+    const seasonal = mf.factor;
     const p21 = p21Latest.has(date) ? p21Latest.get(date)! : null;
     if (!activeDows.has(dw)) {
       if (p21 != null && p21 > 0) {
@@ -207,7 +214,7 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
     const forecast = Math.max(0, Math.min(1.25, base * seasonal));
     const final = p21 != null ? Math.max(forecast, p21) : forecast;
     const wk = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dw];
-    const monLbl = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][monthOf(date) - 1];
+    const monLbl = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][mo - 1];
     days.push({
       date, dow: dw,
       baseline: base, seasonal, forecast, mad: madVal, p21, final,
@@ -215,6 +222,7 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
       explain: `${wk} baseline ${base.toFixed(2)} (n=${samples.length}) × ${monLbl} ${seasonal.toFixed(2)} = ${forecast.toFixed(2)}${p21 != null ? ` · P21 ${p21.toFixed(2)}` : ""}`,
     });
   }
+
 
   return { route: route as Route, days };
 }
