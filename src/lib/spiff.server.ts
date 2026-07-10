@@ -256,6 +256,17 @@ export async function generateSpiffRunCore(opts: {
     opts.dateTo
   );
 
+  // Per-reason exclusion counters across the whole run.
+  const exclusionCounts: Record<string, number> = {
+    not_invoiced: 0,
+    cancelled: 0,
+    sample: 0,
+    catalog: 0,
+    out_of_scope: 0,
+    missing_product_group: 0,
+    special_order: 0,
+  };
+
   for (const program of progs) {
     try {
       const rawLines = linesByCustomer.get(program.customer_id) ?? [];
@@ -263,6 +274,7 @@ export async function generateSpiffRunCore(opts: {
       let unmatched = 0;
       let spiffSum = 0;
       let missingProductGroup = 0;
+      const perProgramExcl: Record<string, number> = {};
 
       const scoped =
         program.product_scope === "pl_ryker_jax" ||
@@ -276,27 +288,57 @@ export async function generateSpiffRunCore(opts: {
         const vsUpper = vs.toUpperCase();
         const isSpecial = vsUpper.includes("SPECIAL");
         const excludedSpecial = program.exclude_special_orders && isSpecial;
-        const included = inScope && !excludedSpecial;
-        const exclusion_reason = missingPg
-          ? "missing_product_group"
-          : !inScope
-            ? "out_of_scope"
-            : excludedSpecial
-              ? "special_order"
-              : null;
 
-        // Flag (don't exclude) when validation_status is suspicious.
+        // Invoiced-only (Kim rule #1). Base spiff on invoiced_amount.
+        const invoicedQty = num(r.invoiced_qty);
+        const invoicedAmt = num(r.invoiced_amount);
+        const notInvoiced = invoicedQty <= 0 && invoicedAmt <= 0;
+
+        // Cancelled (Kim rule #3) — header cancel flag OR validation_status CANCEL.
+        const cancelFlag = String(r.cancel_flag ?? "").trim().toUpperCase();
+        const isCancelled = cancelFlag === "Y" || vsUpper.includes("CANCEL");
+
+        // Samples / Catalogs (Kim rules #4, #5).
+        const scReason = classifySampleCatalog({
+          itemId: r.item_id,
+          itemDesc: r.item_desc,
+          productGroupId: r.product_group_id,
+        });
+
+        // Priority: cancelled > not_invoiced > sample > catalog > scope > special.
+        let exclusion_reason: string | null = null;
+        if (isCancelled) exclusion_reason = "cancelled";
+        else if (notInvoiced) exclusion_reason = "not_invoiced";
+        else if (scReason === "sample") exclusion_reason = "sample";
+        else if (scReason === "catalog") exclusion_reason = "catalog";
+        else if (missingPg) exclusion_reason = "missing_product_group";
+        else if (!inScope) exclusion_reason = "out_of_scope";
+        else if (excludedSpecial) exclusion_reason = "special_order";
+
+        const included = exclusion_reason === null;
+
         const flags: Record<string, any> = {};
-        if (vs && (vsUpper.includes("CANCEL") || vsUpper.includes("UNAPPROV") || vsUpper.includes("HOLD") || vsUpper.includes("REJECT"))) {
+        if (vs && (vsUpper.includes("UNAPPROV") || vsUpper.includes("HOLD") || vsUpper.includes("REJECT"))) {
           flags.validation_warning = vs;
         }
+        if (isCancelled && vs) flags.validation_warning = vs || "CANCELLED";
         if (missingPg) {
           flags.missing_product_group = true;
           missingProductGroup++;
         }
+        if (notInvoiced) flags.not_invoiced = true;
 
-        const ext = num(r.extended_price);
-        const spiff = included ? +(ext * Number(program.rate)).toFixed(6) : 0;
+        if (exclusion_reason) {
+          perProgramExcl[exclusion_reason] = (perProgramExcl[exclusion_reason] ?? 0) + 1;
+          exclusionCounts[exclusion_reason] = (exclusionCounts[exclusion_reason] ?? 0) + 1;
+        }
+
+        // Use INVOICED qty/amount as the basis of record (Kim rule #1). Falls
+        // back to ordered values only when nothing was invoiced so the row is
+        // still auditable in the UI even though included=false.
+        const qtyForRow = notInvoiced ? num(r.qty_ordered) : invoicedQty;
+        const extForRow = notInvoiced ? num(r.extended_price) : invoicedAmt;
+        const spiff = included ? +(extForRow * Number(program.rate)).toFixed(6) : 0;
         const parsed = parseWritingRep(r.po_no);
         if (parsed.confidence === "unmatched" && included) unmatched++;
         if (included) spiffSum += spiff;
@@ -310,9 +352,9 @@ export async function generateSpiffRunCore(opts: {
           po_no: r.po_no,
           item_id: r.item_id,
           item_desc: r.item_desc,
-          qty_ordered: num(r.qty_ordered),
+          qty_ordered: qtyForRow,
           unit_price: num(r.unit_price),
-          extended_price: ext,
+          extended_price: extForRow,
           product_group_id: r.product_group_id != null ? String(r.product_group_id) : null,
           spiff_amount: spiff,
           writing_rep: parsed.rep,
@@ -323,14 +365,12 @@ export async function generateSpiffRunCore(opts: {
         });
       }
 
-      // Batched insert
       for (let i = 0; i < toInsert.length; i += 500) {
         const slice = toInsert.slice(i, i + 500);
         const { error } = await supabaseAdmin.from("spiff_run_lines").insert(slice);
         if (error) throw new Error(error.message);
       }
 
-      // Build checks from the just-inserted lines (use the in-memory shape).
       const checkInputs = toInsert.map((l) => ({
         spiff_amount: Number(l.spiff_amount) || 0,
         writing_rep: l.writing_rep,
@@ -350,7 +390,8 @@ export async function generateSpiffRunCore(opts: {
         spiff: spiffSum,
         unmatched,
         missing_product_group: missingProductGroup,
-      };
+        excluded: perProgramExcl,
+      } as any;
     } catch (e: any) {
       const msg = e?.message ?? "unknown error";
       errors[program.customer_id] = msg;
@@ -363,7 +404,6 @@ export async function generateSpiffRunCore(opts: {
     }
   }
 
-  // AR aging gate — single SQL.
   const customerIds = progs.map((p) => p.customer_id);
   const aging = await fetchAging(customerIds);
 
@@ -374,6 +414,8 @@ export async function generateSpiffRunCore(opts: {
         per_customer: perCustomerSummary,
         aging: aging.error ? { error: aging.error } : aging.byCustomer,
         errors,
+        exclusion_counts: exclusionCounts,
+        exclusion_rules: EXCLUSION_RULES,
         generated_at: new Date().toISOString(),
       },
     })
@@ -385,11 +427,12 @@ export async function generateSpiffRunCore(opts: {
     entity_id: runId,
     actor_id: opts.userId,
     message: `SPIFF run generated for ${opts.quarterLabel}`,
-    metadata: { programs: progs.length, errors: Object.keys(errors).length },
+    metadata: { programs: progs.length, errors: Object.keys(errors).length, exclusions: exclusionCounts },
   });
 
   return { runId, programsProcessed: progs.length, errors };
 }
+
 
 // =====================================================================
 // Email distribution
