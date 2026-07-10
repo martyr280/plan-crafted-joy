@@ -43,16 +43,17 @@ export type BacktestResult = {
 
 function firstOfMonthAdd(iso: string, months: number): string {
   const d = new Date(iso + "T00:00:00Z");
-  d.setUTCMonth(d.getUTCMonth() + months, 1);
-  return d.toISOString().slice(0, 10);
+  const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1));
+  return next.toISOString().slice(0, 10);
 }
 
 export function buildMonthlyCutoffs(minDate: string, maxDate: string, warmupDays = 90): string[] {
   const start = new Date(minDate + "T00:00:00Z");
   start.setUTCDate(start.getUTCDate() + warmupDays);
-  const startISO = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 2).padStart(2, "0")}-01`.slice(0, 10);
+  // First-of-next-month after warmup — using Date.UTC so December rolls year correctly.
+  const firstNext = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
   const cutoffs: string[] = [];
-  let cur = startISO;
+  let cur = firstNext.toISOString().slice(0, 10);
   while (cur <= maxDate) {
     cutoffs.push(cur);
     cur = firstOfMonthAdd(cur, 1);

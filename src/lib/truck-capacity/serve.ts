@@ -5,7 +5,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { clamp, predict as vecPredict, mad as madFn } from "./linalg";
 import { baselineFromSnapshot, addDaysISO, dowOf, monthOf, type BaselineDay, type RunPoint } from "./baseline";
 import {
-  buildFeatureContext, buildFeatureRow, buildLagBlock, featureNames,
+  buildFeatureContext, buildLagBlock,
+  buildFeatureNameValueMap, alignToPersistedNames,
   type RouteMeta,
 } from "./features";
 import { groupContributions, driverSummary } from "./explain";
@@ -130,23 +131,25 @@ export async function computeForecastForRoute(
     route.typical_dow ?? [],
   );
 
-  // Decide serving method.
-  const promoted = methodOverride === "baseline" ? null : await (methodOverride === "model" ? loadLatestVersion() : loadPromotedVersion());
-  const useModel = !!promoted && methodOverride !== "baseline";
+  // Decide which persisted version (if any) to serve against.
+  const promoted = methodOverride === "baseline"
+    ? null
+    : await (methodOverride === "model" ? loadLatestVersion() : loadPromotedVersion());
+  let useModel = !!promoted && methodOverride !== "baseline";
 
   let ctxRoutes: RouteMeta[] = [];
-  let names: string[] = [];
   let allRunsForCtx: { date: string }[] = [];
   let allRouteHubRuns: RunPoint[] = [];
+  let persistedNames: string[] = [];
+  let coverage = 1;
+
   if (useModel && promoted) {
     ctxRoutes = await loadAllRoutesMeta();
-    // Fetch min run_date for trend feature — cheap single row.
     const { data: minRow } = await supabaseAdmin
       .from("truck_capacity_runs").select("run_date").order("run_date", { ascending: true }).limit(1).maybeSingle();
     allRunsForCtx = minRow ? [{ date: minRow.run_date }] : [];
-    names = promoted.feature_names as any;
-    void names;
-    // Load extended history for this route + hub for lag freshness.
+    persistedNames = (promoted.feature_names as any) ?? [];
+
     const from56 = addDaysISO(today, -56);
     const [routeHist, hubHist] = await Promise.all([
       loadRouteRunsSince(routeId, from56),
@@ -158,10 +161,38 @@ export async function computeForecastForRoute(
   }
 
   const routeMeta: RouteMeta = { id: route.id, code: route.code, hub: route.hub, truck_type: route.truck_type };
-  const ctx = useModel ? buildFeatureContext(ctxRoutes.length > 0 ? ctxRoutes : [routeMeta], allRunsForCtx) : null;
+  const ctx = useModel
+    ? buildFeatureContext(ctxRoutes.length > 0 ? ctxRoutes : [routeMeta], allRunsForCtx)
+    : null;
+
+  // Coverage guard: if live feature set can't reproduce ≥95% of persisted names,
+  // log and fall back to baseline for this request. Cheap check via a probe day.
+  if (useModel && promoted && ctx && persistedNames.length > 0) {
+    const probeLags = buildLagBlock(routeRunsData, allRouteHubRuns, today, today);
+    const probeMap = buildFeatureNameValueMap(ctx, routeMeta, today, probeLags);
+    const { coverage: cov } = alignToPersistedNames(probeMap, persistedNames);
+    coverage = cov;
+    if (cov < 0.95) {
+      useModel = false;
+      try {
+        await supabaseAdmin.from("activity_events").insert({
+          event_type: "truck_capacity.feature_coverage_low",
+          entity_type: "truck_capacity_model_versions",
+          entity_id: promoted.id,
+          message: `Feature coverage ${(cov * 100).toFixed(1)}% below 95% threshold; served baseline for route ${route.code}.`,
+          metadata: { route_id: routeId, coverage: cov, persisted_names: persistedNames.length },
+        });
+      } catch { /* best-effort */ }
+    }
+  }
 
   const perRouteResidMad = (promoted as any)?.per_route_residual_mad ?? {};
   const routeMadOverride: number | undefined = perRouteResidMad?.[routeId];
+
+  // "Model" override serves the pure model (w=1); Auto uses promoted blend_w.
+  const effectiveW = useModel && promoted
+    ? (methodOverride === "model" ? 1 : Number(promoted.blend_w ?? 0))
+    : 0;
 
   const days: ForecastDay[] = baselineDays.map((b: BaselineDay) => {
     const p21 = p21Latest.get(b.date) ?? null;
@@ -172,26 +203,25 @@ export async function computeForecastForRoute(
 
     if (useModel && promoted && ctx) {
       const lags = buildLagBlock(routeRunsData, allRouteHubRuns, today, b.date);
-      const x = buildFeatureRow(ctx, routeMeta, b.date, lags);
+      const liveMap = buildFeatureNameValueMap(ctx, routeMeta, b.date, lags);
+      const { vector: x } = alignToPersistedNames(liveMap, persistedNames);
       const coeffs = promoted.coefficients as any as number[];
-      // Guard against feature-count drift after a schema change: fall back to
-      // baseline if lengths don't match.
       if (Array.isArray(coeffs) && coeffs.length === x.length) {
         modelPred = clamp(vecPredict(x, coeffs), 0, 1.25);
-        const w = Number(promoted.blend_w ?? 0);
         const baseVal = b.forecast ?? modelPred;
-        blend = clamp(w * modelPred + (1 - w) * baseVal, 0, 1.25);
-        method = w >= 0.999 ? "model" : (w <= 0.001 ? "baseline" : "blend");
-        const groups = groupContributions(coeffs, promoted.feature_names as any, x);
+        blend = clamp(effectiveW * modelPred + (1 - effectiveW) * baseVal, 0, 1.25);
+        method = effectiveW >= 0.999 ? "model" : (effectiveW <= 0.001 ? "baseline" : "blend");
+        const groups = groupContributions(coeffs, persistedNames, x);
         driverStr = driverSummary(groups, p21 != null && p21 > (blend ?? 0));
       }
     }
 
     const chosen = useModel && blend != null ? blend : (b.forecast ?? null);
+    const guardApplied = chosen != null && p21 != null && p21 > chosen;
     const final = chosen == null ? p21 : (p21 != null ? Math.max(chosen, p21) : chosen);
     const madVal = routeMadOverride ?? b.mad;
     const explainSuffix = driverStr ? ` · ${driverStr}` : "";
-    const p21Suffix = p21 != null ? ` · P21 ${p21.toFixed(2)}` : "";
+    const p21Suffix = p21 != null ? ` · P21 ${p21.toFixed(2)}${guardApplied ? " (guard)" : ""}` : "";
     return {
       date: b.date, dow: b.dow, baseline: b.baseline, seasonal: b.seasonal,
       forecast: b.forecast, model: modelPred, blend, mad: madVal, p21, final,
@@ -202,17 +232,28 @@ export async function computeForecastForRoute(
     };
   });
 
-  // Best-effort forecast_log write (dedup by unique index).
+  // Best-effort forecast_log write. Store raw (pre-guard) prediction in
+  // `predicted`; final served value in `served`; flag guarded days so future
+  // accuracy-vs-actuals can exclude them from MAE math.
   if (useModel && promoted) {
     try {
-      const rows = days.filter((d) => d.final != null).map((d) => ({
-        route_id: routeId,
-        forecast_date: d.date,
-        made_on: today,
-        predicted: d.final!,
-        method: d.method,
-        model_version_id: promoted.id,
-      }));
+      const rows = days
+        .filter((d) => (d.blend ?? d.forecast) != null)
+        .map((d) => {
+          const raw = d.blend ?? d.forecast!;
+          const p21 = d.p21;
+          const guardApplied = p21 != null && p21 > raw;
+          return {
+            route_id: routeId,
+            forecast_date: d.date,
+            made_on: today,
+            predicted: raw,
+            served: d.final,
+            p21_guard_applied: guardApplied,
+            method: d.method,
+            model_version_id: promoted.id,
+          };
+        });
       if (rows.length > 0) {
         await supabaseAdmin.from("truck_capacity_forecast_log")
           .upsert(rows, { onConflict: "route_id,forecast_date,made_on,method", ignoreDuplicates: true });
@@ -221,7 +262,7 @@ export async function computeForecastForRoute(
   }
 
   const servingMethod: "baseline" | "model" | "blend" = useModel
-    ? (Number(promoted?.blend_w ?? 0) >= 0.999 ? "model" : (Number(promoted?.blend_w ?? 0) <= 0.001 ? "baseline" : "blend"))
+    ? (effectiveW >= 0.999 ? "model" : (effectiveW <= 0.001 ? "baseline" : "blend"))
     : "baseline";
 
   const versionOut = promoted ? {
@@ -232,6 +273,6 @@ export async function computeForecastForRoute(
     holdout_mae_blend: promoted.holdout_mae_blend == null ? null : Number(promoted.holdout_mae_blend),
     promoted: promoted.promoted,
   } : null;
-  void dowOf; void monthOf; void madFn;
+  void dowOf; void monthOf; void madFn; void coverage;
   return { route, days, servingMethod, version: versionOut };
 }

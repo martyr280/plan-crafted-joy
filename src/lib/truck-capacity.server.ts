@@ -296,28 +296,8 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
 
 /* ============================== EXCEL IMPORT ============================== */
 
-// Maps workbook sheet-name variants → route.code
-const SHEET_TO_ROUTE_CODE: Record<string, string> = {
-  "dallas special runs": "DAL-SPECIAL",
-  "dallas-local": "DAL-LOCAL", "dallas local": "DAL-LOCAL",
-  "moar": "MOAR", "east tx": "ETX",
-  "okl": "OKL", "hou": "HOU", "kan": "KAN", "ark": "ARK",
-  "bham transfer": "BHM-XFER-DAL", "bham transfer (dallas)": "BHM-XFER-DAL", "birmingham transfer": "BHM-XFER-DAL",
-  "birmingham special runs": "BHM-SPECIAL",
-  "mislou": "MISLOU", "sw miss": "SWMISS", "north al": "NAL", "north miss.": "NMISS", "north miss": "NMISS",
-  "central al": "CAL", "mid tn": "MTN", "east tn": "ETN",
-  "west tn - long": "WTN-LONG", "west tn long": "WTN-LONG",
-  "west tn - short": "WTN-SHORT", "west tn short": "WTN-SHORT",
-  "dallas transfer": "DAL-XFER-BHM", "dallas transfer (bham)": "DAL-XFER-BHM", "dallas transfer(bham)": "DAL-XFER-BHM",
-  "ocala transfer": "OCA-XFER-BHM", "ocala transfer (bham)": "OCA-XFER-BHM", "ocala transfer(bham)": "OCA-XFER-BHM",
-  "north ga": "NGA", "south ga": "SGA",
-  "east carolina": "ECAR", "west carolina": "WCAR",
-  "south al": "SAL", "gulf coast": "GULF",
-  "ocala special runs": "OCA-SPECIAL",
-  "jax": "JAX", "sefl": "SEFL", "mia": "MIA", "orl": "ORL", "swfl": "SWFL", "tampa": "TAMPA",
-  // hidden legacy sheet — explicit skip
-  "carolinas": "__SKIP__",
-};
+// Sheet map imported from single source of truth to keep server + seed script in sync.
+import { SHEET_TO_ROUTE_CODE } from "./truck-capacity/sheet-map";
 
 type ImportRow = {
   route_code: string;
@@ -436,7 +416,8 @@ export async function parseImportWorkbook(fileBase64: string): Promise<ImportRep
       const rawDate = row.getCell(colDate).value;
       const { iso, seq } = parseDateCell(rawDate);
       if (!iso) { if (rawDate != null && rawDate !== "") sheetOut.skipped_bad_date++; continue; }
-      if (Number(iso.slice(0, 4)) < 2020) { sheetOut.skipped_old_year++; continue; }
+      const y = Number(iso.slice(0, 4));
+      if (!(y >= 2020 && y <= 2100)) { sheetOut.skipped_old_year++; continue; }
       const cap = toNum(row.getCell(colCap).value);
       if (cap == null) { sheetOut.skipped_no_capacity++; continue; }
       const capClamped = Math.max(0, Math.min(1.25, cap));

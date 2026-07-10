@@ -1880,8 +1880,10 @@ export type Database = {
           made_on: string
           method: string
           model_version_id: string | null
+          p21_guard_applied: boolean
           predicted: number
           route_id: string
+          served: number | null
         }
         Insert: {
           created_at?: string
@@ -1890,8 +1892,10 @@ export type Database = {
           made_on: string
           method: string
           model_version_id?: string | null
+          p21_guard_applied?: boolean
           predicted: number
           route_id: string
+          served?: number | null
         }
         Update: {
           created_at?: string
@@ -1900,8 +1904,10 @@ export type Database = {
           made_on?: string
           method?: string
           model_version_id?: string | null
+          p21_guard_applied?: boolean
           predicted?: number
           route_id?: string
+          served?: number | null
         }
         Relationships: [
           {
