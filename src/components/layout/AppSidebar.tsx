@@ -34,6 +34,7 @@ const groups = [
     items: [
       { title: "Sales", url: "/sales", icon: BarChart3 },
       { title: "Logistics", url: "/logistics", icon: Truck },
+      { title: "Truck Capacity", url: "/truck-capacity", icon: Truck },
       { title: "Damage Tracker", url: "/damage", icon: AlertTriangle },
     ],
   },

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { timingSafeEqual } from "crypto";
 import { executeDueSchedules } from "@/lib/sql-schedules.server";
 import { runSpiffAutomationTick } from "@/lib/spiff.server";
+import { runP21Snapshot } from "@/lib/truck-capacity.server";
 
 function checkSecret(provided: string | null | undefined, expected: string): boolean {
   if (!provided) return false;
@@ -37,7 +38,14 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
           } catch (e: any) {
             spiff = { ran: false, error: e?.message ?? String(e) };
           }
-          return Response.json({ ok: true, ...result, spiff, ranAt: new Date().toISOString() });
+          // Nightly truck-capacity P21 snapshot: run once per day between 07:00–07:15 UTC (~03:00 EDT).
+          let truckCapacity: any = null;
+          const now = new Date();
+          if (now.getUTCHours() === 7 && now.getUTCMinutes() < 15) {
+            try { truckCapacity = await runP21Snapshot(); }
+            catch (e: any) { truckCapacity = { ok: false, error: e?.message ?? String(e) }; }
+          }
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, ranAt: new Date().toISOString() });
         } catch (e: any) {
           return Response.json(
             { ok: false, error: e?.message ?? String(e) },
