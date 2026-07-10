@@ -137,15 +137,19 @@ async function main() {
 
   console.log(`Parsed ${rows.length} rows across ${perSheet.filter((s) => s.status === "ok").length} sheets`);
 
-  // Batched upserts via supabase-js (service role bypasses RLS).
+  // Dedup within input by (route_id, run_date, run_seq) — last one wins.
+  const dedup = new Map<string, any>();
+  for (const r of rows) dedup.set(`${r.route_id}|${r.run_date}|${r.run_seq}`, r);
+  const uniqueRows = [...dedup.values()];
+  console.log(`After dedup: ${uniqueRows.length} unique rows`);
   let inserted = 0;
-  for (let i = 0; i < rows.length; i += 500) {
-    const batch = rows.slice(i, i + 500).map((r) => ({ ...r, source: "import" }));
+  for (let i = 0; i < uniqueRows.length; i += 500) {
+    const batch = uniqueRows.slice(i, i + 500).map((r) => ({ ...r, source: "import" }));
     const { error } = await sb.from("truck_capacity_runs")
       .upsert(batch, { onConflict: "route_id,run_date,run_seq" });
     if (error) throw new Error(`upsert failed at batch ${i}: ${error.message}`);
     inserted += batch.length;
-    process.stdout.write(`\r  upserted ${inserted}/${rows.length}`);
+    process.stdout.write(`\r  upserted ${inserted}/${uniqueRows.length}`);
   }
   process.stdout.write("\n");
 
