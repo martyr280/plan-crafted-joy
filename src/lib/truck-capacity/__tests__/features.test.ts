@@ -11,8 +11,8 @@ describe("features", () => {
   it("feature names are deterministic and length matches", () => {
     const ctx = buildFeatureContext(routes, [{ date: "2026-01-01" }]);
     const names = featureNames(ctx);
-    // intercept + 6 dow + 11 month + (3 hubs - 1) + truck_box + trend + 7 lags + (3 routes - 1) = 30
-    expect(names.length).toBe(30);
+    // 1 intercept + 6 dow + 11 month + 2 hubs + 1 truck + 1 trend + 7 lags + 2 route = 31
+    expect(names.length).toBe(31);
     expect(names[0]).toBe("intercept");
     const lags = buildLagBlock([], [], "2026-07-01", "2026-07-10");
     const x = buildFeatureRow(ctx, routes[0], "2026-07-10", lags);
