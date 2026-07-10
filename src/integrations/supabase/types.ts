@@ -1872,6 +1872,190 @@ export type Database = {
         }
         Relationships: []
       }
+      truck_capacity_p21_demand: {
+        Row: {
+          est_pallets: number | null
+          id: string
+          order_count: number | null
+          projected_capacity_frac: number | null
+          route_id: string
+          ship_date: string
+          snapshot_at: string
+          total_cube_ft: number | null
+          total_weight_lbs: number | null
+        }
+        Insert: {
+          est_pallets?: number | null
+          id?: string
+          order_count?: number | null
+          projected_capacity_frac?: number | null
+          route_id: string
+          ship_date: string
+          snapshot_at?: string
+          total_cube_ft?: number | null
+          total_weight_lbs?: number | null
+        }
+        Update: {
+          est_pallets?: number | null
+          id?: string
+          order_count?: number | null
+          projected_capacity_frac?: number | null
+          route_id?: string
+          ship_date?: string
+          snapshot_at?: string
+          total_cube_ft?: number | null
+          total_weight_lbs?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_capacity_p21_demand_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      truck_capacity_routes: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          has_vendor_pickup: boolean
+          hub: string
+          id: string
+          name: string
+          pallets_full_truck: number | null
+          ship_to_zip_prefixes: string[] | null
+          sort_order: number
+          truck_type: string | null
+          typical_dow: number[] | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          has_vendor_pickup?: boolean
+          hub: string
+          id?: string
+          name: string
+          pallets_full_truck?: number | null
+          ship_to_zip_prefixes?: string[] | null
+          sort_order?: number
+          truck_type?: string | null
+          typical_dow?: number[] | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          has_vendor_pickup?: boolean
+          hub?: string
+          id?: string
+          name?: string
+          pallets_full_truck?: number | null
+          ship_to_zip_prefixes?: string[] | null
+          sort_order?: number
+          truck_type?: string | null
+          typical_dow?: number[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      truck_capacity_runs: {
+        Row: {
+          capacity_frac: number
+          created_at: string
+          driver: string | null
+          entered_by: string | null
+          id: string
+          notes: string | null
+          pallet_count: number | null
+          returned_pallets: number | null
+          route_id: string
+          run_date: string
+          run_seq: number
+          source: string
+          updated_at: string
+          vendor_pickup_frac: number | null
+        }
+        Insert: {
+          capacity_frac: number
+          created_at?: string
+          driver?: string | null
+          entered_by?: string | null
+          id?: string
+          notes?: string | null
+          pallet_count?: number | null
+          returned_pallets?: number | null
+          route_id: string
+          run_date: string
+          run_seq?: number
+          source?: string
+          updated_at?: string
+          vendor_pickup_frac?: number | null
+        }
+        Update: {
+          capacity_frac?: number
+          created_at?: string
+          driver?: string | null
+          entered_by?: string | null
+          id?: string
+          notes?: string | null
+          pallet_count?: number | null
+          returned_pallets?: number | null
+          route_id?: string
+          run_date?: string
+          run_seq?: number
+          source?: string
+          updated_at?: string
+          vendor_pickup_frac?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_capacity_runs_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      truck_capacity_settings: {
+        Row: {
+          capacity_basis: string
+          created_at: string
+          id: string
+          p21_sql: string | null
+          singleton: boolean
+          updated_at: string
+          updated_by: string | null
+          vendor_pickup_counts: boolean
+        }
+        Insert: {
+          capacity_basis?: string
+          created_at?: string
+          id?: string
+          p21_sql?: string | null
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          vendor_pickup_counts?: boolean
+        }
+        Update: {
+          capacity_basis?: string
+          created_at?: string
+          id?: string
+          p21_sql?: string | null
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          vendor_pickup_counts?: boolean
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
