@@ -457,6 +457,9 @@ function SpiffPage() {
           No SPIFF runs yet. Pick a quarter and click <b>Generate from P21</b>.
         </Card>
       ) : (
+        <>
+        <ExclusionRulesCard totals={currentRun.totals} />
+
         <Tabs defaultValue="review">
           <TabsList>
             <TabsTrigger value="review">Review</TabsTrigger>
