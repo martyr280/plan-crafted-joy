@@ -7,6 +7,7 @@ import {
   computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
   runP21Snapshot, DEFAULT_P21_SQL,
 } from "./truck-capacity.server";
+import { validateSelectSql } from "./sql-schedules.server";
 
 async function requireOpsOrAdmin(userId: string) {
   const { data } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
