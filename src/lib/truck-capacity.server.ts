@@ -3,6 +3,13 @@ import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
 import { validateSelectSql } from "./sql-schedules.server";
+import { baselineFromSnapshot, addDaysISO } from "./truck-capacity/baseline";
+
+// Re-export serving forecast + trainer so consumers keep a single import path.
+export { computeForecastForRoute } from "./truck-capacity/serve";
+export type { ForecastDay, ForecastResponse, ServingMethod } from "./truck-capacity/serve";
+export { trainAndMaybePromote } from "./truck-capacity/train";
+export type { TrainSummary } from "./truck-capacity/train";
 
 
 export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot (STUB — admin must fill in).
@@ -32,6 +39,40 @@ SELECT CAST(NULL AS varchar(32)) AS route_code,
        CAST(NULL AS decimal(18,2)) AS est_pallets
 WHERE 1 = 0;`;
 
+// (Route / Run types defined below alongside the forecast helper.)
+
+
+/* ============================== FORECAST DESCRIPTION ============================== */
+
+export const FORECAST_METHOD_DESCRIPTION = `
+Two layers, blended:
+  1. Baseline (statistical): the last-12-weeks weekday pattern × trimmed-mean baseline
+     per (route, weekday) over 56 days, times a shrunk monthly seasonal factor. Fallback
+     chain is route → hub → 0.5. This is the same explain string you see today:
+       "Thu baseline 0.72 (n=7) × Jul 0.94 = 0.68".
+  2. Model (ridge regression): a small L2 model trained on the entire run history.
+     Features cover weekday, month, hub, truck type, trend, and lag signals
+     (EW-mean halflife=5, last run, same-weekday lag, overall mean, run count,
+     missing-history flag, hub trailing 28d). Coefficients are additive so we surface
+     per-day drivers like "recent form +0.09, Friday +0.06, July +0.03".
+
+Serving pick:
+  • final = clamp(w · model + (1 − w) · baseline, 0, 1.25) with (λ, w) chosen on a
+    rolling-origin backtest (monthly cutoffs, 28-day horizon). Grid: λ ∈ {0.3,1,3,10,30,100},
+    w ∈ {0, 0.3, 0.5, 0.7, 1.0}.
+  • Promotion gate: the blend only becomes the serving default if its holdout MAE beats
+    baseline; otherwise baseline stays default and the model is available as a toggle.
+  • P21 max-guard: if the open-order snapshot for a date exceeds the blend, final = P21.
+    Excluded from MAE math.
+  • Uncertainty band: ±1 MAD per-route residual from the latest promoted backtest;
+    falls back to the trailing-window MAD when a route has no residuals yet.
+
+Runs / forecasts ≥ 0.90 are flagged as at-capacity (second-truck risk). ≤ 0.30 as consolidation candidate.
+`.trim();
+
+export const FLAG_AT_CAPACITY = 0.9;
+export const FLAG_CONSOLIDATION = 0.3;
+
 export type Route = {
   id: string; code: string; name: string; hub: string; sort_order: number;
   active: boolean; has_vendor_pickup: boolean; truck_type: string | null;
@@ -46,186 +87,34 @@ export type Run = {
   notes: string | null; source: string;
 };
 
-/* ============================== FORECAST MATH ============================== */
-
-export const FORECAST_METHOD_DESCRIPTION = `
-For each route we look back 84 days (12 weeks) and identify the weekdays the route typically runs.
-For each future day in the horizon that falls on one of those weekdays, we compute:
-  • baseline = trimmed mean of capacity_frac for that (route, weekday) over the last 56 days
-    (drop top/bottom 10%). If the route has fewer than 3 samples we fall back to the route mean,
-    then to the hub mean, then to 0.5.
-  • month factor  = shrunk (n·raw + 4) / (n + 4) where raw = mean(current month) / mean(all months).
-  • forecast      = clamp(baseline × month_factor, 0, 1.25).
-  • ±1 MAD band around the trailing window.
-  • P21 overlay: if a snapshot row exists for that date, projected_capacity_frac is plotted alongside.
-  • final line   = max(statistical forecast, P21 projection).
-Hover a point to see the explain string, e.g. "Thu baseline 0.72 (n=7) × Jul 0.94 = 0.68".
-Runs / forecasts ≥ 0.90 are flagged as at-capacity (second-truck risk). ≤ 0.30 as consolidation candidate.
-`.trim();
-
-export const FLAG_AT_CAPACITY = 0.9;
-export const FLAG_CONSOLIDATION = 0.3;
-
-function trimmedMean(nums: number[], trimPct = 0.1): number | null {
-  if (nums.length === 0) return null;
-  if (nums.length < 3) return nums.reduce((a, b) => a + b, 0) / nums.length;
-  const sorted = [...nums].sort((a, b) => a - b);
-  const drop = Math.floor(sorted.length * trimPct);
-  const kept = sorted.slice(drop, sorted.length - drop);
-  return kept.reduce((a, b) => a + b, 0) / kept.length;
-}
-
-function mean(nums: number[]): number | null {
-  if (nums.length === 0) return null;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
-}
-
-function mad(nums: number[]): number {
-  if (nums.length === 0) return 0;
-  const m = mean(nums)!;
-  const abs = nums.map((n) => Math.abs(n - m));
-  return mean(abs)!;
-}
-
-function addDaysISO(iso: string, d: number): string {
-  const dt = new Date(iso + "T00:00:00Z");
-  dt.setUTCDate(dt.getUTCDate() + d);
-  return dt.toISOString().slice(0, 10);
-}
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function dowOf(iso: string): number {
-  return new Date(iso + "T00:00:00Z").getUTCDay();
-}
-
-function monthOf(iso: string): number {
-  return new Date(iso + "T00:00:00Z").getUTCMonth() + 1;
-}
-
-export type ForecastDay = {
-  date: string; dow: number;
-  baseline: number | null; seasonal: number; forecast: number | null;
-  mad: number; p21: number | null; final: number | null;
-  n_baseline: number; explain: string;
-};
-
-export async function computeForecastForRoute(routeId: string, horizonDays = 28): Promise<{
-  route: Route | null; days: ForecastDay[];
-}> {
+/**
+ * Baseline-only forecast helper (no model, no P21 max-guard). Kept for callers
+ * that specifically want the historical trimmed-mean × seasonal output.
+ * The full serving path lives in `truck-capacity/serve.ts` and is re-exported
+ * as `computeForecastForRoute` at the top of this file.
+ */
+export async function computeBaselineForecastForRoute(routeId: string, horizonDays = 28) {
   const { data: route } = await supabaseAdmin
     .from("truck_capacity_routes").select("*").eq("id", routeId).maybeSingle();
   if (!route) return { route: null, days: [] };
-
-  const today = todayISO();
+  const today = new Date().toISOString().slice(0, 10);
   const from = addDaysISO(today, -84);
-
   const { data: runsRaw } = await supabaseAdmin
-    .from("truck_capacity_runs")
-    .select("run_date, capacity_frac")
-    .eq("route_id", routeId)
-    .gte("run_date", from)
-    .order("run_date", { ascending: true })
-    .limit(2000);
-  const runs = (runsRaw ?? []).map((r) => ({ date: r.run_date, cap: Number(r.capacity_frac) }));
-
-  // Hub-mean fallback: pool other routes in same hub over same window
+    .from("truck_capacity_runs").select("run_date, capacity_frac")
+    .eq("route_id", routeId).gte("run_date", from)
+    .order("run_date", { ascending: true }).limit(3000);
+  const routeRuns = (runsRaw ?? []).map((r) => ({ date: r.run_date, cap: Number(r.capacity_frac) }));
   const { data: hubRuns } = await supabaseAdmin
     .from("truck_capacity_runs")
     .select("capacity_frac, truck_capacity_routes!inner(hub)")
-    .gte("run_date", from)
-    .eq("truck_capacity_routes.hub", route.hub)
-    .limit(5000);
-  const hubMean = mean((hubRuns ?? []).map((r: any) => Number(r.capacity_frac))) ?? 0.5;
-
-  // Weekday histogram — last 84 days
-  const dowHist = new Map<number, number>();
-  for (const r of runs) dowHist.set(dowOf(r.date), (dowHist.get(dowOf(r.date)) ?? 0) + 1);
-  const activeDows = new Set<number>();
-  for (const [d, n] of dowHist) if (n >= 2) activeDows.add(d);
-  if (activeDows.size === 0) (route.typical_dow ?? []).forEach((d) => activeDows.add(d));
-
-  // Baseline per weekday over last 56 days
-  const cutoff56 = addDaysISO(today, -56);
-  const byDow = new Map<number, number[]>();
-  const routeValsAll: number[] = [];
-  for (const r of runs) {
-    if (r.date < cutoff56) continue;
-    routeValsAll.push(r.cap);
-    const d = dowOf(r.date);
-    const arr = byDow.get(d) ?? [];
-    arr.push(r.cap);
-    byDow.set(d, arr);
-  }
-  const routeMean = mean(routeValsAll);
-  const overallMean = mean(runs.map((r) => r.cap));
-
-  // Monthly factors — computed per calendar month from the trailing 84-day window,
-  // then indexed by each forecast day's own month so month-boundary crossings
-  // use the correct factor (and the explain label matches what was applied).
-  const monthFactor = new Map<number, { factor: number; n: number }>();
-  for (let m = 1; m <= 12; m++) {
-    const vals = runs.filter((r) => monthOf(r.date) === m).map((r) => r.cap);
-    const raw = overallMean && overallMean > 0 && vals.length > 0
-      ? (mean(vals)! / overallMean)
-      : 1.0;
-    const shrunk = (vals.length * raw + 4 * 1.0) / (vals.length + 4);
-    monthFactor.set(m, { factor: shrunk, n: vals.length });
-  }
-
-  // P21 snapshot for horizon
-  const horizonEnd = addDaysISO(today, horizonDays);
-  const { data: p21Rows } = await supabaseAdmin
-    .from("truck_capacity_p21_demand")
-    .select("ship_date, projected_capacity_frac, snapshot_at")
-    .eq("route_id", routeId)
-    .gte("ship_date", today)
-    .lte("ship_date", horizonEnd)
-    .order("snapshot_at", { ascending: false });
-  const p21Latest = new Map<string, number>();
-  for (const p of p21Rows ?? []) {
-    if (!p21Latest.has(p.ship_date)) p21Latest.set(p.ship_date, Number(p.projected_capacity_frac ?? 0));
-  }
-
-  const madVal = mad(routeValsAll);
-
-  const days: ForecastDay[] = [];
-  for (let i = 1; i <= horizonDays; i++) {
-    const date = addDaysISO(today, i);
-    const dw = dowOf(date);
-    const mo = monthOf(date);
-    const mf = monthFactor.get(mo) ?? { factor: 1.0, n: 0 };
-    const seasonal = mf.factor;
-    const p21 = p21Latest.has(date) ? p21Latest.get(date)! : null;
-    if (!activeDows.has(dw)) {
-      if (p21 != null && p21 > 0) {
-        days.push({
-          date, dow: dw, baseline: null, seasonal, forecast: null,
-          mad: madVal, p21, final: p21, n_baseline: 0,
-          explain: `No baseline (route does not typically run this weekday). P21 = ${p21.toFixed(2)}.`,
-        });
-      }
-      continue;
-    }
-    const samples = byDow.get(dw) ?? [];
-    const base = trimmedMean(samples) ?? routeMean ?? hubMean ?? 0.5;
-    const forecast = Math.max(0, Math.min(1.25, base * seasonal));
-    const final = p21 != null ? Math.max(forecast, p21) : forecast;
-    const wk = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dw];
-    const monLbl = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][mo - 1];
-    days.push({
-      date, dow: dw,
-      baseline: base, seasonal, forecast, mad: madVal, p21, final,
-      n_baseline: samples.length,
-      explain: `${wk} baseline ${base.toFixed(2)} (n=${samples.length}) × ${monLbl} ${seasonal.toFixed(2)} = ${forecast.toFixed(2)}${p21 != null ? ` · P21 ${p21.toFixed(2)}` : ""}`,
-    });
-  }
-
-
-  return { route: route as Route, days };
+    .gte("run_date", from).eq("truck_capacity_routes.hub", route.hub).limit(20000);
+  const days = baselineFromSnapshot(
+    routeRuns, (hubRuns ?? []).map((r: any) => Number(r.capacity_frac)),
+    today, horizonDays, route.typical_dow ?? [],
+  );
+  return { route, days };
 }
+
 
 /* ============================== P21 SNAPSHOT ============================== */
 
@@ -419,8 +308,8 @@ const SHEET_TO_ROUTE_CODE: Record<string, string> = {
   "central al": "CAL", "mid tn": "MTN", "east tn": "ETN",
   "west tn - long": "WTN-LONG", "west tn long": "WTN-LONG",
   "west tn - short": "WTN-SHORT", "west tn short": "WTN-SHORT",
-  "dallas transfer": "DAL-XFER-BHM", "dallas transfer (bham)": "DAL-XFER-BHM",
-  "ocala transfer": "OCA-XFER-BHM", "ocala transfer (bham)": "OCA-XFER-BHM",
+  "dallas transfer": "DAL-XFER-BHM", "dallas transfer (bham)": "DAL-XFER-BHM", "dallas transfer(bham)": "DAL-XFER-BHM",
+  "ocala transfer": "OCA-XFER-BHM", "ocala transfer (bham)": "OCA-XFER-BHM", "ocala transfer(bham)": "OCA-XFER-BHM",
   "north ga": "NGA", "south ga": "SGA",
   "east carolina": "ECAR", "west carolina": "WCAR",
   "south al": "SAL", "gulf coast": "GULF",

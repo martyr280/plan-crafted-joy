@@ -25,6 +25,7 @@ import {
   listTruckRoutes, listTruckRuns, upsertTruckRun, deleteTruckRun, getTruckForecast,
   getTruckSettings, updateTruckSettings, updateRoutePalletsPerTruck,
   previewTruckImport, commitTruckImport, exportTruckWorkbook, runP21SnapshotNow, testP21Sql,
+  retrainTruckModel, listTruckModelVersions, getTruckAccuracy,
 } from "@/lib/truck-capacity.functions";
 
 export const Route = createFileRoute("/_app/truck-capacity")({ component: TruckCapacityPage });
@@ -406,39 +407,60 @@ function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean 
 
 /* ============================== FORECAST ============================== */
 
-const FORECAST_METHOD = `For each route we scan the last 12 weeks of runs and identify which weekdays the route typically operates.
-For each future day within the horizon that falls on one of those weekdays:
- • baseline = trimmed mean (drop top/bottom 10%) of capacity for that (route, weekday) over the last 8 weeks.
-   Fallback to route mean → hub mean → 0.5 when n < 3.
- • month factor = shrunk (n·raw + 4) / (n + 4), where raw = mean(current month) / mean(all months).
- • forecast = clamp(baseline × month_factor, 0, 1.25).
- • ±1 MAD band shown around the trailing window.
- • P21 overlay: if a snapshot exists for that date, its projected_capacity_frac is plotted.
- • final = max(statistical forecast, P21 projection). Both series are visible; hover for the explain string.
-Thresholds: runs/forecasts ≥ 0.90 are flagged as at-capacity (second-truck risk); ≤ 0.30 as a consolidation candidate.`;
+const FORECAST_METHOD = `Two layers, blended:
+ 1. Baseline (statistical): the last-12-weeks weekday pattern × trimmed-mean baseline per (route, weekday)
+    over 56 days, times a shrunk monthly seasonal factor. Fallback chain is route → hub → 0.5.
+    Explain string looks like "Thu baseline 0.72 (n=7) × Jul 0.94 = 0.68".
+ 2. Model (ridge regression): trained on the entire run history. Features cover weekday, month, hub,
+    truck type, trend, and lag signals (EW-mean halflife=5, last run, same-weekday lag, overall mean,
+    run count, missing-history flag, hub trailing 28d). Additive coefficients yield per-day drivers
+    like "recent form +0.09, Friday +0.06, July +0.03".
+
+Serving:
+ • final = clamp(w · model + (1 − w) · baseline, 0, 1.25). (λ, w) selected by rolling-origin
+   backtest (monthly cutoffs, 28d horizon). Grid: λ ∈ {0.3,1,3,10,30,100}, w ∈ {0, 0.3, 0.5, 0.7, 1.0}.
+ • Promotion gate: the blend serves only if holdout MAE beats baseline. Otherwise baseline serves and
+   the model is available as a toggle.
+ • P21 max-guard: applied after blending; final = max(blend, P21). Excluded from MAE math.
+ • Uncertainty band: ±1 MAD from per-route residuals of the promoted backtest (falls back to trailing MAD).
+
+Thresholds: ≥ 0.90 = at-capacity (second-truck risk); ≤ 0.30 = consolidation candidate.`;
 
 function ForecastTab({ routes }: { routes: RouteRow[] }) {
   const [routeId, setRouteId] = useState<string>("");
+  const [method, setMethod] = useState<"auto" | "baseline" | "model">(() => {
+    if (typeof window === "undefined") return "auto";
+    return (localStorage.getItem("tc-method") as any) ?? "auto";
+  });
   useEffect(() => { if (!routeId && routes[0]) setRouteId(routes[0].id); }, [routes, routeId]);
+  useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tc-method", method); }, [method]);
 
   const fFn = useServerFn(getTruckForecast);
   const q = useQuery({
-    queryKey: ["tc-forecast", routeId],
-    queryFn: () => fFn({ data: { routeId, horizonDays: 28 } }),
+    queryKey: ["tc-forecast", routeId, method],
+    queryFn: () => fFn({ data: { routeId, horizonDays: 28, method } }),
     enabled: !!routeId,
   });
+  const accFn = useServerFn(getTruckAccuracy);
+  const accQ = useQuery({ queryKey: ["tc-accuracy"], queryFn: () => accFn() });
+
   const days = (q.data?.days ?? []).map((d: any) => ({
     ...d,
     forecastPct: d.forecast == null ? null : d.forecast,
+    modelPct: d.model == null ? null : d.model,
+    blendPct: d.blend == null ? null : d.blend,
     p21Pct: d.p21 == null ? null : d.p21,
     finalPct: d.final,
     upper: d.forecast == null ? null : Math.min(1.25, d.forecast + d.mad),
     lower: d.forecast == null ? null : Math.max(0, d.forecast - d.mad),
   }));
 
+  const version = q.data?.version;
+  const servingMethod = q.data?.servingMethod ?? "baseline";
+
   return (
     <div className="space-y-4 pt-4">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Label className="text-sm">Route</Label>
         <Select value={routeId} onValueChange={setRouteId}>
           <SelectTrigger className="w-72"><SelectValue /></SelectTrigger>
@@ -446,6 +468,26 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
             {routes.map((r) => (<SelectItem key={r.id} value={r.id}>{r.hub} — {r.name}</SelectItem>))}
           </SelectContent>
         </Select>
+        <Label className="text-sm ml-4">Method</Label>
+        <Select value={method} onValueChange={(v: any) => setMethod(v)}>
+          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Auto (promoted)</SelectItem>
+            <SelectItem value="baseline">Baseline only</SelectItem>
+            <SelectItem value="model">Model (latest)</SelectItem>
+          </SelectContent>
+        </Select>
+        {version ? (
+          <Badge variant={version.promoted ? "default" : "outline"} className="text-xs">
+            {version.promoted ? "Model promoted" : "Model available"} · λ={version.lambda} w={version.blend_w}
+            {version.holdout_mae_blend != null && version.holdout_mae_baseline != null
+              ? ` · MAE ${Number(version.holdout_mae_blend).toFixed(3)} vs ${Number(version.holdout_mae_baseline).toFixed(3)}`
+              : ""}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-xs">Baseline serving · no model yet</Badge>
+        )}
+        <Badge variant="secondary" className="text-xs">Serving: {servingMethod}</Badge>
       </div>
 
       <Collapsible>
@@ -469,9 +511,11 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
                 <Legend />
                 <Area type="monotone" dataKey="upper" stroke="none" fill="hsl(var(--primary) / 0.15)" name="±MAD upper" />
                 <Area type="monotone" dataKey="lower" stroke="none" fill="hsl(var(--background))" name="±MAD lower" />
-                <Line type="monotone" dataKey="forecastPct" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Statistical" />
+                <Line type="monotone" dataKey="forecastPct" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Baseline" />
+                {version && <Line type="monotone" dataKey="modelPct" stroke="hsl(var(--chart-2, 200 80% 50%))" strokeWidth={1} strokeDasharray="5 3" dot={false} name="Model" />}
+                {version && <Line type="monotone" dataKey="blendPct" stroke="hsl(var(--foreground))" strokeWidth={2} dot={false} name="Blend" />}
                 <Line type="monotone" dataKey="p21Pct" stroke="hsl(var(--destructive))" strokeWidth={1} dot={{ r: 3 }} name="P21 projection" />
-                <Line type="monotone" dataKey="finalPct" stroke="hsl(var(--foreground))" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Final (max)" />
+                <Line type="monotone" dataKey="finalPct" stroke="hsl(var(--foreground))" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Final (served)" />
                 <ReferenceLine y={0.9} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
                 <ReferenceLine y={0.3} stroke="orange" strokeDasharray="3 3" />
               </ComposedChart>
@@ -485,8 +529,8 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
           <Table>
             <TableHeader><TableRow>
               <TableHead>Date</TableHead><TableHead>DoW</TableHead><TableHead>Baseline</TableHead>
-              <TableHead>Month factor</TableHead><TableHead>Forecast</TableHead>
-              <TableHead>P21</TableHead><TableHead>Final</TableHead><TableHead>Explain</TableHead>
+              <TableHead>Model</TableHead><TableHead>Blend</TableHead><TableHead>P21</TableHead>
+              <TableHead>Final</TableHead><TableHead>Method</TableHead><TableHead>Drivers</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {days.map((d) => (
@@ -494,17 +538,20 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
                   <TableCell>{d.date}</TableCell>
                   <TableCell>{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.dow]}</TableCell>
                   <TableCell>{pct(d.baseline)}</TableCell>
-                  <TableCell>{d.seasonal?.toFixed(2)}</TableCell>
-                  <TableCell>{pct(d.forecast)}</TableCell>
+                  <TableCell>{pct(d.model)}</TableCell>
+                  <TableCell>{pct(d.blend)}</TableCell>
                   <TableCell>{pct(d.p21)}</TableCell>
                   <TableCell className="font-medium">{pct(d.final)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{d.explain}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs">{d.method}</Badge></TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-[320px]">{d.driverSummary ?? "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </Card>
       )}
+
+      <AccuracyPanel accQuery={accQ} routes={routes} />
     </div>
   );
 }
@@ -513,12 +560,73 @@ function ForecastTooltip({ active, payload }: any) {
   if (!active || !payload?.[0]) return null;
   const d = payload[0].payload;
   return (
-    <div className="rounded border bg-background p-2 text-xs shadow-md max-w-[300px]">
+    <div className="rounded border bg-background p-2 text-xs shadow-md max-w-[320px]">
       <div className="font-medium">{d.date}</div>
-      <div className="text-muted-foreground">{d.explain}</div>
+      <div className="text-muted-foreground whitespace-pre-line">{d.explain}</div>
     </div>
   );
 }
+
+function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[] }) {
+  const v = accQuery.data?.promoted ?? accQuery.data?.latest;
+  if (!v) return <Card className="p-3 text-xs text-muted-foreground">No trained model yet. Import history and run a retrain to populate accuracy.</Card>;
+  const per = (v.per_route_mae ?? {}) as Record<string, { baseline: number; model: number; blend: number; n: number }>;
+  const routeName = new Map(routes.map((r) => [r.id, `${r.hub[0]}·${r.code}`]));
+  const rows = Object.entries(per)
+    .filter(([, m]) => (m.n ?? 0) > 0)
+    .map(([rid, m]) => ({ rid, name: routeName.get(rid) ?? rid.slice(0, 8), ...m, delta: m.baseline - m.blend }))
+    .sort((a, b) => b.delta - a.delta);
+  return (
+    <Card className="p-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-medium">Model accuracy</div>
+        <div className="text-xs text-muted-foreground">
+          {v.promoted ? "Promoted" : "Latest (not promoted)"} · trained {new Date(v.trained_at).toLocaleString()}
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <StatCell label="Baseline MAE" value={v.holdout_mae_baseline} />
+        <StatCell label="Model MAE" value={v.holdout_mae_model} />
+        <StatCell label="Blend MAE" value={v.holdout_mae_blend} />
+        <StatCell label="Baseline WAPE" value={v.wape_baseline} pct />
+        <StatCell label="Model WAPE" value={v.wape_model} pct />
+        <StatCell label="Blend WAPE" value={v.wape_blend} pct />
+      </div>
+      <Table>
+        <TableHeader><TableRow>
+          <TableHead>Lane</TableHead><TableHead>n</TableHead>
+          <TableHead>Baseline</TableHead><TableHead>Model</TableHead><TableHead>Blend</TableHead><TableHead>Δ vs baseline</TableHead>
+        </TableRow></TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow key={r.rid}>
+              <TableCell className="text-xs">{r.name}</TableCell>
+              <TableCell className="text-xs">{r.n}</TableCell>
+              <TableCell className="text-xs">{r.baseline?.toFixed(3)}</TableCell>
+              <TableCell className="text-xs">{r.model?.toFixed(3)}</TableCell>
+              <TableCell className="text-xs font-medium">{r.blend?.toFixed(3)}</TableCell>
+              <TableCell className={`text-xs ${r.delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {r.delta >= 0 ? "+" : ""}{r.delta?.toFixed(3)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
+function StatCell({ label, value, pct: isPct }: { label: string; value: number | null | undefined; pct?: boolean }) {
+  const num = value == null ? null : Number(value);
+  const display = num == null ? "—" : isPct ? `${(num * 100).toFixed(1)}%` : num.toFixed(3);
+  return (
+    <div className="rounded border p-2">
+      <div className="text-[10px] text-muted-foreground uppercase">{label}</div>
+      <div className="text-sm font-semibold">{display}</div>
+    </div>
+  );
+}
+
 
 /* ============================== IMPORT ============================== */
 
@@ -709,9 +817,69 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         {snapResult && <div className="text-xs mt-2">Snapshot: pulled {snapResult.rowsPulled}, wrote {snapResult.snapshotsWritten}. Unmatched codes: {snapResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
       </Card>
 
+      <RetrainCard />
+
       <div className="flex justify-end">
         <Button onClick={save} disabled={busy === "save"}>{busy === "save" && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Save settings</Button>
       </div>
     </div>
   );
 }
+
+function RetrainCard() {
+  const retrainFn = useServerFn(retrainTruckModel);
+  const versionsFn = useServerFn(listTruckModelVersions);
+  const qc = useQueryClient();
+  const vQ = useQuery({ queryKey: ["tc-model-versions"], queryFn: () => versionsFn() });
+  const [busy, setBusy] = useState(false);
+  const [last, setLast] = useState<any>(null);
+  async function run() {
+    setBusy(true); setLast(null);
+    try {
+      const r = await retrainFn();
+      setLast(r);
+      if (r?.ok) toast.success(`Retrained: blend MAE ${Number(r.holdout_mae_blend).toFixed(3)} vs baseline ${Number(r.holdout_mae_baseline).toFixed(3)} — ${r.promoted ? "promoted" : "kept baseline"}`);
+      else toast.error(r?.error ?? "Retrain failed");
+      qc.invalidateQueries({ queryKey: ["tc-model-versions"] });
+      qc.invalidateQueries({ queryKey: ["tc-accuracy"] });
+      qc.invalidateQueries({ queryKey: ["tc-forecast"] });
+    } catch (e: any) { toast.error(e?.message ?? "Retrain failed"); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-medium">Forecast model</div>
+        <Button size="sm" variant="outline" onClick={run} disabled={busy}>
+          {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}Retrain now
+        </Button>
+      </div>
+      <div className="text-xs text-muted-foreground mb-3">Nightly retrain runs automatically at ~03:00 EDT. Manual retrain trains + backtests + promotes if the blend beats baseline.</div>
+      {last && (
+        <div className="text-xs mb-3">
+          Last: λ={last.chosenLambda}, w={last.chosenW}, blend MAE {Number(last.holdout_mae_blend ?? 0).toFixed(4)} vs baseline {Number(last.holdout_mae_baseline ?? 0).toFixed(4)} · {last.promoted ? "PROMOTED" : "not promoted"} · folds {last.fold_count}
+        </div>
+      )}
+      <Table>
+        <TableHeader><TableRow>
+          <TableHead>Trained</TableHead><TableHead>λ</TableHead><TableHead>w</TableHead>
+          <TableHead>Rows</TableHead><TableHead>Baseline MAE</TableHead><TableHead>Blend MAE</TableHead><TableHead>Promoted</TableHead>
+        </TableRow></TableHeader>
+        <TableBody>
+          {(vQ.data?.versions ?? []).map((v: any) => (
+            <TableRow key={v.id}>
+              <TableCell className="text-xs">{new Date(v.trained_at).toLocaleString()}</TableCell>
+              <TableCell className="text-xs">{v.lambda}</TableCell>
+              <TableCell className="text-xs">{v.blend_w}</TableCell>
+              <TableCell className="text-xs">{v.train_rows}</TableCell>
+              <TableCell className="text-xs">{v.holdout_mae_baseline == null ? "—" : Number(v.holdout_mae_baseline).toFixed(4)}</TableCell>
+              <TableCell className="text-xs">{v.holdout_mae_blend == null ? "—" : Number(v.holdout_mae_blend).toFixed(4)}</TableCell>
+              <TableCell><Badge variant={v.promoted ? "default" : "outline"} className="text-xs">{v.promoted ? "yes" : "no"}</Badge></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
