@@ -2,6 +2,8 @@
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
+import { validateSelectSql } from "./sql-schedules.server";
+
 
 export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot (STUB — admin must fill in).
 -- Required output columns (exact names):
