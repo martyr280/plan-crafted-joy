@@ -205,8 +205,8 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
                 </div>
               ))}
               {sortedRoutes.map((r) => (
-                <>
-                  <div key={`lbl-${r.id}`} className="pr-2 truncate text-xs" title={`${r.hub} — ${r.name}`}>
+                <Fragment key={r.id}>
+                  <div className="pr-2 truncate text-xs" title={`${r.hub} — ${r.name}`}>
                     <span className="text-muted-foreground">{r.hub[0]}·</span>{r.code}
                   </div>
                   {heat.weekStarts.map((w) => {
@@ -224,8 +224,9 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
                       </div>
                     );
                   })}
-                </>
+                </Fragment>
               ))}
+
             </div>
           </div>
         </Card>
