@@ -178,7 +178,10 @@ export const testP21Sql = createServerFn({ method: "POST" })
   .inputValidator((i) => z.object({ sql: z.string().min(1).max(20000) }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
+    // Defense-in-depth: block anything that isn't a read-only SELECT/WITH/DECLARE.
+    validateSelectSql(data.sql);
     const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-test" }, 60_000);
     const rows = ((result as any)?.rows ?? []) as any[];
     return { rowCount: rows.length, sample: rows.slice(0, 10) };
   });
+
