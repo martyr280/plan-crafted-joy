@@ -457,21 +457,45 @@ function normHeader(s: any): string {
 
 function parseDateCell(v: any): { iso: string | null; seq: number } {
   if (v == null || v === "") return { iso: null, seq: 1 };
-  if (v instanceof Date) return { iso: v.toISOString().slice(0, 10), seq: 1 };
+  if (v instanceof Date) {
+    // Use UTC parts to avoid TZ shifts.
+    const y = v.getUTCFullYear(), mo = v.getUTCMonth() + 1, dd = v.getUTCDate();
+    return { iso: `${y}-${String(mo).padStart(2, "0")}-${String(dd).padStart(2, "0")}`, seq: 1 };
+  }
   if (typeof v === "number") {
-    // Excel serial date
+    // Excel serial date → UTC ymd (no TZ shift).
     const ms = Math.round((v - 25569) * 86400 * 1000);
     const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? { iso: null, seq: 1 } : { iso: d.toISOString().slice(0, 10), seq: 1 };
+    if (Number.isNaN(d.getTime())) return { iso: null, seq: 1 };
+    const y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1, dd = d.getUTCDate();
+    return { iso: `${y}-${String(mo).padStart(2, "0")}-${String(dd).padStart(2, "0")}`, seq: 1 };
   }
   const s = String(v);
   const m = s.match(/^(.+?)\s*[-–]\s*Run\s*(\d+)\s*$/i);
-  const datePart = m ? m[1] : s;
+  const datePart = (m ? m[1] : s).trim();
   const seq = m ? Number(m[2]) : 1;
+
+  // Explicit M/D/YYYY or M-D-YYYY → build YYYY-MM-DD without new Date() (avoids TZ shifts).
+  const mdy = datePart.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (mdy) {
+    let [, mo, dd, yy] = mdy;
+    let year = Number(yy);
+    if (year < 100) year += year < 50 ? 2000 : 1900;
+    const mm = Number(mo), d = Number(dd);
+    if (mm >= 1 && mm <= 12 && d >= 1 && d <= 31) {
+      return { iso: `${year}-${String(mm).padStart(2, "0")}-${String(d).padStart(2, "0")}`, seq };
+    }
+  }
+  // ISO YYYY-MM-DD passthrough.
+  const isoMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return { iso: `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`, seq };
+
   const d = new Date(datePart);
   if (Number.isNaN(d.getTime())) return { iso: null, seq };
-  return { iso: d.toISOString().slice(0, 10), seq };
+  const y = d.getUTCFullYear(), mo2 = d.getUTCMonth() + 1, dd2 = d.getUTCDate();
+  return { iso: `${y}-${String(mo2).padStart(2, "0")}-${String(dd2).padStart(2, "0")}`, seq };
 }
+
 
 function toNum(v: any): number | null {
   if (v == null || v === "") return null;
