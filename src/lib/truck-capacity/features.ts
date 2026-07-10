@@ -154,3 +154,40 @@ export function buildFeatureRow(
   void routeRef;
   return x;
 }
+
+// Build a name→value map for one (route, targetDate, lags) triple against a
+// live feature context. Serving uses this to align to persisted feature_names
+// (name-based, positional-drift-proof) rather than trusting current column order.
+export function buildFeatureNameValueMap(
+  ctx: FeatureContext,
+  route: RouteMeta,
+  targetDate: string,
+  lags: LagBlock,
+): Record<string, number> {
+  const names = featureNames(ctx);
+  const values = buildFeatureRow(ctx, route, targetDate, lags);
+  const map: Record<string, number> = {};
+  for (let i = 0; i < names.length; i++) map[names[i]] = values[i] ?? 0;
+  return map;
+}
+
+// Align a live name→value map to a persisted feature-name order.
+// Returns { vector, coverage } where coverage = (# persisted names present in
+// live map with a definition) / persistedNames.length. Missing names → 0.
+export function alignToPersistedNames(
+  liveMap: Record<string, number>,
+  persistedNames: string[],
+): { vector: number[]; coverage: number } {
+  const vector: number[] = new Array(persistedNames.length);
+  let present = 0;
+  for (let i = 0; i < persistedNames.length; i++) {
+    const name = persistedNames[i];
+    if (Object.prototype.hasOwnProperty.call(liveMap, name)) {
+      vector[i] = liveMap[name];
+      present += 1;
+    } else {
+      vector[i] = 0;
+    }
+  }
+  return { vector, coverage: persistedNames.length === 0 ? 1 : present / persistedNames.length };
+}
