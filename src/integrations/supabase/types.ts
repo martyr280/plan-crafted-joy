@@ -1872,6 +1872,123 @@ export type Database = {
         }
         Relationships: []
       }
+      truck_capacity_forecast_log: {
+        Row: {
+          created_at: string
+          forecast_date: string
+          id: string
+          made_on: string
+          method: string
+          model_version_id: string | null
+          predicted: number
+          route_id: string
+        }
+        Insert: {
+          created_at?: string
+          forecast_date: string
+          id?: string
+          made_on: string
+          method: string
+          model_version_id?: string | null
+          predicted: number
+          route_id: string
+        }
+        Update: {
+          created_at?: string
+          forecast_date?: string
+          id?: string
+          made_on?: string
+          method?: string
+          model_version_id?: string | null
+          predicted?: number
+          route_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_capacity_forecast_log_model_version_id_fkey"
+            columns: ["model_version_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_model_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "truck_capacity_forecast_log_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      truck_capacity_model_versions: {
+        Row: {
+          blend_w: number
+          coefficients: Json
+          created_at: string
+          created_by: string | null
+          feature_names: Json
+          holdout_mae_baseline: number | null
+          holdout_mae_blend: number | null
+          holdout_mae_model: number | null
+          horizon_days: number
+          id: string
+          lambda: number
+          notes: string | null
+          per_route_mae: Json | null
+          per_route_residual_mad: Json | null
+          promoted: boolean
+          train_rows: number
+          trained_at: string
+          wape_baseline: number | null
+          wape_blend: number | null
+          wape_model: number | null
+        }
+        Insert: {
+          blend_w: number
+          coefficients: Json
+          created_at?: string
+          created_by?: string | null
+          feature_names: Json
+          holdout_mae_baseline?: number | null
+          holdout_mae_blend?: number | null
+          holdout_mae_model?: number | null
+          horizon_days?: number
+          id?: string
+          lambda: number
+          notes?: string | null
+          per_route_mae?: Json | null
+          per_route_residual_mad?: Json | null
+          promoted?: boolean
+          train_rows: number
+          trained_at?: string
+          wape_baseline?: number | null
+          wape_blend?: number | null
+          wape_model?: number | null
+        }
+        Update: {
+          blend_w?: number
+          coefficients?: Json
+          created_at?: string
+          created_by?: string | null
+          feature_names?: Json
+          holdout_mae_baseline?: number | null
+          holdout_mae_blend?: number | null
+          holdout_mae_model?: number | null
+          horizon_days?: number
+          id?: string
+          lambda?: number
+          notes?: string | null
+          per_route_mae?: Json | null
+          per_route_residual_mad?: Json | null
+          promoted?: boolean
+          train_rows?: number
+          trained_at?: string
+          wape_baseline?: number | null
+          wape_blend?: number | null
+          wape_model?: number | null
+        }
+        Relationships: []
+      }
       truck_capacity_p21_demand: {
         Row: {
           est_pallets: number | null
