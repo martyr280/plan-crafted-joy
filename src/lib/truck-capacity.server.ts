@@ -416,7 +416,8 @@ export async function parseImportWorkbook(fileBase64: string): Promise<ImportRep
       const rawDate = row.getCell(colDate).value;
       const { iso, seq } = parseDateCell(rawDate);
       if (!iso) { if (rawDate != null && rawDate !== "") sheetOut.skipped_bad_date++; continue; }
-      if (Number(iso.slice(0, 4)) < 2020) { sheetOut.skipped_old_year++; continue; }
+      const y = Number(iso.slice(0, 4));
+      if (!(y >= 2020 && y <= 2100)) { sheetOut.skipped_old_year++; continue; }
       const cap = toNum(row.getCell(colCap).value);
       if (cap == null) { sheetOut.skipped_no_capacity++; continue; }
       const capClamped = Math.max(0, Math.min(1.25, cap));
