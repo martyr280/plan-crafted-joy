@@ -1,137 +1,139 @@
-## Goal
 
-Reproduce the five attached workbooks (Hector/Mark/Olivia/Michelle/Nikki "Sales 2022–2026 Annualized May") as automated scheduled queries delivered by email. One schedule per rep, same column layout, same sort order, dynamic for "previous completed month".
+# Truck Capacity Module — Implementation Plan
 
-## Report shape (matches the xlsx exactly)
+Replaces NDI's "Primary Truck Capacity" workbook with a first-class module (capture, view, forecast, export). No code yet.
 
-Columns, in order:
+## 1. Reuse vs. new
 
-1. `Cust Code` — customer_id
-2. `Price` — customer price level (L1/L3/MML1/MML3/L5/…)
-3. `BG` — business group (ISG, OP, MML1, MML3, N, …)
-4. `Customer Name`
-5. `City`
-6. `St`
-7. `Total Value` — lifetime invoiced net sales (all years in source)
-8. `Year 2022` … `Year {currentYear}` — calendar-year net sales
-9. `Ann {currentYear}` — current-YTD × (365 / days elapsed YTD)
-10. `Pct` — `(Ann {currentYear} - Year {currentYear-1}) / Year {currentYear-1}`; null when prior year is 0
-11. `{Mon} Sales` — previous completed calendar month net sales, header renamed (Jun, Jul, …)
-12. `{Mon} Profit` — previous completed calendar month gross profit
-13. `Keep Lvl` — `CASE WHEN BG IN ('ISG','OP','MML1','MML3','L5') THEN BG ELSE <threshold for price level> END`
+- **`fleet_routes` already exists** with `hub`, `group_label`, `route_code`, `destination_city`, `delivery_day`, `driver_name`. **Reuse it** as the route dimension — add missing columns rather than a parallel `truck_capacity_routes` table. Avoids two sources of truth for hub/route lists that Logistics already reads.
+- **`fleet_loads`** is a *per-shipment manifest* (truck_id, orders jsonb, weight, cube, capacity_pct). Overlapping intent but wrong grain: capacity workbook is one row per route per run-day (judgment %), not per truckload with order manifests. Keep separate; document the relationship (a `fleet_loads` row could later auto-populate a `truck_capacity_runs` row, out of scope for v1).
+- **Reuse:** `ModuleHeader`, sql-schedules `runJob` + admin-editable SQL pattern, ExcelJS export pattern from `sql-schedules.server.ts`, TanStack Query + `*.functions.ts`/`*.server.ts` split, role gating via `assertAdmin`/`has_role`. **Do not reuse** `SifXmlImporter` — it's pipe-delimited SIF, wrong format; build a dedicated xlsx importer using `exceljs` server-side.
 
-Sort: `{Mon} Sales DESC`, then `Ann {currentYear} DESC`.
+## 2. Database migrations
 
-Threshold table for Keep Lvl when BG is not a group (derived from the files; confirm before seeding):
+**Migration A — extend `fleet_routes`:**
+- `active boolean default true`
+- `sort_order int` (workbook tab order per hub)
+- `has_vendor_pickup boolean default false` (MOAR, HOU, West TN L/S, N GA, S GA)
+- `pallets_full_truck int` nullable (17–20 regional, ~10 local, ~6 FL box)
+- `truck_type text` nullable ('53_trailer'|'box_truck'|'local')
+- `typical_dow int[]` nullable
 
-| Price level | Threshold |
-| --- | --- |
-| L1 | 450000 |
-| L2 | ~200000 |
-| L3 | 75000–100000 (varies by file) |
-| L4 | 25000 |
-| MML1 | (mirrors group label) |
-| MML3 | (mirrors group label) |
-| L5 | (mirrors group label) |
+Seed/upsert the 35 routes from the spec, keyed by `route_code`.
 
-I'll lock the exact numeric thresholds with you before seeding — the xlsx shows a few different values per level.
+**Migration B — new tables (all with GRANTs + RLS + `updated_at` trigger):**
 
-## Customer scope per rep
+```
+truck_capacity_runs
+  id uuid pk
+  route_id uuid fk -> fleet_routes
+  run_date date not null
+  run_seq int not null default 1          -- for "Run 1/2/3" same-day
+  capacity_frac numeric(4,3) not null     -- 0..1.25
+  vendor_pickup_frac numeric(4,3) null
+  driver text null
+  pallet_count int null
+  returned_pallets int null
+  notes text null
+  source text not null default 'manual'   -- manual|import|p21
+  entered_by uuid null
+  created_at, updated_at
+  unique(route_id, run_date, run_seq)
 
-"Both: assigned OR historically invoiced" — for `@repCode`, include every `customer_id` where:
+truck_capacity_p21_demand      -- snapshot, not live
+  id uuid pk
+  route_id uuid fk
+  ship_date date not null
+  order_count int
+  total_weight_lbs numeric
+  total_cube_ft numeric
+  est_pallets numeric
+  projected_capacity_frac numeric(4,3)
+  snapshot_at timestamptz not null default now()
+  unique(route_id, ship_date, snapshot_at::date)
 
-- `customer.salesrep_id = @repCode`, OR
-- there exists any `invoice_hdr` row 2022-01-01 → today with `salesrep_id = @repCode` for that customer.
-
-## SQL (single statement, parameterized)
-
-One T-SQL `WITH` chain against P21 (`invoice_hdr` + `invoice_line` + `customer`):
-
-```text
-DECLARE @repCode varchar(20) = @repCode;
-DECLARE @today date = CAST(GETDATE() AS date);
-DECLARE @prevMonthStart date = DATEADD(month, DATEDIFF(month, 0, @today) - 1, 0);
-DECLARE @prevMonthEnd   date = DATEADD(month, DATEDIFF(month, 0, @today),     0);  -- exclusive
-DECLARE @yrStart        date = DATEFROMPARTS(YEAR(@today), 1, 1);
-DECLARE @daysElapsed    int  = DATEDIFF(day, @yrStart, @today) + 1;
-
-WITH scope AS (
-  SELECT DISTINCT customer_id
-  FROM invoice_hdr
-  WHERE salesrep_id = @repCode AND invoice_date >= '2022-01-01'
-  UNION
-  SELECT customer_id FROM customer WHERE salesrep_id = @repCode
-),
-inv AS (
-  SELECT ih.customer_id, ih.invoice_date,
-         il.extended_price AS net,
-         (il.extended_price - il.extended_cost) AS gp
-  FROM invoice_hdr ih
-  JOIN invoice_line il ON il.invoice_no = ih.invoice_no
-  WHERE ih.customer_id IN (SELECT customer_id FROM scope)
-)
-SELECT
-  c.customer_id          AS [Cust Code],
-  c.price_level          AS [Price],
-  c.business_group       AS [BG],
-  c.customer_name        AS [Customer Name],
-  c.city                 AS [City],
-  c.state                AS [St],
-  SUM(inv.net)           AS [Total Value],
-  SUM(CASE WHEN YEAR(invoice_date)=2022 THEN net END) AS [Year 2022],
-  SUM(CASE WHEN YEAR(invoice_date)=2023 THEN net END) AS [Year 2023],
-  SUM(CASE WHEN YEAR(invoice_date)=2024 THEN net END) AS [Year 2024],
-  SUM(CASE WHEN YEAR(invoice_date)=2025 THEN net END) AS [Year 2025],
-  SUM(CASE WHEN YEAR(invoice_date)=YEAR(@today) THEN net END) AS [Year {cy}],
-  SUM(CASE WHEN YEAR(invoice_date)=YEAR(@today) THEN net END)
-      * 365.0 / @daysElapsed                                 AS [Ann {cy}],
-  -- Pct vs prior year
-  (Ann - PrevYear)/NULLIF(PrevYear,0)                        AS [Pct],
-  SUM(CASE WHEN invoice_date>=@prevMonthStart AND invoice_date<@prevMonthEnd THEN net END) AS [{Mon} Sales],
-  SUM(CASE WHEN invoice_date>=@prevMonthStart AND invoice_date<@prevMonthEnd THEN gp  END) AS [{Mon} Profit],
-  CASE WHEN c.business_group IN ('ISG','OP','MML1','MML3','L5')
-       THEN c.business_group
-       ELSE CAST(<threshold map>(c.price_level) AS varchar(20))
-  END                                                        AS [Keep Lvl]
-FROM customer c
-JOIN inv ON inv.customer_id = c.customer_id
-GROUP BY c.customer_id, c.price_level, c.business_group, c.customer_name, c.city, c.state
-ORDER BY [{Mon} Sales] DESC, [Ann {cy}] DESC;
+truck_capacity_settings        -- one row, admin-editable config (open questions a–d)
+  id uuid pk
+  capacity_basis text           -- 'pallets' | 'weight' | 'cube'
+  vendor_pickup_counts boolean
+  p21_sql text                  -- editable projection query
+  updated_by, updated_at
 ```
 
-Notes:
-- Column-name interpolation (`{Mon}`, `{cy}`) happens server-side in `sql-schedules.server.ts` before the SQL is sent to the agent so the xlsx headers read "Jun Sales" / "Jun Profit" / "Year 2026" / "Ann 2026" dynamically. The existing `resolveOutputColumns` already preserves column order in the workbook.
-- Exact P21 column names (`salesrep_id`, `price_level`, `business_group`, `extended_cost`) will be confirmed against the live schema before seeding; the structure above is the canonical P21 layout used elsewhere in this codebase (`agent/handlers/sales-query.js`).
+RLS: authenticated read for `runs`/`demand`/`fleet_routes`; write on `runs` for ops_orders/admin; `settings` admin-only.
 
-## Schedule per rep
+## 3. File plan
 
-Insert five rows into `sql_schedules`, each with:
+```
+src/lib/truck-capacity.server.ts        forecast math, xlsx build, p21 snapshot, import parser
+src/lib/truck-capacity.functions.ts     listRoutes, listRuns, upsertRun, deleteRun,
+                                        importWorkbook, exportWorkbook, getForecast,
+                                        runP21Snapshot, getSettings, updateSettings
+src/routes/_app.truck-capacity.tsx      tabs: Overview | Route | Forecast | Import | Settings
+src/components/truck-capacity/
+  RouteSheetTable.tsx                   exact-workbook column table + edit dialog
+  CapacityStackedBar.tsx                recharts stacked bar (Capacity + Unused = 1.0)
+  HubOverviewGrid.tsx                   hub-grouped cards, sparkline, last-run, avg %
+  UtilizationHeatmap.tsx                route × week heatmap
+  ForecastChart.tsx                     stat forecast + MAD band + P21 overlay
+  ForecastMathPopover.tsx               hover explanation
+  WorkbookImportDialog.tsx              xlsx upload → dry-run diff → confirm
+```
 
-- `name`: "{RepName} Sales Annualized"
-- `sql`: the template above with `@repCode` filled in
-- `params`: `{ "repCode": "<P21 code>" }` (kept for documentation; SQL inlines it)
-- `recipients`: `["<rep email>"]`
-- `bcc_recipients`: `["marty@resolvedynamics.com"]` (matches the existing E2G BCC pattern)
-- `email_subject`: `"{RepName} Sales — {{date}}"`
-- `schedule_cron`: 1st of each month, 6 AM CT (`0 6 1 * *`), TZ `America/Chicago` — confirm cadence
-- `action`: `email`
+Sidebar: add "Truck Capacity" (icon `Truck`) under Fulfillment, next to Logistics.
 
-## What I still need from you before seeding
+## 4. Excel import (one-time seed)
 
-1. **Reps + P21 codes + emails** (Hector, Mark, Olivia, Michelle, Nikki). The earlier prompt asked but came back empty.
-2. **Cadence**: monthly on the 1st at 6 AM Central, OK? Or weekly?
-3. **Keep Lvl thresholds**: confirm the numeric defaults per price level (L1=450k, L2=200k, L3=100k, L4=25k) — I'll back-test against the five files before seeding.
+Server function `importWorkbook({ fileBase64 })`:
+- Parse with `exceljs`; iterate sheets, skip hidden Carolinas legacy sheet.
+- Sheet → route via a hardcoded `SHEET_NAME_TO_ROUTE_CODE` map (35 entries) reviewed against seeded routes.
+- Detect column indices by header text on row 1 (Date, Capacity, Unused Capacity, Vendor Pickup Capacity?, Driver, Pallet Count, Notes, Returned Pallets).
+- Parse date cells: real Date → keep; string with " - Run N" suffix → strip, set `run_seq = N`; year < 2020 → skip and report; unparseable → skip and report.
+- Coerce `capacity_frac` (clamp 0..1.25); ignore the `=1-B{n}` unused column (derived).
+- Dry-run returns per-sheet counts (`ok`, `skipped_bad_date`, `skipped_no_capacity`, `duplicates`) before writing. Confirm → upsert with `source='import'` on the unique key.
 
-## Build phases
+## 5. P21 projection
 
-1. Add a "Rep Sales Annualized" template button on `/sql-schedules` that pre-fills the SQL and params for a new schedule (rep code + email entered in the form).
-2. Extend `sql-schedules.server.ts` to interpolate `{Mon}` / `{cy}` in column aliases at render time so workbook headers track the run date.
-3. Verify against the five attached xlsx: run the template with each rep code for May 2026, diff `[Total Value]`, yearly columns, `[May Sales]`, and `[May Profit]` against the files. Fix any column-name mismatches against the live P21 schema.
-4. Insert the five `sql_schedules` rows once you confirm reps/emails/thresholds.
-5. QA: trigger one schedule manually via the "Run now" action on `/sql-schedules`, confirm the xlsx attachment matches.
+- Store the projection SQL in `truck_capacity_settings.p21_sql` (admin-editable, same UX as sql-schedules). Do **not** hardcode column assumptions.
+- Starter SQL commented with the joins we'd try (`oe_hdr` + `oe_line` + `inv_mast` weight/cube, filtered to open + ship_date within next 28 days, grouped by ship-to region → route). Explicit "unverified" comment for the client to correct.
+- Nightly snapshot via a new `sql_schedules` cron entry OR a dedicated `/api/public/run-truck-capacity-snapshot` route wired to the same cron caller. Writes `truck_capacity_p21_demand`. Route → ship-to mapping lives in `fleet_routes` (add optional `ship_to_zip_prefixes text[]` if needed; flagged as an open question in Settings).
 
-## Risks
+## 6. Forecast math (implemented exactly as spec)
 
-- Real P21 column names may differ from the canonical names above (e.g. `salesrep_id` vs `salesperson_id`, `business_group` vs `customer_class`); phase 3 catches this before seeding.
-- "Total Value" in the files is lifetime through May; if you want it pinned to a 2022-onward window for consistency, say so and I'll add a floor.
-- The cron parser already in `sql-schedules.server.ts` handles standard 5-field expressions, so monthly-on-the-1st works without code changes.
+`getForecast({ routeId, horizonDays=28 })` in `.server.ts`, pure function over runs:
+1. Dominant weekdays: histogram of `EXTRACT(dow FROM run_date)` for last 84 days.
+2. Baseline: trimmed mean (drop top/bottom 10%) of `capacity_frac` per (route, weekday) over last 56 days. Fallback route mean → hub mean when n<3.
+3. Seasonal: `factor_m = mean(month_m) / mean(all)`, shrunk `(n*raw + 4*1.0)/(n+4)`.
+4. `forecast = clamp(baseline * seasonal, 0, 1.25)`.
+5. Band: ±MAD of trailing window.
+6. Overlay: `final = max(forecast, p21_projection)` when demand row exists for that date.
+7. Return per-day: `{ date, dow, baseline, seasonal, forecast, mad, p21, final, n_baseline, explain: "Thu baseline 0.72 (n=7) × Jul 0.94 = 0.68" }` — powers the hover.
+
+## 7. Export
+
+`exportWorkbook()` builds xlsx server-side with `exceljs` (reusing sql-schedules pattern): one sheet per active route in hub order, headers match workbook exactly, `Unused Capacity` written as literal formula `=1-B{row}`, Vendor Pickup column only on flagged routes. Skip charts.
+
+## 8. UI details
+
+- **Overview:** hub sections (Dallas, Birmingham, Ocala) → route cards showing sparkline (last 12 weeks), last run date/%, 8-wk avg, flags (≥90% red, ≤30% amber).
+- **Route view:** route picker + date range + workbook-shape table + stacked bar chart. Inline edit + "Add run" button (multi-run same day supported).
+- **Forecast:** 28-day chart with stat line + MAD band + P21 dots, tooltip renders `explain` string. Table below with per-day breakdown.
+- **Settings tab (admin):** capacity_basis, vendor_pickup_counts, pallets_full_truck per route (editable grid), P21 SQL editor with "Test" button (runs against bridge, shows result), "Run snapshot now."
+- **Import tab:** upload → dry-run → confirm.
+
+## 9. Spec conflicts / notes
+
+- Spec proposed `truck_capacity_routes`; **using existing `fleet_routes` instead** (one source of truth). Truck Capacity Settings page exposes the extra fields.
+- Spec called for `fleet_routes` reuse "if better fit" — yes; `fleet_loads` stays untouched (different grain).
+- Charts in export: skipping (exceljs chart support is thin); the app UI provides the charts.
+- Live P21 queries on page load: rejected per spec; snapshot table only.
+- Role gating: read = any authenticated user with `ops_orders` or above; write runs = `ops_orders`+; settings + import + P21 SQL edit = `admin`.
+
+## 10. Open questions surfaced in UI (not hardcoded)
+
+Rendered in Settings with defaults and inline explanations:
+(a) capacity basis (pallets/weight/cube), (b) pallets_full_truck per route, (c) P21 route-assignment field (SQL editable), (d) vendor pickups counted in forecast — toggle.
+
+## 11. Out of scope for v1
+
+Auto-derivation of runs from `fleet_loads`; per-driver capacity attribution; SMS/email alerts on overcapacity days; multi-hub consolidation optimizer.
