@@ -71,15 +71,16 @@ function TruckCapacityPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="route">Route</TabsTrigger>
           <TabsTrigger value="forecast">Forecast</TabsTrigger>
-          {canWrite && <TabsTrigger value="import">Import</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="import">Import</TabsTrigger>}
           {isAdmin && <TabsTrigger value="settings">Settings</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview"><OverviewTab routes={routes} /></TabsContent>
         <TabsContent value="route"><RouteTab routes={routes} canWrite={canWrite} /></TabsContent>
         <TabsContent value="forecast"><ForecastTab routes={routes} /></TabsContent>
-        {canWrite && <TabsContent value="import"><ImportTab /></TabsContent>}
+        {isAdmin && <TabsContent value="import"><ImportTab /></TabsContent>}
         {isAdmin && <TabsContent value="settings"><SettingsTab routes={routes} /></TabsContent>}
       </Tabs>
+
     </div>
   );
 }
