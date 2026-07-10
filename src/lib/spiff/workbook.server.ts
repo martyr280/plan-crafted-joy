@@ -263,12 +263,17 @@ export async function buildSpiffWorkbook(
   wb.creator = "Nelson AI — SPIFF";
   wb.created = new Date();
 
+  // Summary/rules sheet first so AP + reps see exactly which selection
+  // rules were applied to this run (client requirement).
+  addSummarySheet(wb, run);
+
   // Order sheets by customer_name for consistency with the manual workbook
   for (const p of programs) {
     const pl = lines.filter((l) => l.program_id === p.id);
     if (pl.length === 0) continue; // skip customers with zero lines
     addCustomerSheet(wb, p, pl, checks, run.quarter_label);
   }
+
 
   // If nothing was added, leave one placeholder sheet so the file is valid.
   if (wb.worksheets.length === 0) {
