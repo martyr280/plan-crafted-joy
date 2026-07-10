@@ -230,11 +230,27 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
 /* ============================== P21 SNAPSHOT ============================== */
 
 export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
-  rowsPulled: number; snapshotsWritten: number; unmatchedRouteCodes: string[]; skipped: boolean;
+  ok: boolean; rowsPulled: number; snapshotsWritten: number;
+  unmatchedRouteCodes: string[]; skipped: boolean; error?: string;
 }> {
   const { data: settings } = await supabaseAdmin
     .from("truck_capacity_settings").select("p21_sql").eq("singleton", true).maybeSingle();
   const sqlText = (settings?.p21_sql ?? "").trim() || DEFAULT_P21_SQL;
+
+  // Defense-in-depth: reject anything that isn't a read-only SELECT/WITH/DECLARE
+  // before it goes to the bridge, even though the DB user is db_datareader-only.
+  try {
+    validateSelectSql(sqlText);
+  } catch (e: any) {
+    const error = e?.message ?? String(e);
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.snapshot_failed",
+      entity_type: "truck_capacity_p21_demand",
+      message: `Truck Capacity P21 snapshot rejected: ${error}`,
+      metadata: { stage: "validate" },
+    });
+    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error };
+  }
 
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes").select("id, code, pallets_full_truck");
@@ -245,12 +261,21 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
     const { result } = await runJob("sql.select", { sql: sqlText, params: {}, slug: "truck-capacity-p21" }, timeoutMs);
     rows = ((result as any)?.rows ?? []) as any[];
   } catch (e: any) {
-    // If the stub is in place, this may simply return no rows — swallow rather than fail cron.
-    if (/agent/i.test(String(e?.message ?? ""))) throw e;
-    return { rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true };
+    const error = e?.message ?? String(e);
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.snapshot_failed",
+      entity_type: "truck_capacity_p21_demand",
+      message: `Truck Capacity P21 snapshot failed: ${error}`,
+      metadata: { stage: "execute" },
+    });
+    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error };
   }
 
-  if (rows.length === 0) return { rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false };
+  // Zero rows against a well-formed query (e.g. the WHERE 1=0 stub) is a valid
+  // no-op, not an error.
+  if (rows.length === 0) {
+    return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true };
+  }
 
   const num = (v: any): number | null => {
     if (v == null || v === "") return null;
@@ -286,11 +311,22 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
   }
 
   let written = 0;
-  for (let i = 0; i < inserts.length; i += 500) {
-    const batch = inserts.slice(i, i + 500);
-    const { error } = await supabaseAdmin.from("truck_capacity_p21_demand").insert(batch);
-    if (error) throw new Error(`P21 snapshot insert failed: ${error.message}`);
-    written += batch.length;
+  try {
+    for (let i = 0; i < inserts.length; i += 500) {
+      const batch = inserts.slice(i, i + 500);
+      const { error } = await supabaseAdmin.from("truck_capacity_p21_demand").insert(batch);
+      if (error) throw new Error(`P21 snapshot insert failed: ${error.message}`);
+      written += batch.length;
+    }
+  } catch (e: any) {
+    const error = e?.message ?? String(e);
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.snapshot_failed",
+      entity_type: "truck_capacity_p21_demand",
+      message: `Truck Capacity P21 snapshot insert failed: ${error}`,
+      metadata: { stage: "insert", written },
+    });
+    return { ok: false, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, error };
   }
 
   await supabaseAdmin.from("activity_events").insert({
@@ -300,8 +336,9 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
     metadata: { written, unmatched: Array.from(unmatched) },
   });
 
-  return { rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false };
+  return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false };
 }
+
 
 /* ============================== EXCEL EXPORT ============================== */
 
