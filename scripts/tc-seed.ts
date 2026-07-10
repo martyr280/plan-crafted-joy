@@ -137,25 +137,17 @@ async function main() {
 
   console.log(`Parsed ${rows.length} rows across ${perSheet.filter((s) => s.status === "ok").length} sheets`);
 
-  // Write CSV to /tmp
-  const csvPath = join(tmpdir(), "tc-runs.csv");
-  const escape = (v: any) => {
-    if (v == null) return "";
-    const s = String(v).replace(/"/g, '""');
-    return /[",\n]/.test(s) ? `"${s}"` : s;
-  };
-  const csv = ["route_id,run_date,run_seq,capacity_frac,vendor_pickup_frac,driver,pallet_count,returned_pallets,notes"];
-  for (const r of rows) csv.push([r.route_id, r.run_date, r.run_seq, r.capacity_frac, r.vendor_pickup_frac ?? "", r.driver ?? "", r.pallet_count ?? "", r.returned_pallets ?? "", r.notes ?? ""].map(escape).join(","));
-  writeFileSync(csvPath, csv.join("\n"));
-
-  const sqlPath = join(tmpdir(), "tc-runs.sql");
-  writeFileSync(sqlPath, `CREATE TEMP TABLE tc_stage (route_id uuid, run_date date, run_seq int, capacity_frac numeric, vendor_pickup_frac numeric, driver text, pallet_count int, returned_pallets int, notes text);
-\\copy tc_stage FROM '${csvPath}' WITH (FORMAT csv, HEADER true, NULL '');
-INSERT INTO public.truck_capacity_runs (route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, driver, pallet_count, returned_pallets, notes, source)
-SELECT route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, NULLIF(driver,''), pallet_count, returned_pallets, NULLIF(notes,''), 'import' FROM tc_stage
-ON CONFLICT (route_id, run_date, run_seq) DO UPDATE SET capacity_frac = EXCLUDED.capacity_frac, vendor_pickup_frac = EXCLUDED.vendor_pickup_frac, driver = EXCLUDED.driver, pallet_count = EXCLUDED.pallet_count, returned_pallets = EXCLUDED.returned_pallets, notes = EXCLUDED.notes, source = 'import';
-`);
-  execSync(`psql -v ON_ERROR_STOP=1 -f "${sqlPath}"`, { stdio: "inherit" });
+  // Batched upserts via supabase-js (service role bypasses RLS).
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const batch = rows.slice(i, i + 500).map((r) => ({ ...r, source: "import" }));
+    const { error } = await sb.from("truck_capacity_runs")
+      .upsert(batch, { onConflict: "route_id,run_date,run_seq" });
+    if (error) throw new Error(`upsert failed at batch ${i}: ${error.message}`);
+    inserted += batch.length;
+    process.stdout.write(`\r  upserted ${inserted}/${rows.length}`);
+  }
+  process.stdout.write("\n");
 
   // Report per hub
   const byHub = new Map<string, number>();
