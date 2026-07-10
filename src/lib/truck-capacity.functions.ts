@@ -133,7 +133,7 @@ export const previewTruckImport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ fileBase64: z.string().min(1) }).parse(i))
   .handler(async ({ data, context }) => {
-    await requireOpsOrAdmin(context.userId);
+    await assertAdmin(null, context.userId);
     const report = await parseImportWorkbook(data.fileBase64);
     return { sheets: report.sheets, totalOk: report.totalOk, rows: report.rows };
   });
@@ -154,9 +154,10 @@ export const commitTruckImport = createServerFn({ method: "POST" })
     })).max(20000),
   }).parse(i))
   .handler(async ({ data, context }) => {
-    await requireOpsOrAdmin(context.userId);
+    await assertAdmin(null, context.userId);
     return applyImportRows(data.rows);
   });
+
 
 export const exportTruckWorkbook = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
