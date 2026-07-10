@@ -9,6 +9,8 @@ import {
   SPIFF_LINES_SQL,
   SPIFF_LINES_ALL_SQL,
   SPIFF_AGING_SQL,
+  EXCLUSION_RULES,
+  classifySampleCatalog,
   isInScope,
   type ProductScope,
 } from "./spiff/constants";
@@ -37,6 +39,7 @@ type RawLine = {
   order_date: string | null;
   customer_id: string;
   order_no: string | number | null;
+  line_no: number | string | null;
   po_no: string | null;
   inv_mast_uid: number | null;
   item_id: string | null;
@@ -47,8 +50,13 @@ type RawLine = {
   extended_price: number | string | null;
   disposition: string | null;
   validation_status: string | null;
+  cancel_flag: string | null;
+  projected_order: string | null;
   kit: number | null;
+  invoiced_qty: number | string | null;
+  invoiced_amount: number | string | null;
 };
+
 
 function num(v: any): number {
   if (v === null || v === undefined || v === "") return 0;
