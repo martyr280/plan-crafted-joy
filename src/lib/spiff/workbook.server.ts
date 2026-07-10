@@ -41,7 +41,7 @@ type Check = {
   below_minimum: boolean;
 };
 
-type RunRow = { id: string; quarter_label: string };
+type RunRow = { id: string; quarter_label: string; totals: any };
 
 const HEADERS = [
   "ORDER DATE",
@@ -219,10 +219,11 @@ function addCustomerSheet(
 async function fetchRunBundle(runId: string, customerIds?: string[]) {
   const { data: run } = await supabaseAdmin
     .from("spiff_runs")
-    .select("id, quarter_label")
+    .select("id, quarter_label, totals")
     .eq("id", runId)
     .single();
   if (!run) throw new Error("Run not found");
+
 
   let progQ = supabaseAdmin.from("spiff_programs").select("*");
   if (customerIds && customerIds.length) progQ = progQ.in("customer_id", customerIds);
@@ -252,7 +253,48 @@ async function fetchRunBundle(runId: string, customerIds?: string[]) {
   };
 }
 
+function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
+  const ws = wb.addWorksheet("Summary");
+  ws.getColumn(1).width = 8;
+  ws.getColumn(2).width = 70;
+  ws.getColumn(3).width = 14;
+
+  ws.mergeCells("A1:C1");
+  const title = ws.getCell("A1");
+  title.value = `SPIFF ${run.quarter_label} — Data selection rules applied`;
+  title.font = { bold: true, size: 14 };
+
+  const totals = run.totals ?? {};
+  const rules: Array<{ code: string; label: string; where?: string }> = totals.exclusion_rules ?? [];
+  const counts: Record<string, number> = totals.exclusion_counts ?? {};
+
+  ws.getRow(3).values = ["#", "Rule", "Excluded"];
+  ws.getRow(3).font = { bold: true };
+
+  let r = 4;
+  rules.forEach((rule, i) => {
+    ws.getRow(r).values = [i + 1, rule.label, Number(counts[rule.code === "invoiced_only" ? "not_invoiced" : rule.code === "no_quotes" ? "quote" : rule.code === "no_cancelled" ? "cancelled" : rule.code === "no_samples" ? "sample" : rule.code === "no_catalogs" ? "catalog" : rule.code] ?? 0)];
+    r++;
+  });
+
+  r++;
+  ws.getCell(`A${r}`).value = "Notes:";
+  ws.getCell(`A${r}`).font = { bold: true };
+  r++;
+  ws.getCell(`B${r}`).value = "Quotes are hard-excluded at the SQL layer (oe_hdr.projected_order = 'N'), so no per-line rows exist for them.";
+  ws.getCell(`B${r}`).alignment = { wrapText: true };
+  r++;
+  ws.getCell(`B${r}`).value = "Sample/catalog detection is a keyword match (SAMPLE / CATALOG) on item_id + description. Edit src/lib/spiff/constants.ts to refine.";
+  ws.getCell(`B${r}`).alignment = { wrapText: true };
+  r++;
+  ws.getCell(`B${r}`).value = "SPIFF basis is invoiced amount (not ordered). Quarter assignment still uses oe_hdr.order_date.";
+  ws.getCell(`B${r}`).alignment = { wrapText: true };
+
+  ws.views = [{ state: "frozen", ySplit: 3 }];
+}
+
 export async function buildSpiffWorkbook(
+
   runId: string,
   opts?: { customerIds?: string[] }
 ): Promise<{ filename: string; buffer: Buffer; quarterLabel: string }> {
@@ -262,12 +304,17 @@ export async function buildSpiffWorkbook(
   wb.creator = "Nelson AI — SPIFF";
   wb.created = new Date();
 
+  // Summary/rules sheet first so AP + reps see exactly which selection
+  // rules were applied to this run (client requirement).
+  addSummarySheet(wb, run);
+
   // Order sheets by customer_name for consistency with the manual workbook
   for (const p of programs) {
     const pl = lines.filter((l) => l.program_id === p.id);
     if (pl.length === 0) continue; // skip customers with zero lines
     addCustomerSheet(wb, p, pl, checks, run.quarter_label);
   }
+
 
   // If nothing was added, leave one placeholder sheet so the file is valid.
   if (wb.worksheets.length === 0) {

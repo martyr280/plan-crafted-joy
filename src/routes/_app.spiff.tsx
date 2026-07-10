@@ -457,6 +457,9 @@ function SpiffPage() {
           No SPIFF runs yet. Pick a quarter and click <b>Generate from P21</b>.
         </Card>
       ) : (
+        <>
+        <ExclusionRulesCard totals={currentRun.totals} />
+
         <Tabs defaultValue="review">
           <TabsList>
             <TabsTrigger value="review">Review</TabsTrigger>
@@ -599,7 +602,9 @@ function SpiffPage() {
             <AutomationCard />
           </TabsContent>
         </Tabs>
+        </>
       )}
+
     </div>
   );
 }
@@ -1313,4 +1318,41 @@ function AutomationCard() {
     </Card>
   );
 }
+
+function ExclusionRulesCard({ totals }: { totals: any }) {
+  const rules: Array<{ code: string; label: string; where?: string }> = totals?.exclusion_rules ?? [];
+  const counts: Record<string, number> = totals?.exclusion_counts ?? {};
+  if (rules.length === 0) return null;
+  const codeToCountKey = (code: string) =>
+    code === "invoiced_only" ? "not_invoiced"
+    : code === "no_quotes" ? "quote"
+    : code === "no_cancelled" ? "cancelled"
+    : code === "no_samples" ? "sample"
+    : code === "no_catalogs" ? "catalog"
+    : code;
+  return (
+    <Card className="p-4 mb-3">
+      <div className="text-sm font-semibold mb-2">Exclusion rules applied to this run</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+        {rules.map((r) => {
+          const key = codeToCountKey(r.code);
+          const n = Number(counts[key] ?? 0);
+          return (
+            <div key={r.code} className="flex justify-between gap-4 border-b border-border/40 py-1">
+              <span>{r.label}</span>
+              <span className="font-mono text-muted-foreground">
+                {n > 0 ? `${n.toLocaleString()} excluded` : "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-[11px] text-muted-foreground mt-2">
+        Quotes are hard-filtered in SQL (no per-line rows); other exclusions are stored as{" "}
+        <code>spiff_run_lines</code> with <code>included=false</code> for auditability.
+      </div>
+    </Card>
+  );
+}
+
 
