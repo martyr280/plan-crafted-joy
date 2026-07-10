@@ -558,8 +558,9 @@ export async function parseImportWorkbook(fileBase64: string): Promise<ImportRep
         capacity_frac: capClamped,
         vendor_pickup_frac: colVendor ? (() => { const n = toNum(row.getCell(colVendor).value); return n == null ? null : Math.max(0, Math.min(1.25, n)); })() : null,
         driver: colDriver ? (row.getCell(colDriver).value ? String(row.getCell(colDriver).value) : null) : null,
-        pallet_count: colPallets ? (toNum(row.getCell(colPallets).value)) as any : null,
-        returned_pallets: colReturned ? (toNum(row.getCell(colReturned).value)) as any : null,
+        pallet_count: colPallets ? (() => { const n = toNum(row.getCell(colPallets).value); return n == null ? null : Math.round(n); })() : null,
+        returned_pallets: colReturned ? (() => { const n = toNum(row.getCell(colReturned).value); return n == null ? null : Math.round(n); })() : null,
+
         notes: colNotes ? (row.getCell(colNotes).value ? String(row.getCell(colNotes).value) : null) : null,
       });
       sheetOut.ok++;
