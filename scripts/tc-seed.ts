@@ -2,10 +2,12 @@
 // Run with: bun run scripts/tc-seed.ts <xlsx-path>
 
 import ExcelJS from "exceljs";
-import { execSync } from "child_process";
-import { writeFileSync, readFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { createClient } from "@supabase/supabase-js";
+import { readFileSync } from "fs";
+
+const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const SHEET_TO_ROUTE_CODE: Record<string, string> = {
   "dallas special runs": "DAL-SPECIAL",
