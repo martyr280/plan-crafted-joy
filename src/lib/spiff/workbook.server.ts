@@ -219,10 +219,11 @@ function addCustomerSheet(
 async function fetchRunBundle(runId: string, customerIds?: string[]) {
   const { data: run } = await supabaseAdmin
     .from("spiff_runs")
-    .select("id, quarter_label")
+    .select("id, quarter_label, totals")
     .eq("id", runId)
     .single();
   if (!run) throw new Error("Run not found");
+
 
   let progQ = supabaseAdmin.from("spiff_programs").select("*");
   if (customerIds && customerIds.length) progQ = progQ.in("customer_id", customerIds);
