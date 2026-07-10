@@ -2,6 +2,8 @@
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
+import { validateSelectSql } from "./sql-schedules.server";
+
 
 export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot (STUB — admin must fill in).
 -- Required output columns (exact names):
@@ -160,14 +162,18 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
   const routeMean = mean(routeValsAll);
   const overallMean = mean(runs.map((r) => r.cap));
 
-  // Monthly factor: raw = mean(this month) / mean(all), shrunk (n*raw + 4)/(n+4)
-  const monthNow = monthOf(today);
-  const thisMonthVals = runs.filter((r) => monthOf(r.date) === monthNow).map((r) => r.cap);
-  const rawMonth = overallMean && overallMean > 0 && thisMonthVals.length > 0
-    ? (mean(thisMonthVals)! / overallMean)
-    : 1.0;
-  const nMonth = thisMonthVals.length;
-  const seasonal = (nMonth * rawMonth + 4 * 1.0) / (nMonth + 4);
+  // Monthly factors — computed per calendar month from the trailing 84-day window,
+  // then indexed by each forecast day's own month so month-boundary crossings
+  // use the correct factor (and the explain label matches what was applied).
+  const monthFactor = new Map<number, { factor: number; n: number }>();
+  for (let m = 1; m <= 12; m++) {
+    const vals = runs.filter((r) => monthOf(r.date) === m).map((r) => r.cap);
+    const raw = overallMean && overallMean > 0 && vals.length > 0
+      ? (mean(vals)! / overallMean)
+      : 1.0;
+    const shrunk = (vals.length * raw + 4 * 1.0) / (vals.length + 4);
+    monthFactor.set(m, { factor: shrunk, n: vals.length });
+  }
 
   // P21 snapshot for horizon
   const horizonEnd = addDaysISO(today, horizonDays);
@@ -189,6 +195,9 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
   for (let i = 1; i <= horizonDays; i++) {
     const date = addDaysISO(today, i);
     const dw = dowOf(date);
+    const mo = monthOf(date);
+    const mf = monthFactor.get(mo) ?? { factor: 1.0, n: 0 };
+    const seasonal = mf.factor;
     const p21 = p21Latest.has(date) ? p21Latest.get(date)! : null;
     if (!activeDows.has(dw)) {
       if (p21 != null && p21 > 0) {
@@ -205,7 +214,7 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
     const forecast = Math.max(0, Math.min(1.25, base * seasonal));
     const final = p21 != null ? Math.max(forecast, p21) : forecast;
     const wk = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dw];
-    const monLbl = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][monthOf(date) - 1];
+    const monLbl = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][mo - 1];
     days.push({
       date, dow: dw,
       baseline: base, seasonal, forecast, mad: madVal, p21, final,
@@ -214,17 +223,34 @@ export async function computeForecastForRoute(routeId: string, horizonDays = 28)
     });
   }
 
+
   return { route: route as Route, days };
 }
 
 /* ============================== P21 SNAPSHOT ============================== */
 
 export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
-  rowsPulled: number; snapshotsWritten: number; unmatchedRouteCodes: string[]; skipped: boolean;
+  ok: boolean; rowsPulled: number; snapshotsWritten: number;
+  unmatchedRouteCodes: string[]; skipped: boolean; error?: string;
 }> {
   const { data: settings } = await supabaseAdmin
     .from("truck_capacity_settings").select("p21_sql").eq("singleton", true).maybeSingle();
   const sqlText = (settings?.p21_sql ?? "").trim() || DEFAULT_P21_SQL;
+
+  // Defense-in-depth: reject anything that isn't a read-only SELECT/WITH/DECLARE
+  // before it goes to the bridge, even though the DB user is db_datareader-only.
+  try {
+    validateSelectSql(sqlText);
+  } catch (e: any) {
+    const error = e?.message ?? String(e);
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.snapshot_failed",
+      entity_type: "truck_capacity_p21_demand",
+      message: `Truck Capacity P21 snapshot rejected: ${error}`,
+      metadata: { stage: "validate" },
+    });
+    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error };
+  }
 
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes").select("id, code, pallets_full_truck");
@@ -235,12 +261,21 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
     const { result } = await runJob("sql.select", { sql: sqlText, params: {}, slug: "truck-capacity-p21" }, timeoutMs);
     rows = ((result as any)?.rows ?? []) as any[];
   } catch (e: any) {
-    // If the stub is in place, this may simply return no rows — swallow rather than fail cron.
-    if (/agent/i.test(String(e?.message ?? ""))) throw e;
-    return { rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true };
+    const error = e?.message ?? String(e);
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.snapshot_failed",
+      entity_type: "truck_capacity_p21_demand",
+      message: `Truck Capacity P21 snapshot failed: ${error}`,
+      metadata: { stage: "execute" },
+    });
+    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error };
   }
 
-  if (rows.length === 0) return { rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false };
+  // Zero rows against a well-formed query (e.g. the WHERE 1=0 stub) is a valid
+  // no-op, not an error.
+  if (rows.length === 0) {
+    return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true };
+  }
 
   const num = (v: any): number | null => {
     if (v == null || v === "") return null;
@@ -276,11 +311,22 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
   }
 
   let written = 0;
-  for (let i = 0; i < inserts.length; i += 500) {
-    const batch = inserts.slice(i, i + 500);
-    const { error } = await supabaseAdmin.from("truck_capacity_p21_demand").insert(batch);
-    if (error) throw new Error(`P21 snapshot insert failed: ${error.message}`);
-    written += batch.length;
+  try {
+    for (let i = 0; i < inserts.length; i += 500) {
+      const batch = inserts.slice(i, i + 500);
+      const { error } = await supabaseAdmin.from("truck_capacity_p21_demand").insert(batch);
+      if (error) throw new Error(`P21 snapshot insert failed: ${error.message}`);
+      written += batch.length;
+    }
+  } catch (e: any) {
+    const error = e?.message ?? String(e);
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.snapshot_failed",
+      entity_type: "truck_capacity_p21_demand",
+      message: `Truck Capacity P21 snapshot insert failed: ${error}`,
+      metadata: { stage: "insert", written },
+    });
+    return { ok: false, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, error };
   }
 
   await supabaseAdmin.from("activity_events").insert({
@@ -290,8 +336,9 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
     metadata: { written, unmatched: Array.from(unmatched) },
   });
 
-  return { rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false };
+  return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false };
 }
+
 
 /* ============================== EXCEL EXPORT ============================== */
 
@@ -410,21 +457,45 @@ function normHeader(s: any): string {
 
 function parseDateCell(v: any): { iso: string | null; seq: number } {
   if (v == null || v === "") return { iso: null, seq: 1 };
-  if (v instanceof Date) return { iso: v.toISOString().slice(0, 10), seq: 1 };
+  if (v instanceof Date) {
+    // Use UTC parts to avoid TZ shifts.
+    const y = v.getUTCFullYear(), mo = v.getUTCMonth() + 1, dd = v.getUTCDate();
+    return { iso: `${y}-${String(mo).padStart(2, "0")}-${String(dd).padStart(2, "0")}`, seq: 1 };
+  }
   if (typeof v === "number") {
-    // Excel serial date
+    // Excel serial date → UTC ymd (no TZ shift).
     const ms = Math.round((v - 25569) * 86400 * 1000);
     const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? { iso: null, seq: 1 } : { iso: d.toISOString().slice(0, 10), seq: 1 };
+    if (Number.isNaN(d.getTime())) return { iso: null, seq: 1 };
+    const y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1, dd = d.getUTCDate();
+    return { iso: `${y}-${String(mo).padStart(2, "0")}-${String(dd).padStart(2, "0")}`, seq: 1 };
   }
   const s = String(v);
   const m = s.match(/^(.+?)\s*[-–]\s*Run\s*(\d+)\s*$/i);
-  const datePart = m ? m[1] : s;
+  const datePart = (m ? m[1] : s).trim();
   const seq = m ? Number(m[2]) : 1;
+
+  // Explicit M/D/YYYY or M-D-YYYY → build YYYY-MM-DD without new Date() (avoids TZ shifts).
+  const mdy = datePart.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (mdy) {
+    let [, mo, dd, yy] = mdy;
+    let year = Number(yy);
+    if (year < 100) year += year < 50 ? 2000 : 1900;
+    const mm = Number(mo), d = Number(dd);
+    if (mm >= 1 && mm <= 12 && d >= 1 && d <= 31) {
+      return { iso: `${year}-${String(mm).padStart(2, "0")}-${String(d).padStart(2, "0")}`, seq };
+    }
+  }
+  // ISO YYYY-MM-DD passthrough.
+  const isoMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return { iso: `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`, seq };
+
   const d = new Date(datePart);
   if (Number.isNaN(d.getTime())) return { iso: null, seq };
-  return { iso: d.toISOString().slice(0, 10), seq };
+  const y = d.getUTCFullYear(), mo2 = d.getUTCMonth() + 1, dd2 = d.getUTCDate();
+  return { iso: `${y}-${String(mo2).padStart(2, "0")}-${String(dd2).padStart(2, "0")}`, seq };
 }
+
 
 function toNum(v: any): number | null {
   if (v == null || v === "") return null;
@@ -487,8 +558,9 @@ export async function parseImportWorkbook(fileBase64: string): Promise<ImportRep
         capacity_frac: capClamped,
         vendor_pickup_frac: colVendor ? (() => { const n = toNum(row.getCell(colVendor).value); return n == null ? null : Math.max(0, Math.min(1.25, n)); })() : null,
         driver: colDriver ? (row.getCell(colDriver).value ? String(row.getCell(colDriver).value) : null) : null,
-        pallet_count: colPallets ? (toNum(row.getCell(colPallets).value)) as any : null,
-        returned_pallets: colReturned ? (toNum(row.getCell(colReturned).value)) as any : null,
+        pallet_count: colPallets ? (() => { const n = toNum(row.getCell(colPallets).value); return n == null ? null : Math.round(n); })() : null,
+        returned_pallets: colReturned ? (() => { const n = toNum(row.getCell(colReturned).value); return n == null ? null : Math.round(n); })() : null,
+
         notes: colNotes ? (row.getCell(colNotes).value ? String(row.getCell(colNotes).value) : null) : null,
       });
       sheetOut.ok++;

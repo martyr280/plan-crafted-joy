@@ -7,6 +7,7 @@ import {
   computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
   runP21Snapshot, DEFAULT_P21_SQL,
 } from "./truck-capacity.server";
+import { validateSelectSql } from "./sql-schedules.server";
 
 async function requireOpsOrAdmin(userId: string) {
   const { data } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
@@ -132,7 +133,7 @@ export const previewTruckImport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ fileBase64: z.string().min(1) }).parse(i))
   .handler(async ({ data, context }) => {
-    await requireOpsOrAdmin(context.userId);
+    await assertAdmin(null, context.userId);
     const report = await parseImportWorkbook(data.fileBase64);
     return { sheets: report.sheets, totalOk: report.totalOk, rows: report.rows };
   });
@@ -153,9 +154,10 @@ export const commitTruckImport = createServerFn({ method: "POST" })
     })).max(20000),
   }).parse(i))
   .handler(async ({ data, context }) => {
-    await requireOpsOrAdmin(context.userId);
+    await assertAdmin(null, context.userId);
     return applyImportRows(data.rows);
   });
+
 
 export const exportTruckWorkbook = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -176,7 +178,10 @@ export const testP21Sql = createServerFn({ method: "POST" })
   .inputValidator((i) => z.object({ sql: z.string().min(1).max(20000) }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
+    // Defense-in-depth: block anything that isn't a read-only SELECT/WITH/DECLARE.
+    validateSelectSql(data.sql);
     const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-test" }, 60_000);
     const rows = ((result as any)?.rows ?? []) as any[];
     return { rowCount: rows.length, sample: rows.slice(0, 10) };
   });
+

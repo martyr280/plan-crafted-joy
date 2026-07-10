@@ -39,12 +39,26 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             spiff = { ran: false, error: e?.message ?? String(e) };
           }
           // Nightly truck-capacity P21 snapshot: run once per day between 07:00–07:15 UTC (~03:00 EDT).
+          // Dedup: skip if a demand row already carries a snapshot_at on today's UTC date, so
+          // overlapping cron ticks in the window don't double-insert.
           let truckCapacity: any = null;
           const now = new Date();
           if (now.getUTCHours() === 7 && now.getUTCMinutes() < 15) {
-            try { truckCapacity = await runP21Snapshot(); }
-            catch (e: any) { truckCapacity = { ok: false, error: e?.message ?? String(e) }; }
+            const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+            const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
+            const { data: already } = await supabaseAdmin
+              .from("truck_capacity_p21_demand")
+              .select("id")
+              .gte("snapshot_at", todayStart)
+              .limit(1);
+            if (already && already.length > 0) {
+              truckCapacity = { ok: true, skipped: true, reason: "already_ran_today" };
+            } else {
+              try { truckCapacity = await runP21Snapshot(); }
+              catch (e: any) { truckCapacity = { ok: false, error: e?.message ?? String(e) }; }
+            }
           }
+
           return Response.json({ ok: true, ...result, spiff, truckCapacity, ranAt: new Date().toISOString() });
         } catch (e: any) {
           return Response.json(
