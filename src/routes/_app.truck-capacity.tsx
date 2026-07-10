@@ -516,7 +516,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
   const [vendorCounts, setVendorCounts] = useState(false);
   const [sql, setSql] = useState("");
   useEffect(() => {
-    if (s) { setBasis(s.capacity_basis); setVendorCounts(s.vendor_pickup_counts); setSql(s.p21_sql ?? defaultSql); }
+    if (s) { setBasis(s.capacity_basis as "pallets"|"weight"|"cube"); setVendorCounts(s.vendor_pickup_counts); setSql(s.p21_sql ?? defaultSql); }
   }, [s, defaultSql]);
 
   const [pallets, setPallets] = useState<Record<string, string>>({});

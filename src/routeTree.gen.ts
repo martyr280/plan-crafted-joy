@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWebhooksRouteImport } from './routes/_app.webhooks'
+import { Route as AppTruckCapacityRouteImport } from './routes/_app.truck-capacity'
 import { Route as AppSqlSchedulesRouteImport } from './routes/_app.sql-schedules'
 import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
@@ -63,6 +64,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppWebhooksRoute = AppWebhooksRouteImport.update({
   id: '/webhooks',
   path: '/webhooks',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTruckCapacityRoute = AppTruckCapacityRouteImport.update({
+  id: '/truck-capacity',
+  path: '/truck-capacity',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSqlSchedulesRoute = AppSqlSchedulesRouteImport.update({
@@ -220,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
   '/sql-schedules': typeof AppSqlSchedulesRoute
+  '/truck-capacity': typeof AppTruckCapacityRoute
   '/webhooks': typeof AppWebhooksRoute
   '/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
@@ -251,6 +258,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
   '/sql-schedules': typeof AppSqlSchedulesRoute
+  '/truck-capacity': typeof AppTruckCapacityRoute
   '/webhooks': typeof AppWebhooksRoute
   '/': typeof AppIndexRoute
   '/reports/e2g': typeof AppReportsE2gRoute
@@ -285,6 +293,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/spiff': typeof AppSpiffRoute
   '/_app/sql-schedules': typeof AppSqlSchedulesRoute
+  '/_app/truck-capacity': typeof AppTruckCapacityRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/_app/': typeof AppIndexRoute
   '/_app/reports/e2g': typeof AppReportsE2gRoute
@@ -320,6 +329,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/spiff'
     | '/sql-schedules'
+    | '/truck-capacity'
     | '/webhooks'
     | '/reports/e2g'
     | '/api/public/inbound-email'
@@ -351,6 +361,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/spiff'
     | '/sql-schedules'
+    | '/truck-capacity'
     | '/webhooks'
     | '/'
     | '/reports/e2g'
@@ -384,6 +395,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/spiff'
     | '/_app/sql-schedules'
+    | '/_app/truck-capacity'
     | '/_app/webhooks'
     | '/_app/'
     | '/_app/reports/e2g'
@@ -441,6 +453,13 @@ declare module '@tanstack/react-router' {
       path: '/webhooks'
       fullPath: '/webhooks'
       preLoaderRoute: typeof AppWebhooksRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/truck-capacity': {
+      id: '/_app/truck-capacity'
+      path: '/truck-capacity'
+      fullPath: '/truck-capacity'
+      preLoaderRoute: typeof AppTruckCapacityRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/sql-schedules': {
@@ -648,6 +667,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppSpiffRoute: typeof AppSpiffRoute
   AppSqlSchedulesRoute: typeof AppSqlSchedulesRoute
+  AppTruckCapacityRoute: typeof AppTruckCapacityRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
   AppReportsE2gRoute: typeof AppReportsE2gRoute
@@ -674,6 +694,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppSpiffRoute: AppSpiffRoute,
   AppSqlSchedulesRoute: AppSqlSchedulesRoute,
+  AppTruckCapacityRoute: AppTruckCapacityRoute,
   AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,
   AppReportsE2gRoute: AppReportsE2gRoute,
