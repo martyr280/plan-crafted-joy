@@ -41,7 +41,7 @@ type Check = {
   below_minimum: boolean;
 };
 
-type RunRow = { id: string; quarter_label: string };
+type RunRow = { id: string; quarter_label: string; totals: any };
 
 const HEADERS = [
   "ORDER DATE",
