@@ -1347,18 +1347,19 @@ function ExclusionRulesCard({ totals }: { totals: any }) {
         {rules.map((r) => {
           const key = codeToCountKey(r.code);
           const n = Number(counts[key] ?? 0);
+          const isBasis = r.code === "quarter_basis_invoice_date";
           return (
             <div key={r.code} className="flex justify-between gap-4 border-b border-border/40 py-1">
               <span>{r.label}</span>
               <span className="font-mono text-muted-foreground">
-                {n > 0 ? `${n.toLocaleString()} excluded` : "—"}
+                {isBasis ? "basis rule" : n > 0 ? `${n.toLocaleString()} excluded` : "—"}
               </span>
             </div>
           );
         })}
       </div>
       <div className="text-[11px] text-muted-foreground mt-2">
-        Quotes are hard-filtered in SQL (no per-line rows); other exclusions are stored as{" "}
+        Quarter basis = <strong>invoice date</strong>: a line pays in the quarter its invoice_date falls in. Partial invoicing across quarters pays only the in-window portion each quarter. Quotes are hard-filtered in SQL (no per-line rows); other exclusions are stored as{" "}
         <code>spiff_run_lines</code> with <code>included=false</code> for auditability.
       </div>
     </Card>
