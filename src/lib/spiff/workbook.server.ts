@@ -19,6 +19,9 @@ type Line = {
   program_id: string;
   customer_id: string;
   order_date: string | null;
+  first_invoice_date: string | null;
+  last_invoice_date: string | null;
+  invoice_date: string | null;
   order_no: string | null;
   po_no: string | null;
   item_id: string | null;
