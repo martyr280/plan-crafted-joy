@@ -704,7 +704,7 @@ function ReviewGroup({
   return (
     <>
       <TableRow className="bg-muted/40">
-        <TableCell colSpan={11} className="font-semibold">
+        <TableCell colSpan={12} className="font-semibold">
           {rep} ({rows.length} lines)
         </TableCell>
       </TableRow>
@@ -715,6 +715,12 @@ function ReviewGroup({
         >
           <TableCell className="whitespace-nowrap text-xs">
             {l.order_date ? new Date(l.order_date).toLocaleDateString() : "—"}
+          </TableCell>
+          <TableCell className="whitespace-nowrap text-xs">
+            {(() => {
+              const d = l.last_invoice_date ?? l.invoice_date ?? null;
+              return d ? new Date(d).toLocaleDateString() : (l.included ? "—" : "not inv.");
+            })()}
           </TableCell>
           <TableCell className="text-xs">
             {l.order_no}
