@@ -55,6 +55,8 @@ type RawLine = {
   kit: number | null;
   invoiced_qty: number | string | null;
   invoiced_amount: number | string | null;
+  first_invoice_date: string | null;
+  last_invoice_date: string | null;
 };
 
 
