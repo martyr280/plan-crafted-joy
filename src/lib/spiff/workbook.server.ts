@@ -48,6 +48,7 @@ type RunRow = { id: string; quarter_label: string; totals: any };
 
 const HEADERS = [
   "ORDER DATE",
+  "INVOICE DATE",
   "ORDER NUMBER",
   "PO NUMBER",
   "ITEM ID",
@@ -58,7 +59,8 @@ const HEADERS = [
   "SPIFF",
 ];
 
-const COL_WIDTHS = [13, 13, 22, 14, 38, 11, 12, 14, 12];
+// One entry per header column (10 columns).
+const COL_WIDTHS = [13, 13, 13, 22, 14, 38, 11, 12, 14, 12];
 
 function quarterOrdinal(label: string): { ordinal: string; year: string } {
   // "Q2-2026" → { ordinal: "2nd", year: "2026" }
