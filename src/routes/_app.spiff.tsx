@@ -650,6 +650,7 @@ function ReviewTable({
       <TableHeader>
         <TableRow>
           <TableHead>Order Date</TableHead>
+          <TableHead>Invoice Date</TableHead>
           <TableHead>Order No</TableHead>
           <TableHead>PO Number</TableHead>
           <TableHead>Item</TableHead>
