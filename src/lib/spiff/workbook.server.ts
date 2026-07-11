@@ -90,12 +90,12 @@ function addCustomerSheet(
   for (let i = 0; i < COL_WIDTHS.length; i++) {
     ws.getColumn(i + 1).width = COL_WIDTHS[i];
   }
-  ws.getColumn(10).width = 4; // J spacer
-  ws.getColumn(11).width = 36; // K payee
-  ws.getColumn(12).width = 14; // L amount
+  ws.getColumn(11).width = 4; // K spacer
+  ws.getColumn(12).width = 36; // L payee
+  ws.getColumn(13).width = 14; // M amount
 
-  // Row 1 — title, merged A1:I1
-  ws.mergeCells("A1:I1");
+  // Row 1 — title, merged A1:J1 (10 data columns now)
+  ws.mergeCells("A1:J1");
   const title = ws.getCell("A1");
   title.value = formatQuarterTitle(program.customer_name, program.rep_org, quarterLabel);
   title.font = { bold: true, size: 14 };
