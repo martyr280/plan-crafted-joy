@@ -136,31 +136,38 @@ function addCustomerSheet(
     for (const l of rows) {
       const r = ws.getRow(row);
       const orderDate = l.order_date ? new Date(l.order_date) : null;
+      const invDate = l.last_invoice_date
+        ? new Date(l.last_invoice_date)
+        : l.invoice_date
+        ? new Date(l.invoice_date)
+        : null;
       r.getCell(1).value = orderDate;
-      if (orderDate) r.getCell(1).numFmt = "m/d/yyyy h:mm";
-      r.getCell(2).value = l.order_no ?? null;
-      r.getCell(3).value = l.po_no ?? null;
-      r.getCell(4).value = l.item_id ?? null;
-      r.getCell(5).value = l.item_desc ?? null;
-      r.getCell(6).value = Number(l.qty_ordered ?? 0);
-      r.getCell(7).value = Number(l.unit_price ?? 0);
-      r.getCell(7).numFmt = "#,##0.00;(#,##0.00)";
-      r.getCell(8).value = Number(l.extended_price ?? 0);
+      if (orderDate) r.getCell(1).numFmt = "m/d/yyyy";
+      r.getCell(2).value = invDate;
+      if (invDate) r.getCell(2).numFmt = "m/d/yyyy";
+      r.getCell(3).value = l.order_no ?? null;
+      r.getCell(4).value = l.po_no ?? null;
+      r.getCell(5).value = l.item_id ?? null;
+      r.getCell(6).value = l.item_desc ?? null;
+      r.getCell(7).value = Number(l.qty_ordered ?? 0);
+      r.getCell(8).value = Number(l.unit_price ?? 0);
       r.getCell(8).numFmt = "#,##0.00;(#,##0.00)";
-      // SPIFF as a live Excel formula so AP can audit it.
-      r.getCell(9).value = { formula: `H${row}*${program.rate}` } as any;
+      r.getCell(9).value = Number(l.extended_price ?? 0);
       r.getCell(9).numFmt = "#,##0.00;(#,##0.00)";
+      // SPIFF as a live Excel formula so AP can audit it.
+      r.getCell(10).value = { formula: `I${row}*${program.rate}` } as any;
+      r.getCell(10).numFmt = "#,##0.00;(#,##0.00)";
       row++;
     }
     const lastRow = row - 1;
     // Total row
     const tr = ws.getRow(row);
-    tr.getCell(8).value = `TOTAL — ${key}`;
-    tr.getCell(8).font = { bold: true };
-    tr.getCell(8).alignment = { horizontal: "right" };
-    tr.getCell(9).value = { formula: `SUM(I${firstRow}:I${lastRow})` } as any;
-    tr.getCell(9).numFmt = "#,##0.00;(#,##0.00)";
+    tr.getCell(9).value = `TOTAL — ${key}`;
     tr.getCell(9).font = { bold: true };
+    tr.getCell(9).alignment = { horizontal: "right" };
+    tr.getCell(10).value = { formula: `SUM(J${firstRow}:J${lastRow})` } as any;
+    tr.getCell(10).numFmt = "#,##0.00;(#,##0.00)";
+    tr.getCell(10).font = { bold: true };
     row++;
     // blank separator
     row++;
