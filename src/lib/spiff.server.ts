@@ -350,6 +350,9 @@ export async function generateSpiffRunCore(opts: {
           program_id: program.id,
           customer_id: program.customer_id,
           order_date: r.order_date,
+          first_invoice_date: r.first_invoice_date,
+          last_invoice_date: r.last_invoice_date,
+          invoice_date: r.last_invoice_date, // convenience mirror
           order_no: r.order_no != null ? String(r.order_no) : null,
           po_no: r.po_no,
           item_id: r.item_id,
