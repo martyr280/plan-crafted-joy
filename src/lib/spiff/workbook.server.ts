@@ -285,7 +285,15 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
 
   let r = 4;
   rules.forEach((rule, i) => {
-    ws.getRow(r).values = [i + 1, rule.label, Number(counts[rule.code === "invoiced_only" ? "not_invoiced" : rule.code === "no_quotes" ? "quote" : rule.code === "no_cancelled" ? "cancelled" : rule.code === "no_samples" ? "sample" : rule.code === "no_catalogs" ? "catalog" : rule.code] ?? 0)];
+    const key =
+      rule.code === "invoiced_only" ? "not_invoiced"
+      : rule.code === "no_quotes" ? "quote"
+      : rule.code === "no_cancelled" ? "cancelled"
+      : rule.code === "no_samples" ? "sample"
+      : rule.code === "no_catalogs" ? "catalog"
+      : rule.code;
+    const val = rule.code === "quarter_basis_invoice_date" ? "n/a (basis rule)" : Number(counts[key] ?? 0);
+    ws.getRow(r).values = [i + 1, rule.label, val];
     r++;
   });
 
