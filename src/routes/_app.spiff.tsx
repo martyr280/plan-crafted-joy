@@ -763,7 +763,7 @@ function ReviewGroup({
         </TableRow>
       ))}
       <TableRow>
-        <TableCell colSpan={8} className="text-right font-semibold">
+        <TableCell colSpan={9} className="text-right font-semibold">
           Subtotal — {rep}
         </TableCell>
         <TableCell className="text-right font-mono font-semibold">{money(subtotal)}</TableCell>
