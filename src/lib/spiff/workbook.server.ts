@@ -179,9 +179,9 @@ function addCustomerSheet(
     row = 4;
   }
 
-  // Right-side payee block — starts at K2
-  const payeeCol = 11; // K
-  const amtCol = 12; // L
+  // Right-side payee block — starts at L2 (M is amount)
+  const payeeCol = 12; // L
+  const amtCol = 13; // M
   const header = ws.getCell(2, payeeCol);
   header.value = "Make Checks Payable to:";
   header.font = { bold: true };
