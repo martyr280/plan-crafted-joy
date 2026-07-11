@@ -293,13 +293,16 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
   ws.getCell(`A${r}`).value = "Notes:";
   ws.getCell(`A${r}`).font = { bold: true };
   r++;
+  ws.getCell(`B${r}`).value = "Quarter assignment = INVOICE DATE (invoice_hdr.invoice_date). A line pays in the quarter its invoice_date falls in, regardless of when it was ordered. Partial invoicing across quarters: each quarter pays only its own in-window invoiced portion.";
+  ws.getCell(`B${r}`).alignment = { wrapText: true };
+  r++;
   ws.getCell(`B${r}`).value = "Quotes are hard-excluded at the SQL layer (oe_hdr.projected_order = 'N'), so no per-line rows exist for them.";
   ws.getCell(`B${r}`).alignment = { wrapText: true };
   r++;
-  ws.getCell(`B${r}`).value = "Sample/catalog detection is a keyword match (SAMPLE / CATALOG) on item_id + description. Edit src/lib/spiff/constants.ts to refine.";
+  ws.getCell(`B${r}`).value = "Sample/catalog detection: keyword match (SAMPLE / CATALOG) on item_id + description, standalone CAT token in item_id (e.g. 'ND 2026 CAT D'), plus a confirmed catalog SKU deny list. Edit src/lib/spiff/constants.ts to refine.";
   ws.getCell(`B${r}`).alignment = { wrapText: true };
   r++;
-  ws.getCell(`B${r}`).value = "SPIFF basis is invoiced amount (not ordered). Quarter assignment still uses oe_hdr.order_date.";
+  ws.getCell(`B${r}`).value = "SPIFF basis is invoiced amount (not ordered), summed only over invoices whose invoice_date falls inside the quarter window.";
   ws.getCell(`B${r}`).alignment = { wrapText: true };
 
   ws.views = [{ state: "frozen", ySplit: 3 }];
