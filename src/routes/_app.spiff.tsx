@@ -58,6 +58,9 @@ type Line = {
   program_id: string;
   customer_id: string;
   order_date: string | null;
+  first_invoice_date: string | null;
+  last_invoice_date: string | null;
+  invoice_date: string | null;
   order_no: string | null;
   po_no: string | null;
   item_id: string | null;
@@ -647,6 +650,7 @@ function ReviewTable({
       <TableHeader>
         <TableRow>
           <TableHead>Order Date</TableHead>
+          <TableHead>Invoice Date</TableHead>
           <TableHead>Order No</TableHead>
           <TableHead>PO Number</TableHead>
           <TableHead>Item</TableHead>
@@ -700,7 +704,7 @@ function ReviewGroup({
   return (
     <>
       <TableRow className="bg-muted/40">
-        <TableCell colSpan={11} className="font-semibold">
+        <TableCell colSpan={12} className="font-semibold">
           {rep} ({rows.length} lines)
         </TableCell>
       </TableRow>
@@ -711,6 +715,12 @@ function ReviewGroup({
         >
           <TableCell className="whitespace-nowrap text-xs">
             {l.order_date ? new Date(l.order_date).toLocaleDateString() : "—"}
+          </TableCell>
+          <TableCell className="whitespace-nowrap text-xs">
+            {(() => {
+              const d = l.last_invoice_date ?? l.invoice_date ?? null;
+              return d ? new Date(d).toLocaleDateString() : (l.included ? "—" : "not inv.");
+            })()}
           </TableCell>
           <TableCell className="text-xs">
             {l.order_no}
@@ -753,7 +763,7 @@ function ReviewGroup({
         </TableRow>
       ))}
       <TableRow>
-        <TableCell colSpan={8} className="text-right font-semibold">
+        <TableCell colSpan={9} className="text-right font-semibold">
           Subtotal — {rep}
         </TableCell>
         <TableCell className="text-right font-mono font-semibold">{money(subtotal)}</TableCell>
@@ -1337,18 +1347,19 @@ function ExclusionRulesCard({ totals }: { totals: any }) {
         {rules.map((r) => {
           const key = codeToCountKey(r.code);
           const n = Number(counts[key] ?? 0);
+          const isBasis = r.code === "quarter_basis_invoice_date";
           return (
             <div key={r.code} className="flex justify-between gap-4 border-b border-border/40 py-1">
               <span>{r.label}</span>
               <span className="font-mono text-muted-foreground">
-                {n > 0 ? `${n.toLocaleString()} excluded` : "—"}
+                {isBasis ? "basis rule" : n > 0 ? `${n.toLocaleString()} excluded` : "—"}
               </span>
             </div>
           );
         })}
       </div>
       <div className="text-[11px] text-muted-foreground mt-2">
-        Quotes are hard-filtered in SQL (no per-line rows); other exclusions are stored as{" "}
+        Quarter basis = <strong>invoice date</strong>: a line pays in the quarter its invoice_date falls in. Partial invoicing across quarters pays only the in-window portion each quarter. Quotes are hard-filtered in SQL (no per-line rows); other exclusions are stored as{" "}
         <code>spiff_run_lines</code> with <code>included=false</code> for auditability.
       </div>
     </Card>

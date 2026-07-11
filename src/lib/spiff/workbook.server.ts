@@ -19,6 +19,9 @@ type Line = {
   program_id: string;
   customer_id: string;
   order_date: string | null;
+  first_invoice_date: string | null;
+  last_invoice_date: string | null;
+  invoice_date: string | null;
   order_no: string | null;
   po_no: string | null;
   item_id: string | null;
@@ -45,6 +48,7 @@ type RunRow = { id: string; quarter_label: string; totals: any };
 
 const HEADERS = [
   "ORDER DATE",
+  "INVOICE DATE",
   "ORDER NUMBER",
   "PO NUMBER",
   "ITEM ID",
@@ -55,7 +59,8 @@ const HEADERS = [
   "SPIFF",
 ];
 
-const COL_WIDTHS = [13, 13, 22, 14, 38, 11, 12, 14, 12];
+// One entry per header column (10 columns).
+const COL_WIDTHS = [13, 13, 13, 22, 14, 38, 11, 12, 14, 12];
 
 function quarterOrdinal(label: string): { ordinal: string; year: string } {
   // "Q2-2026" → { ordinal: "2nd", year: "2026" }
@@ -85,12 +90,12 @@ function addCustomerSheet(
   for (let i = 0; i < COL_WIDTHS.length; i++) {
     ws.getColumn(i + 1).width = COL_WIDTHS[i];
   }
-  ws.getColumn(10).width = 4; // J spacer
-  ws.getColumn(11).width = 36; // K payee
-  ws.getColumn(12).width = 14; // L amount
+  ws.getColumn(11).width = 4; // K spacer
+  ws.getColumn(12).width = 36; // L payee
+  ws.getColumn(13).width = 14; // M amount
 
-  // Row 1 — title, merged A1:I1
-  ws.mergeCells("A1:I1");
+  // Row 1 — title, merged A1:J1 (10 data columns now)
+  ws.mergeCells("A1:J1");
   const title = ws.getCell("A1");
   title.value = formatQuarterTitle(program.customer_name, program.rep_org, quarterLabel);
   title.font = { bold: true, size: 14 };
@@ -131,31 +136,38 @@ function addCustomerSheet(
     for (const l of rows) {
       const r = ws.getRow(row);
       const orderDate = l.order_date ? new Date(l.order_date) : null;
+      const invDate = l.last_invoice_date
+        ? new Date(l.last_invoice_date)
+        : l.invoice_date
+        ? new Date(l.invoice_date)
+        : null;
       r.getCell(1).value = orderDate;
-      if (orderDate) r.getCell(1).numFmt = "m/d/yyyy h:mm";
-      r.getCell(2).value = l.order_no ?? null;
-      r.getCell(3).value = l.po_no ?? null;
-      r.getCell(4).value = l.item_id ?? null;
-      r.getCell(5).value = l.item_desc ?? null;
-      r.getCell(6).value = Number(l.qty_ordered ?? 0);
-      r.getCell(7).value = Number(l.unit_price ?? 0);
-      r.getCell(7).numFmt = "#,##0.00;(#,##0.00)";
-      r.getCell(8).value = Number(l.extended_price ?? 0);
+      if (orderDate) r.getCell(1).numFmt = "m/d/yyyy";
+      r.getCell(2).value = invDate;
+      if (invDate) r.getCell(2).numFmt = "m/d/yyyy";
+      r.getCell(3).value = l.order_no ?? null;
+      r.getCell(4).value = l.po_no ?? null;
+      r.getCell(5).value = l.item_id ?? null;
+      r.getCell(6).value = l.item_desc ?? null;
+      r.getCell(7).value = Number(l.qty_ordered ?? 0);
+      r.getCell(8).value = Number(l.unit_price ?? 0);
       r.getCell(8).numFmt = "#,##0.00;(#,##0.00)";
-      // SPIFF as a live Excel formula so AP can audit it.
-      r.getCell(9).value = { formula: `H${row}*${program.rate}` } as any;
+      r.getCell(9).value = Number(l.extended_price ?? 0);
       r.getCell(9).numFmt = "#,##0.00;(#,##0.00)";
+      // SPIFF as a live Excel formula so AP can audit it.
+      r.getCell(10).value = { formula: `I${row}*${program.rate}` } as any;
+      r.getCell(10).numFmt = "#,##0.00;(#,##0.00)";
       row++;
     }
     const lastRow = row - 1;
     // Total row
     const tr = ws.getRow(row);
-    tr.getCell(8).value = `TOTAL — ${key}`;
-    tr.getCell(8).font = { bold: true };
-    tr.getCell(8).alignment = { horizontal: "right" };
-    tr.getCell(9).value = { formula: `SUM(I${firstRow}:I${lastRow})` } as any;
-    tr.getCell(9).numFmt = "#,##0.00;(#,##0.00)";
+    tr.getCell(9).value = `TOTAL — ${key}`;
     tr.getCell(9).font = { bold: true };
+    tr.getCell(9).alignment = { horizontal: "right" };
+    tr.getCell(10).value = { formula: `SUM(J${firstRow}:J${lastRow})` } as any;
+    tr.getCell(10).numFmt = "#,##0.00;(#,##0.00)";
+    tr.getCell(10).font = { bold: true };
     row++;
     // blank separator
     row++;
@@ -167,9 +179,9 @@ function addCustomerSheet(
     row = 4;
   }
 
-  // Right-side payee block — starts at K2
-  const payeeCol = 11; // K
-  const amtCol = 12; // L
+  // Right-side payee block — starts at L2 (M is amount)
+  const payeeCol = 12; // L
+  const amtCol = 13; // M
   const header = ws.getCell(2, payeeCol);
   header.value = "Make Checks Payable to:";
   header.font = { bold: true };
@@ -273,7 +285,15 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
 
   let r = 4;
   rules.forEach((rule, i) => {
-    ws.getRow(r).values = [i + 1, rule.label, Number(counts[rule.code === "invoiced_only" ? "not_invoiced" : rule.code === "no_quotes" ? "quote" : rule.code === "no_cancelled" ? "cancelled" : rule.code === "no_samples" ? "sample" : rule.code === "no_catalogs" ? "catalog" : rule.code] ?? 0)];
+    const key =
+      rule.code === "invoiced_only" ? "not_invoiced"
+      : rule.code === "no_quotes" ? "quote"
+      : rule.code === "no_cancelled" ? "cancelled"
+      : rule.code === "no_samples" ? "sample"
+      : rule.code === "no_catalogs" ? "catalog"
+      : rule.code;
+    const val = rule.code === "quarter_basis_invoice_date" ? "n/a (basis rule)" : Number(counts[key] ?? 0);
+    ws.getRow(r).values = [i + 1, rule.label, val];
     r++;
   });
 
@@ -281,13 +301,16 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
   ws.getCell(`A${r}`).value = "Notes:";
   ws.getCell(`A${r}`).font = { bold: true };
   r++;
+  ws.getCell(`B${r}`).value = "Quarter assignment = INVOICE DATE (invoice_hdr.invoice_date). A line pays in the quarter its invoice_date falls in, regardless of when it was ordered. Partial invoicing across quarters: each quarter pays only its own in-window invoiced portion.";
+  ws.getCell(`B${r}`).alignment = { wrapText: true };
+  r++;
   ws.getCell(`B${r}`).value = "Quotes are hard-excluded at the SQL layer (oe_hdr.projected_order = 'N'), so no per-line rows exist for them.";
   ws.getCell(`B${r}`).alignment = { wrapText: true };
   r++;
-  ws.getCell(`B${r}`).value = "Sample/catalog detection is a keyword match (SAMPLE / CATALOG) on item_id + description. Edit src/lib/spiff/constants.ts to refine.";
+  ws.getCell(`B${r}`).value = "Sample/catalog detection: keyword match (SAMPLE / CATALOG) on item_id + description, standalone CAT token in item_id (e.g. 'ND 2026 CAT D'), plus a confirmed catalog SKU deny list. Edit src/lib/spiff/constants.ts to refine.";
   ws.getCell(`B${r}`).alignment = { wrapText: true };
   r++;
-  ws.getCell(`B${r}`).value = "SPIFF basis is invoiced amount (not ordered). Quarter assignment still uses oe_hdr.order_date.";
+  ws.getCell(`B${r}`).value = "SPIFF basis is invoiced amount (not ordered), summed only over invoices whose invoice_date falls inside the quarter window.";
   ws.getCell(`B${r}`).alignment = { wrapText: true };
 
   ws.views = [{ state: "frozen", ySplit: 3 }];

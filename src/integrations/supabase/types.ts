@@ -1689,11 +1689,14 @@ export type Database = {
           customer_id: string
           exclusion_reason: string | null
           extended_price: number | null
+          first_invoice_date: string | null
           flags: Json
           id: string
           included: boolean
+          invoice_date: string | null
           item_desc: string | null
           item_id: string | null
+          last_invoice_date: string | null
           order_date: string | null
           order_no: string | null
           po_no: string | null
@@ -1711,11 +1714,14 @@ export type Database = {
           customer_id: string
           exclusion_reason?: string | null
           extended_price?: number | null
+          first_invoice_date?: string | null
           flags?: Json
           id?: string
           included?: boolean
+          invoice_date?: string | null
           item_desc?: string | null
           item_id?: string | null
+          last_invoice_date?: string | null
           order_date?: string | null
           order_no?: string | null
           po_no?: string | null
@@ -1733,11 +1739,14 @@ export type Database = {
           customer_id?: string
           exclusion_reason?: string | null
           extended_price?: number | null
+          first_invoice_date?: string | null
           flags?: Json
           id?: string
           included?: boolean
+          invoice_date?: string | null
           item_desc?: string | null
           item_id?: string | null
+          last_invoice_date?: string | null
           order_date?: string | null
           order_no?: string | null
           po_no?: string | null

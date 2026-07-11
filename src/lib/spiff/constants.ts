@@ -37,8 +37,15 @@ export function isInScope(productGroupId: string | null | undefined, scope: Prod
 export const SAMPLE_KEYWORDS = ["SAMPLE"];
 export const CATALOG_KEYWORDS = ["CATALOG", "CATALOGUE"];
 
-// Item IDs the client wants unconditionally excluded (add SKUs here).
+// Item IDs the client wants unconditionally excluded as samples.
 export const EXCLUDED_ITEM_IDS: string[] = [];
+
+// Confirmed catalog SKUs from AP (Kim K., 7/10/2026). Anything added here is
+// treated as a catalog regardless of description keyword match.
+export const EXCLUDED_CATALOG_ITEM_IDS: string[] = [
+  "ND 2026 CAT D",
+  "ND 2026 DIGITAL CATALOG",
+];
 
 // Product groups treated as sample/catalog buckets regardless of description.
 export const SAMPLE_PRODUCT_GROUPS: string[] = [];
@@ -47,6 +54,17 @@ export const CATALOG_PRODUCT_GROUPS: string[] = [];
 function containsAny(hay: string, needles: string[]): boolean {
   const s = hay.toUpperCase();
   return needles.some((n) => s.includes(n.toUpperCase()));
+}
+
+// Whitespace-delimited token match. Used for standalone "CAT" in item_id
+// (e.g. "ND 2026 CAT D") without false-positives on SKUs containing CAT
+// inside a word like "CATALYST" or "SCATTER".
+function hasToken(hay: string, token: string): boolean {
+  const t = token.toUpperCase();
+  return String(hay)
+    .toUpperCase()
+    .split(/\s+/)
+    .some((tok) => tok === t);
 }
 
 export type SampleCatalogReason = "sample" | "catalog" | null;
@@ -60,11 +78,15 @@ export function classifySampleCatalog(opts: {
   const desc = String(opts.itemDesc ?? "").trim();
   const pg = String(opts.productGroupId ?? "").trim();
   const blob = `${id} ${desc}`;
-  if (EXCLUDED_ITEM_IDS.includes(id)) return "sample"; // treat manual deny list as samples
+  if (EXCLUDED_CATALOG_ITEM_IDS.includes(id)) return "catalog";
+  if (EXCLUDED_ITEM_IDS.includes(id)) return "sample";
   if (pg && SAMPLE_PRODUCT_GROUPS.includes(pg)) return "sample";
   if (pg && CATALOG_PRODUCT_GROUPS.includes(pg)) return "catalog";
   if (containsAny(blob, SAMPLE_KEYWORDS)) return "sample";
   if (containsAny(blob, CATALOG_KEYWORDS)) return "catalog";
+  // Standalone "CAT" token in item_id — confirmed catalog naming pattern
+  // (e.g. "ND 2026 CAT D"). Description-only "CAT" would be too aggressive.
+  if (id && hasToken(id, "CAT")) return "catalog";
   return null;
 }
 
@@ -73,19 +95,24 @@ export function classifySampleCatalog(opts: {
 // time (client feedback: rules must be surfaced and auditable).
 export const EXCLUSION_RULES: Array<{ code: string; label: string; where: string }> = [
   {
+    code: "quarter_basis_invoice_date",
+    label: "Quarter assignment = INVOICE DATE (a line pays in the quarter its invoice_date falls in, regardless of when it was ordered)",
+    where: "SQL: inv subquery filters on invoice_hdr.invoice_date IN [dateFrom, dateTo); partial invoicing across quarters sums only the in-window invoices",
+  },
+  {
     code: "invoiced_only",
-    label: "Invoiced orders only (uninvoiced order lines excluded)",
-    where: "SQL: INNER-equivalent join to invoice_line; JS marks invoiced_qty=0 as not_invoiced",
+    label: "Invoiced amount only (uninvoiced lines retained as included=false / not_invoiced for audit)",
+    where: "SQL: invoice_line join windowed on invoice_date; JS marks invoiced_qty=0 as not_invoiced",
   },
   {
     code: "no_quotes",
-    label: "Quotes excluded",
-    where: "SQL: oe_hdr.projected_order = 'N' (also implicit — quotes never invoice)",
+    label: "Quotes excluded (P21 Quote checkbox — oe_hdr.projected_order='Y')",
+    where: "SQL: oe_hdr.projected_order = 'N' (client-corroborated: header-level flag on Order Entry screen)",
   },
   {
     code: "no_cancelled",
-    label: "Cancelled orders excluded (header cancel flag or validation_status CANCEL)",
-    where: "JS: exclusion_reason='cancelled' (header-level)",
+    label: "Cancelled orders excluded (P21 Cancelled checkbox — header cancel flag or validation_status CANCEL)",
+    where: "JS: exclusion_reason='cancelled' (header-level; client-corroborated)",
   },
   {
     code: "no_samples",
@@ -94,26 +121,36 @@ export const EXCLUSION_RULES: Array<{ code: string; label: string; where: string
   },
   {
     code: "no_catalogs",
-    label: `Catalogs excluded (item_id/desc contains ${CATALOG_KEYWORDS.join("/")})`,
+    label: `Catalogs excluded (item_id/desc contains ${CATALOG_KEYWORDS.join("/")}; standalone CAT token in item_id; confirmed SKU deny list)`,
     where: "JS: exclusion_reason='catalog'",
   },
 ];
 
 // Canonical line-detail query — accounting's SSMS query, extended with:
-//   * invoice_line join → invoiced_qty / invoiced_amount (Kim K. rule #1: invoiced-only)
-//   * projected_order filter → hard-drop quotes (Kim K. rule #2)
-//   * oe_hdr.cancel_flag surfaced so JS can mark cancels excluded (Kim K. #3)
-// Samples/catalogs (#4/#5) are handled in JS via classifySampleCatalog so
-// tweaking the keyword/deny list doesn't require a bridge SQL change.
+//   * invoice_line join → invoiced_qty / invoiced_amount summed ONLY over
+//     invoices whose invoice_date falls inside the run's quarter window
+//     (Kim K. 7/10/2026: quarter basis is invoice date, not order date).
+//   * projected_order filter → hard-drop quotes (Kim K. rule #2, client-
+//     corroborated by Quote checkbox on Order Entry).
+//   * oe_hdr.cancel_flag surfaced so JS can mark cancels excluded (Kim K. #3,
+//     client-corroborated by Cancelled checkbox on Order Entry).
+// Samples/catalogs (#4/#5) handled in JS via classifySampleCatalog so tweaks
+// don't need a bridge SQL redeploy.
+//
+// Row selection: a line is fetched if EITHER
+//   (a) it has invoice activity inside the window (payable population), OR
+//   (b) it was ordered inside the window but not yet invoiced (retained as
+//       included=false / not_invoiced so AP can see what is pending).
+// This is the auditable superset — no other quarter's paid lines leak in.
 //
 // P21 SCHEMA ASSUMPTIONS (verify against client's DB):
 //   * dbo.oe_hdr.projected_order CHAR/NCHAR with 'N'=order, 'Y'=quote
 //   * dbo.oe_hdr.cancel_flag     CHAR/NCHAR with 'N'/'Y'
-//   * dbo.invoice_line columns: order_no, order_line_no, qty_shipped, extended_price
+//   * dbo.invoice_hdr.invoice_date DATE/DATETIME (already used elsewhere in
+//     sales-annualized-template.ts — treated as confirmed)
 //   * dbo.invoice_hdr.cancel_flag CHAR/NCHAR with 'N'/'Y' (cancelled invoices ignored)
+//   * dbo.invoice_line columns: order_no, order_line_no, qty_shipped, extended_price, invoice_no
 //   * dbo.oe_line.line_no exists and matches invoice_line.order_line_no
-// Quarter assignment stays keyed to oe_hdr.order_date (existing behavior);
-// invoice-date basis is an open question flagged to the client.
 export const SPIFF_LINES_SQL = `
 SELECT
   b.order_date, b.customer_id, a.order_no, a.line_no, b.po_no, a.inv_mast_uid,
@@ -125,7 +162,9 @@ SELECT
   ISNULL(b.projected_order, 'N') AS projected_order,
   e.inv_mast_uid AS kit,
   ISNULL(inv.invoiced_qty, 0) AS invoiced_qty,
-  ISNULL(inv.invoiced_amount, 0) AS invoiced_amount
+  ISNULL(inv.invoiced_amount, 0) AS invoiced_amount,
+  inv.first_invoice_date,
+  inv.last_invoice_date
 FROM dbo.oe_line a
 JOIN dbo.oe_hdr b ON a.order_no = b.order_no
 JOIN dbo.inv_mast d ON a.inv_mast_uid = d.inv_mast_uid
@@ -138,20 +177,26 @@ LEFT JOIN dbo.assembly_hdr e ON a.inv_mast_uid = e.inv_mast_uid
 LEFT JOIN (
   SELECT il.order_no, il.order_line_no,
          SUM(il.qty_shipped) AS invoiced_qty,
-         SUM(il.extended_price) AS invoiced_amount
+         SUM(il.extended_price) AS invoiced_amount,
+         MIN(ih.invoice_date) AS first_invoice_date,
+         MAX(ih.invoice_date) AS last_invoice_date
   FROM dbo.invoice_line il
   JOIN dbo.invoice_hdr ih ON il.invoice_no = ih.invoice_no
   WHERE ISNULL(ih.cancel_flag, 'N') = 'N'
+    AND ih.invoice_date >= @dateFrom
+    AND ih.invoice_date < @dateTo
   GROUP BY il.order_no, il.order_line_no
 ) inv ON inv.order_no = a.order_no AND inv.order_line_no = a.line_no
-WHERE b.order_date >= @dateFrom
-  AND b.order_date < @dateTo
-  AND b.customer_id = @customerId
+WHERE b.customer_id = @customerId
   AND a.delete_flag = 'N'
   AND a.disposition IS NULL
   AND e.inv_mast_uid IS NULL
   AND ISNULL(b.projected_order, 'N') = 'N'
-ORDER BY b.order_date
+  AND (
+    inv.invoiced_qty IS NOT NULL
+    OR (b.order_date >= @dateFrom AND b.order_date < @dateTo)
+  )
+ORDER BY COALESCE(inv.last_invoice_date, b.order_date)
 `.trim();
 
 export const SPIFF_LINES_ALL_SQL = `
@@ -165,7 +210,9 @@ SELECT
   ISNULL(b.projected_order, 'N') AS projected_order,
   e.inv_mast_uid AS kit,
   ISNULL(inv.invoiced_qty, 0) AS invoiced_qty,
-  ISNULL(inv.invoiced_amount, 0) AS invoiced_amount
+  ISNULL(inv.invoiced_amount, 0) AS invoiced_amount,
+  inv.first_invoice_date,
+  inv.last_invoice_date
 FROM dbo.oe_line a
 JOIN dbo.oe_hdr b ON a.order_no = b.order_no
 JOIN dbo.inv_mast d ON a.inv_mast_uid = d.inv_mast_uid
@@ -178,20 +225,26 @@ LEFT JOIN dbo.assembly_hdr e ON a.inv_mast_uid = e.inv_mast_uid
 LEFT JOIN (
   SELECT il.order_no, il.order_line_no,
          SUM(il.qty_shipped) AS invoiced_qty,
-         SUM(il.extended_price) AS invoiced_amount
+         SUM(il.extended_price) AS invoiced_amount,
+         MIN(ih.invoice_date) AS first_invoice_date,
+         MAX(ih.invoice_date) AS last_invoice_date
   FROM dbo.invoice_line il
   JOIN dbo.invoice_hdr ih ON il.invoice_no = ih.invoice_no
   WHERE ISNULL(ih.cancel_flag, 'N') = 'N'
+    AND ih.invoice_date >= @dateFrom
+    AND ih.invoice_date < @dateTo
   GROUP BY il.order_no, il.order_line_no
 ) inv ON inv.order_no = a.order_no AND inv.order_line_no = a.line_no
-WHERE b.order_date >= @dateFrom
-  AND b.order_date < @dateTo
-  AND b.customer_id IN ({customer_ids})
+WHERE b.customer_id IN ({customer_ids})
   AND a.delete_flag = 'N'
   AND a.disposition IS NULL
   AND e.inv_mast_uid IS NULL
   AND ISNULL(b.projected_order, 'N') = 'N'
-ORDER BY b.customer_id, b.order_date
+  AND (
+    inv.invoiced_qty IS NOT NULL
+    OR (b.order_date >= @dateFrom AND b.order_date < @dateTo)
+  )
+ORDER BY b.customer_id, COALESCE(inv.last_invoice_date, b.order_date)
 `.trim();
 
 // AR aging gate query. If schema guess fails at runtime, we surface
