@@ -37,8 +37,15 @@ export function isInScope(productGroupId: string | null | undefined, scope: Prod
 export const SAMPLE_KEYWORDS = ["SAMPLE"];
 export const CATALOG_KEYWORDS = ["CATALOG", "CATALOGUE"];
 
-// Item IDs the client wants unconditionally excluded (add SKUs here).
+// Item IDs the client wants unconditionally excluded as samples.
 export const EXCLUDED_ITEM_IDS: string[] = [];
+
+// Confirmed catalog SKUs from AP (Kim K., 7/10/2026). Anything added here is
+// treated as a catalog regardless of description keyword match.
+export const EXCLUDED_CATALOG_ITEM_IDS: string[] = [
+  "ND 2026 CAT D",
+  "ND 2026 DIGITAL CATALOG",
+];
 
 // Product groups treated as sample/catalog buckets regardless of description.
 export const SAMPLE_PRODUCT_GROUPS: string[] = [];
@@ -47,6 +54,17 @@ export const CATALOG_PRODUCT_GROUPS: string[] = [];
 function containsAny(hay: string, needles: string[]): boolean {
   const s = hay.toUpperCase();
   return needles.some((n) => s.includes(n.toUpperCase()));
+}
+
+// Whitespace-delimited token match. Used for standalone "CAT" in item_id
+// (e.g. "ND 2026 CAT D") without false-positives on SKUs containing CAT
+// inside a word like "CATALYST" or "SCATTER".
+function hasToken(hay: string, token: string): boolean {
+  const t = token.toUpperCase();
+  return String(hay)
+    .toUpperCase()
+    .split(/\s+/)
+    .some((tok) => tok === t);
 }
 
 export type SampleCatalogReason = "sample" | "catalog" | null;
@@ -60,11 +78,15 @@ export function classifySampleCatalog(opts: {
   const desc = String(opts.itemDesc ?? "").trim();
   const pg = String(opts.productGroupId ?? "").trim();
   const blob = `${id} ${desc}`;
-  if (EXCLUDED_ITEM_IDS.includes(id)) return "sample"; // treat manual deny list as samples
+  if (EXCLUDED_CATALOG_ITEM_IDS.includes(id)) return "catalog";
+  if (EXCLUDED_ITEM_IDS.includes(id)) return "sample";
   if (pg && SAMPLE_PRODUCT_GROUPS.includes(pg)) return "sample";
   if (pg && CATALOG_PRODUCT_GROUPS.includes(pg)) return "catalog";
   if (containsAny(blob, SAMPLE_KEYWORDS)) return "sample";
   if (containsAny(blob, CATALOG_KEYWORDS)) return "catalog";
+  // Standalone "CAT" token in item_id — confirmed catalog naming pattern
+  // (e.g. "ND 2026 CAT D"). Description-only "CAT" would be too aggressive.
+  if (id && hasToken(id, "CAT")) return "catalog";
   return null;
 }
 
