@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
@@ -34,6 +35,8 @@ import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppAskRouteImport } from './routes/_app.ask'
 import { Route as AppArRouteImport } from './routes/_app.ar'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as AppReportsIndexRouteImport } from './routes/_app.reports.index'
 import { Route as ApiPublicSyncPricerRouteImport } from './routes/api/public/sync-pricer'
 import { Route as ApiPublicSyncE2gRouteImport } from './routes/api/public/sync-e2g'
@@ -41,10 +44,16 @@ import { Route as ApiPublicRunSqlSchedulesRouteImport } from './routes/api/publi
 import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-bridge'
 import { Route as ApiPublicInboundEmailRouteImport } from './routes/api/public/inbound-email'
 import { Route as AppReportsE2gRouteImport } from './routes/_app.reports.e2g'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -166,6 +175,18 @@ const AppArRoute = AppArRouteImport.update({
   path: '/ar',
   getParentRoute: () => AppRoute,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AppReportsIndexRoute = AppReportsIndexRouteImport.update({
   id: '/reports/',
   path: '/reports/',
@@ -202,11 +223,20 @@ const AppReportsE2gRoute = AppReportsE2gRouteImport.update({
   path: '/reports/e2g',
   getParentRoute: () => AppRoute,
 } as any)
+const Char91DotmcpChar93InvokeToolToolRoute =
+  Char91DotmcpChar93InvokeToolToolRouteImport.update({
+    id: '/.mcp/invoke-tool/$tool',
+    path: '/.mcp/invoke-tool/$tool',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/auth': typeof AuthRoute
+  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/ar': typeof AppArRoute
   '/ask': typeof AppAskRoute
   '/audit': typeof AppAuditRoute
@@ -228,6 +258,7 @@ export interface FileRoutesByFullPath {
   '/sql-schedules': typeof AppSqlSchedulesRoute
   '/truck-capacity': typeof AppTruckCapacityRoute
   '/webhooks': typeof AppWebhooksRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
@@ -238,7 +269,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/ar': typeof AppArRoute
   '/ask': typeof AppAskRoute
   '/audit': typeof AppAuditRoute
@@ -261,6 +295,7 @@ export interface FileRoutesByTo {
   '/truck-capacity': typeof AppTruckCapacityRoute
   '/webhooks': typeof AppWebhooksRoute
   '/': typeof AppIndexRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
@@ -273,7 +308,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/mcp': typeof McpRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_app/ar': typeof AppArRoute
   '/_app/ask': typeof AppAskRoute
   '/_app/audit': typeof AppAuditRoute
@@ -296,6 +334,7 @@ export interface FileRoutesById {
   '/_app/truck-capacity': typeof AppTruckCapacityRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/_app/': typeof AppIndexRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_app/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
@@ -309,7 +348,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/mcp'
     | '/reset-password'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/ar'
     | '/ask'
     | '/audit'
@@ -331,6 +373,7 @@ export interface FileRouteTypes {
     | '/sql-schedules'
     | '/truck-capacity'
     | '/webhooks'
+    | '/.mcp/invoke-tool/$tool'
     | '/reports/e2g'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
@@ -341,7 +384,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
+    | '/mcp'
     | '/reset-password'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/ar'
     | '/ask'
     | '/audit'
@@ -364,6 +410,7 @@ export interface FileRouteTypes {
     | '/truck-capacity'
     | '/webhooks'
     | '/'
+    | '/.mcp/invoke-tool/$tool'
     | '/reports/e2g'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
@@ -375,7 +422,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/auth'
+    | '/mcp'
     | '/reset-password'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/_app/ar'
     | '/_app/ask'
     | '/_app/audit'
@@ -398,6 +448,7 @@ export interface FileRouteTypes {
     | '/_app/truck-capacity'
     | '/_app/webhooks'
     | '/_app/'
+    | '/.mcp/invoke-tool/$tool'
     | '/_app/reports/e2g'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
@@ -410,7 +461,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  McpRoute: typeof McpRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiPublicInboundEmailRoute: typeof ApiPublicInboundEmailRoute
   ApiPublicP21BridgeRoute: typeof ApiPublicP21BridgeRoute
   ApiPublicRunSqlSchedulesRoute: typeof ApiPublicRunSqlSchedulesRoute
@@ -425,6 +480,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -595,6 +657,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArRouteImport
       parentRoute: typeof AppRoute
     }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/list-tools': {
+      id: '/.mcp/list-tools'
+      path: '/.mcp/list-tools'
+      fullPath: '/.mcp/list-tools'
+      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/reports/': {
       id: '/_app/reports/'
       path: '/reports'
@@ -643,6 +719,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/reports/e2g'
       preLoaderRoute: typeof AppReportsE2gRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -706,7 +789,12 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  McpRoute: McpRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiPublicInboundEmailRoute: ApiPublicInboundEmailRoute,
   ApiPublicP21BridgeRoute: ApiPublicP21BridgeRoute,
   ApiPublicRunSqlSchedulesRoute: ApiPublicRunSqlSchedulesRoute,

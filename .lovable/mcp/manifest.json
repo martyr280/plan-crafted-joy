@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "sdk_version": "0.22.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://qvkiheecfatnfjnfwcau.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "nelson-ai-mcp",
+      "version": "0.1.0",
+      "title": "Nelson AI"
+    },
+    "tools": [
+      {
+        "name": "whoami",
+        "title": "Who am I",
+        "description": "Return the currently authenticated Nelson AI user (id, email, display name, roles). Use to verify the MCP session is connected as the expected user before calling other tools.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_recent_activity",
+        "title": "List recent activity",
+        "description": "List recent Nelson AI activity events (orders, imports, jobs, background events). Read-only. Results are filtered by row-level security to what the caller can see in the web app.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "description": "Max number of events to return (1-100)."
+            },
+            "event_type": {
+              "type": "string",
+              "description": "Optional exact match on event_type (e.g. 'order.created')."
+            },
+            "entity_type": {
+              "type": "string",
+              "description": "Optional exact match on entity_type (e.g. 'order', 'spiff_run')."
+            },
+            "since_hours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 720,
+              "description": "Only include events created within the last N hours."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_ar_aging",
+        "title": "List AR aging",
+        "description": "List NDI accounts-receivable aging rows for the signed-in user's tenant scope. Read-only. Supports filtering by aging bucket, minimum amount past due, and customer name substring. Results respect row-level security.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "description": "Max rows (1-200)."
+            },
+            "bucket": {
+              "type": "string",
+              "description": "Optional aging bucket (e.g. '0-30', '31-60', '61-90', '90+')."
+            },
+            "min_amount_due": {
+              "type": "number",
+              "description": "Only include invoices with amount_due >= this value."
+            },
+            "customer_contains": {
+              "type": "string",
+              "description": "Case-insensitive substring match on customer_name."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
