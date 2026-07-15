@@ -727,12 +727,28 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     if (s) { setBasis(s.capacity_basis as "pallets"|"weight"|"cube"); setVendorCounts(s.vendor_pickup_counts); setSql(s.p21_sql ?? defaultSql); }
   }, [s, defaultSql]);
 
-  const [pallets, setPallets] = useState<Record<string, string>>({});
+  type RouteEdit = {
+    pallets_full_truck: string;
+    cube_full_truck_ft3: string;
+    weight_full_truck_lbs: string;
+    p21_route_code: string;
+    cutoff_time: string;
+  };
+  const [routeEdits, setRouteEdits] = useState<Record<string, RouteEdit>>({});
   useEffect(() => {
-    const m: Record<string, string> = {};
-    for (const r of routes) m[r.id] = r.pallets_full_truck?.toString() ?? "";
-    setPallets(m);
+    const m: Record<string, RouteEdit> = {};
+    for (const r of routes) m[r.id] = {
+      pallets_full_truck: r.pallets_full_truck?.toString() ?? "",
+      cube_full_truck_ft3: r.cube_full_truck_ft3?.toString() ?? "",
+      weight_full_truck_lbs: r.weight_full_truck_lbs?.toString() ?? "",
+      p21_route_code: r.p21_route_code ?? "",
+      cutoff_time: r.cutoff_time ?? "",
+    };
+    setRouteEdits(m);
   }, [routes]);
+  function patchRoute(id: string, patch: Partial<RouteEdit>) {
+    setRouteEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
 
   const [testResult, setTestResult] = useState<any>(null);
   const [snapResult, setSnapResult] = useState<any>(null);
@@ -742,7 +758,19 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     setBusy("save");
     try {
       await updateFn({ data: { capacity_basis: basis, vendor_pickup_counts: vendorCounts, p21_sql: sql } });
-      const updates = routes.map((r) => ({ id: r.id, pallets_full_truck: pallets[r.id] === "" ? null : Number(pallets[r.id]) }));
+      const numOrNull = (v: string) => v === "" ? null : Number(v);
+      const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
+      const updates = routes.map((r) => {
+        const e = routeEdits[r.id];
+        return {
+          id: r.id,
+          pallets_full_truck: e ? numOrNull(e.pallets_full_truck) : null,
+          cube_full_truck_ft3: e ? numOrNull(e.cube_full_truck_ft3) : null,
+          weight_full_truck_lbs: e ? numOrNull(e.weight_full_truck_lbs) : null,
+          p21_route_code: e ? strOrNull(e.p21_route_code) : null,
+          cutoff_time: e ? strOrNull(e.cutoff_time) : null,
+        };
+      });
       await palletsFn({ data: { updates } });
       toast.success("Settings saved");
       qc.invalidateQueries({ queryKey: ["tc-settings"] });
