@@ -612,7 +612,7 @@ function SpiffPage() {
                   </Card>
                 )}
 
-                <Card className="p-0 overflow-auto max-h-[60vh]">
+                <Card className="p-0 overflow-y-auto overflow-x-hidden max-h-[60vh]">
                   <ReviewTable
                     lines={customerLines}
                     repsSeen={repsSeen}
@@ -699,7 +699,21 @@ function ReviewTable({
   }
 
   return (
-    <Table>
+    <Table className="table-fixed w-full [&_th]:px-2 [&_td]:px-2">
+      <colgroup>
+        <col className="w-[76px]" />
+        <col className="w-[76px]" />
+        <col className="w-[80px]" />
+        <col className="w-[110px]" />
+        <col className="w-[90px]" />
+        <col />
+        <col className="w-[48px]" />
+        <col className="w-[70px]" />
+        <col className="w-[80px]" />
+        <col className="w-[80px]" />
+        <col className="w-[130px]" />
+        <col className="w-[64px]" />
+      </colgroup>
       <TableHeader>
         <TableRow>
           <TableHead>Order Date</TableHead>
@@ -783,18 +797,18 @@ function ReviewGroup({
               </Badge>
             )}
           </TableCell>
-          <TableCell className="text-xs max-w-[200px] truncate" title={l.po_no ?? ""}>
+          <TableCell className="text-xs truncate" title={l.po_no ?? ""}>
             {l.po_no}
           </TableCell>
-          <TableCell className="text-xs">{l.item_id}</TableCell>
-          <TableCell className="text-xs max-w-[260px] truncate" title={l.item_desc ?? ""}>
+          <TableCell className="text-xs truncate" title={l.item_id ?? ""}>{l.item_id}</TableCell>
+          <TableCell className="text-xs truncate" title={l.item_desc ?? ""}>
             {l.item_desc}
           </TableCell>
           <TableCell className="text-right text-xs">{Number(l.qty_ordered ?? 0)}</TableCell>
           <TableCell className="text-right text-xs">{money(l.unit_price)}</TableCell>
           <TableCell className="text-right text-xs font-mono">{money(l.extended_price)}</TableCell>
           <TableCell className="text-right text-xs font-mono">{money(l.spiff_amount)}</TableCell>
-          <TableCell>
+          <TableCell className="px-1">
             <RepCombo
               value={l.writing_rep ?? ""}
               options={repsSeen}
