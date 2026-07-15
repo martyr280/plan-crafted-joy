@@ -15,6 +15,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail } from "lucide-react";
 import { toast } from "sonner";
@@ -283,6 +289,32 @@ function SpiffPage() {
       writing_rep: v || null,
       rep_parse_confidence: "manual",
     });
+  }
+
+  // Bulk-assign a writing rep to many lines (used from the Checks page "fix"
+  // dialog for the (Unassigned) payee row). One round-trip + one rebuild.
+  async function assignRepToLines(lineIds: string[], newRep: string) {
+    if (isLocked || !currentRunId || lineIds.length === 0) return;
+    const v = newRep.trim();
+    if (!v) {
+      toast.error("Enter a writing rep name");
+      return;
+    }
+    const { error } = await supabase
+      .from("spiff_run_lines")
+      .update({ writing_rep: v, rep_parse_confidence: "manual" })
+      .in("id", lineIds);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setLines((ls) =>
+      ls.map((l) =>
+        lineIds.includes(l.id) ? { ...l, writing_rep: v, rep_parse_confidence: "manual" } : l,
+      ),
+    );
+    toast.success(`Assigned "${v}" to ${lineIds.length} line${lineIds.length === 1 ? "" : "s"}`);
+    scheduleRebuild();
   }
 
   async function toggleIncluded(line: Line, reason?: string) {
@@ -593,14 +625,25 @@ function SpiffPage() {
             <ChecksTab
               programs={programs}
               checks={checks}
+              lines={lines}
               isLocked={isLocked}
               onApprove={approveCheck}
               onMarkRunApproved={markRunApproved}
+              onAssignRep={assignRepToLines}
             />
           </TabsContent>
 
           <TabsContent value="programs" className="space-y-4">
-            <ProgramsEditor programs={programs} onChanged={loadProgramsAndRuns} />
+            <ProgramsEditor
+              programs={programs}
+              onChanged={async () => {
+                await loadProgramsAndRuns();
+                // Program edits (rate/payee_name/payout_mode) change how checks
+                // aggregate — rebuild so the Checks tab reflects the new values
+                // without the user hunting for the manual button.
+                scheduleRebuild();
+              }}
+            />
             <ContactsEditor />
             <AutomationCard />
           </TabsContent>
@@ -833,15 +876,19 @@ function RepCombo({
 function ChecksTab({
   programs,
   checks,
+  lines,
   isLocked,
   onApprove,
   onMarkRunApproved,
+  onAssignRep,
 }: {
   programs: Program[];
   checks: Check[];
+  lines: Line[];
   isLocked: boolean;
   onApprove: (id: string) => void;
   onMarkRunApproved: () => void;
+  onAssignRep: (lineIds: string[], newRep: string) => Promise<void>;
 }) {
   const progById = new Map(programs.map((p) => [p.id, p]));
   const byOrg = new Map<string, Check[]>();
@@ -855,6 +902,45 @@ function ChecksTab({
   const orgs = Array.from(byOrg.entries()).sort();
   const allApproved = checks.length > 0 && checks.every((c) => c.status === "approved");
   const hasUnassigned = checks.some((c) => c.payee === "(Unassigned)");
+
+  const [selected, setSelected] = useState<Check | null>(null);
+  const [repDraft, setRepDraft] = useState("");
+  const [assigning, setAssigning] = useState(false);
+
+  const selectedProgram = selected ? progById.get(selected.program_id) : null;
+  // Lines behind the selected check: same program, included, and matching
+  // payee (writing_rep in per_writing_rep mode, or all program lines in
+  // single_check mode).
+  const selectedLines = useMemo(() => {
+    if (!selected || !selectedProgram) return [] as Line[];
+    return lines.filter((l) => {
+      if (l.program_id !== selected.program_id) return false;
+      if (!l.included) return false;
+      if (selectedProgram.payout_mode === "single_check") return true;
+      const rep = l.writing_rep ?? "(Unassigned)";
+      return rep === selected.payee;
+    });
+  }, [selected, selectedProgram, lines]);
+  const selectedTotal = selectedLines.reduce((s, l) => s + Number(l.spiff_amount || 0), 0);
+  const isFixable = selected?.payee === "(Unassigned)";
+
+  function openCheck(c: Check) {
+    setSelected(c);
+    setRepDraft("");
+  }
+  async function submitFix() {
+    if (!selected || !isFixable) return;
+    setAssigning(true);
+    try {
+      await onAssignRep(
+        selectedLines.map((l) => l.id),
+        repDraft,
+      );
+      setSelected(null);
+    } finally {
+      setAssigning(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -886,7 +972,8 @@ function ChecksTab({
                 return (
                   <TableRow
                     key={c.id}
-                    className={c.below_minimum ? "text-muted-foreground" : ""}
+                    className={`cursor-pointer hover:bg-muted/50 ${c.below_minimum ? "text-muted-foreground" : ""}`}
+                    onClick={() => openCheck(c)}
                   >
                     <TableCell className="text-xs">{p?.customer_name}</TableCell>
                     <TableCell>
@@ -909,7 +996,7 @@ function ChecksTab({
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       {c.status !== "approved" && (
                         <Button
                           size="sm"
@@ -927,6 +1014,104 @@ function ChecksTab({
           </Table>
         </Card>
       ))}
+
+      <Dialog open={selected != null} onOpenChange={(o) => !o && setSelected(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selected?.payee} — {selectedProgram?.customer_name}
+            </DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <div className="space-y-3">
+              <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                <span>Program rate: {(Number(selectedProgram?.rate ?? 0) * 100).toFixed(2)}%</span>
+                <span>Payout: {selectedProgram?.payout_mode}</span>
+                <span>Min check: {money(Number(selectedProgram?.min_check_amount ?? 0))}</span>
+                <span>Stored total: {money(Number(selected.amount))}</span>
+                <span>Computed from lines: {money(selectedTotal)}</span>
+                {selected.below_minimum && (
+                  <span className="text-amber-600">Under minimum — no check will cut</span>
+                )}
+              </div>
+
+              {isFixable && (
+                <Card className="p-3 bg-amber-50 dark:bg-amber-950/30 border-amber-300">
+                  <div className="text-sm font-semibold mb-1">Fix unassigned payee</div>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    These lines have no writing rep parsed from the PO. Enter the rep name to
+                    assign to all {selectedLines.length} line{selectedLines.length === 1 ? "" : "s"};
+                    checks rebuild automatically.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Writing rep (e.g. Joe Perry)"
+                      value={repDraft}
+                      onChange={(e) => setRepDraft(e.target.value)}
+                      disabled={isLocked || assigning}
+                      className="max-w-[280px]"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={submitFix}
+                      disabled={isLocked || assigning || !repDraft.trim()}
+                    >
+                      {assigning ? "Assigning…" : `Assign to ${selectedLines.length}`}
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
+              <Card className="p-0 overflow-auto max-h-[55vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice date</TableHead>
+                      <TableHead>Order #</TableHead>
+                      <TableHead>PO</TableHead>
+                      <TableHead>Item</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Extended</TableHead>
+                      <TableHead className="text-right">Spiff</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedLines.map((l) => (
+                      <TableRow key={l.id}>
+                        <TableCell className="text-xs">
+                          {l.last_invoice_date ?? l.invoice_date ?? l.order_date ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono">{l.order_no}</TableCell>
+                        <TableCell className="text-xs">{l.po_no}</TableCell>
+                        <TableCell className="text-xs">
+                          <div className="font-mono">{l.item_id}</div>
+                          <div className="text-muted-foreground truncate max-w-[280px]">
+                            {l.item_desc}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-xs">{l.qty_ordered}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {money(Number(l.extended_price))}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {money(Number(l.spiff_amount))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {selectedLines.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-6">
+                          No included lines behind this check.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
