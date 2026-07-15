@@ -637,6 +637,7 @@ function SpiffPage() {
               lines={lines}
               isLocked={isLocked}
               onApprove={approveCheck}
+              onUnapprove={unapproveCheck}
               onMarkRunApproved={markRunApproved}
               onAssignRep={assignRepToLines}
             />
