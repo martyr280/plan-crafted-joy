@@ -6,15 +6,91 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
 import {
-  SPIFF_LINES_SQL,
-  SPIFF_LINES_ALL_SQL,
+  buildSpiffLinesSql,
+  buildSpiffLinesAllSql,
   SPIFF_AGING_SQL,
   EXCLUSION_RULES,
+  INVOICE_LINE_LINKAGE_CANDIDATES,
+  OE_LINE_LINKAGE_CANDIDATES,
+  INVOICED_QTY_CANDIDATES,
+  EXTENDED_PRICE_CANDIDATES,
   classifySampleCatalog,
   isInScope,
   type ProductScope,
+  type SchemaMapping,
 } from "./spiff/constants";
 import { parseWritingRep } from "./spiff/parser";
+
+const SCHEMA_TIMEOUT_MS = 30_000;
+
+// Runtime schema discovery. One extra bridge call per run — cheap relative
+// to the lines query — that reads INFORMATION_SCHEMA.COLUMNS for the two
+// tables we care about, resolves each moving column by candidate priority,
+// and returns a SchemaMapping we substitute into the lines-SQL template.
+// If no linkage candidate exists on invoice_line, we fall back to
+// order-level aggregation and mark linkage_mode='order_level'.
+export async function discoverSpiffSchema(): Promise<SchemaMapping> {
+  const sql = `
+    SELECT LOWER(TABLE_NAME) AS table_name, LOWER(COLUMN_NAME) AS column_name
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = 'dbo'
+      AND TABLE_NAME IN ('invoice_line', 'oe_line')
+  `.trim();
+  const { result } = await runJob("sql.select", { sql, slug: "spiff-schema" }, SCHEMA_TIMEOUT_MS);
+  const rows = (((result as any)?.rows ?? []) as Array<{ table_name: string; column_name: string }>);
+  const invCols = new Set<string>();
+  const oeCols = new Set<string>();
+  for (const r of rows) {
+    const t = String(r.table_name ?? "").toLowerCase();
+    const c = String(r.column_name ?? "").toLowerCase();
+    if (t === "invoice_line") invCols.add(c);
+    else if (t === "oe_line") oeCols.add(c);
+  }
+
+  if (invCols.size === 0) {
+    throw new Error("Schema discovery returned no columns for dbo.invoice_line");
+  }
+  if (oeCols.size === 0) {
+    throw new Error("Schema discovery returned no columns for dbo.oe_line");
+  }
+  if (!invCols.has("order_no")) {
+    throw new Error(
+      `dbo.invoice_line has no 'order_no' column — cannot join to oe_line. Columns found: [${Array.from(invCols).sort().join(", ")}]`,
+    );
+  }
+
+  const extPrice = EXTENDED_PRICE_CANDIDATES.find((c) => invCols.has(c));
+  if (!extPrice) {
+    throw new Error(
+      `dbo.invoice_line has no extended-price column. Tried: [${EXTENDED_PRICE_CANDIDATES.join(", ")}]. Columns found: [${Array.from(invCols).sort().join(", ")}]`,
+    );
+  }
+  const invoicedQty = INVOICED_QTY_CANDIDATES.find((c) => invCols.has(c));
+  if (!invoicedQty) {
+    throw new Error(
+      `dbo.invoice_line has no invoiced-quantity column. Tried: [${INVOICED_QTY_CANDIDATES.join(", ")}]. Columns found: [${Array.from(invCols).sort().join(", ")}]`,
+    );
+  }
+  const oeLinkage = OE_LINE_LINKAGE_CANDIDATES.find((c) => oeCols.has(c));
+  if (!oeLinkage) {
+    throw new Error(
+      `dbo.oe_line has no line-number column. Tried: [${OE_LINE_LINKAGE_CANDIDATES.join(", ")}]. Columns found: [${Array.from(oeCols).sort().join(", ")}]`,
+    );
+  }
+
+  const invLinkage = INVOICE_LINE_LINKAGE_CANDIDATES.find((c) => invCols.has(c)) ?? null;
+  const linkage_mode: SchemaMapping["linkage_mode"] = invLinkage ? "line_level" : "order_level";
+
+  return {
+    invoice_line_columns: Array.from(invCols).sort(),
+    oe_line_columns: Array.from(oeCols).sort(),
+    invoice_line_linkage: invLinkage,
+    oe_line_linkage: oeLinkage,
+    invoiced_qty: invoicedQty,
+    extended_price: extPrice,
+    linkage_mode,
+  };
+}
 
 const LINES_TIMEOUT_MS = 180_000;
 const AGING_TIMEOUT_MS = 60_000;
