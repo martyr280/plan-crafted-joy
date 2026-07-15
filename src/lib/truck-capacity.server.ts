@@ -85,6 +85,8 @@ export type Route = {
   active: boolean; has_vendor_pickup: boolean; truck_type: string | null;
   pallets_full_truck: number | null; typical_dow: number[] | null;
   ship_to_zip_prefixes: string[] | null;
+  p21_route_code: string | null; cutoff_time: string | null;
+  cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
 };
 
 export type Run = {
