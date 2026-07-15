@@ -12,32 +12,39 @@ export { trainAndMaybePromote } from "./truck-capacity/train";
 export type { TrainSummary } from "./truck-capacity/train";
 
 
-export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot (STUB — admin must fill in).
+export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 -- Required output columns (exact names):
---   route_code        text     -- must match public.truck_capacity_routes.code
+--   route_code        text     -- matched against truck_capacity_routes.p21_route_code, then .code
 --   ship_date         date     -- shipment / delivery date
 --   order_count       int
 --   total_weight_lbs  numeric
 --   total_cube_ft     numeric
---   est_pallets       numeric  -- server will compute projected_capacity_frac = min(1.5, est_pallets / pallets_full_truck)
+--   est_pallets       numeric  -- may be NULL; capacity ratio falls back to weight/cube when so
 --
--- Suggested (unverified) skeleton against P21 dbo:
---   SELECT ship_route AS route_code, CAST(promise_date AS DATE) AS ship_date,
---          COUNT(DISTINCT h.order_no) AS order_count,
---          SUM(l.extended_weight) AS total_weight_lbs,
---          SUM(l.extended_cube)   AS total_cube_ft,
---          SUM(l.extended_pallets) AS est_pallets
---   FROM dbo.oe_hdr h JOIN dbo.oe_line l ON l.order_no = h.order_no
---   WHERE h.completed = 'N' AND h.cancel_flag = 'N'
---     AND h.promise_date BETWEEN GETDATE() AND DATEADD(day, 28, GETDATE())
---   GROUP BY ship_route, CAST(promise_date AS DATE);
-SELECT CAST(NULL AS varchar(32)) AS route_code,
-       CAST(NULL AS date)        AS ship_date,
-       CAST(NULL AS int)         AS order_count,
-       CAST(NULL AS decimal(18,2)) AS total_weight_lbs,
-       CAST(NULL AS decimal(18,2)) AS total_cube_ft,
-       CAST(NULL AS decimal(18,2)) AS est_pallets
-WHERE 1 = 0;`;
+-- UNVERIFIED column names — tune in Settings. The exact P21 field names for the
+-- order-header route code (Joe confirmed the field exists on Order Entry → Ship
+-- Info → "Route"), the ship/promise/requested date, and weight/cube on inv_mast
+-- still need to be confirmed against the client's DB. Use the Test button to
+-- iterate on this SQL until the sample rows look right, then Run snapshot.
+SELECT h.route              AS route_code,
+       CAST(COALESCE(h.promise_date, h.requested_date) AS DATE) AS ship_date,
+       COUNT(DISTINCT h.order_no)                              AS order_count,
+       SUM(l.qty_ordered * im.weight)                          AS total_weight_lbs,
+       SUM(l.qty_ordered * im.cubic_length_size)               AS total_cube_ft,
+       CAST(NULL AS decimal(18,2))                             AS est_pallets
+  FROM dbo.oe_hdr  h
+  JOIN dbo.oe_line l  ON l.order_no    = h.order_no
+  JOIN dbo.inv_mast im ON im.inv_mast_uid = l.inv_mast_uid
+ WHERE h.completed = 'N'
+   AND h.cancel_flag = 'N'
+   AND h.delete_flag = 'N'
+   AND h.quote_flag  = 'N'
+   AND l.invoice_no IS NULL
+   AND h.route IS NOT NULL
+   AND COALESCE(h.promise_date, h.requested_date)
+       BETWEEN CAST(GETDATE() AS DATE)
+           AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
+ GROUP BY h.route, CAST(COALESCE(h.promise_date, h.requested_date) AS DATE);`;
 
 // (Route / Run types defined below alongside the forecast helper.)
 
