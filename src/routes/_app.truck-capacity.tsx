@@ -734,6 +734,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     weight_full_truck_lbs: string;
     p21_route_code: string;
     cutoff_time: string;
+    p21_cities: string;
   };
   const [routeEdits, setRouteEdits] = useState<Record<string, RouteEdit>>({});
   useEffect(() => {
@@ -744,6 +745,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       weight_full_truck_lbs: r.weight_full_truck_lbs?.toString() ?? "",
       p21_route_code: r.p21_route_code ?? "",
       cutoff_time: r.cutoff_time ?? "",
+      p21_cities: (r.p21_cities ?? []).join(", "),
     };
     setRouteEdits(m);
   }, [routes]);
@@ -761,6 +763,10 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       await updateFn({ data: { capacity_basis: basis, vendor_pickup_counts: vendorCounts, p21_sql: sql } });
       const numOrNull = (v: string) => v === "" ? null : Number(v);
       const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
+      const citiesOrNull = (v: string) => {
+        const parts = v.split(",").map((s) => s.trim()).filter(Boolean);
+        return parts.length === 0 ? null : parts;
+      };
       const updates = routes.map((r) => {
         const e = routeEdits[r.id];
         return {
@@ -770,6 +776,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           weight_full_truck_lbs: e ? numOrNull(e.weight_full_truck_lbs) : null,
           p21_route_code: e ? strOrNull(e.p21_route_code) : null,
           cutoff_time: e ? strOrNull(e.cutoff_time) : null,
+          p21_cities: e ? citiesOrNull(e.p21_cities) : null,
         };
       });
       await palletsFn({ data: { updates } });
