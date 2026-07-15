@@ -1335,6 +1335,7 @@ function ExclusionRulesCard({ totals }: { totals: any }) {
   if (rules.length === 0) return null;
   const codeToCountKey = (code: string) =>
     code === "invoiced_only" ? "not_invoiced"
+    : code === "no_returns_credits" ? "return_credit"
     : code === "no_quotes" ? "quote"
     : code === "no_cancelled" ? "cancelled"
     : code === "no_samples" ? "sample"

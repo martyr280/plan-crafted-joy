@@ -370,6 +370,7 @@ export async function generateSpiffRunCore(opts: {
   // Per-reason exclusion counters across the whole run.
   const exclusionCounts: Record<string, number> = {
     not_invoiced: 0,
+    return_credit: 0,
     cancelled: 0,
     sample: 0,
     catalog: 0,
@@ -403,7 +404,15 @@ export async function generateSpiffRunCore(opts: {
         // Invoiced-only (Kim rule #1). Base spiff on invoiced_amount.
         const invoicedQty = num(r.invoiced_qty);
         const invoicedAmt = num(r.invoiced_amount);
-        const notInvoiced = invoicedQty <= 0 && invoicedAmt <= 0;
+        const qtyOrdered = num(r.qty_ordered);
+        const extOrdered = num(r.extended_price);
+        // Return / credit: line has negative invoiced qty or amount (order-level
+        // mode mirrors qty_ordered/extended_price into invoiced_*, so negative
+        // ordered qty on an invoiced order also surfaces here). Distinguished
+        // from "no invoice activity at all" for audit clarity.
+        const isReturnCredit =
+          invoicedQty < 0 || invoicedAmt < 0 || qtyOrdered < 0 || extOrdered < 0;
+        const notInvoiced = !isReturnCredit && invoicedQty <= 0 && invoicedAmt <= 0;
 
         // Cancelled (Kim rule #3) — header cancel flag OR validation_status CANCEL.
         const cancelFlag = String(r.cancel_flag ?? "").trim().toUpperCase();
@@ -416,9 +425,10 @@ export async function generateSpiffRunCore(opts: {
           productGroupId: r.product_group_id,
         });
 
-        // Priority: cancelled > not_invoiced > sample > catalog > scope > special.
+        // Priority: cancelled > return_credit > not_invoiced > sample > catalog > scope > special.
         let exclusion_reason: string | null = null;
         if (isCancelled) exclusion_reason = "cancelled";
+        else if (isReturnCredit) exclusion_reason = "return_credit";
         else if (notInvoiced) exclusion_reason = "not_invoiced";
         else if (scReason === "sample") exclusion_reason = "sample";
         else if (scReason === "catalog") exclusion_reason = "catalog";
@@ -438,6 +448,7 @@ export async function generateSpiffRunCore(opts: {
           missingProductGroup++;
         }
         if (notInvoiced) flags.not_invoiced = true;
+        if (isReturnCredit) flags.return_credit = true;
 
         if (exclusion_reason) {
           perProgramExcl[exclusion_reason] = (perProgramExcl[exclusion_reason] ?? 0) + 1;
@@ -447,8 +458,10 @@ export async function generateSpiffRunCore(opts: {
         // Use INVOICED qty/amount as the basis of record (Kim rule #1). Falls
         // back to ordered values only when nothing was invoiced so the row is
         // still auditable in the UI even though included=false.
-        const qtyForRow = notInvoiced ? num(r.qty_ordered) : invoicedQty;
-        const extForRow = notInvoiced ? num(r.extended_price) : invoicedAmt;
+        const useOrdered = notInvoiced; // returns keep their negative invoiced values for audit
+        const qtyForRow = useOrdered ? qtyOrdered : invoicedQty;
+        const extForRow = useOrdered ? extOrdered : invoicedAmt;
+
         const spiff = included ? +(extForRow * Number(program.rate)).toFixed(6) : 0;
         const parsed = parseWritingRep(r.po_no);
         if (parsed.confidence === "unmatched" && included) unmatched++;
