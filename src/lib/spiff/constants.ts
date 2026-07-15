@@ -181,6 +181,10 @@ export type SchemaMapping = {
 //   * dbo.oe_line.<oe_line_linkage> exists (schema discovery verifies)
 //   * dbo.oe_line.delete_flag / .disposition / .inv_mast_uid / .qty_ordered /
 //     .unit_price / .extended_price exist (unchanged from historical query)
+function invHdrCancelPredicate(m: SchemaMapping): string {
+  return m.has_invoice_cancel_flag ? "ISNULL(ih.cancel_flag, 'N') = 'N' AND " : "";
+}
+
 function buildLinkedInvJoin(m: SchemaMapping): string {
   // Line-level linkage: sum invoice quantities/amounts per (order_no, line).
   return `
@@ -192,8 +196,7 @@ LEFT JOIN (
          MAX(ih.invoice_date) AS last_invoice_date
   FROM dbo.invoice_line il
   JOIN dbo.invoice_hdr ih ON il.invoice_no = ih.invoice_no
-  WHERE ISNULL(ih.cancel_flag, 'N') = 'N'
-    AND ih.invoice_date >= @dateFrom
+  WHERE ${invHdrCancelPredicate(m)}ih.invoice_date >= @dateFrom
     AND ih.invoice_date < @dateTo
   GROUP BY il.order_no, il.${m.invoice_line_linkage}
 ) inv ON inv.order_no = a.order_no AND inv.order_line_no = a.${m.oe_line_linkage}
@@ -202,10 +205,6 @@ LEFT JOIN (
 
 function buildOrderLevelInvJoin(m: SchemaMapping): string {
   // Order-level fallback: any oe_line on an invoiced order counts as invoiced.
-  // We can't split invoice amount per line, so we surface the oe_line's own
-  // ordered qty / extended_price when the parent order shows invoice activity.
-  // Downstream JS treats invoiced_qty>0 as included, so this yields a coarser
-  // but functional payout.
   return `
 LEFT JOIN (
   SELECT il.order_no,
@@ -213,8 +212,7 @@ LEFT JOIN (
          MAX(ih.invoice_date) AS last_invoice_date
   FROM dbo.invoice_line il
   JOIN dbo.invoice_hdr ih ON il.invoice_no = ih.invoice_no
-  WHERE ISNULL(ih.cancel_flag, 'N') = 'N'
-    AND ih.invoice_date >= @dateFrom
+  WHERE ${invHdrCancelPredicate(m)}ih.invoice_date >= @dateFrom
     AND ih.invoice_date < @dateTo
   GROUP BY il.order_no
 ) inv ON inv.order_no = a.order_no
@@ -237,15 +235,21 @@ function buildInvProjection(m: SchemaMapping): string {
 }
 
 function buildInvWindowClause(m: SchemaMapping): string {
-  // Line-level: inv.invoiced_qty non-null means the line was invoiced in-window.
-  // Order-level: inv.order_no non-null means the parent order had any invoice
-  // in-window, so every non-cancelled non-deleted line on that order is in.
   return m.linkage_mode === "order_level"
     ? "inv.order_no IS NOT NULL"
     : "inv.invoiced_qty IS NOT NULL";
 }
 
 function buildLinesTemplate(m: SchemaMapping, customerClause: string, orderBy: string): string {
+  const cancelProj = m.has_oe_cancel_flag
+    ? "ISNULL(b.cancel_flag, 'N') AS cancel_flag,"
+    : "CAST('N' AS CHAR(1)) AS cancel_flag,";
+  const projectedProj = m.has_oe_projected_order
+    ? "ISNULL(b.projected_order, 'N') AS projected_order,"
+    : "CAST('N' AS CHAR(1)) AS projected_order,";
+  const projectedFilter = m.has_oe_projected_order
+    ? "AND ISNULL(b.projected_order, 'N') = 'N'"
+    : "";
   return `
 SELECT
   b.order_date, b.customer_id, a.order_no, a.${m.oe_line_linkage} AS line_no, b.po_no, a.inv_mast_uid,
@@ -253,8 +257,8 @@ SELECT
   pg.product_group_id,
   a.qty_ordered, a.unit_price, a.${m.extended_price} AS extended_price, a.disposition,
   b.validation_status,
-  ISNULL(b.cancel_flag, 'N') AS cancel_flag,
-  ISNULL(b.projected_order, 'N') AS projected_order,
+  ${cancelProj}
+  ${projectedProj}
   e.inv_mast_uid AS kit,${buildInvProjection(m)}
 FROM dbo.oe_line a
 JOIN dbo.oe_hdr b ON a.order_no = b.order_no
@@ -270,7 +274,7 @@ WHERE ${customerClause}
   AND a.delete_flag = 'N'
   AND a.disposition IS NULL
   AND e.inv_mast_uid IS NULL
-  AND ISNULL(b.projected_order, 'N') = 'N'
+  ${projectedFilter}
   AND (
     ${buildInvWindowClause(m)}
     OR (b.order_date >= @dateFrom AND b.order_date < @dateTo)
