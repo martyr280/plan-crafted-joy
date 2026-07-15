@@ -156,13 +156,24 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
 export const updateRoutePalletsPerTruck = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({
-    updates: z.array(z.object({ id: z.string().uuid(), pallets_full_truck: z.number().int().min(1).max(60).nullable() })).max(100),
+    updates: z.array(z.object({
+      id: z.string().uuid(),
+      pallets_full_truck: z.number().int().min(1).max(60).nullable().optional(),
+      cube_full_truck_ft3: z.number().min(0).max(20000).nullable().optional(),
+      weight_full_truck_lbs: z.number().min(0).max(200000).nullable().optional(),
+      p21_route_code: z.string().max(64).nullable().optional(),
+      cutoff_time: z.string().max(32).nullable().optional(),
+    })).max(200),
   }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
     for (const u of data.updates) {
-      const { error } = await supabaseAdmin.from("truck_capacity_routes")
-        .update({ pallets_full_truck: u.pallets_full_truck }).eq("id", u.id);
+      const { id, ...rest } = u;
+      // Only include keys that were explicitly provided (undefined = untouched).
+      const patch: Record<string, any> = {};
+      for (const [k, v] of Object.entries(rest)) if (v !== undefined) patch[k] = v;
+      if (Object.keys(patch).length === 0) continue;
+      const { error } = await supabaseAdmin.from("truck_capacity_routes").update(patch).eq("id", id);
       if (error) throw new Error(error.message);
     }
     return { ok: true, updated: data.updates.length };
