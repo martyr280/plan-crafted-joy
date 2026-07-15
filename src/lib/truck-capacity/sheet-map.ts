@@ -20,6 +20,11 @@ export const SHEET_TO_ROUTE_CODE: Record<string, string> = {
   "south al": "SAL", "gulf coast": "GULF",
   "ocala special runs": "OCA-SPECIAL",
   "jax": "JAX", "sefl": "SEFL", "mia": "MIA", "orl": "ORL", "swfl": "SWFL", "tampa": "TAMPA",
+  "bham transfer (ocala)": "BHM-XFER-OCA",
+  "ocala to bham": "BHM-XFER-OCA",
+  "ocala to bham transfer": "BHM-XFER-OCA",
+  "ocala to birmingham": "BHM-XFER-OCA",
+  "ocala to birmingham transfer": "BHM-XFER-OCA",
   // hidden legacy sheet — explicit skip
   "carolinas": "__SKIP__",
 };
