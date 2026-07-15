@@ -126,58 +126,63 @@ export const EXCLUSION_RULES: Array<{ code: string; label: string; where: string
   },
 ];
 
-// Canonical line-detail query — accounting's SSMS query, extended with:
-//   * invoice_line join → invoiced_qty / invoiced_amount summed ONLY over
-//     invoices whose invoice_date falls inside the run's quarter window
-//     (Kim K. 7/10/2026: quarter basis is invoice date, not order date).
-//   * projected_order filter → hard-drop quotes (Kim K. rule #2, client-
-//     corroborated by Quote checkbox on Order Entry).
-//   * oe_hdr.cancel_flag surfaced so JS can mark cancels excluded (Kim K. #3,
-//     client-corroborated by Cancelled checkbox on Order Entry).
-// Samples/catalogs (#4/#5) handled in JS via classifySampleCatalog so tweaks
-// don't need a bridge SQL redeploy.
-//
-// Row selection: a line is fetched if EITHER
-//   (a) it has invoice activity inside the window (payable population), OR
-//   (b) it was ordered inside the window but not yet invoiced (retained as
-//       included=false / not_invoiced so AP can see what is pending).
-// This is the auditable superset — no other quarter's paid lines leak in.
-//
-// P21 SCHEMA ASSUMPTIONS (verify against client's DB):
+// ---------------------------------------------------------------------------
+// P21 schema mapping — resolved AT RUNTIME via INFORMATION_SCHEMA.COLUMNS
+// against the client's actual database (see spiff.server.ts → discoverSpiffSchema).
+// Historically these queries hard-coded `invoice_line.order_line_no`, but the
+// client's P21 build doesn't have that column, so we now resolve each moving
+// column by candidate priority and substitute into a SQL TEMPLATE. First
+// candidate that exists wins.
+// ---------------------------------------------------------------------------
+export const INVOICE_LINE_LINKAGE_CANDIDATES = [
+  "order_line_no",
+  "oe_line_number",
+  "order_line_number",
+  "line_no",
+  "line_number",
+] as const;
+
+export const OE_LINE_LINKAGE_CANDIDATES = [
+  "line_no",
+  "line_number",
+  "oe_line_number",
+] as const;
+
+export const INVOICED_QTY_CANDIDATES = [
+  "qty_shipped",
+  "qty_invoiced",
+  "qty_billed",
+] as const;
+
+export const EXTENDED_PRICE_CANDIDATES = ["extended_price"] as const;
+
+export type SchemaMapping = {
+  invoice_line_columns: string[];
+  oe_line_columns: string[];
+  invoice_line_linkage: string | null; // null → order-level fallback
+  oe_line_linkage: string;              // used for a.<col> projection + join RHS
+  invoiced_qty: string;
+  extended_price: string;
+  linkage_mode: "line_level" | "order_level";
+};
+
+// P21 SCHEMA ASSUMPTIONS still made (verified at runtime where possible):
 //   * dbo.oe_hdr.projected_order CHAR/NCHAR with 'N'=order, 'Y'=quote
 //   * dbo.oe_hdr.cancel_flag     CHAR/NCHAR with 'N'/'Y'
-//   * dbo.invoice_hdr.invoice_date DATE/DATETIME (already used elsewhere in
-//     sales-annualized-template.ts — treated as confirmed)
-//   * dbo.invoice_hdr.cancel_flag CHAR/NCHAR with 'N'/'Y' (cancelled invoices ignored)
-//   * dbo.invoice_line columns: order_no, order_line_no, qty_shipped, extended_price, invoice_no
-//   * dbo.oe_line.line_no exists and matches invoice_line.order_line_no
-export const SPIFF_LINES_SQL = `
-SELECT
-  b.order_date, b.customer_id, a.order_no, a.line_no, b.po_no, a.inv_mast_uid,
-  d.item_id, d.item_desc,
-  pg.product_group_id,
-  a.qty_ordered, a.unit_price, a.extended_price, a.disposition,
-  b.validation_status,
-  ISNULL(b.cancel_flag, 'N') AS cancel_flag,
-  ISNULL(b.projected_order, 'N') AS projected_order,
-  e.inv_mast_uid AS kit,
-  ISNULL(inv.invoiced_qty, 0) AS invoiced_qty,
-  ISNULL(inv.invoiced_amount, 0) AS invoiced_amount,
-  inv.first_invoice_date,
-  inv.last_invoice_date
-FROM dbo.oe_line a
-JOIN dbo.oe_hdr b ON a.order_no = b.order_no
-JOIN dbo.inv_mast d ON a.inv_mast_uid = d.inv_mast_uid
+//   * dbo.invoice_hdr.invoice_date DATE/DATETIME
+//   * dbo.invoice_hdr.cancel_flag CHAR/NCHAR with 'N'/'Y'
+//   * dbo.invoice_line.order_no exists (schema discovery verifies)
+//   * dbo.invoice_line.invoice_no exists (assumed; no candidate list yet)
+//   * dbo.oe_line.<oe_line_linkage> exists (schema discovery verifies)
+//   * dbo.oe_line.delete_flag / .disposition / .inv_mast_uid / .qty_ordered /
+//     .unit_price / .extended_price exist (unchanged from historical query)
+function buildLinkedInvJoin(m: SchemaMapping): string {
+  // Line-level linkage: sum invoice quantities/amounts per (order_no, line).
+  return `
 LEFT JOIN (
-  SELECT inv_mast_uid, MAX(product_group_id) AS product_group_id
-  FROM dbo.inv_loc
-  GROUP BY inv_mast_uid
-) pg ON a.inv_mast_uid = pg.inv_mast_uid
-LEFT JOIN dbo.assembly_hdr e ON a.inv_mast_uid = e.inv_mast_uid
-LEFT JOIN (
-  SELECT il.order_no, il.order_line_no,
-         SUM(il.qty_shipped) AS invoiced_qty,
-         SUM(il.extended_price) AS invoiced_amount,
+  SELECT il.order_no, il.${m.invoice_line_linkage} AS order_line_no,
+         SUM(il.${m.invoiced_qty}) AS invoiced_qty,
+         SUM(il.${m.extended_price}) AS invoiced_amount,
          MIN(ih.invoice_date) AS first_invoice_date,
          MAX(ih.invoice_date) AS last_invoice_date
   FROM dbo.invoice_line il
@@ -185,34 +190,67 @@ LEFT JOIN (
   WHERE ISNULL(ih.cancel_flag, 'N') = 'N'
     AND ih.invoice_date >= @dateFrom
     AND ih.invoice_date < @dateTo
-  GROUP BY il.order_no, il.order_line_no
-) inv ON inv.order_no = a.order_no AND inv.order_line_no = a.line_no
-WHERE b.customer_id = @customerId
-  AND a.delete_flag = 'N'
-  AND a.disposition IS NULL
-  AND e.inv_mast_uid IS NULL
-  AND ISNULL(b.projected_order, 'N') = 'N'
-  AND (
-    inv.invoiced_qty IS NOT NULL
-    OR (b.order_date >= @dateFrom AND b.order_date < @dateTo)
-  )
-ORDER BY COALESCE(inv.last_invoice_date, b.order_date)
+  GROUP BY il.order_no, il.${m.invoice_line_linkage}
+) inv ON inv.order_no = a.order_no AND inv.order_line_no = a.${m.oe_line_linkage}
 `.trim();
+}
 
-export const SPIFF_LINES_ALL_SQL = `
-SELECT
-  b.order_date, b.customer_id, a.order_no, a.line_no, b.po_no, a.inv_mast_uid,
-  d.item_id, d.item_desc,
-  pg.product_group_id,
-  a.qty_ordered, a.unit_price, a.extended_price, a.disposition,
-  b.validation_status,
-  ISNULL(b.cancel_flag, 'N') AS cancel_flag,
-  ISNULL(b.projected_order, 'N') AS projected_order,
-  e.inv_mast_uid AS kit,
+function buildOrderLevelInvJoin(m: SchemaMapping): string {
+  // Order-level fallback: any oe_line on an invoiced order counts as invoiced.
+  // We can't split invoice amount per line, so we surface the oe_line's own
+  // ordered qty / extended_price when the parent order shows invoice activity.
+  // Downstream JS treats invoiced_qty>0 as included, so this yields a coarser
+  // but functional payout.
+  return `
+LEFT JOIN (
+  SELECT il.order_no,
+         MIN(ih.invoice_date) AS first_invoice_date,
+         MAX(ih.invoice_date) AS last_invoice_date
+  FROM dbo.invoice_line il
+  JOIN dbo.invoice_hdr ih ON il.invoice_no = ih.invoice_no
+  WHERE ISNULL(ih.cancel_flag, 'N') = 'N'
+    AND ih.invoice_date >= @dateFrom
+    AND ih.invoice_date < @dateTo
+  GROUP BY il.order_no
+) inv ON inv.order_no = a.order_no
+`.trim();
+}
+
+function buildInvProjection(m: SchemaMapping): string {
+  if (m.linkage_mode === "order_level") {
+    return `
+  CASE WHEN inv.order_no IS NULL THEN 0 ELSE a.qty_ordered END AS invoiced_qty,
+  CASE WHEN inv.order_no IS NULL THEN 0 ELSE a.${m.extended_price} END AS invoiced_amount,
+  inv.first_invoice_date,
+  inv.last_invoice_date`;
+  }
+  return `
   ISNULL(inv.invoiced_qty, 0) AS invoiced_qty,
   ISNULL(inv.invoiced_amount, 0) AS invoiced_amount,
   inv.first_invoice_date,
-  inv.last_invoice_date
+  inv.last_invoice_date`;
+}
+
+function buildInvWindowClause(m: SchemaMapping): string {
+  // Line-level: inv.invoiced_qty non-null means the line was invoiced in-window.
+  // Order-level: inv.order_no non-null means the parent order had any invoice
+  // in-window, so every non-cancelled non-deleted line on that order is in.
+  return m.linkage_mode === "order_level"
+    ? "inv.order_no IS NOT NULL"
+    : "inv.invoiced_qty IS NOT NULL";
+}
+
+function buildLinesTemplate(m: SchemaMapping, customerClause: string, orderBy: string): string {
+  return `
+SELECT
+  b.order_date, b.customer_id, a.order_no, a.${m.oe_line_linkage} AS line_no, b.po_no, a.inv_mast_uid,
+  d.item_id, d.item_desc,
+  pg.product_group_id,
+  a.qty_ordered, a.unit_price, a.${m.extended_price} AS extended_price, a.disposition,
+  b.validation_status,
+  ISNULL(b.cancel_flag, 'N') AS cancel_flag,
+  ISNULL(b.projected_order, 'N') AS projected_order,
+  e.inv_mast_uid AS kit,${buildInvProjection(m)}
 FROM dbo.oe_line a
 JOIN dbo.oe_hdr b ON a.order_no = b.order_no
 JOIN dbo.inv_mast d ON a.inv_mast_uid = d.inv_mast_uid
@@ -222,30 +260,31 @@ LEFT JOIN (
   GROUP BY inv_mast_uid
 ) pg ON a.inv_mast_uid = pg.inv_mast_uid
 LEFT JOIN dbo.assembly_hdr e ON a.inv_mast_uid = e.inv_mast_uid
-LEFT JOIN (
-  SELECT il.order_no, il.order_line_no,
-         SUM(il.qty_shipped) AS invoiced_qty,
-         SUM(il.extended_price) AS invoiced_amount,
-         MIN(ih.invoice_date) AS first_invoice_date,
-         MAX(ih.invoice_date) AS last_invoice_date
-  FROM dbo.invoice_line il
-  JOIN dbo.invoice_hdr ih ON il.invoice_no = ih.invoice_no
-  WHERE ISNULL(ih.cancel_flag, 'N') = 'N'
-    AND ih.invoice_date >= @dateFrom
-    AND ih.invoice_date < @dateTo
-  GROUP BY il.order_no, il.order_line_no
-) inv ON inv.order_no = a.order_no AND inv.order_line_no = a.line_no
-WHERE b.customer_id IN ({customer_ids})
+${m.linkage_mode === "order_level" ? buildOrderLevelInvJoin(m) : buildLinkedInvJoin(m)}
+WHERE ${customerClause}
   AND a.delete_flag = 'N'
   AND a.disposition IS NULL
   AND e.inv_mast_uid IS NULL
   AND ISNULL(b.projected_order, 'N') = 'N'
   AND (
-    inv.invoiced_qty IS NOT NULL
+    ${buildInvWindowClause(m)}
     OR (b.order_date >= @dateFrom AND b.order_date < @dateTo)
   )
-ORDER BY b.customer_id, COALESCE(inv.last_invoice_date, b.order_date)
+ORDER BY ${orderBy}
 `.trim();
+}
+
+export function buildSpiffLinesSql(m: SchemaMapping): string {
+  return buildLinesTemplate(m, "b.customer_id = @customerId", "COALESCE(inv.last_invoice_date, b.order_date)");
+}
+
+export function buildSpiffLinesAllSql(m: SchemaMapping): string {
+  return buildLinesTemplate(
+    m,
+    "b.customer_id IN ({customer_ids})",
+    "b.customer_id, COALESCE(inv.last_invoice_date, b.order_date)",
+  );
+}
 
 // AR aging gate query. If schema guess fails at runtime, we surface
 // the error gracefully and flag the run as "aging_unavailable".
