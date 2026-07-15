@@ -152,15 +152,51 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
 
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
-    .select("id, code, p21_route_code, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
+    .select("id, code, p21_route_code, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
+
+  // Build code → route map. p21_route_code may be a comma-separated list
+  // (several lanes cover multiple P21 route codes, e.g. "ARK01,ARK02").
+  // Priority: p21_route_code entries win over .code fallback. When two routes
+  // claim the same code, keep the one with the lower sort_order and emit an
+  // activity_events warning so an admin can reconcile.
   const codeToRoute = new Map<string, any>();
-  // p21_route_code takes priority; .code is the fallback.
+  const ambiguous: Array<{ code: string; kept: string; dropped: string }> = [];
+  const consider = (rawCode: string, r: any, priority: number) => {
+    const key = rawCode.trim().toLowerCase();
+    if (!key) return;
+    const existing = codeToRoute.get(key);
+    if (!existing) { codeToRoute.set(key, { ...r, _priority: priority }); return; }
+    // Higher priority beats lower priority (p21 > .code fallback).
+    if (priority > existing._priority) {
+      codeToRoute.set(key, { ...r, _priority: priority });
+      return;
+    }
+    if (priority < existing._priority) return;
+    // Same priority — prefer lower sort_order; record the collision.
+    const existingSort = existing.sort_order ?? Number.POSITIVE_INFINITY;
+    const newSort = r.sort_order ?? Number.POSITIVE_INFINITY;
+    const kept = newSort < existingSort ? r : existing;
+    const dropped = newSort < existingSort ? existing : r;
+    codeToRoute.set(key, { ...kept, _priority: priority });
+    ambiguous.push({ code: rawCode.trim(), kept: kept.code, dropped: dropped.code });
+  };
+  // Fallback first (lower priority) so p21 entries can overwrite.
   for (const r of routes ?? []) {
-    if (r.code) codeToRoute.set(String(r.code).trim().toLowerCase(), r);
+    if (r.code) consider(String(r.code), r, 0);
   }
   for (const r of routes ?? []) {
-    if (r.p21_route_code) codeToRoute.set(String(r.p21_route_code).trim().toLowerCase(), r);
+    if (!r.p21_route_code) continue;
+    for (const part of String(r.p21_route_code).split(",")) consider(part, r, 1);
   }
+  if (ambiguous.length > 0) {
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.route_code_ambiguous",
+      entity_type: "truck_capacity_routes",
+      message: `Truck Capacity: ${ambiguous.length} P21 route code(s) claimed by multiple routes — kept lower sort_order.`,
+      metadata: { collisions: ambiguous },
+    });
+  }
+
 
   let rows: any[] = [];
   try {
