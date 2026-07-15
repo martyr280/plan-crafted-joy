@@ -287,6 +287,7 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
   rules.forEach((rule, i) => {
     const key =
       rule.code === "invoiced_only" ? "not_invoiced"
+      : rule.code === "no_returns_credits" ? "return_credit"
       : rule.code === "no_quotes" ? "quote"
       : rule.code === "no_cancelled" ? "cancelled"
       : rule.code === "no_samples" ? "sample"
