@@ -1009,13 +1009,22 @@ function ChecksTab({
                       )}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      {c.status !== "approved" && (
+                      {c.status !== "approved" ? (
                         <Button
                           size="sm"
                           disabled={isLocked || c.payee === "(Unassigned)"}
                           onClick={() => onApprove(c.id)}
                         >
                           Approve
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isLocked}
+                          onClick={() => onUnapprove(c.id)}
+                        >
+                          Unapprove
                         </Button>
                       )}
                     </TableCell>
