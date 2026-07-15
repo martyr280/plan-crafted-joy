@@ -159,11 +159,16 @@ export const EXTENDED_PRICE_CANDIDATES = ["extended_price"] as const;
 export type SchemaMapping = {
   invoice_line_columns: string[];
   oe_line_columns: string[];
+  oe_hdr_columns: string[];
+  invoice_hdr_columns: string[];
   invoice_line_linkage: string | null; // null → order-level fallback
   oe_line_linkage: string;              // used for a.<col> projection + join RHS
   invoiced_qty: string;
   extended_price: string;
   linkage_mode: "line_level" | "order_level";
+  has_oe_cancel_flag: boolean;
+  has_invoice_cancel_flag: boolean;
+  has_oe_projected_order: boolean;
 };
 
 // P21 SCHEMA ASSUMPTIONS still made (verified at runtime where possible):
