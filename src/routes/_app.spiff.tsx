@@ -699,7 +699,21 @@ function ReviewTable({
   }
 
   return (
-    <Table>
+    <Table className="table-fixed w-full [&_th]:px-2 [&_td]:px-2">
+      <colgroup>
+        <col className="w-[76px]" />
+        <col className="w-[76px]" />
+        <col className="w-[80px]" />
+        <col className="w-[110px]" />
+        <col className="w-[90px]" />
+        <col />
+        <col className="w-[48px]" />
+        <col className="w-[70px]" />
+        <col className="w-[80px]" />
+        <col className="w-[80px]" />
+        <col className="w-[130px]" />
+        <col className="w-[64px]" />
+      </colgroup>
       <TableHeader>
         <TableRow>
           <TableHead>Order Date</TableHead>
