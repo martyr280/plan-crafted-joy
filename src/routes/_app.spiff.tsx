@@ -15,6 +15,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail } from "lucide-react";
 import { toast } from "sonner";
