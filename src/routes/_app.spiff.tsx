@@ -291,6 +291,32 @@ function SpiffPage() {
     });
   }
 
+  // Bulk-assign a writing rep to many lines (used from the Checks page "fix"
+  // dialog for the (Unassigned) payee row). One round-trip + one rebuild.
+  async function assignRepToLines(lineIds: string[], newRep: string) {
+    if (isLocked || !currentRunId || lineIds.length === 0) return;
+    const v = newRep.trim();
+    if (!v) {
+      toast.error("Enter a writing rep name");
+      return;
+    }
+    const { error } = await supabase
+      .from("spiff_run_lines")
+      .update({ writing_rep: v, rep_parse_confidence: "manual" })
+      .in("id", lineIds);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setLines((ls) =>
+      ls.map((l) =>
+        lineIds.includes(l.id) ? { ...l, writing_rep: v, rep_parse_confidence: "manual" } : l,
+      ),
+    );
+    toast.success(`Assigned "${v}" to ${lineIds.length} line${lineIds.length === 1 ? "" : "s"}`);
+    scheduleRebuild();
+  }
+
   async function toggleIncluded(line: Line, reason?: string) {
     await updateLine(line.id, {
       included: !line.included,
