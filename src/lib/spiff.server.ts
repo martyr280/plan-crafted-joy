@@ -34,17 +34,21 @@ export async function discoverSpiffSchema(): Promise<SchemaMapping> {
     SELECT LOWER(TABLE_NAME) AS table_name, LOWER(COLUMN_NAME) AS column_name
     FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = 'dbo'
-      AND TABLE_NAME IN ('invoice_line', 'oe_line')
+      AND TABLE_NAME IN ('invoice_line', 'oe_line', 'oe_hdr', 'invoice_hdr')
   `.trim();
   const { result } = await runJob("sql.select", { sql, slug: "spiff-schema" }, SCHEMA_TIMEOUT_MS);
   const rows = (((result as any)?.rows ?? []) as Array<{ table_name: string; column_name: string }>);
   const invCols = new Set<string>();
   const oeCols = new Set<string>();
+  const oeHdrCols = new Set<string>();
+  const invHdrCols = new Set<string>();
   for (const r of rows) {
     const t = String(r.table_name ?? "").toLowerCase();
     const c = String(r.column_name ?? "").toLowerCase();
     if (t === "invoice_line") invCols.add(c);
     else if (t === "oe_line") oeCols.add(c);
+    else if (t === "oe_hdr") oeHdrCols.add(c);
+    else if (t === "invoice_hdr") invHdrCols.add(c);
   }
 
   if (invCols.size === 0) {
@@ -84,11 +88,16 @@ export async function discoverSpiffSchema(): Promise<SchemaMapping> {
   return {
     invoice_line_columns: Array.from(invCols).sort(),
     oe_line_columns: Array.from(oeCols).sort(),
+    oe_hdr_columns: Array.from(oeHdrCols).sort(),
+    invoice_hdr_columns: Array.from(invHdrCols).sort(),
     invoice_line_linkage: invLinkage,
     oe_line_linkage: oeLinkage,
     invoiced_qty: invoicedQty,
     extended_price: extPrice,
     linkage_mode,
+    has_oe_cancel_flag: oeHdrCols.has("cancel_flag"),
+    has_invoice_cancel_flag: invHdrCols.has("cancel_flag"),
+    has_oe_projected_order: oeHdrCols.has("projected_order"),
   };
 }
 
