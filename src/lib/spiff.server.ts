@@ -186,12 +186,13 @@ export async function findOrCreateDraftRun(opts: {
 async function fetchProgramLines(
   program: Program,
   dateFrom: string,
-  dateTo: string
+  dateTo: string,
+  mapping: SchemaMapping,
 ): Promise<RawLine[]> {
   const { result } = await runJob(
     "sql.select",
     {
-      sql: SPIFF_LINES_SQL,
+      sql: buildSpiffLinesSql(mapping),
       params: {
         dateFrom,
         dateTo,
@@ -210,7 +211,8 @@ async function fetchProgramLines(
 async function fetchAllProgramLines(
   customerIds: string[],
   dateFrom: string,
-  dateTo: string
+  dateTo: string,
+  mapping: SchemaMapping,
 ): Promise<Map<string, RawLine[]>> {
   const out = new Map<string, RawLine[]>();
   if (customerIds.length === 0) return out;
@@ -220,7 +222,7 @@ async function fetchAllProgramLines(
   for (const c of safe) out.set(c, []);
   if (safe.length === 0) return out;
   const inList = safe.map((c) => `'${c}'`).join(",");
-  const sql = SPIFF_LINES_ALL_SQL.replace("{customer_ids}", inList);
+  const sql = buildSpiffLinesAllSql(mapping).replace("{customer_ids}", inList);
   const { result } = await runJob(
     "sql.select",
     { sql, params: { dateFrom, dateTo }, slug: "spiff-all" },
