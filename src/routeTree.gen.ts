@@ -45,6 +45,7 @@ import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-
 import { Route as ApiPublicInboundEmailRouteImport } from './routes/api/public/inbound-email'
 import { Route as AppReportsE2gRouteImport } from './routes/_app.reports.e2g'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -229,6 +230,11 @@ const Char91DotmcpChar93InvokeToolToolRoute =
     path: '/.mcp/invoke-tool/$tool',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -258,6 +264,7 @@ export interface FileRoutesByFullPath {
   '/sql-schedules': typeof AppSqlSchedulesRoute
   '/truck-capacity': typeof AppTruckCapacityRoute
   '/webhooks': typeof AppWebhooksRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
@@ -295,6 +302,7 @@ export interface FileRoutesByTo {
   '/truck-capacity': typeof AppTruckCapacityRoute
   '/webhooks': typeof AppWebhooksRoute
   '/': typeof AppIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
@@ -334,6 +342,7 @@ export interface FileRoutesById {
   '/_app/truck-capacity': typeof AppTruckCapacityRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/_app/': typeof AppIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_app/reports/e2g': typeof AppReportsE2gRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
@@ -373,6 +382,7 @@ export interface FileRouteTypes {
     | '/sql-schedules'
     | '/truck-capacity'
     | '/webhooks'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/reports/e2g'
     | '/api/public/inbound-email'
@@ -410,6 +420,7 @@ export interface FileRouteTypes {
     | '/truck-capacity'
     | '/webhooks'
     | '/'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/reports/e2g'
     | '/api/public/inbound-email'
@@ -448,6 +459,7 @@ export interface FileRouteTypes {
     | '/_app/truck-capacity'
     | '/_app/webhooks'
     | '/_app/'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/_app/reports/e2g'
     | '/api/public/inbound-email'
@@ -465,6 +477,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiPublicInboundEmailRoute: typeof ApiPublicInboundEmailRoute
   ApiPublicP21BridgeRoute: typeof ApiPublicP21BridgeRoute
@@ -727,6 +740,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -794,6 +814,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiPublicInboundEmailRoute: ApiPublicInboundEmailRoute,
   ApiPublicP21BridgeRoute: ApiPublicP21BridgeRoute,
