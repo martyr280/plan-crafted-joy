@@ -344,6 +344,15 @@ function SpiffPage() {
     if (currentRunId) loadRunDetail(currentRunId);
   }
 
+  async function unapproveCheck(checkId: string) {
+    if (isLocked) return;
+    await supabase
+      .from("spiff_checks")
+      .update({ status: "pending", approved_by: null, approved_at: null })
+      .eq("id", checkId);
+    if (currentRunId) loadRunDetail(currentRunId);
+  }
+
   async function markRunApproved() {
     if (!currentRunId) return;
     const unassigned = checks.some((c) => c.payee === "(Unassigned)");
