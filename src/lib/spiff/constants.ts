@@ -101,8 +101,13 @@ export const EXCLUSION_RULES: Array<{ code: string; label: string; where: string
   },
   {
     code: "invoiced_only",
-    label: "Invoiced amount only (uninvoiced lines retained as included=false / not_invoiced for audit)",
-    where: "SQL: invoice_line join windowed on invoice_date; JS marks invoiced_qty=0 as not_invoiced",
+    label: "Uninvoiced lines excluded (order landed in-window but nothing has shipped/billed yet)",
+    where: "JS: exclusion_reason='not_invoiced' — invoiced_qty=0 AND invoiced_amount=0 AND no negative values",
+  },
+  {
+    code: "no_returns_credits",
+    label: "Returns / credit lines excluded (negative invoiced qty or amount — no negative spiff)",
+    where: "JS: exclusion_reason='return_credit' — invoiced_qty<0 OR invoiced_amount<0 OR qty_ordered<0",
   },
   {
     code: "no_quotes",
