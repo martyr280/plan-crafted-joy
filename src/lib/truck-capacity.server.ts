@@ -21,6 +21,17 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 --   total_cube_ft     numeric
 --   est_pallets       numeric  -- may be NULL; capacity ratio falls back to weight/cube when so
 --
+-- Optional output column:
+--   ship_city         text     -- ship-to city on the order. When a P21 code is
+--                                 claimed by more than one route (e.g. NSC01
+--                                 covers both Carolinas), the server uses
+--                                 ship_city to disambiguate — the row is
+--                                 assigned to the claimant whose p21_cities
+--                                 list contains this city (case-insensitive).
+--                                 If ship_city is returned, the server also
+--                                 re-aggregates rows to (route_id, ship_date)
+--                                 before insert.
+--
 -- UNVERIFIED column names — tune in Settings. The exact P21 field names for the
 -- order-header route code (Joe confirmed the field exists on Order Entry → Ship
 -- Info → "Route"), the ship/promise/requested date, and weight/cube on inv_mast
@@ -87,7 +98,9 @@ export type Route = {
   ship_to_zip_prefixes: string[] | null;
   p21_route_code: string | null; cutoff_time: string | null;
   cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
+  p21_cities: string[] | null;
 };
+
 
 export type Run = {
   id: string; route_id: string; run_date: string; run_seq: number;
@@ -152,49 +165,34 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
 
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
-    .select("id, code, p21_route_code, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
+    .select("id, code, p21_route_code, p21_cities, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
 
-  // Build code → route map. p21_route_code may be a comma-separated list
-  // (several lanes cover multiple P21 route codes, e.g. "ARK01,ARK02").
-  // Priority: p21_route_code entries win over .code fallback. When two routes
-  // claim the same code, keep the one with the lower sort_order and emit an
-  // activity_events warning so an admin can reconcile.
-  const codeToRoute = new Map<string, any>();
-  const ambiguous: Array<{ code: string; kept: string; dropped: string }> = [];
-  const consider = (rawCode: string, r: any, priority: number) => {
+  // Build code → claimants[] map. p21_route_code may be a comma-separated list
+  // (e.g. "ARK01,ARK02"), and a single P21 code may legitimately be claimed
+  // by more than one internal route (e.g. NSC01 covers both Carolinas,
+  // GEO02 covers both N and S Georgia via different weekday cutoffs).
+  // Priority: p21_route_code entries win over .code fallback. Per-row
+  // resolution happens below; we only record all claimants here.
+  const codeToRoutes = new Map<string, Array<any>>();
+  const addClaim = (rawCode: string, r: any, priority: number) => {
     const key = rawCode.trim().toLowerCase();
     if (!key) return;
-    const existing = codeToRoute.get(key);
-    if (!existing) { codeToRoute.set(key, { ...r, _priority: priority }); return; }
-    // Higher priority beats lower priority (p21 > .code fallback).
-    if (priority > existing._priority) {
-      codeToRoute.set(key, { ...r, _priority: priority });
-      return;
-    }
-    if (priority < existing._priority) return;
-    // Same priority — prefer lower sort_order; record the collision.
-    const existingSort = existing.sort_order ?? Number.POSITIVE_INFINITY;
-    const newSort = r.sort_order ?? Number.POSITIVE_INFINITY;
-    const kept = newSort < existingSort ? r : existing;
-    const dropped = newSort < existingSort ? existing : r;
-    codeToRoute.set(key, { ...kept, _priority: priority });
-    ambiguous.push({ code: rawCode.trim(), kept: kept.code, dropped: dropped.code });
+    const arr = codeToRoutes.get(key) ?? [];
+    arr.push({ ...r, _priority: priority });
+    codeToRoutes.set(key, arr);
   };
-  // Fallback first (lower priority) so p21 entries can overwrite.
-  for (const r of routes ?? []) {
-    if (r.code) consider(String(r.code), r, 0);
-  }
+  // Fallback first (lower priority) so p21 entries take precedence.
+  for (const r of routes ?? []) if (r.code) addClaim(String(r.code), r, 0);
   for (const r of routes ?? []) {
     if (!r.p21_route_code) continue;
-    for (const part of String(r.p21_route_code).split(",")) consider(part, r, 1);
+    for (const part of String(r.p21_route_code).split(",")) addClaim(part, r, 1);
   }
-  if (ambiguous.length > 0) {
-    await supabaseAdmin.from("activity_events").insert({
-      event_type: "truck_capacity.route_code_ambiguous",
-      entity_type: "truck_capacity_routes",
-      message: `Truck Capacity: ${ambiguous.length} P21 route code(s) claimed by multiple routes — kept lower sort_order.`,
-      metadata: { collisions: ambiguous },
-    });
+  // Keep only the highest-priority claimants per code (drops the .code
+  // fallback when the same code is also listed as a real p21_route_code
+  // on another route).
+  for (const [key, arr] of codeToRoutes) {
+    const maxP = Math.max(...arr.map((x) => x._priority));
+    codeToRoutes.set(key, arr.filter((x) => x._priority === maxP));
   }
 
 
@@ -229,45 +227,132 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
     const d = v instanceof Date ? v : new Date(v);
     return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
   };
+  // City normalizer: drop leading/trailing whitespace and any trailing state
+  // token (", TX" / "TX" — some P21 exports append the state to the city).
+  const normCity = (v: any): string | null => {
+    if (v == null) return null;
+    let s = String(v).trim();
+    if (!s) return null;
+    // Strip trailing ", XX" (2-letter state) or trailing " XX".
+    s = s.replace(/[,\s]+[A-Za-z]{2}\s*$/, "");
+    return s.trim().toLowerCase();
+  };
 
+  // Per-row resolution — see the DEFAULT_P21_SQL header comment for the
+  // full contract. Order: single-claimant → city match → weekday match →
+  // sort_order tiebreaker (plus one ambiguity warning per snapshot).
   const unmatched = new Set<string>();
-  const inserts: any[] = [];
+  const ambiguousResolved = new Map<string, { kept: string[]; dropped: string[] }>();
+  // Aggregate to (route_id, ship_date) — an optional ship_city column can
+  // produce many rows per route/date that must be summed before insert.
+  const agg = new Map<string, {
+    route_id: string; ship_date: string;
+    order_count: number; total_weight_lbs: number | null;
+    total_cube_ft: number | null; est_pallets: number | null;
+    // per-route full-truck targets kept so we can recompute the projected ratio after aggregation
+    pallets_full_truck: number | null; cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
+  }>();
+  const addNullable = (a: number | null, b: number | null): number | null =>
+    a == null && b == null ? null : (a ?? 0) + (b ?? 0);
+
   for (const r of rows) {
     const code = String(r.route_code ?? "").trim();
     const ship = iso(r.ship_date);
     if (!code || !ship) continue;
-    const route = codeToRoute.get(code.toLowerCase());
-    if (!route) { unmatched.add(code); continue; }
+    const claimants = codeToRoutes.get(code.toLowerCase());
+    if (!claimants || claimants.length === 0) { unmatched.add(code); continue; }
+
+    let route: any;
+    if (claimants.length === 1) {
+      route = claimants[0];
+    } else {
+      // (b) city match
+      const city = normCity(r.ship_city);
+      const cityHits = city
+        ? claimants.filter((c) => Array.isArray(c.p21_cities)
+            && c.p21_cities.some((x: string) => normCity(x) === city))
+        : [];
+      if (cityHits.length === 1) {
+        route = cityHits[0];
+      } else {
+        // (c) weekday match
+        const dow = new Date(ship + "T00:00:00Z").getUTCDay();
+        const dowHits = claimants.filter((c) => Array.isArray(c.typical_dow)
+          && c.typical_dow.includes(dow));
+        if (dowHits.length === 1) {
+          route = dowHits[0];
+        } else {
+          // (d) sort_order tiebreaker
+          const sorted = [...claimants].sort((a, b) =>
+            (a.sort_order ?? Number.POSITIVE_INFINITY) - (b.sort_order ?? Number.POSITIVE_INFINITY));
+          route = sorted[0];
+          const entry = ambiguousResolved.get(code) ?? { kept: [], dropped: [] };
+          if (!entry.kept.includes(route.code)) entry.kept.push(route.code);
+          for (const c of sorted.slice(1)) if (!entry.dropped.includes(c.code)) entry.dropped.push(c.code);
+          ambiguousResolved.set(code, entry);
+        }
+      }
+    }
+
     const est = num(r.est_pallets);
     const weight = num(r.total_weight_lbs);
     const cube = num(r.total_cube_ft);
+    const oc = num(r.order_count) ?? 0;
+    const key = `${route.id}|${ship}`;
+    const prev = agg.get(key);
+    if (prev) {
+      prev.order_count += oc;
+      prev.total_weight_lbs = addNullable(prev.total_weight_lbs, weight);
+      prev.total_cube_ft = addNullable(prev.total_cube_ft, cube);
+      prev.est_pallets = addNullable(prev.est_pallets, est);
+    } else {
+      agg.set(key, {
+        route_id: route.id, ship_date: ship,
+        order_count: oc, total_weight_lbs: weight,
+        total_cube_ft: cube, est_pallets: est,
+        pallets_full_truck: route.pallets_full_truck,
+        cube_full_truck_ft3: route.cube_full_truck_ft3 == null ? null : Number(route.cube_full_truck_ft3),
+        weight_full_truck_lbs: route.weight_full_truck_lbs == null ? null : Number(route.weight_full_truck_lbs),
+      });
+    }
+  }
 
-    // Compute every ratio the data supports; pick the max as the binding constraint.
-    // Reflects Joe's reality: pallets are approximate (48"–104" sizes, loose top-off),
-    // so pallets, weight, and cube can each be the binding dimension depending on load.
-    const ratios: number[] = [];
-    if (est != null && route.pallets_full_truck && route.pallets_full_truck > 0) {
-      ratios.push(est / route.pallets_full_truck);
-    }
-    if (cube != null && route.cube_full_truck_ft3 && Number(route.cube_full_truck_ft3) > 0) {
-      ratios.push(cube / Number(route.cube_full_truck_ft3));
-    }
-    if (weight != null && route.weight_full_truck_lbs && Number(route.weight_full_truck_lbs) > 0) {
-      ratios.push(weight / Number(route.weight_full_truck_lbs));
-    }
-    if (ratios.length === 0) continue; // no ratio computable → skip (per spec)
-    const projected = Math.min(1.5, Math.max(...ratios));
-
-    inserts.push({
-      route_id: route.id,
-      ship_date: ship,
-      order_count: num(r.order_count),
-      total_weight_lbs: weight,
-      total_cube_ft: cube,
-      est_pallets: est,
-      projected_capacity_frac: projected,
+  if (ambiguousResolved.size > 0) {
+    const collisions = Array.from(ambiguousResolved.entries()).map(([code, v]) => ({
+      code, kept: v.kept, dropped: v.dropped,
+    }));
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.route_code_ambiguous",
+      entity_type: "truck_capacity_routes",
+      message: `Truck Capacity: ${collisions.length} P21 route code(s) could not be resolved by city or weekday — fell back to lowest sort_order.`,
+      metadata: { collisions },
     });
   }
+
+  const inserts: any[] = [];
+  for (const a of agg.values()) {
+    const ratios: number[] = [];
+    if (a.est_pallets != null && a.pallets_full_truck && a.pallets_full_truck > 0) {
+      ratios.push(a.est_pallets / a.pallets_full_truck);
+    }
+    if (a.total_cube_ft != null && a.cube_full_truck_ft3 && a.cube_full_truck_ft3 > 0) {
+      ratios.push(a.total_cube_ft / a.cube_full_truck_ft3);
+    }
+    if (a.total_weight_lbs != null && a.weight_full_truck_lbs && a.weight_full_truck_lbs > 0) {
+      ratios.push(a.total_weight_lbs / a.weight_full_truck_lbs);
+    }
+    if (ratios.length === 0) continue;
+    inserts.push({
+      route_id: a.route_id,
+      ship_date: a.ship_date,
+      order_count: a.order_count,
+      total_weight_lbs: a.total_weight_lbs,
+      total_cube_ft: a.total_cube_ft,
+      est_pallets: a.est_pallets,
+      projected_capacity_frac: Math.min(1.5, Math.max(...ratios)),
+    });
+  }
+
 
   let written = 0;
   try {
