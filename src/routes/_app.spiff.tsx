@@ -344,6 +344,15 @@ function SpiffPage() {
     if (currentRunId) loadRunDetail(currentRunId);
   }
 
+  async function unapproveCheck(checkId: string) {
+    if (isLocked) return;
+    await supabase
+      .from("spiff_checks")
+      .update({ status: "pending", approved_by: null, approved_at: null })
+      .eq("id", checkId);
+    if (currentRunId) loadRunDetail(currentRunId);
+  }
+
   async function markRunApproved() {
     if (!currentRunId) return;
     const unassigned = checks.some((c) => c.payee === "(Unassigned)");
@@ -628,6 +637,7 @@ function SpiffPage() {
               lines={lines}
               isLocked={isLocked}
               onApprove={approveCheck}
+              onUnapprove={unapproveCheck}
               onMarkRunApproved={markRunApproved}
               onAssignRep={assignRepToLines}
             />
@@ -879,6 +889,7 @@ function ChecksTab({
   lines,
   isLocked,
   onApprove,
+  onUnapprove,
   onMarkRunApproved,
   onAssignRep,
 }: {
@@ -887,6 +898,7 @@ function ChecksTab({
   lines: Line[];
   isLocked: boolean;
   onApprove: (id: string) => void;
+  onUnapprove: (id: string) => void;
   onMarkRunApproved: () => void;
   onAssignRep: (lineIds: string[], newRep: string) => Promise<void>;
 }) {
@@ -997,13 +1009,22 @@ function ChecksTab({
                       )}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      {c.status !== "approved" && (
+                      {c.status !== "approved" ? (
                         <Button
                           size="sm"
                           disabled={isLocked || c.payee === "(Unassigned)"}
                           onClick={() => onApprove(c.id)}
                         >
                           Approve
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isLocked}
+                          onClick={() => onUnapprove(c.id)}
+                        >
+                          Unapprove
                         </Button>
                       )}
                     </TableCell>
