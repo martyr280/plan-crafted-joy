@@ -117,7 +117,7 @@ function Consent() {
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Requested access</p>
             <ul className="text-sm space-y-1">
-              {scopes.map((s) => (
+              {scopes.map((s: string) => (
                 <li key={s} className="text-foreground">
                   • {s}
                 </li>
