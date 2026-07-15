@@ -2059,6 +2059,7 @@ export type Database = {
           hub: string
           id: string
           name: string
+          p21_cities: string[] | null
           p21_route_code: string | null
           pallets_full_truck: number | null
           ship_to_zip_prefixes: string[] | null
@@ -2078,6 +2079,7 @@ export type Database = {
           hub: string
           id?: string
           name: string
+          p21_cities?: string[] | null
           p21_route_code?: string | null
           pallets_full_truck?: number | null
           ship_to_zip_prefixes?: string[] | null
@@ -2097,6 +2099,7 @@ export type Database = {
           hub?: string
           id?: string
           name?: string
+          p21_cities?: string[] | null
           p21_route_code?: string | null
           pallets_full_truck?: number | null
           ship_to_zip_prefixes?: string[] | null
