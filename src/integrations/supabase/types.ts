@@ -2053,46 +2053,58 @@ export type Database = {
           active: boolean
           code: string
           created_at: string
+          cube_full_truck_ft3: number | null
+          cutoff_time: string | null
           has_vendor_pickup: boolean
           hub: string
           id: string
           name: string
+          p21_route_code: string | null
           pallets_full_truck: number | null
           ship_to_zip_prefixes: string[] | null
           sort_order: number
           truck_type: string | null
           typical_dow: number[] | null
           updated_at: string
+          weight_full_truck_lbs: number | null
         }
         Insert: {
           active?: boolean
           code: string
           created_at?: string
+          cube_full_truck_ft3?: number | null
+          cutoff_time?: string | null
           has_vendor_pickup?: boolean
           hub: string
           id?: string
           name: string
+          p21_route_code?: string | null
           pallets_full_truck?: number | null
           ship_to_zip_prefixes?: string[] | null
           sort_order?: number
           truck_type?: string | null
           typical_dow?: number[] | null
           updated_at?: string
+          weight_full_truck_lbs?: number | null
         }
         Update: {
           active?: boolean
           code?: string
           created_at?: string
+          cube_full_truck_ft3?: number | null
+          cutoff_time?: string | null
           has_vendor_pickup?: boolean
           hub?: string
           id?: string
           name?: string
+          p21_route_code?: string | null
           pallets_full_truck?: number | null
           ship_to_zip_prefixes?: string[] | null
           sort_order?: number
           truck_type?: string | null
           typical_dow?: number[] | null
           updated_at?: string
+          weight_full_truck_lbs?: number | null
         }
         Relationships: []
       }

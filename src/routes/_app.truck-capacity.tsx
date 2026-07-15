@@ -37,6 +37,8 @@ const HUB_ORDER = ["Dallas", "Birmingham", "Ocala"];
 type RouteRow = {
   id: string; code: string; name: string; hub: string; sort_order: number; active: boolean;
   has_vendor_pickup: boolean; truck_type: string | null; pallets_full_truck: number | null;
+  p21_route_code: string | null; cutoff_time: string | null;
+  cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
 };
 type RunRow = {
   id: string; route_id: string; run_date: string; run_seq: number; capacity_frac: number;
@@ -725,12 +727,28 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     if (s) { setBasis(s.capacity_basis as "pallets"|"weight"|"cube"); setVendorCounts(s.vendor_pickup_counts); setSql(s.p21_sql ?? defaultSql); }
   }, [s, defaultSql]);
 
-  const [pallets, setPallets] = useState<Record<string, string>>({});
+  type RouteEdit = {
+    pallets_full_truck: string;
+    cube_full_truck_ft3: string;
+    weight_full_truck_lbs: string;
+    p21_route_code: string;
+    cutoff_time: string;
+  };
+  const [routeEdits, setRouteEdits] = useState<Record<string, RouteEdit>>({});
   useEffect(() => {
-    const m: Record<string, string> = {};
-    for (const r of routes) m[r.id] = r.pallets_full_truck?.toString() ?? "";
-    setPallets(m);
+    const m: Record<string, RouteEdit> = {};
+    for (const r of routes) m[r.id] = {
+      pallets_full_truck: r.pallets_full_truck?.toString() ?? "",
+      cube_full_truck_ft3: r.cube_full_truck_ft3?.toString() ?? "",
+      weight_full_truck_lbs: r.weight_full_truck_lbs?.toString() ?? "",
+      p21_route_code: r.p21_route_code ?? "",
+      cutoff_time: r.cutoff_time ?? "",
+    };
+    setRouteEdits(m);
   }, [routes]);
+  function patchRoute(id: string, patch: Partial<RouteEdit>) {
+    setRouteEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
 
   const [testResult, setTestResult] = useState<any>(null);
   const [snapResult, setSnapResult] = useState<any>(null);
@@ -740,7 +758,19 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     setBusy("save");
     try {
       await updateFn({ data: { capacity_basis: basis, vendor_pickup_counts: vendorCounts, p21_sql: sql } });
-      const updates = routes.map((r) => ({ id: r.id, pallets_full_truck: pallets[r.id] === "" ? null : Number(pallets[r.id]) }));
+      const numOrNull = (v: string) => v === "" ? null : Number(v);
+      const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
+      const updates = routes.map((r) => {
+        const e = routeEdits[r.id];
+        return {
+          id: r.id,
+          pallets_full_truck: e ? numOrNull(e.pallets_full_truck) : null,
+          cube_full_truck_ft3: e ? numOrNull(e.cube_full_truck_ft3) : null,
+          weight_full_truck_lbs: e ? numOrNull(e.weight_full_truck_lbs) : null,
+          p21_route_code: e ? strOrNull(e.p21_route_code) : null,
+          cutoff_time: e ? strOrNull(e.cutoff_time) : null,
+        };
+      });
       await palletsFn({ data: { updates } });
       toast.success("Settings saved");
       qc.invalidateQueries({ queryKey: ["tc-settings"] });
@@ -791,15 +821,42 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       </Card>
 
       <Card className="p-4">
-        <div className="text-sm font-medium mb-2">Pallets per full truck (per route)</div>
-        <div className="text-xs text-muted-foreground mb-3">Used to project P21 est_pallets → projected_capacity_frac = min(1.5, est_pallets ÷ pallets_full_truck). Blank falls back to 18.</div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[360px] overflow-auto">
-          {routes.map((r) => (
-            <div key={r.id} className="flex items-center gap-2">
-              <Label className="text-xs flex-1 truncate" title={r.name}>{r.code}</Label>
-              <Input type="number" className="w-20 h-8" value={pallets[r.id] ?? ""} onChange={(e) => setPallets({ ...pallets, [r.id]: e.target.value })} />
-            </div>
-          ))}
+        <div className="text-sm font-medium mb-2">Route metadata &amp; truck-full targets</div>
+        <div className="text-xs text-muted-foreground mb-3">
+          P21 route code (Order Entry → Ship Info → Route) drives the projection match; leave blank for routes the client hasn&apos;t confirmed.
+          Truck-full targets compute projected_capacity_frac = min(1.5, max of pallets/cube/weight ratios).
+          Per Joe: pallet counts are approximate (pallet sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with loose product), so cube or weight is often the binding constraint.
+          Cutoff time is display-only for now (from the Driver Routes sheet).
+        </div>
+        <div className="overflow-auto max-h-[420px] border rounded">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/40 sticky top-0">
+              <tr>
+                <th className="text-left p-2">Route</th>
+                <th className="text-left p-2">P21 code</th>
+                <th className="text-left p-2">Cutoff</th>
+                <th className="text-right p-2">Pallets/full</th>
+                <th className="text-right p-2">Cube ft³/full</th>
+                <th className="text-right p-2">Weight lbs/full</th>
+              </tr>
+            </thead>
+            <tbody>
+              {routes.map((r) => {
+                const e = routeEdits[r.id];
+                if (!e) return null;
+                return (
+                  <tr key={r.id} className="border-t">
+                    <td className="p-2 whitespace-nowrap"><span className="font-medium">{r.code}</span> <span className="text-muted-foreground">· {r.hub}</span></td>
+                    <td className="p-1"><Input className="h-7" value={e.p21_route_code} placeholder="—" onChange={(ev) => patchRoute(r.id, { p21_route_code: ev.target.value })} /></td>
+                    <td className="p-1"><Input className="h-7 w-24" value={e.cutoff_time} placeholder="—" onChange={(ev) => patchRoute(r.id, { cutoff_time: ev.target.value })} /></td>
+                    <td className="p-1"><Input type="number" className="h-7 w-20 ml-auto text-right" value={e.pallets_full_truck} onChange={(ev) => patchRoute(r.id, { pallets_full_truck: ev.target.value })} /></td>
+                    <td className="p-1"><Input type="number" className="h-7 w-24 ml-auto text-right" value={e.cube_full_truck_ft3} onChange={(ev) => patchRoute(r.id, { cube_full_truck_ft3: ev.target.value })} /></td>
+                    <td className="p-1"><Input type="number" className="h-7 w-24 ml-auto text-right" value={e.weight_full_truck_lbs} onChange={(ev) => patchRoute(r.id, { weight_full_truck_lbs: ev.target.value })} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </Card>
 
