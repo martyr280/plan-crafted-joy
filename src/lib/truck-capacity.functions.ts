@@ -173,7 +173,7 @@ export const updateRoutePalletsPerTruck = createServerFn({ method: "POST" })
       const patch: Record<string, any> = {};
       for (const [k, v] of Object.entries(rest)) if (v !== undefined) patch[k] = v;
       if (Object.keys(patch).length === 0) continue;
-      const { error } = await supabaseAdmin.from("truck_capacity_routes").update(patch).eq("id", id);
+      const { error } = await supabaseAdmin.from("truck_capacity_routes").update(patch as any).eq("id", id);
       if (error) throw new Error(error.message);
     }
     return { ok: true, updated: data.updates.length };
