@@ -848,7 +848,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
                 return (
                   <tr key={r.id} className="border-t">
                     <td className="p-2 whitespace-nowrap"><span className="font-medium">{r.code}</span> <span className="text-muted-foreground">· {r.hub}</span></td>
-                    <td className="p-1"><Input className="h-7" value={e.p21_route_code} placeholder="—" onChange={(ev) => patchRoute(r.id, { p21_route_code: ev.target.value })} /></td>
+                    <td className="p-1"><Input className="h-7" value={e.p21_route_code} placeholder="e.g. ARK01,ARK02" onChange={(ev) => patchRoute(r.id, { p21_route_code: ev.target.value })} /></td>
                     <td className="p-1"><Input className="h-7 w-24" value={e.cutoff_time} placeholder="—" onChange={(ev) => patchRoute(r.id, { cutoff_time: ev.target.value })} /></td>
                     <td className="p-1"><Input type="number" className="h-7 w-20 ml-auto text-right" value={e.pallets_full_truck} onChange={(ev) => patchRoute(r.id, { pallets_full_truck: ev.target.value })} /></td>
                     <td className="p-1"><Input type="number" className="h-7 w-24 ml-auto text-right" value={e.cube_full_truck_ft3} onChange={(ev) => patchRoute(r.id, { cube_full_truck_ft3: ev.target.value })} /></td>
