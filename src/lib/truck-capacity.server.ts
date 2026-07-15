@@ -21,6 +21,17 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 --   total_cube_ft     numeric
 --   est_pallets       numeric  -- may be NULL; capacity ratio falls back to weight/cube when so
 --
+-- Optional output column:
+--   ship_city         text     -- ship-to city on the order. When a P21 code is
+--                                 claimed by more than one route (e.g. NSC01
+--                                 covers both Carolinas), the server uses
+--                                 ship_city to disambiguate — the row is
+--                                 assigned to the claimant whose p21_cities
+--                                 list contains this city (case-insensitive).
+--                                 If ship_city is returned, the server also
+--                                 re-aggregates rows to (route_id, ship_date)
+--                                 before insert.
+--
 -- UNVERIFIED column names — tune in Settings. The exact P21 field names for the
 -- order-header route code (Joe confirmed the field exists on Order Entry → Ship
 -- Info → "Route"), the ship/promise/requested date, and weight/cube on inv_mast
