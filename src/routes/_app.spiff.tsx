@@ -625,14 +625,25 @@ function SpiffPage() {
             <ChecksTab
               programs={programs}
               checks={checks}
+              lines={lines}
               isLocked={isLocked}
               onApprove={approveCheck}
               onMarkRunApproved={markRunApproved}
+              onAssignRep={assignRepToLines}
             />
           </TabsContent>
 
           <TabsContent value="programs" className="space-y-4">
-            <ProgramsEditor programs={programs} onChanged={loadProgramsAndRuns} />
+            <ProgramsEditor
+              programs={programs}
+              onChanged={async () => {
+                await loadProgramsAndRuns();
+                // Program edits (rate/payee_name/payout_mode) change how checks
+                // aggregate — rebuild so the Checks tab reflects the new values
+                // without the user hunting for the manual button.
+                scheduleRebuild();
+              }}
+            />
             <ContactsEditor />
             <AutomationCard />
           </TabsContent>
