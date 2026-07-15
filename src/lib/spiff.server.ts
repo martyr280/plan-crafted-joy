@@ -327,13 +327,35 @@ export async function generateSpiffRunCore(opts: {
   const perCustomerSummary: Record<string, { rows: number; spiff: number; unmatched: number; missing_product_group?: number; error?: string }> = {};
   const errors: Record<string, string> = {};
 
+  // Runtime schema discovery — resolves the moving invoice_line/oe_line
+  // column names before we build the lines query. If discovery itself
+  // fails, record a run-level error and abort (no lines fetched).
+  let mapping: SchemaMapping;
+  try {
+    mapping = await discoverSpiffSchema();
+  } catch (e: any) {
+    const msg = `schema discovery failed: ${e?.message ?? "unknown error"}`;
+    await supabaseAdmin
+      .from("spiff_runs")
+      .update({
+        totals: {
+          error: msg,
+          exclusion_rules: EXCLUSION_RULES,
+          generated_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", runId);
+    return { runId, programsProcessed: 0, errors: { _schema: msg } };
+  }
+
   // ONE bridge call pulls every program's lines. Previously we polled the
   // agent once per program, which routinely exceeded the edge request budget
   // and surfaced to the user as "Failed to fetch".
   const linesByCustomer = await fetchAllProgramLines(
     progs.map((p) => p.customer_id),
     opts.dateFrom,
-    opts.dateTo
+    opts.dateTo,
+    mapping,
   );
 
   // Per-reason exclusion counters across the whole run.
