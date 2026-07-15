@@ -149,8 +149,16 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
   }
 
   const { data: routes } = await supabaseAdmin
-    .from("truck_capacity_routes").select("id, code, pallets_full_truck");
-  const codeToRoute = new Map((routes ?? []).map((r) => [r.code.toLowerCase(), r]));
+    .from("truck_capacity_routes")
+    .select("id, code, p21_route_code, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
+  const codeToRoute = new Map<string, any>();
+  // p21_route_code takes priority; .code is the fallback.
+  for (const r of routes ?? []) {
+    if (r.code) codeToRoute.set(String(r.code).trim().toLowerCase(), r);
+  }
+  for (const r of routes ?? []) {
+    if (r.p21_route_code) codeToRoute.set(String(r.p21_route_code).trim().toLowerCase(), r);
+  }
 
   let rows: any[] = [];
   try {
@@ -193,14 +201,31 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
     const route = codeToRoute.get(code.toLowerCase());
     if (!route) { unmatched.add(code); continue; }
     const est = num(r.est_pallets);
-    const perTruck = route.pallets_full_truck ?? 18;
-    const projected = est != null && perTruck > 0 ? Math.min(1.5, est / perTruck) : null;
+    const weight = num(r.total_weight_lbs);
+    const cube = num(r.total_cube_ft);
+
+    // Compute every ratio the data supports; pick the max as the binding constraint.
+    // Reflects Joe's reality: pallets are approximate (48"–104" sizes, loose top-off),
+    // so pallets, weight, and cube can each be the binding dimension depending on load.
+    const ratios: number[] = [];
+    if (est != null && route.pallets_full_truck && route.pallets_full_truck > 0) {
+      ratios.push(est / route.pallets_full_truck);
+    }
+    if (cube != null && route.cube_full_truck_ft3 && Number(route.cube_full_truck_ft3) > 0) {
+      ratios.push(cube / Number(route.cube_full_truck_ft3));
+    }
+    if (weight != null && route.weight_full_truck_lbs && Number(route.weight_full_truck_lbs) > 0) {
+      ratios.push(weight / Number(route.weight_full_truck_lbs));
+    }
+    if (ratios.length === 0) continue; // no ratio computable → skip (per spec)
+    const projected = Math.min(1.5, Math.max(...ratios));
+
     inserts.push({
       route_id: route.id,
       ship_date: ship,
       order_count: num(r.order_count),
-      total_weight_lbs: num(r.total_weight_lbs),
-      total_cube_ft: num(r.total_cube_ft),
+      total_weight_lbs: weight,
+      total_cube_ft: cube,
       est_pallets: est,
       projected_capacity_frac: projected,
     });
