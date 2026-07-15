@@ -612,7 +612,7 @@ function SpiffPage() {
                   </Card>
                 )}
 
-                <Card className="p-0 overflow-auto max-h-[60vh]">
+                <Card className="p-0 overflow-y-auto overflow-x-hidden max-h-[60vh]">
                   <ReviewTable
                     lines={customerLines}
                     repsSeen={repsSeen}
