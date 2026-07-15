@@ -823,10 +823,11 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       <Card className="p-4">
         <div className="text-sm font-medium mb-2">Route metadata &amp; truck-full targets</div>
         <div className="text-xs text-muted-foreground mb-3">
-          P21 route code (Order Entry → Ship Info → Route) drives the projection match; leave blank for routes the client hasn&apos;t confirmed.
+          P21 route code (Order Entry → Ship Info → Route) drives the projection match. Multiple codes allowed — enter comma-separated (e.g. <code>ARK01,ARK02</code>). Leave blank for lanes the client hasn&apos;t confirmed.
           Truck-full targets compute projected_capacity_frac = min(1.5, max of pallets/cube/weight ratios).
           Per Joe: pallet counts are approximate (pallet sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with loose product), so cube or weight is often the binding constraint.
           Cutoff time is display-only for now (from the Driver Routes sheet).
+          <br /><span className="text-amber-600">Pending client confirmation:</span> <code>GEO02</code> (N vs S Georgia), <code>NSC01</code> (E vs W Carolinas), <code>DTR01</code> (Dallas↔Bham transfer, both directions), <code>SOCA1</code> (Carolinas code on Ocala tab).
         </div>
         <div className="overflow-auto max-h-[420px] border rounded">
           <table className="w-full text-xs">
