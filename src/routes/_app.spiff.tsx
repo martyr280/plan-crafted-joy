@@ -889,6 +889,7 @@ function ChecksTab({
   lines,
   isLocked,
   onApprove,
+  onUnapprove,
   onMarkRunApproved,
   onAssignRep,
 }: {
@@ -897,6 +898,7 @@ function ChecksTab({
   lines: Line[];
   isLocked: boolean;
   onApprove: (id: string) => void;
+  onUnapprove: (id: string) => void;
   onMarkRunApproved: () => void;
   onAssignRep: (lineIds: string[], newRep: string) => Promise<void>;
 }) {
