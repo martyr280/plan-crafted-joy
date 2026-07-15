@@ -521,6 +521,8 @@ export async function generateSpiffRunCore(opts: {
         errors,
         exclusion_counts: exclusionCounts,
         exclusion_rules: EXCLUSION_RULES,
+        schema_mapping: mapping,
+        linkage_mode: mapping.linkage_mode,
         generated_at: new Date().toISOString(),
       },
     })
