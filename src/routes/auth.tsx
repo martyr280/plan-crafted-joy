@@ -13,11 +13,22 @@ import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
 
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (s: Record<string, unknown>) => ({
+    next: typeof s.next === "string" ? s.next : "",
+  }),
   component: AuthPage,
 });
 
+// Only allow same-origin relative paths as post-auth destinations.
+function safeNext(next: string): string {
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/";
+  return next;
+}
+
 function AuthPage() {
   const navigate = useNavigate();
+  const { next } = Route.useSearch();
+  const dest = safeNext(next);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -34,9 +45,12 @@ function AuthPage() {
   useEffect(() => {
     setMounted(true);
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/" });
+      if (data.session) {
+        if (dest === "/") navigate({ to: "/" });
+        else window.location.href = dest;
+      }
     });
-  }, [navigate]);
+  }, [navigate, dest]);
 
   if (!mounted) {
     return (
@@ -52,15 +66,18 @@ function AuthPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) return toast.error(error.message);
-    navigate({ to: "/" });
+    if (dest === "/") navigate({ to: "/" });
+    else window.location.href = dest;
   }
 
   async function signUp(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    const emailRedirect =
+      dest === "/" ? `${window.location.origin}/` : `${window.location.origin}${dest}`;
     const { error } = await supabase.auth.signUp({
       email, password,
-      options: { emailRedirectTo: `${window.location.origin}/`, data: { display_name: name } },
+      options: { emailRedirectTo: emailRedirect, data: { display_name: name } },
     });
     setLoading(false);
     if (error) return toast.error(error.message);
@@ -96,15 +113,22 @@ function AuthPage() {
 
   async function googleSignIn() {
     const { lovable } = await import("@/integrations/lovable/index");
+    // Return to /auth so the useEffect above can consume `next` after the
+    // session is set — required for OAuth-consent handoff.
+    const redirectUri =
+      dest === "/"
+        ? window.location.origin
+        : `${window.location.origin}/auth?next=${encodeURIComponent(dest)}`;
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: redirectUri,
     });
     if (result.error) {
       toast.error(result.error.message ?? "Google sign-in failed");
       return;
     }
     if (result.redirected) return;
-    navigate({ to: "/" });
+    if (dest === "/") navigate({ to: "/" });
+    else window.location.href = dest;
   }
 
   return (

@@ -15,7 +15,10 @@ function AppLayout() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
+    if (!loading && !user) {
+      const next = window.location.pathname + window.location.search;
+      navigate({ to: "/auth", search: next && next !== "/" ? { next } : undefined });
+    }
   }, [user, loading, navigate]);
 
   if (loading || !user) {
