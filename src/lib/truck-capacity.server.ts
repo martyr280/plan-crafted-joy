@@ -290,7 +290,7 @@ export async function runP21Snapshot(
 
   let rows: any[] = [];
   try {
-    const { result } = await runJob("sql.select", { sql: sqlText, params: {}, slug }, timeoutMs);
+    const { result } = await runJob("sql.select", { sql: stripLeadingSqlComments(sqlText), params: {}, slug }, timeoutMs);
     rows = ((result as any)?.rows ?? []) as any[];
   } catch (e: any) {
     const error = e?.message ?? String(e);
