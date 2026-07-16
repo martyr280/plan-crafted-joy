@@ -24,7 +24,8 @@ import { useAuth } from "@/lib/auth";
 import {
   listTruckRoutes, listTruckRuns, upsertTruckRun, deleteTruckRun, getTruckForecast,
   getTruckSettings, updateTruckSettings, updateRoutePalletsPerTruck,
-  previewTruckImport, commitTruckImport, exportTruckWorkbook, runP21SnapshotNow, testP21Sql,
+  previewTruckImport, commitTruckImport, exportTruckWorkbook,
+  runP21SnapshotNow, testP21Sql, runP21TransferSnapshotNow, testP21TransferSql,
   retrainTruckModel, listTruckModelVersions, getTruckAccuracy,
 } from "@/lib/truck-capacity.functions";
 
