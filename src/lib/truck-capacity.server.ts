@@ -4,6 +4,17 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
 import { validateSelectSql } from "./sql-schedules.server";
 import { baselineFromSnapshot, addDaysISO } from "./truck-capacity/baseline";
+import {
+  validateP21SqlText,
+  validateP21SqlOutput,
+  type SqlValidation,
+} from "./truck-capacity/sql-validate";
+
+// Re-export the validators so the *.functions.ts server-fn module (which
+// runs auth + saves settings) can call them without pulling in the rest of
+// this file's ExcelJS surface at its top level.
+export { validateP21SqlText, validateP21SqlOutput };
+export type { SqlValidation };
 
 // Re-export serving forecast + trainer so consumers keep a single import path.
 export { computeForecastForRoute } from "./truck-capacity/serve";
@@ -244,6 +255,23 @@ export async function runP21Snapshot(
     return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
   }
 
+  // Contract check on the SQL text itself — confirms every required output
+  // column alias is at least mentioned. Cheap and catches most admin typos
+  // (missing est_pallets, renamed route_code) before we pay the bridge round-trip.
+  {
+    const textCheck = validateP21SqlText(sqlText, kind);
+    if (textCheck.errors.length > 0) {
+      const error = `Output column contract failed: ${textCheck.errors.join(" ")}`;
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_failed",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
+        metadata: { stage: "validate_columns", kind, errors: textCheck.errors },
+      });
+      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    }
+  }
+
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
     .select("id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
@@ -296,6 +324,31 @@ export async function runP21Snapshot(
   // no-op, not an error.
   if (rows.length === 0) {
     return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true, kind };
+  }
+
+  // Runtime output-shape check. If the bridge returned rows whose columns
+  // or types don't match the contract, refuse to insert — better to fail
+  // the snapshot loudly than to write junk into truck_capacity_p21_demand.
+  {
+    const outCheck = validateP21SqlOutput(rows, kind);
+    if (outCheck.errors.length > 0) {
+      const error = `Output row shape failed: ${outCheck.errors.join(" ")}`;
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_failed",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
+        metadata: { stage: "validate_output", kind, errors: outCheck.errors, warnings: outCheck.warnings, sampleKeys: Object.keys(rows[0] ?? {}) },
+      });
+      return { ok: false, rowsPulled: rows.length, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    }
+    if (outCheck.warnings.length > 0) {
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_warning",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 ${kindLabel} snapshot warnings: ${outCheck.warnings.join(" ")}`,
+        metadata: { stage: "validate_output", kind, warnings: outCheck.warnings },
+      });
+    }
   }
 
   const num = (v: any): number | null => {

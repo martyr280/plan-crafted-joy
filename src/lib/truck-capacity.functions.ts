@@ -6,6 +6,7 @@ import { assertAdmin, runJob } from "./p21.server";
 import {
   computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
   runP21Snapshot, DEFAULT_P21_SQL, DEFAULT_P21_TRANSFER_SQL,
+  validateP21SqlText, validateP21SqlOutput,
 } from "./truck-capacity.server";
 import { validateSelectSql } from "./sql-schedules.server";
 
@@ -152,6 +153,25 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
   }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
+    // Sanity-check any custom SQL text before persisting. Null/empty means
+    // "use the default" — no check needed. A stored query that fails the
+    // column contract would silently poison every nightly snapshot, so we
+    // refuse the save instead.
+    for (const [field, sql] of [
+      ["p21_sql", data.p21_sql],
+      ["p21_transfer_sql", data.p21_transfer_sql],
+    ] as const) {
+      if (sql == null) continue;
+      const trimmed = sql.trim();
+      if (!trimmed) continue;
+      try { validateSelectSql(trimmed); }
+      catch (e: any) { throw new Error(`${field}: ${e?.message ?? String(e)}`); }
+      const kind = field === "p21_transfer_sql" ? "transfers" : "orders";
+      const check = validateP21SqlText(trimmed, kind);
+      if (check.errors.length > 0) {
+        throw new Error(`${field} output contract failed: ${check.errors.join(" ")}`);
+      }
+    }
     const { error } = await supabaseAdmin.from("truck_capacity_settings")
       .update({ ...data, updated_by: context.userId } as any).eq("singleton", true);
     if (error) throw new Error(error.message);
@@ -252,9 +272,25 @@ export const testP21Sql = createServerFn({ method: "POST" })
     await assertAdmin(null, context.userId);
     // Defense-in-depth: block anything that isn't a read-only SELECT/WITH/DECLARE.
     validateSelectSql(data.sql);
+    // Column-alias smell test before we ship the query to the bridge.
+    const textCheck = validateP21SqlText(data.sql, "orders");
+    if (textCheck.errors.length > 0) {
+      throw new Error(`Output contract failed: ${textCheck.errors.join(" ")}`);
+    }
     const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-test" }, 60_000);
     const rows = ((result as any)?.rows ?? []) as any[];
-    return { rowCount: rows.length, sample: rows.slice(0, 10) };
+    // Runtime output-shape check against the actual sample. Surface as
+    // findings (not a throw) so admins see column/type mismatches side-by-side
+    // with the sample rows in the Test dialog.
+    const outCheck = validateP21SqlOutput(rows, "orders");
+    return {
+      rowCount: rows.length,
+      sample: rows.slice(0, 10),
+      validation: {
+        errors: [...textCheck.errors, ...outCheck.errors],
+        warnings: [...textCheck.warnings, ...outCheck.warnings],
+      },
+    };
   });
 
 export const testP21TransferSql = createServerFn({ method: "POST" })
@@ -263,8 +299,20 @@ export const testP21TransferSql = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
     validateSelectSql(data.sql);
+    const textCheck = validateP21SqlText(data.sql, "transfers");
+    if (textCheck.errors.length > 0) {
+      throw new Error(`Output contract failed: ${textCheck.errors.join(" ")}`);
+    }
     const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-transfer-test" }, 60_000);
     const rows = ((result as any)?.rows ?? []) as any[];
-    return { rowCount: rows.length, sample: rows.slice(0, 10) };
+    const outCheck = validateP21SqlOutput(rows, "transfers");
+    return {
+      rowCount: rows.length,
+      sample: rows.slice(0, 10),
+      validation: {
+        errors: [...textCheck.errors, ...outCheck.errors],
+        warnings: [...textCheck.warnings, ...outCheck.warnings],
+      },
+    };
   });
 
