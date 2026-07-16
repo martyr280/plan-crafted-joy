@@ -153,6 +153,25 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
   }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
+    // Sanity-check any custom SQL text before persisting. Null/empty means
+    // "use the default" — no check needed. A stored query that fails the
+    // column contract would silently poison every nightly snapshot, so we
+    // refuse the save instead.
+    for (const [field, sql] of [
+      ["p21_sql", data.p21_sql],
+      ["p21_transfer_sql", data.p21_transfer_sql],
+    ] as const) {
+      if (sql == null) continue;
+      const trimmed = sql.trim();
+      if (!trimmed) continue;
+      try { validateSelectSql(trimmed); }
+      catch (e: any) { throw new Error(`${field}: ${e?.message ?? String(e)}`); }
+      const kind = field === "p21_transfer_sql" ? "transfers" : "orders";
+      const check = validateP21SqlText(trimmed, kind);
+      if (check.errors.length > 0) {
+        throw new Error(`${field} output contract failed: ${check.errors.join(" ")}`);
+      }
+    }
     const { error } = await supabaseAdmin.from("truck_capacity_settings")
       .update({ ...data, updated_by: context.userId } as any).eq("singleton", true);
     if (error) throw new Error(error.message);
