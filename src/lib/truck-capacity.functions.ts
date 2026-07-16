@@ -233,7 +233,14 @@ export const runP21SnapshotNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(null, context.userId);
-    return runP21Snapshot();
+    return runP21Snapshot({ kind: "orders" });
+  });
+
+export const runP21TransferSnapshotNow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(null, context.userId);
+    return runP21Snapshot({ kind: "transfers" });
   });
 
 export const testP21Sql = createServerFn({ method: "POST" })
@@ -244,6 +251,17 @@ export const testP21Sql = createServerFn({ method: "POST" })
     // Defense-in-depth: block anything that isn't a read-only SELECT/WITH/DECLARE.
     validateSelectSql(data.sql);
     const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-test" }, 60_000);
+    const rows = ((result as any)?.rows ?? []) as any[];
+    return { rowCount: rows.length, sample: rows.slice(0, 10) };
+  });
+
+export const testP21TransferSql = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ sql: z.string().min(1).max(20000) }).parse(i))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(null, context.userId);
+    validateSelectSql(data.sql);
+    const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-transfer-test" }, 60_000);
     const rows = ((result as any)?.rows ?? []) as any[];
     return { rowCount: rows.length, sample: rows.slice(0, 10) };
   });
