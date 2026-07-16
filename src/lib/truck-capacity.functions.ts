@@ -6,6 +6,7 @@ import { assertAdmin, runJob } from "./p21.server";
 import {
   computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
   runP21Snapshot, DEFAULT_P21_SQL, DEFAULT_P21_TRANSFER_SQL,
+  validateP21SqlText, validateP21SqlOutput,
 } from "./truck-capacity.server";
 import { validateSelectSql } from "./sql-schedules.server";
 
