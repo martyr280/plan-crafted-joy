@@ -13,10 +13,16 @@ describe("validateP21SqlText", () => {
     expect(errors).toEqual([]);
   });
 
-  it("rejects a query missing est_pallets", () => {
+  it("rejects a query missing a required column (route_code)", () => {
+    const sql = `SELECT ship_date, order_count, total_weight_lbs, total_cube_ft FROM x`;
+    const { errors } = validateP21SqlText(sql);
+    expect(errors.some((e) => e.includes("route_code"))).toBe(true);
+  });
+
+  it("accepts a query without est_pallets (est_pallets is optional)", () => {
     const sql = `SELECT route_code, ship_date, order_count, total_weight_lbs, total_cube_ft FROM x`;
     const { errors } = validateP21SqlText(sql);
-    expect(errors.some((e) => e.includes("est_pallets"))).toBe(true);
+    expect(errors).toEqual([]);
   });
 
   it("ignores aliases that only appear in a comment", () => {
@@ -55,10 +61,16 @@ describe("validateP21SqlOutput", () => {
     expect(warnings.length).toBe(1);
   });
 
-  it("flags a missing required column", () => {
+  it("flags a missing required column (route_code)", () => {
+    const row: any = goodRow(); delete row.route_code;
+    const { errors } = validateP21SqlOutput([row]);
+    expect(errors.some((e) => e.includes("route_code"))).toBe(true);
+  });
+
+  it("accepts rows without est_pallets (optional column)", () => {
     const row: any = goodRow(); delete row.est_pallets;
     const { errors } = validateP21SqlOutput([row]);
-    expect(errors.some((e) => e.includes("est_pallets"))).toBe(true);
+    expect(errors).toEqual([]);
   });
 
   it("flags an unparseable ship_date", () => {

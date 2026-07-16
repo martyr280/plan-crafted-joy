@@ -2,7 +2,7 @@
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
-import { validateSelectSql } from "./sql-schedules.server";
+import { validateSelectSql, stripLeadingSqlComments } from "./sql-schedules.server";
 import { baselineFromSnapshot, addDaysISO } from "./truck-capacity/baseline";
 import {
   validateP21SqlText,
@@ -24,48 +24,32 @@ export type { TrainSummary } from "./truck-capacity/train";
 
 
 export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
+-- Verified against NDI production by K. Moore, Jul 2026.
+-- NOTE: required_date must stay UNQUALIFIED — h.required_date errors
+-- (the column resolves via the join, likely from oe_line). est_pallets
+-- intentionally omitted; the snapshot treats a missing est_pallets column
+-- as NULL and falls back to weight/cube for the capacity ratio.
+--
 -- Required output columns (exact names):
 --   route_code        text     -- matched against truck_capacity_routes.p21_route_code, then .code
 --   ship_date         date     -- shipment / delivery date
 --   order_count       int
 --   total_weight_lbs  numeric
 --   total_cube_ft     numeric
---   est_pallets       numeric  -- may be NULL; capacity ratio falls back to weight/cube when so
---
--- Optional output columns used to disambiguate shared route codes
--- (e.g. NSC01 covers both Carolinas). The resolver cascades in this order
--- per row: ship_city (against route.p21_cities) → ship_zip (5-digit
--- prefix-matched against route.ship_to_zip_prefixes) → ship_state
--- (against route.p21_states) → shipment weekday (typical_dow) → lowest
--- sort_order. Any of the three geo columns may be NULL; the resolver
--- just skips that step. If ship_city/state/zip are returned, the server
--- re-aggregates rows to (route_id, ship_date) before insert.
+-- Optional (resolver disambiguation; may be omitted):
 --   ship_city   text
---   ship_state  text  -- 2-letter US state code (case-insensitive)
---   ship_zip    text  -- postal code; only the leading 5 digits are used
---
--- Schema confirmed by NDI (K. Moore, Jul 2026): the order-header route lives on
--- oe_hdr.shipping_route_uid → shipping_route.route_code (not a plain column on
--- oe_hdr). required_date is the field NDI uses ("date we start the shipping
--- process"); promise/requested get skewed by request delays. Weight/cube are on
--- inv_mast (im.weight, im.cube). Ship-to fields are oe_hdr.ship2_city /
--- ship2_state / ship2_postal_code.
---
--- Filter convention (projected_order='N' = not a quote) mirrors the working
--- SPIFF query in this codebase. qty_ordered is used as the open-quantity proxy
--- for now — a net-of-shipped refinement is possible later.
+--   ship_state  text  -- 2-letter US state code
+--   ship_zip    text  -- postal code; leading 5 digits used
+--   est_pallets numeric
 --
 -- Warehouse transfers are handled by DEFAULT_P21_TRANSFER_SQL below and pulled
 -- as a second snapshot pass that feeds the same truck_capacity_p21_demand table.
 SELECT sr.route_code                    AS route_code,
-       CAST(h.required_date AS DATE)    AS ship_date,
+       CAST(required_date AS DATE)      AS ship_date,
        h.ship2_city                     AS ship_city,
-       h.ship2_state                    AS ship_state,
-       h.ship2_postal_code              AS ship_zip,
        COUNT(DISTINCT h.order_no)       AS order_count,
        SUM(l.qty_ordered * im.weight)   AS total_weight_lbs,
-       SUM(l.qty_ordered * im.cube)     AS total_cube_ft,
-       CAST(NULL AS decimal(18,2))      AS est_pallets
+       SUM(l.qty_ordered * im.cube)     AS total_cube_ft
   FROM dbo.oe_hdr h
   JOIN dbo.shipping_route sr ON sr.shipping_route_uid = h.shipping_route_uid
   JOIN dbo.oe_line l  ON l.order_no = h.order_no
@@ -75,9 +59,8 @@ SELECT sr.route_code                    AS route_code,
    AND ISNULL(h.delete_flag, 'N') = 'N'
    AND ISNULL(h.projected_order, 'N') = 'N'
    AND l.delete_flag = 'N'
-   AND h.required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
- GROUP BY sr.route_code, CAST(h.required_date AS DATE),
-          h.ship2_city, h.ship2_state, h.ship2_postal_code;`;
+   AND required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
+ GROUP BY sr.route_code, CAST(required_date AS DATE), h.ship2_city;`;
 
 
 // -----------------------------------------------------------------------------
@@ -307,7 +290,7 @@ export async function runP21Snapshot(
 
   let rows: any[] = [];
   try {
-    const { result } = await runJob("sql.select", { sql: sqlText, params: {}, slug }, timeoutMs);
+    const { result } = await runJob("sql.select", { sql: stripLeadingSqlComments(sqlText), params: {}, slug }, timeoutMs);
     rows = ((result as any)?.rows ?? []) as any[];
   } catch (e: any) {
     const error = e?.message ?? String(e);

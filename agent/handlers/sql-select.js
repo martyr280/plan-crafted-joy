@@ -9,9 +9,20 @@ export async function sqlSelect(payload) {
   if (typeof text !== "string" || !text.trim()) {
     throw new Error("sql is required");
   }
-  const trimmed = text.trim().replace(/^;\s*/, "").replace(/;\s*$/, "");
-  const head = trimmed.slice(0, 6).toLowerCase();
-  if (!head.startsWith("select") && !head.startsWith("with") && !head.startsWith("declar")) {
+  // Strip leading `--` line comments and `/* ... */` block comments plus
+  // leading whitespace/semicolons before the shape check, so a query
+  // prefixed with an explanatory header still passes.
+  let head = text;
+  for (;;) {
+    const before = head;
+    head = head.replace(/^\s+/, "");
+    head = head.replace(/^;+\s*/, "");
+    head = head.replace(/^--[^\n]*\n?/, "");
+    head = head.replace(/^\/\*[\s\S]*?\*\//, "");
+    if (head === before) break;
+  }
+  const firstToken = head.slice(0, 6).toLowerCase();
+  if (!firstToken.startsWith("select") && !firstToken.startsWith("with") && !firstToken.startsWith("declar")) {
     throw new Error("Query must begin with SELECT, WITH, or DECLARE");
   }
   // Multiple statements are allowed — the DB user is db_datareader-only,
