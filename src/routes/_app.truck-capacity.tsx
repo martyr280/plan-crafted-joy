@@ -765,12 +765,19 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 
   const [testResult, setTestResult] = useState<any>(null);
   const [snapResult, setSnapResult] = useState<any>(null);
+  const [testTransferResult, setTestTransferResult] = useState<any>(null);
+  const [snapTransferResult, setSnapTransferResult] = useState<any>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function save() {
     setBusy("save");
     try {
-      await updateFn({ data: { capacity_basis: basis, vendor_pickup_counts: vendorCounts, p21_sql: sql } });
+      await updateFn({ data: {
+        capacity_basis: basis,
+        vendor_pickup_counts: vendorCounts,
+        p21_sql: sql,
+        p21_transfer_sql: transferSql,
+      } });
       const numOrNull = (v: string) => v === "" ? null : Number(v);
       const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
       const citiesOrNull = (v: string) => {
@@ -808,6 +815,20 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     setBusy("snap"); setSnapResult(null);
     try { setSnapResult(await snapFn()); toast.success("Snapshot run"); }
     catch (e: any) { toast.error(e?.message ?? "Snapshot failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function testTransfer() {
+    setBusy("testTransfer"); setTestTransferResult(null);
+    try { setTestTransferResult(await testTransferFn({ data: { sql: transferSql } })); }
+    catch (e: any) { toast.error(e?.message ?? "Transfer test failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function snapTransfer() {
+    setBusy("snapTransfer"); setSnapTransferResult(null);
+    try { setSnapTransferResult(await snapTransferFn()); toast.success("Transfer snapshot run"); }
+    catch (e: any) { toast.error(e?.message ?? "Transfer snapshot failed"); }
     finally { setBusy(null); }
   }
 
