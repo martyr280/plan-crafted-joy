@@ -233,10 +233,10 @@ export async function runP21Snapshot(
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.snapshot_failed",
       entity_type: "truck_capacity_p21_demand",
-      message: `Truck Capacity P21 snapshot rejected: ${error}`,
-      metadata: { stage: "validate" },
+      message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
+      metadata: { stage: "validate", kind },
     });
-    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error };
+    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
   }
 
   const { data: routes } = await supabaseAdmin
