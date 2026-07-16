@@ -2,7 +2,7 @@
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
-import { validateSelectSql } from "./sql-schedules.server";
+import { validateSelectSql, stripLeadingSqlComments } from "./sql-schedules.server";
 import { baselineFromSnapshot, addDaysISO } from "./truck-capacity/baseline";
 import {
   validateP21SqlText,
