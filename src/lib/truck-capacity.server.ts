@@ -21,22 +21,24 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 --   total_cube_ft     numeric
 --   est_pallets       numeric  -- may be NULL; capacity ratio falls back to weight/cube when so
 --
--- Optional output column:
---   ship_city         text     -- ship-to city on the order. When a P21 code is
---                                 claimed by more than one route (e.g. NSC01
---                                 covers both Carolinas), the server uses
---                                 ship_city to disambiguate — the row is
---                                 assigned to the claimant whose p21_cities
---                                 list contains this city (case-insensitive).
---                                 If ship_city is returned, the server also
---                                 re-aggregates rows to (route_id, ship_date)
---                                 before insert.
+-- Optional output columns used to disambiguate shared route codes
+-- (e.g. NSC01 covers both Carolinas). The resolver cascades in this order
+-- per row: ship_city (against route.p21_cities) → ship_zip (5-digit
+-- prefix-matched against route.ship_to_zip_prefixes) → ship_state
+-- (against route.p21_states) → shipment weekday (typical_dow) → lowest
+-- sort_order. Any of the three geo columns may be NULL; the resolver
+-- just skips that step. If ship_city/state/zip are returned, the server
+-- re-aggregates rows to (route_id, ship_date) before insert.
+--   ship_city   text
+--   ship_state  text  -- 2-letter US state code (case-insensitive)
+--   ship_zip    text  -- postal code; only the leading 5 digits are used
 --
 -- Schema confirmed by NDI (K. Moore, Jul 2026): the order-header route lives on
 -- oe_hdr.shipping_route_uid → shipping_route.route_code (not a plain column on
 -- oe_hdr). required_date is the field NDI uses ("date we start the shipping
 -- process"); promise/requested get skewed by request delays. Weight/cube are on
--- inv_mast (im.weight, im.cube). Ship-to city is oe_hdr.ship2_city.
+-- inv_mast (im.weight, im.cube). Ship-to fields are oe_hdr.ship2_city /
+-- ship2_state / ship2_postal_code.
 --
 -- Filter convention (projected_order='N' = not a quote) mirrors the working
 -- SPIFF query in this codebase. qty_ordered is used as the open-quantity proxy
@@ -47,6 +49,8 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 SELECT sr.route_code                    AS route_code,
        CAST(h.required_date AS DATE)    AS ship_date,
        h.ship2_city                     AS ship_city,
+       h.ship2_state                    AS ship_state,
+       h.ship2_postal_code              AS ship_zip,
        COUNT(DISTINCT h.order_no)       AS order_count,
        SUM(l.qty_ordered * im.weight)   AS total_weight_lbs,
        SUM(l.qty_ordered * im.cube)     AS total_cube_ft,
@@ -61,7 +65,8 @@ SELECT sr.route_code                    AS route_code,
    AND ISNULL(h.projected_order, 'N') = 'N'
    AND l.delete_flag = 'N'
    AND h.required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
- GROUP BY sr.route_code, CAST(h.required_date AS DATE), h.ship2_city;`;
+ GROUP BY sr.route_code, CAST(h.required_date AS DATE),
+          h.ship2_city, h.ship2_state, h.ship2_postal_code;`;
 
 
 // -----------------------------------------------------------------------------
@@ -241,7 +246,7 @@ export async function runP21Snapshot(
 
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
-    .select("id, code, p21_route_code, p21_cities, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
+    .select("id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
 
   // Build code → claimants[] map. p21_route_code may be a comma-separated list
   // (e.g. "ARK01,ARK02"), and a single P21 code may legitimately be claimed
@@ -303,20 +308,49 @@ export async function runP21Snapshot(
     const d = v instanceof Date ? v : new Date(v);
     return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
   };
-  // City normalizer: drop leading/trailing whitespace and any trailing state
-  // token (", TX" / "TX" — some P21 exports append the state to the city).
+  // City normalizer: strip punctuation, expand common abbreviations
+  // ("St." → "saint", "Ft." → "fort", "Mt." → "mount", "Ste." → "sainte"),
+  // drop the trailing state token (", TX" or " TX") that some P21 exports
+  // append to the city field, and collapse repeated whitespace so
+  // "St. Petersburg" and "Saint Petersburg  " match against the same key.
   const normCity = (v: any): string | null => {
     if (v == null) return null;
     let s = String(v).trim();
     if (!s) return null;
-    // Strip trailing ", XX" (2-letter state) or trailing " XX".
-    s = s.replace(/[,\s]+[A-Za-z]{2}\s*$/, "");
-    return s.trim().toLowerCase();
+    s = s.replace(/[,\s]+[A-Za-z]{2}\s*$/, "");    // trailing state
+    s = s.toLowerCase();
+    s = s.replace(/\./g, " ");                      // "St." → "st "
+    s = s.replace(/\bst\b/g, "saint");
+    s = s.replace(/\bste\b/g, "sainte");
+    s = s.replace(/\bft\b/g, "fort");
+    s = s.replace(/\bmt\b/g, "mount");
+    s = s.replace(/[^a-z0-9\s-]/g, " ");            // drop punctuation
+    s = s.replace(/\s+/g, " ").trim();
+    return s || null;
+  };
+  const normState = (v: any): string | null => {
+    if (v == null) return null;
+    const s = String(v).trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(s) ? s : null;
+  };
+  const normZip = (v: any): string | null => {
+    if (v == null) return null;
+    const m = String(v).match(/\d/g);
+    if (!m) return null;
+    const digits = m.join("");
+    return digits.length >= 5 ? digits.slice(0, 5) : null;
+  };
+  const zipMatches = (zip: string, prefixes: string[]): boolean => {
+    for (const p of prefixes) {
+      const clean = String(p).replace(/\D/g, "");
+      if (clean && zip.startsWith(clean)) return true;
+    }
+    return false;
   };
 
   // Per-row resolution — see the DEFAULT_P21_SQL header comment for the
-  // full contract. Order: single-claimant → city match → weekday match →
-  // sort_order tiebreaker (plus one ambiguity warning per snapshot).
+  // full contract. Order: single-claimant → city → zip prefix → state →
+  // weekday → sort_order tiebreaker (plus one ambiguity warning per snapshot).
   const unmatched = new Set<string>();
   const ambiguousResolved = new Map<string, { kept: string[]; dropped: string[] }>();
   // Aggregate to (route_id, ship_date) — an optional ship_city column can
@@ -325,11 +359,15 @@ export async function runP21Snapshot(
     route_id: string; ship_date: string;
     order_count: number; total_weight_lbs: number | null;
     total_cube_ft: number | null; est_pallets: number | null;
-    // per-route full-truck targets kept so we can recompute the projected ratio after aggregation
     pallets_full_truck: number | null; cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
   }>();
   const addNullable = (a: number | null, b: number | null): number | null =>
     a == null && b == null ? null : (a ?? 0) + (b ?? 0);
+
+  const narrow = (list: any[], pred: (r: any) => boolean): any[] => {
+    const hits = list.filter(pred);
+    return hits.length > 0 && hits.length < list.length ? hits : list;
+  };
 
   for (const r of rows) {
     const code = String(r.route_code ?? "").trim();
@@ -342,31 +380,46 @@ export async function runP21Snapshot(
     if (claimants.length === 1) {
       route = claimants[0];
     } else {
-      // (b) city match
+      // Cascade candidates: each geo signal narrows the set only when it
+      // partitions the claimants (splits, but doesn't zero out). Weekday
+      // still fires as a final geo-free split. If more than one survives
+      // all cascades, sort_order tiebreak with an audit warning.
+      let cands = claimants;
       const city = normCity(r.ship_city);
-      const cityHits = city
-        ? claimants.filter((c) => Array.isArray(c.p21_cities)
-            && c.p21_cities.some((x: string) => normCity(x) === city))
-        : [];
-      if (cityHits.length === 1) {
-        route = cityHits[0];
-      } else {
-        // (c) weekday match
-        const dow = new Date(ship + "T00:00:00Z").getUTCDay();
-        const dowHits = claimants.filter((c) => Array.isArray(c.typical_dow)
-          && c.typical_dow.includes(dow));
-        if (dowHits.length === 1) {
-          route = dowHits[0];
-        } else {
-          // (d) sort_order tiebreaker
-          const sorted = [...claimants].sort((a, b) =>
-            (a.sort_order ?? Number.POSITIVE_INFINITY) - (b.sort_order ?? Number.POSITIVE_INFINITY));
-          route = sorted[0];
-          const entry = ambiguousResolved.get(code) ?? { kept: [], dropped: [] };
-          if (!entry.kept.includes(route.code)) entry.kept.push(route.code);
-          for (const c of sorted.slice(1)) if (!entry.dropped.includes(c.code)) entry.dropped.push(c.code);
-          ambiguousResolved.set(code, entry);
+      if (city) {
+        cands = narrow(cands, (c) => Array.isArray(c.p21_cities)
+          && c.p21_cities.some((x: string) => normCity(x) === city));
+      }
+      if (cands.length > 1) {
+        const zip = normZip(r.ship_zip);
+        if (zip) {
+          cands = narrow(cands, (c) => Array.isArray(c.ship_to_zip_prefixes)
+            && c.ship_to_zip_prefixes.length > 0
+            && zipMatches(zip, c.ship_to_zip_prefixes));
         }
+      }
+      if (cands.length > 1) {
+        const st = normState(r.ship_state);
+        if (st) {
+          cands = narrow(cands, (c) => Array.isArray(c.p21_states)
+            && c.p21_states.some((x: string) => normState(x) === st));
+        }
+      }
+      if (cands.length > 1) {
+        const dow = new Date(ship + "T00:00:00Z").getUTCDay();
+        cands = narrow(cands, (c) => Array.isArray(c.typical_dow)
+          && c.typical_dow.includes(dow));
+      }
+      if (cands.length === 1) {
+        route = cands[0];
+      } else {
+        const sorted = [...cands].sort((a, b) =>
+          (a.sort_order ?? Number.POSITIVE_INFINITY) - (b.sort_order ?? Number.POSITIVE_INFINITY));
+        route = sorted[0];
+        const entry = ambiguousResolved.get(code) ?? { kept: [], dropped: [] };
+        if (!entry.kept.includes(route.code)) entry.kept.push(route.code);
+        for (const c of sorted.slice(1)) if (!entry.dropped.includes(c.code)) entry.dropped.push(c.code);
+        ambiguousResolved.set(code, entry);
       }
     }
 

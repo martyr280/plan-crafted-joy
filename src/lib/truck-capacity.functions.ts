@@ -169,6 +169,8 @@ export const updateRoutePalletsPerTruck = createServerFn({ method: "POST" })
       p21_route_code: z.string().max(128).nullable().optional(),
       cutoff_time: z.string().max(128).nullable().optional(),
       p21_cities: z.array(z.string().max(80)).max(50).nullable().optional(),
+      p21_states: z.array(z.string().max(4)).max(20).nullable().optional(),
+      ship_to_zip_prefixes: z.array(z.string().max(6)).max(50).nullable().optional(),
     })).max(200),
   }).parse(i))
   .handler(async ({ data, context }) => {

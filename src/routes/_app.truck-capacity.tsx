@@ -41,6 +41,8 @@ type RouteRow = {
   p21_route_code: string | null; cutoff_time: string | null;
   cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
   p21_cities: string[] | null;
+  p21_states: string[] | null;
+  ship_to_zip_prefixes: string[] | null;
 };
 type RunRow = {
   id: string; route_id: string; run_date: string; run_seq: number; capacity_frac: number;
@@ -745,6 +747,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     p21_route_code: string;
     cutoff_time: string;
     p21_cities: string;
+    p21_states: string;
+    ship_to_zip_prefixes: string;
   };
   const [routeEdits, setRouteEdits] = useState<Record<string, RouteEdit>>({});
   useEffect(() => {
@@ -756,6 +760,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       p21_route_code: r.p21_route_code ?? "",
       cutoff_time: r.cutoff_time ?? "",
       p21_cities: (r.p21_cities ?? []).join(", "),
+      p21_states: (r.p21_states ?? []).join(", "),
+      ship_to_zip_prefixes: (r.ship_to_zip_prefixes ?? []).join(", "),
     };
     setRouteEdits(m);
   }, [routes]);
@@ -780,8 +786,16 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       } });
       const numOrNull = (v: string) => v === "" ? null : Number(v);
       const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
-      const citiesOrNull = (v: string) => {
+      const listOrNull = (v: string) => {
         const parts = v.split(",").map((s) => s.trim()).filter(Boolean);
+        return parts.length === 0 ? null : parts;
+      };
+      const statesOrNull = (v: string) => {
+        const parts = v.split(",").map((s) => s.trim().toUpperCase()).filter((s) => /^[A-Z]{2}$/.test(s));
+        return parts.length === 0 ? null : parts;
+      };
+      const zipsOrNull = (v: string) => {
+        const parts = v.split(",").map((s) => s.replace(/\D/g, "")).filter(Boolean);
         return parts.length === 0 ? null : parts;
       };
       const updates = routes.map((r) => {
@@ -793,7 +807,9 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           weight_full_truck_lbs: e ? numOrNull(e.weight_full_truck_lbs) : null,
           p21_route_code: e ? strOrNull(e.p21_route_code) : null,
           cutoff_time: e ? strOrNull(e.cutoff_time) : null,
-          p21_cities: e ? citiesOrNull(e.p21_cities) : null,
+          p21_cities: e ? listOrNull(e.p21_cities) : null,
+          p21_states: e ? statesOrNull(e.p21_states) : null,
+          ship_to_zip_prefixes: e ? zipsOrNull(e.ship_to_zip_prefixes) : null,
         };
       });
       await palletsFn({ data: { updates } });
@@ -863,7 +879,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         <div className="text-sm font-medium mb-2">Route metadata &amp; truck-full targets</div>
         <div className="text-xs text-muted-foreground mb-3">
           P21 route code (Order Entry → Ship Info → Route) drives the projection match. Multiple codes allowed — enter comma-separated (e.g. <code>ARK01,ARK02</code>). Leave blank for lanes the client hasn&apos;t confirmed.
-          When a P21 code is claimed by more than one route, the server resolves per row by (1) <b>ship_city</b> against each claimant&apos;s Cities list, then (2) shipment weekday against <code>typical_dow</code>, then (3) lowest sort_order (with an audit warning). Populate Cities for shared codes like <code>NSC01</code> (Carolinas).
+          When a P21 code is claimed by more than one route, the server resolves per row by (1) <b>ship_city</b> against Cities (with alias fuzzing — <code>St./Ste./Ft./Mt.</code> expand, trailing state tokens strip), then (2) <b>ship_zip</b> against Zip prefixes, then (3) <b>ship_state</b> against States, then (4) shipment weekday, then (5) lowest sort_order (with an audit warning). Each cascade only narrows when it actually splits the claimants — a signal that hits zero or all is skipped, so partial data still helps. Populate Cities / Zips / States for shared codes like <code>NSC01</code> (Carolinas).
           Truck-full targets compute projected_capacity_frac = min(1.5, max of pallets/cube/weight ratios).
           Per Joe: pallet counts are approximate (pallet sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with loose product), so cube or weight is often the binding constraint.
           Cutoff time is display-only for now (from the Driver Routes sheet).
@@ -878,7 +894,9 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
               <tr>
                 <th className="text-left p-2">Route</th>
                 <th className="text-left p-2">P21 code</th>
-                <th className="text-left p-2">Cities (shared-code resolver)</th>
+                <th className="text-left p-2">Cities</th>
+                <th className="text-left p-2">Zip prefixes</th>
+                <th className="text-left p-2">States</th>
                 <th className="text-left p-2">Cutoff</th>
                 <th className="text-right p-2">Pallets/full</th>
                 <th className="text-right p-2">Cube ft³/full</th>
@@ -894,6 +912,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
                     <td className="p-2 whitespace-nowrap"><span className="font-medium">{r.code}</span> <span className="text-muted-foreground">· {r.hub}</span></td>
                     <td className="p-1"><Input className="h-7" value={e.p21_route_code} placeholder="e.g. ARK01,ARK02" onChange={(ev) => patchRoute(r.id, { p21_route_code: ev.target.value })} /></td>
                     <td className="p-1"><Input className="h-7" value={e.p21_cities} placeholder="Charlotte, Columbia, …" onChange={(ev) => patchRoute(r.id, { p21_cities: ev.target.value })} /></td>
+                    <td className="p-1"><Input className="h-7 w-28" value={e.ship_to_zip_prefixes} placeholder="280, 290, 3…" onChange={(ev) => patchRoute(r.id, { ship_to_zip_prefixes: ev.target.value })} /></td>
+                    <td className="p-1"><Input className="h-7 w-20" value={e.p21_states} placeholder="NC, SC" onChange={(ev) => patchRoute(r.id, { p21_states: ev.target.value.toUpperCase() })} /></td>
                     <td className="p-1"><Input className="h-7 w-24" value={e.cutoff_time} placeholder="—" onChange={(ev) => patchRoute(r.id, { cutoff_time: ev.target.value })} /></td>
                     <td className="p-1"><Input type="number" className="h-7 w-20 ml-auto text-right" value={e.pallets_full_truck} onChange={(ev) => patchRoute(r.id, { pallets_full_truck: ev.target.value })} /></td>
                     <td className="p-1"><Input type="number" className="h-7 w-24 ml-auto text-right" value={e.cube_full_truck_ft3} onChange={(ev) => patchRoute(r.id, { cube_full_truck_ft3: ev.target.value })} /></td>

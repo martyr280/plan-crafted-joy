@@ -2061,6 +2061,7 @@ export type Database = {
           name: string
           p21_cities: string[] | null
           p21_route_code: string | null
+          p21_states: string[] | null
           pallets_full_truck: number | null
           ship_to_zip_prefixes: string[] | null
           sort_order: number
@@ -2081,6 +2082,7 @@ export type Database = {
           name: string
           p21_cities?: string[] | null
           p21_route_code?: string | null
+          p21_states?: string[] | null
           pallets_full_truck?: number | null
           ship_to_zip_prefixes?: string[] | null
           sort_order?: number
@@ -2101,6 +2103,7 @@ export type Database = {
           name?: string
           p21_cities?: string[] | null
           p21_route_code?: string | null
+          p21_states?: string[] | null
           pallets_full_truck?: number | null
           ship_to_zip_prefixes?: string[] | null
           sort_order?: number
