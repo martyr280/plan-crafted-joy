@@ -716,18 +716,27 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
   const palletsFn = useServerFn(updateRoutePalletsPerTruck);
   const testFn = useServerFn(testP21Sql);
   const snapFn = useServerFn(runP21SnapshotNow);
+  const testTransferFn = useServerFn(testP21TransferSql);
+  const snapTransferFn = useServerFn(runP21TransferSnapshotNow);
   const qc = useQueryClient();
 
   const q = useQuery({ queryKey: ["tc-settings"], queryFn: () => settingsFn() });
   const s = q.data?.settings;
   const defaultSql: string = q.data?.defaultP21Sql ?? "";
+  const defaultTransferSql: string = (q.data as any)?.defaultP21TransferSql ?? "";
 
   const [basis, setBasis] = useState<"pallets"|"weight"|"cube">("pallets");
   const [vendorCounts, setVendorCounts] = useState(false);
   const [sql, setSql] = useState("");
+  const [transferSql, setTransferSql] = useState("");
   useEffect(() => {
-    if (s) { setBasis(s.capacity_basis as "pallets"|"weight"|"cube"); setVendorCounts(s.vendor_pickup_counts); setSql(s.p21_sql ?? defaultSql); }
-  }, [s, defaultSql]);
+    if (s) {
+      setBasis(s.capacity_basis as "pallets"|"weight"|"cube");
+      setVendorCounts(s.vendor_pickup_counts);
+      setSql(s.p21_sql ?? defaultSql);
+      setTransferSql((s as any).p21_transfer_sql ?? defaultTransferSql);
+    }
+  }, [s, defaultSql, defaultTransferSql]);
 
   type RouteEdit = {
     pallets_full_truck: string;
