@@ -41,6 +41,8 @@ type RouteRow = {
   p21_route_code: string | null; cutoff_time: string | null;
   cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
   p21_cities: string[] | null;
+  p21_states: string[] | null;
+  ship_to_zip_prefixes: string[] | null;
 };
 type RunRow = {
   id: string; route_id: string; run_date: string; run_seq: number; capacity_frac: number;
