@@ -786,8 +786,16 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       } });
       const numOrNull = (v: string) => v === "" ? null : Number(v);
       const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
-      const citiesOrNull = (v: string) => {
+      const listOrNull = (v: string) => {
         const parts = v.split(",").map((s) => s.trim()).filter(Boolean);
+        return parts.length === 0 ? null : parts;
+      };
+      const statesOrNull = (v: string) => {
+        const parts = v.split(",").map((s) => s.trim().toUpperCase()).filter((s) => /^[A-Z]{2}$/.test(s));
+        return parts.length === 0 ? null : parts;
+      };
+      const zipsOrNull = (v: string) => {
+        const parts = v.split(",").map((s) => s.replace(/\D/g, "")).filter(Boolean);
         return parts.length === 0 ? null : parts;
       };
       const updates = routes.map((r) => {
@@ -799,7 +807,9 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           weight_full_truck_lbs: e ? numOrNull(e.weight_full_truck_lbs) : null,
           p21_route_code: e ? strOrNull(e.p21_route_code) : null,
           cutoff_time: e ? strOrNull(e.cutoff_time) : null,
-          p21_cities: e ? citiesOrNull(e.p21_cities) : null,
+          p21_cities: e ? listOrNull(e.p21_cities) : null,
+          p21_states: e ? statesOrNull(e.p21_states) : null,
+          ship_to_zip_prefixes: e ? zipsOrNull(e.ship_to_zip_prefixes) : null,
         };
       });
       await palletsFn({ data: { updates } });
