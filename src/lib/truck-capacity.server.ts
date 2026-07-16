@@ -246,7 +246,7 @@ export async function runP21Snapshot(
 
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
-    .select("id, code, p21_route_code, p21_cities, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
+    .select("id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
 
   // Build code → claimants[] map. p21_route_code may be a comma-separated list
   // (e.g. "ARK01,ARK02"), and a single P21 code may legitimately be claimed
