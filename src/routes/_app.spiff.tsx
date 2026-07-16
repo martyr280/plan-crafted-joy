@@ -1160,6 +1160,22 @@ function ProgramsEditor({
 }) {
   const [editId, setEditId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Program>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const emptyNew = {
+    customer_id: "",
+    customer_name: "",
+    rep_org: "",
+    rate: 0.03,
+    product_scope: "all" as Program["product_scope"],
+    exclude_special_orders: false,
+    payout_mode: "per_writing_rep" as Program["payout_mode"],
+    payee_name: "",
+    min_check_amount: 8,
+    notes: "",
+    active: true,
+  };
+  const [nu, setNu] = useState(emptyNew);
+  const [adding, setAdding] = useState(false);
 
   function startEdit(p: Program) {
     setEditId(p.id);
@@ -1182,8 +1198,59 @@ function ProgramsEditor({
     onChanged();
   }
 
+  async function addProgram() {
+    const cid = nu.customer_id.trim();
+    const cname = nu.customer_name.trim();
+    const rorg = nu.rep_org.trim();
+    if (!cid) return toast.error("Customer ID is required");
+    if (!/^[A-Za-z0-9_-]+$/.test(cid)) {
+      return toast.error(
+        "Customer ID must contain only letters, numbers, dashes, or underscores (SPIFF generator will silently skip other IDs)",
+      );
+    }
+    if (!cname) return toast.error("Customer name is required");
+    if (!rorg) return toast.error("Rep org is required");
+    if (!Number.isFinite(nu.rate) || nu.rate <= 0) return toast.error("Rate must be > 0 (e.g. 0.03 = 3%)");
+    if (programs.some((p) => p.customer_id.trim().toLowerCase() === cid.toLowerCase())) {
+      return toast.error("A program already exists for this customer");
+    }
+    if (nu.payout_mode === "single_check" && !nu.payee_name.trim()) {
+      return toast.error("Payee name is required for single_check payout");
+    }
+    setAdding(true);
+    const payload = {
+      customer_id: cid,
+      customer_name: cname,
+      rep_org: rorg,
+      rate: Number(nu.rate),
+      product_scope: nu.product_scope,
+      exclude_special_orders: !!nu.exclude_special_orders,
+      payout_mode: nu.payout_mode,
+      payee_name: nu.payee_name.trim() || null,
+      min_check_amount: Number(nu.min_check_amount),
+      notes: nu.notes.trim() || null,
+      active: !!nu.active,
+    };
+    const { error } = await supabase.from("spiff_programs").insert(payload);
+    setAdding(false);
+    if (error) return toast.error(error.message);
+    toast.success("Program added", {
+      description:
+        "It will appear in SPIFF runs after you click \u201CGenerate from P21\u201D for the target quarter.",
+    });
+    setAddOpen(false);
+    setNu(emptyNew);
+    onChanged();
+  }
+
   return (
-    <Card>
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setAddOpen(true)}>
+          <Plus className="w-3 h-3 mr-1" /> Add program
+        </Button>
+      </div>
+      <Card>
       <Table>
         <TableHeader>
           <TableRow>
