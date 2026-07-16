@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertAdmin, runJob } from "./p21.server";
 import {
   computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
-  runP21Snapshot, DEFAULT_P21_SQL,
+  runP21Snapshot, DEFAULT_P21_SQL, DEFAULT_P21_TRANSFER_SQL,
 } from "./truck-capacity.server";
 import { validateSelectSql } from "./sql-schedules.server";
 
