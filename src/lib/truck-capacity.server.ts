@@ -255,6 +255,23 @@ export async function runP21Snapshot(
     return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
   }
 
+  // Contract check on the SQL text itself — confirms every required output
+  // column alias is at least mentioned. Cheap and catches most admin typos
+  // (missing est_pallets, renamed route_code) before we pay the bridge round-trip.
+  {
+    const textCheck = validateP21SqlText(sqlText, kind);
+    if (textCheck.errors.length > 0) {
+      const error = `Output column contract failed: ${textCheck.errors.join(" ")}`;
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_failed",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
+        metadata: { stage: "validate_columns", kind, errors: textCheck.errors },
+      });
+      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    }
+  }
+
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
     .select("id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
