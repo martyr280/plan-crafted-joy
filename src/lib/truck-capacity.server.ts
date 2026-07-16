@@ -326,6 +326,31 @@ export async function runP21Snapshot(
     return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true, kind };
   }
 
+  // Runtime output-shape check. If the bridge returned rows whose columns
+  // or types don't match the contract, refuse to insert — better to fail
+  // the snapshot loudly than to write junk into truck_capacity_p21_demand.
+  {
+    const outCheck = validateP21SqlOutput(rows, kind);
+    if (outCheck.errors.length > 0) {
+      const error = `Output row shape failed: ${outCheck.errors.join(" ")}`;
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_failed",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
+        metadata: { stage: "validate_output", kind, errors: outCheck.errors, warnings: outCheck.warnings, sampleKeys: Object.keys(rows[0] ?? {}) },
+      });
+      return { ok: false, rowsPulled: rows.length, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    }
+    if (outCheck.warnings.length > 0) {
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_warning",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 ${kindLabel} snapshot warnings: ${outCheck.warnings.join(" ")}`,
+        metadata: { stage: "validate_output", kind, warnings: outCheck.warnings },
+      });
+    }
+  }
+
   const num = (v: any): number | null => {
     if (v == null || v === "") return null;
     const n = typeof v === "number" ? v : Number(String(v).replace(/[$,\s]/g, ""));
