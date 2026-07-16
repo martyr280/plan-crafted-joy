@@ -25,13 +25,29 @@ export type ScheduleRow = {
   last_error: string | null;
 };
 
+export function stripLeadingSqlComments(text: string): string {
+  // Strips leading `--` line comments and `/* ... */` block comments, plus
+  // any leading whitespace/semicolons, so the "starts with SELECT/WITH/DECLARE"
+  // check works when admins prefix a query with an explanatory comment block.
+  let s = String(text ?? "");
+  for (;;) {
+    const before = s;
+    s = s.replace(/^\s+/, "");
+    s = s.replace(/^;+\s*/, "");
+    s = s.replace(/^--[^\n]*\n?/, "");
+    s = s.replace(/^\/\*[\s\S]*?\*\//, "");
+    if (s === before) break;
+  }
+  return s;
+}
+
 export function validateSelectSql(text: string) {
-  // Strip leading/trailing semicolons (T-SQL `;WITH` idiom is common).
-  // Multiple statements are allowed (e.g. DECLARE + SELECT, or setup +
-  // final output SELECT). The DB user is db_datareader-only, so writes
-  // would fail at the server regardless.
-  const trimmed = text.trim().replace(/^;\s*/, "").replace(/;\s*$/, "");
-  const head = trimmed.slice(0, 6).toLowerCase();
+  // Strip leading comments/whitespace/semicolons so a query prefixed with an
+  // explanatory `-- ...` header still passes the SELECT/WITH/DECLARE check.
+  // Multiple statements are allowed — the DB user is db_datareader-only,
+  // so writes would fail at the server regardless.
+  const stripped = stripLeadingSqlComments(text).replace(/;\s*$/, "");
+  const head = stripped.slice(0, 6).toLowerCase();
   if (!head.startsWith("select") && !head.startsWith("with") && !head.startsWith("declar")) {
     throw new Error("Query must begin with SELECT, WITH, or DECLARE.");
   }
