@@ -274,23 +274,23 @@ export async function runP21Snapshot(
 
   let rows: any[] = [];
   try {
-    const { result } = await runJob("sql.select", { sql: sqlText, params: {}, slug: "truck-capacity-p21" }, timeoutMs);
+    const { result } = await runJob("sql.select", { sql: sqlText, params: {}, slug }, timeoutMs);
     rows = ((result as any)?.rows ?? []) as any[];
   } catch (e: any) {
     const error = e?.message ?? String(e);
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.snapshot_failed",
       entity_type: "truck_capacity_p21_demand",
-      message: `Truck Capacity P21 snapshot failed: ${error}`,
-      metadata: { stage: "execute" },
+      message: `Truck Capacity P21 ${kindLabel} snapshot failed: ${error}`,
+      metadata: { stage: "execute", kind },
     });
-    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error };
+    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
   }
 
   // Zero rows against a well-formed query (e.g. the WHERE 1=0 stub) is a valid
   // no-op, not an error.
   if (rows.length === 0) {
-    return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true };
+    return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true, kind };
   }
 
   const num = (v: any): number | null => {
