@@ -955,7 +955,10 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           Pulls warehouse transfers from <code>transfer_hdr</code>/<code>transfer_line</code> and feeds the same demand table used by the projection guard. Same output contract as the orders query — <code>route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets</code> — but <code>route_code</code> is synthesized as <code>&lt;from_loc&gt;-&gt;&lt;to_loc&gt;</code>. Pin each transfer route&apos;s <b>P21 code</b> to the matching pair (e.g. <code>BHM-&gt;DAL</code> on <code>BHM-XFER-DAL</code>). Runs nightly alongside the orders snapshot.
         </div>
         <Textarea value={transferSql} onChange={(e) => setTransferSql(e.target.value)} rows={14} className="font-mono text-xs" />
-        {testTransferResult && <div className="text-xs mt-2">Test: <b>{testTransferResult.rowCount}</b> rows. Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testTransferResult.sample, null, 2)}</pre></div>}
+        {testTransferResult && <div className="text-xs mt-2">Test: <b>{testTransferResult.rowCount}</b> rows.
+          {testTransferResult.validation?.errors?.length ? <div className="text-red-600 mt-1"><b>Errors:</b><ul className="list-disc ml-4">{testTransferResult.validation.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
+          {testTransferResult.validation?.warnings?.length ? <div className="text-amber-600 mt-1"><b>Warnings:</b><ul className="list-disc ml-4">{testTransferResult.validation.warnings.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
+          Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testTransferResult.sample, null, 2)}</pre></div>}
         {snapTransferResult && <div className="text-xs mt-2">Snapshot: pulled {snapTransferResult.rowsPulled}, wrote {snapTransferResult.snapshotsWritten}. Unmatched codes: {snapTransferResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
       </Card>
 
