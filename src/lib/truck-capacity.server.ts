@@ -21,22 +21,24 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 --   total_cube_ft     numeric
 --   est_pallets       numeric  -- may be NULL; capacity ratio falls back to weight/cube when so
 --
--- Optional output column:
---   ship_city         text     -- ship-to city on the order. When a P21 code is
---                                 claimed by more than one route (e.g. NSC01
---                                 covers both Carolinas), the server uses
---                                 ship_city to disambiguate — the row is
---                                 assigned to the claimant whose p21_cities
---                                 list contains this city (case-insensitive).
---                                 If ship_city is returned, the server also
---                                 re-aggregates rows to (route_id, ship_date)
---                                 before insert.
+-- Optional output columns used to disambiguate shared route codes
+-- (e.g. NSC01 covers both Carolinas). The resolver cascades in this order
+-- per row: ship_city (against route.p21_cities) → ship_zip (5-digit
+-- prefix-matched against route.ship_to_zip_prefixes) → ship_state
+-- (against route.p21_states) → shipment weekday (typical_dow) → lowest
+-- sort_order. Any of the three geo columns may be NULL; the resolver
+-- just skips that step. If ship_city/state/zip are returned, the server
+-- re-aggregates rows to (route_id, ship_date) before insert.
+--   ship_city   text
+--   ship_state  text  -- 2-letter US state code (case-insensitive)
+--   ship_zip    text  -- postal code; only the leading 5 digits are used
 --
 -- Schema confirmed by NDI (K. Moore, Jul 2026): the order-header route lives on
 -- oe_hdr.shipping_route_uid → shipping_route.route_code (not a plain column on
 -- oe_hdr). required_date is the field NDI uses ("date we start the shipping
 -- process"); promise/requested get skewed by request delays. Weight/cube are on
--- inv_mast (im.weight, im.cube). Ship-to city is oe_hdr.ship2_city.
+-- inv_mast (im.weight, im.cube). Ship-to fields are oe_hdr.ship2_city /
+-- ship2_state / ship2_postal_code.
 --
 -- Filter convention (projected_order='N' = not a quote) mirrors the working
 -- SPIFF query in this codebase. qty_ordered is used as the open-quantity proxy
@@ -47,6 +49,8 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 SELECT sr.route_code                    AS route_code,
        CAST(h.required_date AS DATE)    AS ship_date,
        h.ship2_city                     AS ship_city,
+       h.ship2_state                    AS ship_state,
+       h.ship2_postal_code              AS ship_zip,
        COUNT(DISTINCT h.order_no)       AS order_count,
        SUM(l.qty_ordered * im.weight)   AS total_weight_lbs,
        SUM(l.qty_ordered * im.cube)     AS total_cube_ft,
@@ -61,7 +65,8 @@ SELECT sr.route_code                    AS route_code,
    AND ISNULL(h.projected_order, 'N') = 'N'
    AND l.delete_flag = 'N'
    AND h.required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
- GROUP BY sr.route_code, CAST(h.required_date AS DATE), h.ship2_city;`;
+ GROUP BY sr.route_code, CAST(h.required_date AS DATE),
+          h.ship2_city, h.ship2_state, h.ship2_postal_code;`;
 
 
 // -----------------------------------------------------------------------------
