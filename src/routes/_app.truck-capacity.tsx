@@ -920,6 +920,22 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         {snapResult && <div className="text-xs mt-2">Snapshot: pulled {snapResult.rowsPulled}, wrote {snapResult.snapshotsWritten}. Unmatched codes: {snapResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
       </Card>
 
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium">P21 transfer SQL (phase 2)</div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={testTransfer} disabled={busy === "testTransfer"}>{busy === "testTransfer" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}Test</Button>
+            <Button size="sm" variant="outline" onClick={snapTransfer} disabled={busy === "snapTransfer"}>{busy === "snapTransfer" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}Run transfer snapshot now</Button>
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground mb-2">
+          Pulls warehouse transfers from <code>transfer_hdr</code>/<code>transfer_line</code> and feeds the same demand table used by the projection guard. Same output contract as the orders query — <code>route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets</code> — but <code>route_code</code> is synthesized as <code>&lt;from_loc&gt;-&gt;&lt;to_loc&gt;</code>. Pin each transfer route&apos;s <b>P21 code</b> to the matching pair (e.g. <code>BHM-&gt;DAL</code> on <code>BHM-XFER-DAL</code>). Runs nightly alongside the orders snapshot.
+        </div>
+        <Textarea value={transferSql} onChange={(e) => setTransferSql(e.target.value)} rows={14} className="font-mono text-xs" />
+        {testTransferResult && <div className="text-xs mt-2">Test: <b>{testTransferResult.rowCount}</b> rows. Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testTransferResult.sample, null, 2)}</pre></div>}
+        {snapTransferResult && <div className="text-xs mt-2">Snapshot: pulled {snapTransferResult.rowsPulled}, wrote {snapTransferResult.snapshotsWritten}. Unmatched codes: {snapTransferResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
+      </Card>
+
       <RetrainCard />
 
       <div className="flex justify-end">
