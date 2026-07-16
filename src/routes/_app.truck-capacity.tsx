@@ -836,8 +836,10 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           Truck-full targets compute projected_capacity_frac = min(1.5, max of pallets/cube/weight ratios).
           Per Joe: pallet counts are approximate (pallet sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with loose product), so cube or weight is often the binding constraint.
           Cutoff time is display-only for now (from the Driver Routes sheet).
-          <br /><span className="text-amber-600">Pending client confirmation:</span> <code>DTR01</code> (how directional transfers are coded in P21 — with Kevin), <code>SOCA1</code> (Carolinas code on the Ocala tab).
+          <br /><span className="text-amber-600">Pending client confirmation:</span> <code>SOCA1</code> (Carolinas code on the Ocala tab).
+          <br /><span className="text-muted-foreground">Transfer lanes (<code>BHM-XFER-DAL</code>, <code>DAL-XFER-BHM</code>, <code>BHM-XFER-OCA</code>) don&apos;t receive P21 demand yet — the <code>transfer_hdr</code>/<code>transfer_line</code> query is phase 2.</span>
           <br /><span className="text-muted-foreground">Note:</span> <code>DAL-XFER-BHM</code> (Dallas Transfer) also carries Ocala → Dallas freight per Joe, so its utilization reads higher than Birmingham-only demand would suggest.
+
         </div>
         <div className="overflow-auto max-h-[420px] border rounded">
           <table className="w-full text-xs">

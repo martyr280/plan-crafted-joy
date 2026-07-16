@@ -32,30 +32,38 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 --                                 re-aggregates rows to (route_id, ship_date)
 --                                 before insert.
 --
--- UNVERIFIED column names — tune in Settings. The exact P21 field names for the
--- order-header route code (Joe confirmed the field exists on Order Entry → Ship
--- Info → "Route"), the ship/promise/requested date, and weight/cube on inv_mast
--- still need to be confirmed against the client's DB. Use the Test button to
--- iterate on this SQL until the sample rows look right, then Run snapshot.
-SELECT h.route              AS route_code,
-       CAST(COALESCE(h.promise_date, h.requested_date) AS DATE) AS ship_date,
-       COUNT(DISTINCT h.order_no)                              AS order_count,
-       SUM(l.qty_ordered * im.weight)                          AS total_weight_lbs,
-       SUM(l.qty_ordered * im.cubic_length_size)               AS total_cube_ft,
-       CAST(NULL AS decimal(18,2))                             AS est_pallets
-  FROM dbo.oe_hdr  h
-  JOIN dbo.oe_line l  ON l.order_no    = h.order_no
+-- Schema confirmed by NDI (K. Moore, Jul 2026): the order-header route lives on
+-- oe_hdr.shipping_route_uid → shipping_route.route_code (not a plain column on
+-- oe_hdr). required_date is the field NDI uses ("date we start the shipping
+-- process"); promise/requested get skewed by request delays. Weight/cube are on
+-- inv_mast (im.weight, im.cube). Ship-to city is oe_hdr.ship2_city.
+--
+-- Filter convention (projected_order='N' = not a quote) mirrors the working
+-- SPIFF query in this codebase. qty_ordered is used as the open-quantity proxy
+-- for now — a net-of-shipped refinement is possible later.
+--
+-- Warehouse transfers live in transfer_hdr/transfer_line and are NOT covered by
+-- this query; a phase-2 transfer-demand query will add BHM-XFER-DAL /
+-- DAL-XFER-BHM / BHM-XFER-OCA once its columns are confirmed.
+SELECT sr.route_code                    AS route_code,
+       CAST(h.required_date AS DATE)    AS ship_date,
+       h.ship2_city                     AS ship_city,
+       COUNT(DISTINCT h.order_no)       AS order_count,
+       SUM(l.qty_ordered * im.weight)   AS total_weight_lbs,
+       SUM(l.qty_ordered * im.cube)     AS total_cube_ft,
+       CAST(NULL AS decimal(18,2))      AS est_pallets
+  FROM dbo.oe_hdr h
+  JOIN dbo.shipping_route sr ON sr.shipping_route_uid = h.shipping_route_uid
+  JOIN dbo.oe_line l  ON l.order_no = h.order_no
   JOIN dbo.inv_mast im ON im.inv_mast_uid = l.inv_mast_uid
  WHERE h.completed = 'N'
-   AND h.cancel_flag = 'N'
-   AND h.delete_flag = 'N'
-   AND h.quote_flag  = 'N'
-   AND l.invoice_no IS NULL
-   AND h.route IS NOT NULL
-   AND COALESCE(h.promise_date, h.requested_date)
-       BETWEEN CAST(GETDATE() AS DATE)
-           AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
- GROUP BY h.route, CAST(COALESCE(h.promise_date, h.requested_date) AS DATE);`;
+   AND ISNULL(h.cancel_flag, 'N') = 'N'
+   AND ISNULL(h.delete_flag, 'N') = 'N'
+   AND ISNULL(h.projected_order, 'N') = 'N'
+   AND l.delete_flag = 'N'
+   AND h.required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
+ GROUP BY sr.route_code, CAST(h.required_date AS DATE), h.ship2_city;`;
+
 
 // (Route / Run types defined below alongside the forecast helper.)
 
