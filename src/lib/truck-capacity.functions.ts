@@ -135,7 +135,11 @@ export const getTruckSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
     const { data } = await supabaseAdmin.from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
-    return { settings: data, defaultP21Sql: DEFAULT_P21_SQL };
+    return {
+      settings: data,
+      defaultP21Sql: DEFAULT_P21_SQL,
+      defaultP21TransferSql: DEFAULT_P21_TRANSFER_SQL,
+    };
   });
 
 export const updateTruckSettings = createServerFn({ method: "POST" })
@@ -144,11 +148,12 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
     capacity_basis: z.enum(["pallets", "weight", "cube"]),
     vendor_pickup_counts: z.boolean(),
     p21_sql: z.string().max(20000).nullable().optional(),
+    p21_transfer_sql: z.string().max(20000).nullable().optional(),
   }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
     const { error } = await supabaseAdmin.from("truck_capacity_settings")
-      .update({ ...data, updated_by: context.userId }).eq("singleton", true);
+      .update({ ...data, updated_by: context.userId } as any).eq("singleton", true);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
