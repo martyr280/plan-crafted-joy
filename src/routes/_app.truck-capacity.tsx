@@ -747,6 +747,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     p21_route_code: string;
     cutoff_time: string;
     p21_cities: string;
+    p21_states: string;
+    ship_to_zip_prefixes: string;
   };
   const [routeEdits, setRouteEdits] = useState<Record<string, RouteEdit>>({});
   useEffect(() => {
@@ -758,6 +760,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       p21_route_code: r.p21_route_code ?? "",
       cutoff_time: r.cutoff_time ?? "",
       p21_cities: (r.p21_cities ?? []).join(", "),
+      p21_states: (r.p21_states ?? []).join(", "),
+      ship_to_zip_prefixes: (r.ship_to_zip_prefixes ?? []).join(", "),
     };
     setRouteEdits(m);
   }, [routes]);
