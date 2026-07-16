@@ -443,20 +443,20 @@ export async function runP21Snapshot(
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.snapshot_failed",
       entity_type: "truck_capacity_p21_demand",
-      message: `Truck Capacity P21 snapshot insert failed: ${error}`,
-      metadata: { stage: "insert", written },
+      message: `Truck Capacity P21 ${kindLabel} snapshot insert failed: ${error}`,
+      metadata: { stage: "insert", written, kind },
     });
-    return { ok: false, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, error };
+    return { ok: false, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, error, kind };
   }
 
   await supabaseAdmin.from("activity_events").insert({
     event_type: "truck_capacity.p21_snapshot",
     entity_type: "truck_capacity_p21_demand",
-    message: `Truck Capacity P21 snapshot: ${written} rows, ${unmatched.size} unmatched route codes`,
-    metadata: { written, unmatched: Array.from(unmatched) },
+    message: `Truck Capacity P21 ${kindLabel} snapshot: ${written} rows, ${unmatched.size} unmatched route codes`,
+    metadata: { written, unmatched: Array.from(unmatched), kind },
   });
 
-  return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false };
+  return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, kind };
 }
 
 
