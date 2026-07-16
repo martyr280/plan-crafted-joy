@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail } from "lucide-react";
+import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import {
