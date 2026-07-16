@@ -167,7 +167,7 @@ export function validateP21SqlOutput(
     }
     if (!isNumericOrNull(r.total_weight_lbs)) flag("`total_weight_lbs` must be numeric or NULL.");
     if (!isNumericOrNull(r.total_cube_ft))    flag("`total_cube_ft` must be numeric or NULL.");
-    if (!isNumericOrNull(r.est_pallets))      flag("`est_pallets` must be numeric or NULL.");
+    if ("est_pallets" in r && !isNumericOrNull(r.est_pallets)) flag("`est_pallets` must be numeric or NULL when returned.");
 
     if ("ship_city" in r && r.ship_city != null && !isStringLike(r.ship_city)) {
       flag("`ship_city` must be a string or NULL when returned.");
