@@ -936,7 +936,10 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         </div>
         <div className="text-xs text-muted-foreground mb-2">Must return: <code>route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets</code>.</div>
         <Textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={14} className="font-mono text-xs" />
-        {testResult && <div className="text-xs mt-2">Test: <b>{testResult.rowCount}</b> rows. Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testResult.sample, null, 2)}</pre></div>}
+        {testResult && <div className="text-xs mt-2">Test: <b>{testResult.rowCount}</b> rows.
+          {testResult.validation?.errors?.length ? <div className="text-red-600 mt-1"><b>Errors:</b><ul className="list-disc ml-4">{testResult.validation.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
+          {testResult.validation?.warnings?.length ? <div className="text-amber-600 mt-1"><b>Warnings:</b><ul className="list-disc ml-4">{testResult.validation.warnings.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
+          Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testResult.sample, null, 2)}</pre></div>}
         {snapResult && <div className="text-xs mt-2">Snapshot: pulled {snapResult.rowsPulled}, wrote {snapResult.snapshotsWritten}. Unmatched codes: {snapResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
       </Card>
 
