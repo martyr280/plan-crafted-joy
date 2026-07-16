@@ -61,10 +61,16 @@ describe("validateP21SqlOutput", () => {
     expect(warnings.length).toBe(1);
   });
 
-  it("flags a missing required column", () => {
+  it("flags a missing required column (route_code)", () => {
+    const row: any = goodRow(); delete row.route_code;
+    const { errors } = validateP21SqlOutput([row]);
+    expect(errors.some((e) => e.includes("route_code"))).toBe(true);
+  });
+
+  it("accepts rows without est_pallets (optional column)", () => {
     const row: any = goodRow(); delete row.est_pallets;
     const { errors } = validateP21SqlOutput([row]);
-    expect(errors.some((e) => e.includes("est_pallets"))).toBe(true);
+    expect(errors).toEqual([]);
   });
 
   it("flags an unparseable ship_date", () => {
