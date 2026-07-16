@@ -204,13 +204,25 @@ export async function computeBaselineForecastForRoute(routeId: string, horizonDa
 
 /* ============================== P21 SNAPSHOT ============================== */
 
-export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
+export type SnapshotKind = "orders" | "transfers";
+
+export async function runP21Snapshot(
+  opts: { timeoutMs?: number; kind?: SnapshotKind } = {},
+): Promise<{
   ok: boolean; rowsPulled: number; snapshotsWritten: number;
-  unmatchedRouteCodes: string[]; skipped: boolean; error?: string;
+  unmatchedRouteCodes: string[]; skipped: boolean; error?: string; kind: SnapshotKind;
 }> {
+  const timeoutMs = opts.timeoutMs ?? 90_000;
+  const kind: SnapshotKind = opts.kind ?? "orders";
   const { data: settings } = await supabaseAdmin
-    .from("truck_capacity_settings").select("p21_sql").eq("singleton", true).maybeSingle();
-  const sqlText = (settings?.p21_sql ?? "").trim() || DEFAULT_P21_SQL;
+    .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+  const configuredSql = kind === "transfers"
+    ? ((settings as any)?.p21_transfer_sql ?? "")
+    : ((settings as any)?.p21_sql ?? "");
+  const defaultSql = kind === "transfers" ? DEFAULT_P21_TRANSFER_SQL : DEFAULT_P21_SQL;
+  const sqlText = String(configuredSql).trim() || defaultSql;
+  const slug = kind === "transfers" ? "truck-capacity-p21-transfers" : "truck-capacity-p21";
+  const kindLabel = kind === "transfers" ? "transfers" : "orders";
 
   // Defense-in-depth: reject anything that isn't a read-only SELECT/WITH/DECLARE
   // before it goes to the bridge, even though the DB user is db_datareader-only.
