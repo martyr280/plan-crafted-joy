@@ -54,8 +54,13 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             if (already && already.length > 0) {
               truckCapacity = { ok: true, skipped: true, reason: "already_ran_today" };
             } else {
-              try { truckCapacity = await runP21Snapshot(); }
-              catch (e: any) { truckCapacity = { ok: false, error: e?.message ?? String(e) }; }
+              try {
+                const orders = await runP21Snapshot({ kind: "orders" });
+                let transfers: any = null;
+                try { transfers = await runP21Snapshot({ kind: "transfers" }); }
+                catch (e: any) { transfers = { ok: false, error: e?.message ?? String(e) }; }
+                truckCapacity = { orders, transfers };
+              } catch (e: any) { truckCapacity = { ok: false, error: e?.message ?? String(e) }; }
             }
           }
 
