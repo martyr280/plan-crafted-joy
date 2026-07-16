@@ -24,7 +24,8 @@ import { useAuth } from "@/lib/auth";
 import {
   listTruckRoutes, listTruckRuns, upsertTruckRun, deleteTruckRun, getTruckForecast,
   getTruckSettings, updateTruckSettings, updateRoutePalletsPerTruck,
-  previewTruckImport, commitTruckImport, exportTruckWorkbook, runP21SnapshotNow, testP21Sql,
+  previewTruckImport, commitTruckImport, exportTruckWorkbook,
+  runP21SnapshotNow, testP21Sql, runP21TransferSnapshotNow, testP21TransferSql,
   retrainTruckModel, listTruckModelVersions, getTruckAccuracy,
 } from "@/lib/truck-capacity.functions";
 
@@ -715,18 +716,27 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
   const palletsFn = useServerFn(updateRoutePalletsPerTruck);
   const testFn = useServerFn(testP21Sql);
   const snapFn = useServerFn(runP21SnapshotNow);
+  const testTransferFn = useServerFn(testP21TransferSql);
+  const snapTransferFn = useServerFn(runP21TransferSnapshotNow);
   const qc = useQueryClient();
 
   const q = useQuery({ queryKey: ["tc-settings"], queryFn: () => settingsFn() });
   const s = q.data?.settings;
   const defaultSql: string = q.data?.defaultP21Sql ?? "";
+  const defaultTransferSql: string = (q.data as any)?.defaultP21TransferSql ?? "";
 
   const [basis, setBasis] = useState<"pallets"|"weight"|"cube">("pallets");
   const [vendorCounts, setVendorCounts] = useState(false);
   const [sql, setSql] = useState("");
+  const [transferSql, setTransferSql] = useState("");
   useEffect(() => {
-    if (s) { setBasis(s.capacity_basis as "pallets"|"weight"|"cube"); setVendorCounts(s.vendor_pickup_counts); setSql(s.p21_sql ?? defaultSql); }
-  }, [s, defaultSql]);
+    if (s) {
+      setBasis(s.capacity_basis as "pallets"|"weight"|"cube");
+      setVendorCounts(s.vendor_pickup_counts);
+      setSql(s.p21_sql ?? defaultSql);
+      setTransferSql((s as any).p21_transfer_sql ?? defaultTransferSql);
+    }
+  }, [s, defaultSql, defaultTransferSql]);
 
   type RouteEdit = {
     pallets_full_truck: string;
@@ -755,12 +765,19 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 
   const [testResult, setTestResult] = useState<any>(null);
   const [snapResult, setSnapResult] = useState<any>(null);
+  const [testTransferResult, setTestTransferResult] = useState<any>(null);
+  const [snapTransferResult, setSnapTransferResult] = useState<any>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function save() {
     setBusy("save");
     try {
-      await updateFn({ data: { capacity_basis: basis, vendor_pickup_counts: vendorCounts, p21_sql: sql } });
+      await updateFn({ data: {
+        capacity_basis: basis,
+        vendor_pickup_counts: vendorCounts,
+        p21_sql: sql,
+        p21_transfer_sql: transferSql,
+      } });
       const numOrNull = (v: string) => v === "" ? null : Number(v);
       const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
       const citiesOrNull = (v: string) => {
@@ -801,6 +818,20 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
     finally { setBusy(null); }
   }
 
+  async function testTransfer() {
+    setBusy("testTransfer"); setTestTransferResult(null);
+    try { setTestTransferResult(await testTransferFn({ data: { sql: transferSql } })); }
+    catch (e: any) { toast.error(e?.message ?? "Transfer test failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function snapTransfer() {
+    setBusy("snapTransfer"); setSnapTransferResult(null);
+    try { setSnapTransferResult(await snapTransferFn()); toast.success("Transfer snapshot run"); }
+    catch (e: any) { toast.error(e?.message ?? "Transfer snapshot failed"); }
+    finally { setBusy(null); }
+  }
+
   return (
     <div className="space-y-4 pt-4">
       <Card className="p-4 space-y-3">
@@ -837,7 +868,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           Per Joe: pallet counts are approximate (pallet sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with loose product), so cube or weight is often the binding constraint.
           Cutoff time is display-only for now (from the Driver Routes sheet).
           <br /><span className="text-amber-600">Pending client confirmation:</span> <code>SOCA1</code> (Carolinas code on the Ocala tab).
-          <br /><span className="text-muted-foreground">Transfer lanes (<code>BHM-XFER-DAL</code>, <code>DAL-XFER-BHM</code>, <code>BHM-XFER-OCA</code>) don&apos;t receive P21 demand yet — the <code>transfer_hdr</code>/<code>transfer_line</code> query is phase 2.</span>
+          <br /><span className="text-muted-foreground">Transfer lanes (<code>BHM-XFER-DAL</code>, <code>DAL-XFER-BHM</code>, <code>BHM-XFER-OCA</code>) are pulled by the separate <code>transfer_hdr</code>/<code>transfer_line</code> query below. Pin each transfer route&apos;s P21 code to the synthesized <code>&lt;from&gt;-&gt;&lt;to&gt;</code> pair (e.g. <code>BHM-&gt;DAL</code>) so the same matcher can route it.</span>
           <br /><span className="text-muted-foreground">Note:</span> <code>DAL-XFER-BHM</code> (Dallas Transfer) also carries Ocala → Dallas freight per Joe, so its utilization reads higher than Birmingham-only demand would suggest.
 
         </div>
@@ -887,6 +918,22 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         <Textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={14} className="font-mono text-xs" />
         {testResult && <div className="text-xs mt-2">Test: <b>{testResult.rowCount}</b> rows. Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testResult.sample, null, 2)}</pre></div>}
         {snapResult && <div className="text-xs mt-2">Snapshot: pulled {snapResult.rowsPulled}, wrote {snapResult.snapshotsWritten}. Unmatched codes: {snapResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium">P21 transfer SQL (phase 2)</div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={testTransfer} disabled={busy === "testTransfer"}>{busy === "testTransfer" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}Test</Button>
+            <Button size="sm" variant="outline" onClick={snapTransfer} disabled={busy === "snapTransfer"}>{busy === "snapTransfer" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}Run transfer snapshot now</Button>
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground mb-2">
+          Pulls warehouse transfers from <code>transfer_hdr</code>/<code>transfer_line</code> and feeds the same demand table used by the projection guard. Same output contract as the orders query — <code>route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets</code> — but <code>route_code</code> is synthesized as <code>&lt;from_loc&gt;-&gt;&lt;to_loc&gt;</code>. Pin each transfer route&apos;s <b>P21 code</b> to the matching pair (e.g. <code>BHM-&gt;DAL</code> on <code>BHM-XFER-DAL</code>). Runs nightly alongside the orders snapshot.
+        </div>
+        <Textarea value={transferSql} onChange={(e) => setTransferSql(e.target.value)} rows={14} className="font-mono text-xs" />
+        {testTransferResult && <div className="text-xs mt-2">Test: <b>{testTransferResult.rowCount}</b> rows. Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testTransferResult.sample, null, 2)}</pre></div>}
+        {snapTransferResult && <div className="text-xs mt-2">Snapshot: pulled {snapTransferResult.rowsPulled}, wrote {snapTransferResult.snapshotsWritten}. Unmatched codes: {snapTransferResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
       </Card>
 
       <RetrainCard />

@@ -42,9 +42,8 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 -- SPIFF query in this codebase. qty_ordered is used as the open-quantity proxy
 -- for now — a net-of-shipped refinement is possible later.
 --
--- Warehouse transfers live in transfer_hdr/transfer_line and are NOT covered by
--- this query; a phase-2 transfer-demand query will add BHM-XFER-DAL /
--- DAL-XFER-BHM / BHM-XFER-OCA once its columns are confirmed.
+-- Warehouse transfers are handled by DEFAULT_P21_TRANSFER_SQL below and pulled
+-- as a second snapshot pass that feeds the same truck_capacity_p21_demand table.
 SELECT sr.route_code                    AS route_code,
        CAST(h.required_date AS DATE)    AS ship_date,
        h.ship2_city                     AS ship_city,
@@ -63,6 +62,63 @@ SELECT sr.route_code                    AS route_code,
    AND l.delete_flag = 'N'
    AND h.required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
  GROUP BY sr.route_code, CAST(h.required_date AS DATE), h.ship2_city;`;
+
+
+// -----------------------------------------------------------------------------
+// Phase-2 transfer demand.
+//
+// Warehouse transfers do not live on oe_hdr — they live on transfer_hdr /
+// transfer_line, keyed by from/to location_id. NDI's three transfer lanes are:
+//   BHM-XFER-DAL  = Birmingham -> Dallas
+//   DAL-XFER-BHM  = Dallas     -> Birmingham   (also carries Ocala->Dallas)
+//   BHM-XFER-OCA  = Ocala      -> Birmingham
+//
+// Mapping to internal routes reuses the existing p21_route_code resolver — the
+// query emits a synthetic `route_code` of the form "<from>-><to>" that the
+// admin can pin on each transfer route via the Cities/P21 code column (e.g.
+// `BHM-XFER-DAL.p21_route_code = 'BHM->DAL'`). Ship-city / weekday
+// disambiguation still applies if needed.
+//
+// P21 schema note: standard P21 transfer tables are transfer_hdr (fields:
+// transfer_no, from_location_id, to_location_id, required_date, completed,
+// cancel_flag, delete_flag) and transfer_line (transfer_no, inv_mast_uid,
+// qty_ordered, delete_flag). Location codes come from location.location_id /
+// location.location_name — NDI to confirm exact naming during Test.
+export const DEFAULT_P21_TRANSFER_SQL = `-- Truck Capacity :: forward TRANSFER demand snapshot (phase 2).
+-- Required output columns (same contract as DEFAULT_P21_SQL):
+--   route_code       text     -- synthesized as "<from_loc>-><to_loc>"; pin
+--                                each transfer route's p21_route_code to the
+--                                matching pair (e.g. 'BHM->DAL').
+--   ship_date        date     -- transfer required_date (start of shipping).
+--   order_count      int      -- transfer-order count (transfer_no).
+--   total_weight_lbs numeric
+--   total_cube_ft    numeric
+--   est_pallets      numeric  -- NULL ok; capacity ratio falls back to weight/cube.
+--
+-- Optional: ship_city (unused for transfers, but harmless if returned).
+--
+-- Contract mirrors DEFAULT_P21_SQL so the same matcher + aggregator handles
+-- transfers with zero server changes.  NDI to confirm exact location code
+-- values (BHM / DAL / OCA vs numeric location_ids) during Test — swap in
+-- location.location_name if the numeric IDs aren't what you configured.
+SELECT (fl.location_id + '->' + tl.location_id)      AS route_code,
+       CAST(h.required_date AS DATE)                 AS ship_date,
+       CAST(NULL AS varchar(1))                      AS ship_city,
+       COUNT(DISTINCT h.transfer_no)                 AS order_count,
+       SUM(l.qty_ordered * im.weight)                AS total_weight_lbs,
+       SUM(l.qty_ordered * im.cube)                  AS total_cube_ft,
+       CAST(NULL AS decimal(18,2))                   AS est_pallets
+  FROM dbo.transfer_hdr h
+  JOIN dbo.location fl ON fl.location_id = h.from_location_id
+  JOIN dbo.location tl ON tl.location_id = h.to_location_id
+  JOIN dbo.transfer_line l ON l.transfer_no = h.transfer_no
+  JOIN dbo.inv_mast im ON im.inv_mast_uid = l.inv_mast_uid
+ WHERE ISNULL(h.completed, 'N')   = 'N'
+   AND ISNULL(h.cancel_flag, 'N') = 'N'
+   AND ISNULL(h.delete_flag, 'N') = 'N'
+   AND ISNULL(l.delete_flag, 'N') = 'N'
+   AND h.required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
+ GROUP BY fl.location_id, tl.location_id, CAST(h.required_date AS DATE);`;
 
 
 // (Route / Run types defined below alongside the forecast helper.)
@@ -148,13 +204,25 @@ export async function computeBaselineForecastForRoute(routeId: string, horizonDa
 
 /* ============================== P21 SNAPSHOT ============================== */
 
-export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
+export type SnapshotKind = "orders" | "transfers";
+
+export async function runP21Snapshot(
+  opts: { timeoutMs?: number; kind?: SnapshotKind } = {},
+): Promise<{
   ok: boolean; rowsPulled: number; snapshotsWritten: number;
-  unmatchedRouteCodes: string[]; skipped: boolean; error?: string;
+  unmatchedRouteCodes: string[]; skipped: boolean; error?: string; kind: SnapshotKind;
 }> {
+  const timeoutMs = opts.timeoutMs ?? 90_000;
+  const kind: SnapshotKind = opts.kind ?? "orders";
   const { data: settings } = await supabaseAdmin
-    .from("truck_capacity_settings").select("p21_sql").eq("singleton", true).maybeSingle();
-  const sqlText = (settings?.p21_sql ?? "").trim() || DEFAULT_P21_SQL;
+    .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+  const configuredSql = kind === "transfers"
+    ? ((settings as any)?.p21_transfer_sql ?? "")
+    : ((settings as any)?.p21_sql ?? "");
+  const defaultSql = kind === "transfers" ? DEFAULT_P21_TRANSFER_SQL : DEFAULT_P21_SQL;
+  const sqlText = String(configuredSql).trim() || defaultSql;
+  const slug = kind === "transfers" ? "truck-capacity-p21-transfers" : "truck-capacity-p21";
+  const kindLabel = kind === "transfers" ? "transfers" : "orders";
 
   // Defense-in-depth: reject anything that isn't a read-only SELECT/WITH/DECLARE
   // before it goes to the bridge, even though the DB user is db_datareader-only.
@@ -165,10 +233,10 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.snapshot_failed",
       entity_type: "truck_capacity_p21_demand",
-      message: `Truck Capacity P21 snapshot rejected: ${error}`,
-      metadata: { stage: "validate" },
+      message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
+      metadata: { stage: "validate", kind },
     });
-    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error };
+    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
   }
 
   const { data: routes } = await supabaseAdmin
@@ -206,23 +274,23 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
 
   let rows: any[] = [];
   try {
-    const { result } = await runJob("sql.select", { sql: sqlText, params: {}, slug: "truck-capacity-p21" }, timeoutMs);
+    const { result } = await runJob("sql.select", { sql: sqlText, params: {}, slug }, timeoutMs);
     rows = ((result as any)?.rows ?? []) as any[];
   } catch (e: any) {
     const error = e?.message ?? String(e);
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.snapshot_failed",
       entity_type: "truck_capacity_p21_demand",
-      message: `Truck Capacity P21 snapshot failed: ${error}`,
-      metadata: { stage: "execute" },
+      message: `Truck Capacity P21 ${kindLabel} snapshot failed: ${error}`,
+      metadata: { stage: "execute", kind },
     });
-    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error };
+    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
   }
 
   // Zero rows against a well-formed query (e.g. the WHERE 1=0 stub) is a valid
   // no-op, not an error.
   if (rows.length === 0) {
-    return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true };
+    return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true, kind };
   }
 
   const num = (v: any): number | null => {
@@ -375,20 +443,20 @@ export async function runP21Snapshot(timeoutMs = 90_000): Promise<{
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.snapshot_failed",
       entity_type: "truck_capacity_p21_demand",
-      message: `Truck Capacity P21 snapshot insert failed: ${error}`,
-      metadata: { stage: "insert", written },
+      message: `Truck Capacity P21 ${kindLabel} snapshot insert failed: ${error}`,
+      metadata: { stage: "insert", written, kind },
     });
-    return { ok: false, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, error };
+    return { ok: false, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, error, kind };
   }
 
   await supabaseAdmin.from("activity_events").insert({
     event_type: "truck_capacity.p21_snapshot",
     entity_type: "truck_capacity_p21_demand",
-    message: `Truck Capacity P21 snapshot: ${written} rows, ${unmatched.size} unmatched route codes`,
-    metadata: { written, unmatched: Array.from(unmatched) },
+    message: `Truck Capacity P21 ${kindLabel} snapshot: ${written} rows, ${unmatched.size} unmatched route codes`,
+    metadata: { written, unmatched: Array.from(unmatched), kind },
   });
 
-  return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false };
+  return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, kind };
 }
 
 

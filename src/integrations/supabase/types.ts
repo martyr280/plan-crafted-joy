@@ -2176,6 +2176,7 @@ export type Database = {
           created_at: string
           id: string
           p21_sql: string | null
+          p21_transfer_sql: string | null
           singleton: boolean
           updated_at: string
           updated_by: string | null
@@ -2186,6 +2187,7 @@ export type Database = {
           created_at?: string
           id?: string
           p21_sql?: string | null
+          p21_transfer_sql?: string | null
           singleton?: boolean
           updated_at?: string
           updated_by?: string | null
@@ -2196,6 +2198,7 @@ export type Database = {
           created_at?: string
           id?: string
           p21_sql?: string | null
+          p21_transfer_sql?: string | null
           singleton?: boolean
           updated_at?: string
           updated_by?: string | null

@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertAdmin, runJob } from "./p21.server";
 import {
   computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
-  runP21Snapshot, DEFAULT_P21_SQL,
+  runP21Snapshot, DEFAULT_P21_SQL, DEFAULT_P21_TRANSFER_SQL,
 } from "./truck-capacity.server";
 import { validateSelectSql } from "./sql-schedules.server";
 
@@ -135,7 +135,11 @@ export const getTruckSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
     const { data } = await supabaseAdmin.from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
-    return { settings: data, defaultP21Sql: DEFAULT_P21_SQL };
+    return {
+      settings: data,
+      defaultP21Sql: DEFAULT_P21_SQL,
+      defaultP21TransferSql: DEFAULT_P21_TRANSFER_SQL,
+    };
   });
 
 export const updateTruckSettings = createServerFn({ method: "POST" })
@@ -144,11 +148,12 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
     capacity_basis: z.enum(["pallets", "weight", "cube"]),
     vendor_pickup_counts: z.boolean(),
     p21_sql: z.string().max(20000).nullable().optional(),
+    p21_transfer_sql: z.string().max(20000).nullable().optional(),
   }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
     const { error } = await supabaseAdmin.from("truck_capacity_settings")
-      .update({ ...data, updated_by: context.userId }).eq("singleton", true);
+      .update({ ...data, updated_by: context.userId } as any).eq("singleton", true);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -228,7 +233,14 @@ export const runP21SnapshotNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(null, context.userId);
-    return runP21Snapshot();
+    return runP21Snapshot({ kind: "orders" });
+  });
+
+export const runP21TransferSnapshotNow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(null, context.userId);
+    return runP21Snapshot({ kind: "transfers" });
   });
 
 export const testP21Sql = createServerFn({ method: "POST" })
@@ -239,6 +251,17 @@ export const testP21Sql = createServerFn({ method: "POST" })
     // Defense-in-depth: block anything that isn't a read-only SELECT/WITH/DECLARE.
     validateSelectSql(data.sql);
     const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-test" }, 60_000);
+    const rows = ((result as any)?.rows ?? []) as any[];
+    return { rowCount: rows.length, sample: rows.slice(0, 10) };
+  });
+
+export const testP21TransferSql = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ sql: z.string().min(1).max(20000) }).parse(i))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(null, context.userId);
+    validateSelectSql(data.sql);
+    const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-transfer-test" }, 60_000);
     const rows = ((result as any)?.rows ?? []) as any[];
     return { rowCount: rows.length, sample: rows.slice(0, 10) };
   });
