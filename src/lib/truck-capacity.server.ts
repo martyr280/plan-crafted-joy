@@ -4,6 +4,17 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
 import { validateSelectSql } from "./sql-schedules.server";
 import { baselineFromSnapshot, addDaysISO } from "./truck-capacity/baseline";
+import {
+  validateP21SqlText,
+  validateP21SqlOutput,
+  type SqlValidation,
+} from "./truck-capacity/sql-validate";
+
+// Re-export the validators so the *.functions.ts server-fn module (which
+// runs auth + saves settings) can call them without pulling in the rest of
+// this file's ExcelJS surface at its top level.
+export { validateP21SqlText, validateP21SqlOutput };
+export type { SqlValidation };
 
 // Re-export serving forecast + trainer so consumers keep a single import path.
 export { computeForecastForRoute } from "./truck-capacity/serve";
