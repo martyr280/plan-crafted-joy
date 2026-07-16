@@ -894,7 +894,9 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
               <tr>
                 <th className="text-left p-2">Route</th>
                 <th className="text-left p-2">P21 code</th>
-                <th className="text-left p-2">Cities (shared-code resolver)</th>
+                <th className="text-left p-2">Cities</th>
+                <th className="text-left p-2">Zip prefixes</th>
+                <th className="text-left p-2">States</th>
                 <th className="text-left p-2">Cutoff</th>
                 <th className="text-right p-2">Pallets/full</th>
                 <th className="text-right p-2">Cube ft³/full</th>
