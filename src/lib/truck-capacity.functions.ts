@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertAdmin, runJob } from "./p21.server";
@@ -8,7 +9,7 @@ import {
   runP21Snapshot, DEFAULT_P21_SQL, DEFAULT_P21_TRANSFER_SQL,
   validateP21SqlText, validateP21SqlOutput,
 } from "./truck-capacity.server";
-import { validateSelectSql } from "./sql-schedules.server";
+import { validateSelectSql, stripLeadingSqlComments } from "./sql-schedules.server";
 
 async function requireOpsOrAdmin(userId: string) {
   const { data } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
@@ -362,7 +363,7 @@ export const testP21Sql = createServerFn({ method: "POST" })
     if (textCheck.errors.length > 0) {
       throw new Error(`Output contract failed: ${textCheck.errors.join(" ")}`);
     }
-    const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-test" }, 60_000);
+    const { result } = await runJob("sql.select", { sql: stripLeadingSqlComments(data.sql), params: {}, slug: "truck-capacity-test" }, 60_000);
     const rows = ((result as any)?.rows ?? []) as any[];
     // Runtime output-shape check against the actual sample. Surface as
     // findings (not a throw) so admins see column/type mismatches side-by-side
@@ -388,7 +389,7 @@ export const testP21TransferSql = createServerFn({ method: "POST" })
     if (textCheck.errors.length > 0) {
       throw new Error(`Output contract failed: ${textCheck.errors.join(" ")}`);
     }
-    const { result } = await runJob("sql.select", { sql: data.sql, params: {}, slug: "truck-capacity-transfer-test" }, 60_000);
+    const { result } = await runJob("sql.select", { sql: stripLeadingSqlComments(data.sql), params: {}, slug: "truck-capacity-transfer-test" }, 60_000);
     const rows = ((result as any)?.rows ?? []) as any[];
     const outCheck = validateP21SqlOutput(rows, "transfers");
     return {
