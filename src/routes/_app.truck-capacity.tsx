@@ -976,6 +976,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         {snapTransferResult && <div className="text-xs mt-2">Snapshot: pulled {snapTransferResult.rowsPulled}, wrote {snapTransferResult.snapshotsWritten}. Unmatched codes: {snapTransferResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
       </Card>
 
+      <CapacityCoverageCard />
+
       <UnmatchedRouteCodesCard routes={routes} />
 
       <RetrainCard />
