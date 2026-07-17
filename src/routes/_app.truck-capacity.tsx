@@ -962,6 +962,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         {snapTransferResult && <div className="text-xs mt-2">Snapshot: pulled {snapTransferResult.rowsPulled}, wrote {snapTransferResult.snapshotsWritten}. Unmatched codes: {snapTransferResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
       </Card>
 
+      <UnmatchedRouteCodesCard routes={routes} />
+
       <RetrainCard />
 
       <div className="flex justify-end">
