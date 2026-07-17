@@ -876,6 +876,18 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         </div>
       </Card>
 
+      <BulkFillFullTruckCard
+        routes={routes}
+        routeEdits={routeEdits}
+        onFill={(patch) => {
+          setRouteEdits((prev) => {
+            const next = { ...prev };
+            for (const [id, p] of Object.entries(patch)) next[id] = { ...next[id], ...p };
+            return next;
+          });
+        }}
+      />
+
       <Card className="p-4">
         <div className="text-sm font-medium mb-2">Route metadata &amp; truck-full targets</div>
         <div className="text-xs text-muted-foreground mb-3">
@@ -1148,5 +1160,118 @@ function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
     </Card>
   );
 }
+
+/* ============ BULK FILL FULL-TRUCK TARGETS ============ */
+
+type BulkFillPatch = Record<string, { cube_full_truck_ft3?: string; weight_full_truck_lbs?: string }>;
+
+function BulkFillFullTruckCard({
+  routes,
+  routeEdits,
+  onFill,
+}: {
+  routes: RouteRow[];
+  routeEdits: Record<string, { cube_full_truck_ft3: string; weight_full_truck_lbs: string }>;
+  onFill: (patch: BulkFillPatch) => void;
+}) {
+  const [cube, setCube] = useState("3900");
+  const [weight, setWeight] = useState("45000");
+  const [fillCube, setFillCube] = useState(true);
+  const [fillWeight, setFillWeight] = useState(true);
+  const [onlyBlanks, setOnlyBlanks] = useState(true);
+  const [hub, setHub] = useState<string>("all");
+
+  const targets = useMemo(() => routes.filter((r) => hub === "all" || r.hub === hub), [routes, hub]);
+  const preview = useMemo(() => {
+    let willFill = 0, skipped = 0;
+    for (const r of targets) {
+      const e = routeEdits[r.id];
+      const curCube = e?.cube_full_truck_ft3 ?? "";
+      const curWeight = e?.weight_full_truck_lbs ?? "";
+      let touched = false;
+      if (fillCube && (!onlyBlanks || curCube === "")) touched = true;
+      if (fillWeight && (!onlyBlanks || curWeight === "")) touched = true;
+      if (touched) willFill += 1; else skipped += 1;
+    }
+    return { willFill, skipped };
+  }, [targets, routeEdits, fillCube, fillWeight, onlyBlanks]);
+
+  function apply() {
+    const cubeNum = Number(cube);
+    const weightNum = Number(weight);
+    if (fillCube && (!Number.isFinite(cubeNum) || cubeNum <= 0)) { toast.error("Cube must be a positive number"); return; }
+    if (fillWeight && (!Number.isFinite(weightNum) || weightNum <= 0)) { toast.error("Weight must be a positive number"); return; }
+    if (!fillCube && !fillWeight) { toast.error("Pick at least one field to fill"); return; }
+    const patch: BulkFillPatch = {};
+    for (const r of targets) {
+      const e = routeEdits[r.id];
+      const curCube = e?.cube_full_truck_ft3 ?? "";
+      const curWeight = e?.weight_full_truck_lbs ?? "";
+      const p: { cube_full_truck_ft3?: string; weight_full_truck_lbs?: string } = {};
+      if (fillCube && (!onlyBlanks || curCube === "")) p.cube_full_truck_ft3 = String(cubeNum);
+      if (fillWeight && (!onlyBlanks || curWeight === "")) p.weight_full_truck_lbs = String(weightNum);
+      if (Object.keys(p).length > 0) patch[r.id] = p;
+    }
+    const n = Object.keys(patch).length;
+    if (n === 0) { toast.info("Nothing to fill with these options"); return; }
+    onFill(patch);
+    toast.success(`Filled ${n} route${n === 1 ? "" : "s"} — click "Save settings" to persist.`);
+  }
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium">Bulk fill full-truck targets</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            Populate <code>cube_full_truck_ft3</code> and <code>weight_full_truck_lbs</code> from a shared trailer assumption. Reasonable starting points for a standard 53&apos; dry van: <b>3,800–4,000 ft³</b> usable cube, <b>44,000–46,000 lbs</b> legal payload. Values apply to the edit form below — click <b>Save settings</b> to persist.
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div>
+          <Label className="text-xs">Cube (ft³) per full truck</Label>
+          <div className="flex items-center gap-2">
+            <Switch checked={fillCube} onCheckedChange={setFillCube} />
+            <Input type="number" className="h-8" value={cube} onChange={(e) => setCube(e.target.value)} disabled={!fillCube} />
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs">Weight (lbs) per full truck</Label>
+          <div className="flex items-center gap-2">
+            <Switch checked={fillWeight} onCheckedChange={setFillWeight} />
+            <Input type="number" className="h-8" value={weight} onChange={(e) => setWeight(e.target.value)} disabled={!fillWeight} />
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs">Hub filter</Label>
+          <Select value={hub} onValueChange={setHub}>
+            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All hubs</SelectItem>
+              {HUB_ORDER.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Scope</Label>
+          <div className="flex items-center gap-2 h-8">
+            <Switch checked={onlyBlanks} onCheckedChange={setOnlyBlanks} />
+            <span className="text-xs text-muted-foreground">{onlyBlanks ? "Only blanks" : "Overwrite all"}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          {targets.length} route{targets.length === 1 ? "" : "s"} in scope · will update <b>{preview.willFill}</b>, skip <b>{preview.skipped}</b>.
+        </div>
+        <Button size="sm" onClick={apply} disabled={preview.willFill === 0}>Fill targets</Button>
+      </div>
+    </Card>
+  );
+}
+
 
 
