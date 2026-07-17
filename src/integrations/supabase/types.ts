@@ -2178,6 +2178,7 @@ export type Database = {
           capacity_basis: string
           created_at: string
           id: string
+          ignored_p21_route_codes: string[]
           p21_sql: string | null
           p21_transfer_sql: string | null
           singleton: boolean
@@ -2189,6 +2190,7 @@ export type Database = {
           capacity_basis?: string
           created_at?: string
           id?: string
+          ignored_p21_route_codes?: string[]
           p21_sql?: string | null
           p21_transfer_sql?: string | null
           singleton?: boolean
@@ -2200,6 +2202,7 @@ export type Database = {
           capacity_basis?: string
           created_at?: string
           id?: string
+          ignored_p21_route_codes?: string[]
           p21_sql?: string | null
           p21_transfer_sql?: string | null
           singleton?: boolean

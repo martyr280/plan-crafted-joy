@@ -316,3 +316,161 @@ export const testP21TransferSql = createServerFn({ method: "POST" })
     };
   });
 
+/* ================= UNMATCHED P21 ROUTE CODE MAPPING ================= */
+
+// Aggregate recent unmatched codes from `activity_events` (populated by
+// `runP21Snapshot`), plus the currently-ignored list, so admins can either
+// assign a code to an internal route or hide it permanently.
+export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(null, context.userId);
+    const { data: events } = await supabaseAdmin
+      .from("activity_events")
+      .select("created_at, message, metadata")
+      .eq("event_type", "truck_capacity.p21_snapshot")
+      .order("created_at", { ascending: false })
+      .limit(40);
+    const { data: settings } = await supabaseAdmin
+      .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+    const { data: routes } = await supabaseAdmin
+      .from("truck_capacity_routes")
+      .select("id, code, name, hub, p21_route_code")
+      .order("hub", { ascending: true }).order("sort_order", { ascending: true });
+
+    const ignored: string[] = ((settings as any)?.ignored_p21_route_codes ?? []) as string[];
+    const ignoredSet = new Set(ignored.map((s) => String(s).trim().toLowerCase()).filter(Boolean));
+
+    // Build a case-insensitive map of codes already claimed by some route so
+    // we don't display codes an admin has already mapped in a later save.
+    const claimed = new Set<string>();
+    for (const r of routes ?? []) {
+      if (r.code) claimed.add(String(r.code).toLowerCase());
+      if (r.p21_route_code) {
+        for (const p of String(r.p21_route_code).split(",")) {
+          const k = p.trim().toLowerCase();
+          if (k) claimed.add(k);
+        }
+      }
+    }
+
+    const agg = new Map<string, { code: string; count: number; lastSeen: string; kinds: Set<string> }>();
+    for (const ev of events ?? []) {
+      const meta = (ev as any).metadata ?? {};
+      const kind = String(meta.kind ?? "orders");
+      const codes: string[] = Array.isArray(meta.unmatched) ? meta.unmatched : [];
+      for (const c of codes) {
+        const raw = String(c ?? "").trim();
+        if (!raw) continue;
+        const key = raw.toLowerCase();
+        if (claimed.has(key)) continue; // resolved by a later save
+        const entry = agg.get(key) ?? { code: raw, count: 0, lastSeen: (ev as any).created_at, kinds: new Set() };
+        entry.count += 1;
+        if (new Date((ev as any).created_at) > new Date(entry.lastSeen)) entry.lastSeen = (ev as any).created_at;
+        entry.kinds.add(kind);
+        agg.set(key, entry);
+      }
+    }
+
+    const unmatched = Array.from(agg.values())
+      .map((e) => ({
+        code: e.code,
+        occurrences: e.count,
+        last_seen: e.lastSeen,
+        kinds: Array.from(e.kinds),
+        ignored: ignoredSet.has(e.code.toLowerCase()),
+      }))
+      .sort((a, b) => b.occurrences - a.occurrences || a.code.localeCompare(b.code));
+
+    return {
+      unmatched,
+      ignored,
+      routes: (routes ?? []).map((r) => ({
+        id: r.id, code: r.code, name: r.name, hub: r.hub, p21_route_code: r.p21_route_code,
+      })),
+    };
+  });
+
+// Append a P21 code to a route's comma-separated p21_route_code list.
+// Case-insensitive dedupe. Also drops the code from the ignore list if
+// present so a previously-ignored code can be reclassified.
+export const assignP21RouteCode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({
+    code: z.string().min(1).max(64),
+    routeId: z.string().uuid(),
+  }).parse(i))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(null, context.userId);
+    const code = data.code.trim();
+    if (!code) throw new Error("code required");
+    const { data: route, error: rErr } = await supabaseAdmin
+      .from("truck_capacity_routes")
+      .select("id, p21_route_code")
+      .eq("id", data.routeId).maybeSingle();
+    if (rErr) throw new Error(rErr.message);
+    if (!route) throw new Error("Route not found");
+    const existing = String((route as any).p21_route_code ?? "")
+      .split(",").map((s) => s.trim()).filter(Boolean);
+    const already = existing.some((e) => e.toLowerCase() === code.toLowerCase());
+    const next = already ? existing : [...existing, code];
+    const { error } = await supabaseAdmin
+      .from("truck_capacity_routes")
+      .update({ p21_route_code: next.join(",") } as any)
+      .eq("id", data.routeId);
+    if (error) throw new Error(error.message);
+
+    // If it was ignored, remove it — assigning takes precedence.
+    const { data: settings } = await supabaseAdmin
+      .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+    const ignored: string[] = ((settings as any)?.ignored_p21_route_codes ?? []) as string[];
+    const filtered = ignored.filter((c) => c.toLowerCase() !== code.toLowerCase());
+    if (filtered.length !== ignored.length) {
+      const { error: sErr } = await supabaseAdmin
+        .from("truck_capacity_settings")
+        .update({ ignored_p21_route_codes: filtered, updated_by: context.userId } as any)
+        .eq("singleton", true);
+      if (sErr) throw new Error(sErr.message);
+    }
+
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.route_code_mapped",
+      entity_type: "truck_capacity_routes",
+      entity_id: data.routeId,
+      message: `Mapped P21 route code "${code}" to route ${data.routeId}.`,
+      metadata: { code, route_id: data.routeId },
+    });
+    return { ok: true, alreadyAssigned: already };
+  });
+
+export const setP21RouteCodeIgnored = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({
+    code: z.string().min(1).max(64),
+    ignore: z.boolean(),
+  }).parse(i))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(null, context.userId);
+    const code = data.code.trim();
+    if (!code) throw new Error("code required");
+    const { data: settings } = await supabaseAdmin
+      .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+    const current: string[] = ((settings as any)?.ignored_p21_route_codes ?? []) as string[];
+    const lower = code.toLowerCase();
+    const withoutIt = current.filter((c) => c.toLowerCase() !== lower);
+    const next = data.ignore ? [...withoutIt, code] : withoutIt;
+    const { error } = await supabaseAdmin
+      .from("truck_capacity_settings")
+      .update({ ignored_p21_route_codes: next, updated_by: context.userId } as any)
+      .eq("singleton", true);
+    if (error) throw new Error(error.message);
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: data.ignore ? "truck_capacity.route_code_ignored" : "truck_capacity.route_code_unignored",
+      entity_type: "truck_capacity_settings",
+      message: `${data.ignore ? "Ignored" : "Un-ignored"} P21 route code "${code}".`,
+      metadata: { code },
+    });
+    return { ok: true };
+  });
+
+
