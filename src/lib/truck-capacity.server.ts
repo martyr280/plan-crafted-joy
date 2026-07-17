@@ -205,6 +205,41 @@ export async function computeBaselineForecastForRoute(routeId: string, horizonDa
 
 export type SnapshotKind = "orders" | "transfers";
 
+// Candidate quantity columns on dbo.transfer_line, in priority order. NDI's
+// P21 schema does NOT expose `qty_ordered` on transfer_line (that name only
+// exists on oe_line), so we discover the real column at runtime via
+// INFORMATION_SCHEMA and substitute it into the query before it ships to the
+// bridge. Same defensive pattern the SPIFF module uses for invoice_line.
+const TRANSFER_QTY_CANDIDATES = [
+  "qty_transferred",
+  "qty_requested",
+  "qty_to_transfer",
+  "transfer_qty",
+  "qty_ordered",
+  "quantity",
+  "qty",
+] as const;
+
+async function discoverTransferQtyColumn(
+  timeoutMs: number,
+): Promise<{ col: string | null; found: string[] }> {
+  const introspectSql =
+    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS " +
+    "WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'transfer_line'";
+  const { result } = await runJob(
+    "sql.select",
+    { sql: introspectSql, params: {}, slug: "truck-capacity-p21-transfers-schema" },
+    timeoutMs,
+  );
+  const rows = ((result as any)?.rows ?? []) as any[];
+  const found = rows
+    .map((r) => String(r.COLUMN_NAME ?? r.column_name ?? "").toLowerCase())
+    .filter(Boolean);
+  const set = new Set(found);
+  const col = TRANSFER_QTY_CANDIDATES.find((c) => set.has(c)) ?? null;
+  return { col, found };
+}
+
 export async function runP21Snapshot(
   opts: { timeoutMs?: number; kind?: SnapshotKind } = {},
 ): Promise<{
@@ -219,7 +254,7 @@ export async function runP21Snapshot(
     ? ((settings as any)?.p21_transfer_sql ?? "")
     : ((settings as any)?.p21_sql ?? "");
   const defaultSql = kind === "transfers" ? DEFAULT_P21_TRANSFER_SQL : DEFAULT_P21_SQL;
-  const sqlText = String(configuredSql).trim() || defaultSql;
+  let sqlText = String(configuredSql).trim() || defaultSql;
   const slug = kind === "transfers" ? "truck-capacity-p21-transfers" : "truck-capacity-p21";
   const kindLabel = kind === "transfers" ? "transfers" : "orders";
 
