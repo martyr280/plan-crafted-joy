@@ -787,6 +787,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         vendor_pickup_counts: vendorCounts,
         p21_sql: sql,
         p21_transfer_sql: transferSql,
+        excluded_p21_codes: excludedCodes
+          .split(",").map((x) => x.trim()).filter(Boolean),
       } });
       const numOrNull = (v: string) => v === "" ? null : Number(v);
       const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
