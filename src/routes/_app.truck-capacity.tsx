@@ -733,12 +733,14 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
   const [vendorCounts, setVendorCounts] = useState(false);
   const [sql, setSql] = useState("");
   const [transferSql, setTransferSql] = useState("");
+  const [excludedCodes, setExcludedCodes] = useState("");
   useEffect(() => {
     if (s) {
       setBasis(s.capacity_basis as "pallets"|"weight"|"cube");
       setVendorCounts(s.vendor_pickup_counts);
       setSql(s.p21_sql ?? defaultSql);
       setTransferSql((s as any).p21_transfer_sql ?? defaultTransferSql);
+      setExcludedCodes((((s as any).excluded_p21_codes ?? []) as string[]).join(", "));
     }
   }, [s, defaultSql, defaultTransferSql]);
 
