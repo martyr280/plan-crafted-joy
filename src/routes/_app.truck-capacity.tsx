@@ -876,6 +876,18 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         </div>
       </Card>
 
+      <BulkFillFullTruckCard
+        routes={routes}
+        routeEdits={routeEdits}
+        onFill={(patch) => {
+          setRouteEdits((prev) => {
+            const next = { ...prev };
+            for (const [id, p] of Object.entries(patch)) next[id] = { ...next[id], ...p };
+            return next;
+          });
+        }}
+      />
+
       <Card className="p-4">
         <div className="text-sm font-medium mb-2">Route metadata &amp; truck-full targets</div>
         <div className="text-xs text-muted-foreground mb-3">
