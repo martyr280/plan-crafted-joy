@@ -1031,3 +1031,122 @@ function RetrainCard() {
   );
 }
 
+/* ============ UNMATCHED P21 ROUTE CODES ============ */
+
+function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
+  const listFn = useServerFn(listP21UnmatchedRouteCodes);
+  const assignFn = useServerFn(assignP21RouteCode);
+  const ignoreFn = useServerFn(setP21RouteCodeIgnored);
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["tc-unmatched-p21"], queryFn: () => listFn() });
+  const [choice, setChoice] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function assign(code: string) {
+    const routeId = choice[code];
+    if (!routeId) { toast.error("Pick a route first"); return; }
+    setBusy(`assign:${code}`);
+    try {
+      await assignFn({ data: { code, routeId } });
+      toast.success(`Mapped "${code}" — the next snapshot will link it automatically.`);
+      await qc.invalidateQueries({ queryKey: ["tc-unmatched-p21"] });
+      await qc.invalidateQueries({ queryKey: ["tc-routes"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Assign failed");
+    } finally { setBusy(null); }
+  }
+  async function toggleIgnore(code: string, ignore: boolean) {
+    setBusy(`ignore:${code}`);
+    try {
+      await ignoreFn({ data: { code, ignore } });
+      toast.success(ignore ? `Ignoring "${code}" going forward.` : `"${code}" no longer ignored.`);
+      await qc.invalidateQueries({ queryKey: ["tc-unmatched-p21"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Update failed");
+    } finally { setBusy(null); }
+  }
+
+  const rows = q.data?.unmatched ?? [];
+  const ignored = q.data?.ignored ?? [];
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="text-sm font-medium">Unmatched P21 route codes</div>
+          <div className="text-xs text-muted-foreground">
+            Codes P21 has sent in recent snapshots that don&apos;t map to any internal route. Assign each to the right lane, or ignore codes that aren&apos;t truck demand (e.g. <code>wcall</code>). Changes take effect on the next snapshot.
+          </div>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => qc.invalidateQueries({ queryKey: ["tc-unmatched-p21"] })}>
+          <RefreshCw className="w-4 h-4 mr-1" />Refresh
+        </Button>
+      </div>
+
+      {q.isLoading ? (
+        <div className="text-xs text-muted-foreground py-4"><Loader2 className="w-4 h-4 animate-spin inline mr-1" />Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-xs text-muted-foreground py-4">No unmatched codes in the last 40 snapshots.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>P21 code</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead className="text-right">Times seen</TableHead>
+                <TableHead>Last seen</TableHead>
+                <TableHead>Map to route</TableHead>
+                <TableHead className="w-52 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((u: any) => (
+                <TableRow key={u.code} className={u.ignored ? "opacity-60" : ""}>
+                  <TableCell className="font-mono">{u.code}{u.ignored ? <Badge variant="outline" className="ml-2">ignored</Badge> : null}</TableCell>
+                  <TableCell className="text-xs">{u.kinds.join(", ")}</TableCell>
+                  <TableCell className="text-right">{u.occurrences}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{new Date(u.last_seen).toLocaleString()}</TableCell>
+                  <TableCell>
+                    <Select value={choice[u.code] ?? ""} onValueChange={(v) => setChoice((s) => ({ ...s, [u.code]: v }))}>
+                      <SelectTrigger className="h-8 w-64"><SelectValue placeholder="Choose route…" /></SelectTrigger>
+                      <SelectContent>
+                        {routes.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>{r.code} — {r.name} ({r.hub})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="default" disabled={busy === `assign:${u.code}` || !choice[u.code]} onClick={() => assign(u.code)}>
+                        {busy === `assign:${u.code}` ? <Loader2 className="w-3 h-3 animate-spin" /> : "Assign"}
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={busy === `ignore:${u.code}`} onClick={() => toggleIgnore(u.code, !u.ignored)}>
+                        {busy === `ignore:${u.code}` ? <Loader2 className="w-3 h-3 animate-spin" /> : (u.ignored ? "Un-ignore" : "Ignore")}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {ignored.length > 0 && (
+        <div className="text-xs text-muted-foreground mt-3">
+          Currently ignored: {ignored.map((c: string) => (
+            <button
+              key={c}
+              className="font-mono underline decoration-dotted mr-2 hover:text-foreground"
+              onClick={() => toggleIgnore(c, false)}
+            >{c}</button>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+
