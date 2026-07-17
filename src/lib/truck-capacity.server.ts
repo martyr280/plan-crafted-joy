@@ -405,14 +405,14 @@ export async function runP21Snapshot(
     return hits.length > 0 && hits.length < list.length ? hits : list;
   };
 
-  // Admin-curated ignore list — codes here are skipped entirely (they don't
-  // produce demand rows and don't get reported as unmatched). Used for things
-  // like `wcall` (Will Call) that legitimately aren't truck demand.
-  const ignoredSet = new Set(
-    (((settings as any)?.ignored_p21_route_codes ?? []) as string[])
-      .map((s) => String(s ?? "").trim().toLowerCase())
-      .filter(Boolean),
-  );
+  // Admin-curated ignore lists — codes here are skipped entirely (no demand
+  // row, NOT reported as unmatched). Two sources, unioned:
+  //   • ignored_p21_route_codes — per-code toggles from the Unmatched Codes UI
+  //   • excluded_p21_codes — permanent exclusions (per Joe: WCALL, KCKS1)
+  const ignoredSet = new Set([
+    ...(((settings as any)?.ignored_p21_route_codes ?? []) as string[]),
+    ...(((settings as any)?.excluded_p21_codes ?? []) as string[]),
+  ].map((s) => String(s ?? "").trim().toLowerCase()).filter(Boolean));
   for (const r of rows) {
     const code = String(r.route_code ?? "").trim();
     const ship = iso(r.ship_date);

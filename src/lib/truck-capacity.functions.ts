@@ -150,6 +150,7 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
     vendor_pickup_counts: z.boolean(),
     p21_sql: z.string().max(20000).nullable().optional(),
     p21_transfer_sql: z.string().max(20000).nullable().optional(),
+    excluded_p21_codes: z.array(z.string().max(64)).max(200).nullable().optional(),
   }).parse(i))
   .handler(async ({ data, context }) => {
     await assertAdmin(null, context.userId);
@@ -172,8 +173,19 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
         throw new Error(`${field} output contract failed: ${check.errors.join(" ")}`);
       }
     }
+    // Normalize excluded codes (uppercase, trimmed, deduped) so matcher can
+    // rely on a stable case-insensitive compare and admins see a clean list.
+    const patch: Record<string, any> = { ...data, updated_by: context.userId };
+    if (data.excluded_p21_codes !== undefined) {
+      const norm = Array.from(new Set(
+        (data.excluded_p21_codes ?? [])
+          .map((s) => String(s ?? "").trim().toUpperCase())
+          .filter(Boolean),
+      ));
+      patch.excluded_p21_codes = norm;
+    }
     const { error } = await supabaseAdmin.from("truck_capacity_settings")
-      .update({ ...data, updated_by: context.userId } as any).eq("singleton", true);
+      .update(patch as any).eq("singleton", true);
     if (error) throw new Error(error.message);
     return { ok: true };
   });

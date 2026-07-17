@@ -733,12 +733,14 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
   const [vendorCounts, setVendorCounts] = useState(false);
   const [sql, setSql] = useState("");
   const [transferSql, setTransferSql] = useState("");
+  const [excludedCodes, setExcludedCodes] = useState("");
   useEffect(() => {
     if (s) {
       setBasis(s.capacity_basis as "pallets"|"weight"|"cube");
       setVendorCounts(s.vendor_pickup_counts);
       setSql(s.p21_sql ?? defaultSql);
       setTransferSql((s as any).p21_transfer_sql ?? defaultTransferSql);
+      setExcludedCodes((((s as any).excluded_p21_codes ?? []) as string[]).join(", "));
     }
   }, [s, defaultSql, defaultTransferSql]);
 
@@ -785,6 +787,8 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         vendor_pickup_counts: vendorCounts,
         p21_sql: sql,
         p21_transfer_sql: transferSql,
+        excluded_p21_codes: excludedCodes
+          .split(",").map((x) => x.trim()).filter(Boolean),
       } });
       const numOrNull = (v: string) => v === "" ? null : Number(v);
       const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
@@ -873,6 +877,21 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
               <Switch checked={vendorCounts} onCheckedChange={setVendorCounts} />
               <span className="text-xs text-muted-foreground">When on, vendor pickup capacity is added to the run baseline.</span>
             </div>
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs">Excluded P21 route codes</Label>
+          <Input
+            className="h-8"
+            value={excludedCodes}
+            placeholder="WCALL, KCKS1"
+            onChange={(ev) => setExcludedCodes(ev.target.value)}
+          />
+          <div className="text-xs text-muted-foreground mt-1">
+            Comma-separated. Rows with these route codes are silently skipped during snapshots (no demand row, not reported as unmatched). Per Joe: <code>WCALL</code> (Will Call) and <code>KCKS1</code> aren&apos;t truck demand.
+          </div>
+          <div className="text-xs text-muted-foreground mt-2">
+            Cube targets: 28&apos;=1,830 / 48&apos;=3,570 / 53&apos;=4,050 ft³ (per NDI). Box-truck lanes seeded at 1,830, all others default to the 53&apos; figure — adjust any lane running 48&apos; or 28&apos; equipment.
           </div>
         </div>
       </Card>

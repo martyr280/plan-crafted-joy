@@ -2177,6 +2177,7 @@ export type Database = {
         Row: {
           capacity_basis: string
           created_at: string
+          excluded_p21_codes: string[]
           id: string
           ignored_p21_route_codes: string[]
           p21_sql: string | null
@@ -2189,6 +2190,7 @@ export type Database = {
         Insert: {
           capacity_basis?: string
           created_at?: string
+          excluded_p21_codes?: string[]
           id?: string
           ignored_p21_route_codes?: string[]
           p21_sql?: string | null
@@ -2201,6 +2203,7 @@ export type Database = {
         Update: {
           capacity_basis?: string
           created_at?: string
+          excluded_p21_codes?: string[]
           id?: string
           ignored_p21_route_codes?: string[]
           p21_sql?: string | null
