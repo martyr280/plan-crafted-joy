@@ -290,6 +290,54 @@ export async function runP21Snapshot(
     }
   }
 
+  // Transfers: discover the real quantity column on dbo.transfer_line at
+  // runtime and rewrite the SQL text before it ships. NDI's P21 doesn't use
+  // `qty_ordered` on transfer_line (that column only exists on oe_line), so
+  // hardcoding any single name would keep breaking. Discovery lists the
+  // actual columns and we pick the first candidate that exists.
+  if (kind === "transfers") {
+    let discovered: { col: string | null; found: string[] };
+    try {
+      discovered = await discoverTransferQtyColumn(timeoutMs);
+    } catch (e: any) {
+      const error = `transfer_line schema discovery failed: ${e?.message ?? String(e)}`;
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_failed",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 transfers snapshot rejected: ${error}`,
+        metadata: { stage: "discover_schema", kind },
+      });
+      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    }
+    if (!discovered.col) {
+      const error =
+        `transfer_line has no known quantity column; ` +
+        `tried [${TRANSFER_QTY_CANDIDATES.join(", ")}], found [${discovered.found.join(", ")}]`;
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_failed",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 transfers snapshot rejected: ${error}`,
+        metadata: { stage: "discover_schema", kind, columns_found: discovered.found },
+      });
+      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    }
+    // Substitute any candidate token referenced as `l.<cand>` (the transfer_line
+    // alias used in both the default SQL and any admin-authored SQL that
+    // followed the same shape) with the discovered column.
+    for (const cand of TRANSFER_QTY_CANDIDATES) {
+      if (cand === discovered.col) continue;
+      const re = new RegExp(`\\bl\\.${cand}\\b`, "gi");
+      sqlText = sqlText.replace(re, `l.${discovered.col}`);
+    }
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.snapshot_info",
+      entity_type: "truck_capacity_p21_demand",
+      message: `Truck Capacity P21 transfers: using transfer_line.${discovered.col}`,
+      metadata: { stage: "discover_schema", kind, qty_column: discovered.col },
+    });
+  }
+
+
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
     .select("id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
