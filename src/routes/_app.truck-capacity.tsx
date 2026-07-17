@@ -1276,5 +1276,150 @@ function BulkFillFullTruckCard({
   );
 }
 
+/* ============ CAPACITY COVERAGE REPORT ============ */
 
+function CapacityCoverageCard() {
+  const covFn = useServerFn(getTruckCapacityCoverage);
+  const [days, setDays] = useState(30);
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["tc-capacity-coverage", days], queryFn: () => covFn({ data: { days } }) });
+  const d = q.data;
+
+  const overall = d?.overallPct == null ? "—" : `${(d.overallPct * 100).toFixed(1)}%`;
+  const tone = d?.overallPct == null ? "muted" : d.overallPct >= 0.9 ? "green" : d.overallPct >= 0.5 ? "amber" : "red";
+  const toneClass =
+    tone === "green" ? "text-green-600" : tone === "amber" ? "text-amber-600" : tone === "red" ? "text-red-600" : "text-muted-foreground";
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium">Capacity coverage</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            Share of P21 demand rows in the window that got a <code>projected_capacity_frac</code>. Under Kevin&apos;s verified SQL, <code>est_pallets</code> is null, so coverage depends on the route having <b>cube_full_truck_ft3</b> or <b>weight_full_truck_lbs</b>.
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+            <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+              <SelectItem value="90">Last 90 days</SelectItem>
+              <SelectItem value="180">Last 180 days</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" onClick={() => qc.invalidateQueries({ queryKey: ["tc-capacity-coverage", days] })}>
+            <RefreshCw className="w-4 h-4 mr-1" />Refresh
+          </Button>
+        </div>
+      </div>
+
+      {q.isLoading ? (
+        <div className="text-xs text-muted-foreground py-4"><Loader2 className="w-4 h-4 animate-spin inline mr-1" />Loading…</div>
+      ) : !d ? (
+        <div className="text-xs text-muted-foreground py-4">No data.</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded border p-3">
+              <div className="text-xs text-muted-foreground">Overall</div>
+              <div className={`text-2xl font-semibold ${toneClass}`}>{overall}</div>
+              <div className="text-xs text-muted-foreground">{d.totalCovered.toLocaleString()} / {d.totalRows.toLocaleString()} rows</div>
+            </div>
+            <div className="rounded border p-3">
+              <div className="text-xs text-muted-foreground">Routes missing cube AND weight</div>
+              <div className="text-2xl font-semibold text-red-600">{d.missingCubeAndWeight.length}</div>
+              <div className="text-xs text-muted-foreground">rows with no way to compute a fraction</div>
+            </div>
+            <div className="rounded border p-3">
+              <div className="text-xs text-muted-foreground">Routes with only one target</div>
+              <div className="text-2xl font-semibold text-amber-600">{d.partialTargets.length}</div>
+              <div className="text-xs text-muted-foreground">have cube or weight, not both</div>
+            </div>
+          </div>
+
+          {d.missingCubeAndWeight.length > 0 && (
+            <div>
+              <div className="text-xs font-medium mt-2 mb-1">Routes with demand but no cube/weight target</div>
+              <div className="overflow-x-auto border rounded">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Route</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead className="text-right">Rows</TableHead>
+                      <TableHead className="text-right">Covered</TableHead>
+                      <TableHead className="text-right">Cube ft³</TableHead>
+                      <TableHead className="text-right">Weight lbs</TableHead>
+                      <TableHead className="text-right">Pallets</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {d.missingCubeAndWeight.map((r: any) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-mono text-xs">{r.code} <span className="text-muted-foreground">— {r.name}</span></TableCell>
+                        <TableCell className="text-xs">{r.hub}</TableCell>
+                        <TableCell className="text-right">{r.rows}</TableCell>
+                        <TableCell className="text-right text-red-600">{r.covered}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">—</TableCell>
+                        <TableCell className="text-right text-muted-foreground">—</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{r.pallets_full_truck ?? "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {d.partialTargets.length > 0 && (
+            <div>
+              <div className="text-xs font-medium mt-2 mb-1">Routes with only one full-truck target</div>
+              <div className="overflow-x-auto border rounded">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Route</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead className="text-right">Rows</TableHead>
+                      <TableHead className="text-right">Coverage</TableHead>
+                      <TableHead className="text-right">Cube ft³</TableHead>
+                      <TableHead className="text-right">Weight lbs</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {d.partialTargets.map((r: any) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-mono text-xs">{r.code} <span className="text-muted-foreground">— {r.name}</span></TableCell>
+                        <TableCell className="text-xs">{r.hub}</TableCell>
+                        <TableCell className="text-right">{r.rows}</TableCell>
+                        <TableCell className="text-right">{r.pct == null ? "—" : `${(r.pct * 100).toFixed(0)}%`}</TableCell>
+                        <TableCell className="text-right">{r.cube_full_truck_ft3 ?? <span className="text-red-600">missing</span>}</TableCell>
+                        <TableCell className="text-right">{r.weight_full_truck_lbs ?? <span className="text-red-600">missing</span>}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {d.noDemandNoTargets.length > 0 && (
+            <div className="text-xs text-muted-foreground">
+              <b>Also missing targets (no demand yet in window):</b>{" "}
+              {d.noDemandNoTargets.map((r: any) => (
+                <span key={r.id} className="font-mono mr-2">{r.code}</span>
+              ))}
+            </div>
+          )}
+
+          {d.totalRows > 0 && d.missingCubeAndWeight.length === 0 && d.partialTargets.length === 0 && (
+            <div className="text-xs text-green-600">Every route with demand in the window has both cube and weight targets set.</div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
 
