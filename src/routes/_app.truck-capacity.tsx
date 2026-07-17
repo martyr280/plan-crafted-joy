@@ -28,6 +28,7 @@ import {
   runP21SnapshotNow, testP21Sql, runP21TransferSnapshotNow, testP21TransferSql,
   retrainTruckModel, listTruckModelVersions, getTruckAccuracy,
   listP21UnmatchedRouteCodes, assignP21RouteCode, setP21RouteCodeIgnored,
+  getTruckCapacityCoverage,
 } from "@/lib/truck-capacity.functions";
 
 export const Route = createFileRoute("/_app/truck-capacity")({ component: TruckCapacityPage });
