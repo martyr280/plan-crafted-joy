@@ -263,18 +263,91 @@ export const exportTruckWorkbook = createServerFn({ method: "GET" })
     return { base64: buf.toString("base64"), filename: `truck-capacity-${new Date().toISOString().slice(0,10)}.xlsx` };
   });
 
+async function buildSnapshotReadout(startedAt: Date) {
+  const { data: rows } = await supabaseAdmin
+    .from("truck_capacity_p21_demand")
+    .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, total_weight_lbs, est_pallets, order_count")
+    .gte("created_at", startedAt.toISOString())
+    .limit(50000);
+  const list = rows ?? [];
+  const withFrac = list.filter((r) => r.projected_capacity_frac != null);
+  const fracs = withFrac.map((r) => Number(r.projected_capacity_frac));
+  const min = fracs.length ? Math.min(...fracs) : null;
+  const max = fracs.length ? Math.max(...fracs) : null;
+  const avg = fracs.length ? fracs.reduce((a, b) => a + b, 0) / fracs.length : null;
+  const capped = fracs.filter((f) => f >= 1.499999).length;
+  const routeIds = Array.from(new Set(withFrac.map((r) => r.route_id)));
+  const { data: routeRows } = routeIds.length
+    ? await supabaseAdmin.from("truck_capacity_routes").select("id, code, hub").in("id", routeIds)
+    : { data: [] as { id: string; code: string; hub: string }[] };
+  const codeById = new Map((routeRows ?? []).map((r) => [r.id, `${r.code} · ${r.hub}`]));
+  const top5 = [...withFrac]
+    .sort((a, b) => Number(b.projected_capacity_frac) - Number(a.projected_capacity_frac))
+    .slice(0, 5)
+    .map((r) => ({
+      route: codeById.get(r.route_id) ?? r.route_id,
+      ship_date: r.ship_date,
+      projected_capacity_frac: Number(Number(r.projected_capacity_frac).toFixed(3)),
+      total_cube_ft: r.total_cube_ft,
+      total_weight_lbs: r.total_weight_lbs,
+      est_pallets: r.est_pallets,
+      order_count: r.order_count,
+    }));
+  return {
+    demandRowsWritten: list.length,
+    rowsWithProjection: withFrac.length,
+    projectedFracMin: min,
+    projectedFracMax: max,
+    projectedFracAvg: avg,
+    rowsAtCap_1_5: capped,
+    top5ByProjectedFrac: top5,
+  };
+}
+
+function plausibilityWarnings(
+  r: { avg: number | null; min: number | null; max: number | null; count: number; capped: number },
+  unmatched: string[],
+) {
+  const warnings: string[] = [];
+  if (r.count === 0) {
+    warnings.push("No rows have projected_capacity_frac — every route lacks cube/weight full-truck targets, or nothing matched.");
+  } else {
+    if (r.avg != null && r.avg < 0.02) warnings.push(`Average projection ${r.avg.toFixed(3)} is implausibly low — check that total_cube_ft / total_weight_lbs are populated.`);
+    if (r.max != null && r.max >= 1.5 && r.capped / r.count > 0.5) warnings.push(">50% of rows hit the 1.5 cap — full-truck targets are likely too small.");
+    if (r.min != null && r.min > 0.9) warnings.push(`Minimum projection ${r.min.toFixed(3)} is suspiciously high — every day looks near-capacity.`);
+  }
+  if (unmatched.length > 0) warnings.push(`Unmatched route codes: ${unmatched.join(", ")} — map or exclude them in Settings.`);
+  return warnings;
+}
+
 export const runP21SnapshotNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(null, context.userId);
-    return runP21Snapshot({ kind: "orders" });
+    const startedAt = new Date();
+    const result = await runP21Snapshot({ kind: "orders" });
+    if (!result.ok) return { ...result, readout: null, warnings: [] as string[] };
+    const readout = await buildSnapshotReadout(startedAt);
+    const warnings = plausibilityWarnings(
+      { avg: readout.projectedFracAvg, min: readout.projectedFracMin, max: readout.projectedFracMax, count: readout.rowsWithProjection, capped: readout.rowsAtCap_1_5 },
+      result.unmatchedRouteCodes,
+    );
+    return { ...result, readout, warnings };
   });
 
 export const runP21TransferSnapshotNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(null, context.userId);
-    return runP21Snapshot({ kind: "transfers" });
+    const startedAt = new Date();
+    const result = await runP21Snapshot({ kind: "transfers" });
+    if (!result.ok) return { ...result, readout: null, warnings: [] as string[] };
+    const readout = await buildSnapshotReadout(startedAt);
+    const warnings = plausibilityWarnings(
+      { avg: readout.projectedFracAvg, min: readout.projectedFracMin, max: readout.projectedFracMax, count: readout.rowsWithProjection, capped: readout.rowsAtCap_1_5 },
+      result.unmatchedRouteCodes,
+    );
+    return { ...result, readout, warnings };
   });
 
 export const testP21Sql = createServerFn({ method: "POST" })
