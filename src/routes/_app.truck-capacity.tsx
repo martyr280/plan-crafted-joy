@@ -992,7 +992,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           {testTransferResult.validation?.errors?.length ? <div className="text-red-600 mt-1"><b>Errors:</b><ul className="list-disc ml-4">{testTransferResult.validation.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
           {testTransferResult.validation?.warnings?.length ? <div className="text-amber-600 mt-1"><b>Warnings:</b><ul className="list-disc ml-4">{testTransferResult.validation.warnings.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
           Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testTransferResult.sample, null, 2)}</pre></div>}
-        {snapTransferResult && <div className="text-xs mt-2">Snapshot: pulled {snapTransferResult.rowsPulled}, wrote {snapTransferResult.snapshotsWritten}. Unmatched codes: {snapTransferResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
+        {snapTransferResult && <SnapshotResultView result={snapTransferResult} />}
       </Card>
 
       <CapacityCoverageCard />
