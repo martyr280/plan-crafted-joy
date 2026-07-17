@@ -973,7 +973,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           {testResult.validation?.errors?.length ? <div className="text-red-600 mt-1"><b>Errors:</b><ul className="list-disc ml-4">{testResult.validation.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
           {testResult.validation?.warnings?.length ? <div className="text-amber-600 mt-1"><b>Warnings:</b><ul className="list-disc ml-4">{testResult.validation.warnings.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
           Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testResult.sample, null, 2)}</pre></div>}
-        {snapResult && <div className="text-xs mt-2">Snapshot: pulled {snapResult.rowsPulled}, wrote {snapResult.snapshotsWritten}. Unmatched codes: {snapResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
+        {snapResult && <SnapshotResultView result={snapResult} />}
       </Card>
 
       <Card className="p-4">
@@ -992,7 +992,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           {testTransferResult.validation?.errors?.length ? <div className="text-red-600 mt-1"><b>Errors:</b><ul className="list-disc ml-4">{testTransferResult.validation.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
           {testTransferResult.validation?.warnings?.length ? <div className="text-amber-600 mt-1"><b>Warnings:</b><ul className="list-disc ml-4">{testTransferResult.validation.warnings.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
           Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testTransferResult.sample, null, 2)}</pre></div>}
-        {snapTransferResult && <div className="text-xs mt-2">Snapshot: pulled {snapTransferResult.rowsPulled}, wrote {snapTransferResult.snapshotsWritten}. Unmatched codes: {snapTransferResult.unmatchedRouteCodes?.join(", ") || "—"}</div>}
+        {snapTransferResult && <SnapshotResultView result={snapTransferResult} />}
       </Card>
 
       <CapacityCoverageCard />
@@ -1439,6 +1439,56 @@ function CapacityCoverageCard() {
         </>
       )}
     </Card>
+  );
+}
+
+function SnapshotResultView({ result }: { result: any }) {
+  const r = result;
+  const readout = r.readout;
+  const warnings: string[] = r.warnings ?? [];
+  const fmt = (v: number | null | undefined) => (v == null ? "—" : Number(v).toFixed(3));
+  return (
+    <div className="text-xs mt-3 space-y-2 border-t pt-2">
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <span>Status: <b className={r.ok ? "text-green-700" : "text-red-600"}>{r.ok ? "OK" : "FAILED"}</b></span>
+        <span>Kind: <b>{r.kind}</b></span>
+        <span>Pulled: <b>{r.rowsPulled}</b></span>
+        <span>Written: <b>{r.snapshotsWritten}</b></span>
+        {r.skipped && <span className="text-amber-600">skipped</span>}
+      </div>
+      {r.error && <div className="text-red-600">Error: {r.error}</div>}
+      <div>Unmatched codes: {r.unmatchedRouteCodes?.length ? <code>{r.unmatchedRouteCodes.join(", ")}</code> : "—"}</div>
+      {readout && (
+        <div className="space-y-1">
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <span>Demand rows: <b>{readout.demandRowsWritten}</b></span>
+            <span>With projection: <b>{readout.rowsWithProjection}</b></span>
+            <span>Frac min/avg/max: <b>{fmt(readout.projectedFracMin)} / {fmt(readout.projectedFracAvg)} / {fmt(readout.projectedFracMax)}</b></span>
+            <span>At 1.5 cap: <b>{readout.rowsAtCap_1_5}</b></span>
+          </div>
+          {readout.top5ByProjectedFrac?.length > 0 && (
+            <div>
+              <div className="font-medium mt-1">Top 5 route-days by projected fraction</div>
+              <table className="w-full text-[11px] mt-1">
+                <thead className="text-muted-foreground"><tr><th className="text-left">Route</th><th className="text-left">Ship date</th><th className="text-right">Frac</th><th className="text-right">Cube ft³</th><th className="text-right">Weight lb</th><th className="text-right">Orders</th></tr></thead>
+                <tbody>
+                  {readout.top5ByProjectedFrac.map((t: any, i: number) => (
+                    <tr key={i} className="border-t"><td>{t.route}</td><td>{t.ship_date}</td><td className="text-right">{Number(t.projected_capacity_frac).toFixed(3)}</td><td className="text-right">{t.total_cube_ft ?? "—"}</td><td className="text-right">{t.total_weight_lbs ?? "—"}</td><td className="text-right">{t.order_count ?? "—"}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+      {warnings.length > 0 && (
+        <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+          <div className="font-medium">Plausibility warnings</div>
+          <ul className="list-disc ml-4">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+        </div>
+      )}
+      {r.ok && warnings.length === 0 && readout && <div className="text-green-700">Plausibility: OK — no red flags.</div>}
+    </div>
   );
 }
 
