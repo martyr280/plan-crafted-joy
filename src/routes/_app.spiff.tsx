@@ -145,20 +145,38 @@ function SpiffPage() {
   }
 
   async function loadRunDetail(runId: string) {
-    const [{ data: ls }, { data: cks }] = await Promise.all([
-      supabase
+    // PostgREST caps a single response at ~1000 rows on Lovable Cloud regardless
+    // of .limit(); paginate with .range() so we always get every line in the run.
+    // Without this, customers that sort past the first 1000 rows (e.g. 14493
+    // Anderson & Worth) render as "No lines for this customer" with $0 total
+    // even though the DB has their SPIFF lines.
+    const PAGE = 1000;
+    const allLines: Line[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
         .from("spiff_run_lines")
         .select("*")
         .eq("run_id", runId)
         .order("customer_id")
         .order("order_date")
-        .limit(50000),
-      supabase.from("spiff_checks").select("*").eq("run_id", runId).limit(5000),
-    ]);
-    setLines((ls ?? []) as Line[]);
+        .range(from, from + PAGE - 1);
+      if (error) {
+        console.error("[spiff] loadRunDetail lines page failed", error);
+        break;
+      }
+      const rows = (data ?? []) as Line[];
+      allLines.push(...rows);
+      if (rows.length < PAGE) break;
+    }
+    const { data: cks } = await supabase
+      .from("spiff_checks")
+      .select("*")
+      .eq("run_id", runId)
+      .limit(5000);
+    setLines(allLines);
     setChecks((cks ?? []) as Check[]);
-    if (!selectedCustomer && ls && ls.length > 0) {
-      setSelectedCustomer((ls[0] as Line).customer_id);
+    if (!selectedCustomer && allLines.length > 0) {
+      setSelectedCustomer(allLines[0].customer_id);
     }
   }
 
