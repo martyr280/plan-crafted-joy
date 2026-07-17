@@ -473,4 +473,97 @@ export const setP21RouteCodeIgnored = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/* ================= CAPACITY COVERAGE REPORT ================= */
+
+// How much of the P21 demand actually gets a projected_capacity_frac vs.
+// falls through as null (because the route has no cube/weight/pallets
+// full-truck target and est_pallets is NULL under Kevin's verified SQL).
+// Powers the "Coverage" card in Settings so admins can see, per route,
+// which targets to backfill next.
+export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({
+    days: z.number().int().min(1).max(365).optional(),
+  }).parse(i))
+  .handler(async ({ data }) => {
+    const days = data.days ?? 30;
+    const since = new Date(); since.setUTCDate(since.getUTCDate() - days);
+    const sinceIso = since.toISOString().slice(0, 10);
+
+    // Fetch demand rows in window. Cap defensive limit at 100k to avoid
+    // runaway queries; realistic 30-day snapshot volume is < 5k rows.
+    const { data: demand, error: dErr } = await supabaseAdmin
+      .from("truck_capacity_p21_demand")
+      .select("route_id, projected_capacity_frac, ship_date")
+      .gte("ship_date", sinceIso)
+      .limit(100000);
+    if (dErr) throw new Error(dErr.message);
+
+    const { data: routes, error: rErr } = await supabaseAdmin
+      .from("truck_capacity_routes")
+      .select("id, code, name, hub, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs, active, sort_order")
+      .order("hub", { ascending: true }).order("sort_order", { ascending: true });
+    if (rErr) throw new Error(rErr.message);
+
+    type Agg = { rows: number; covered: number };
+    const byRoute = new Map<string, Agg>();
+    let totalRows = 0, totalCovered = 0;
+    for (const d of demand ?? []) {
+      totalRows += 1;
+      const covered = (d as any).projected_capacity_frac != null;
+      if (covered) totalCovered += 1;
+      const a = byRoute.get((d as any).route_id) ?? { rows: 0, covered: 0 };
+      a.rows += 1; if (covered) a.covered += 1;
+      byRoute.set((d as any).route_id, a);
+    }
+
+    const perRoute = (routes ?? []).map((r) => {
+      const a = byRoute.get(r.id) ?? { rows: 0, covered: 0 };
+      const hasCube = r.cube_full_truck_ft3 != null;
+      const hasWeight = r.weight_full_truck_lbs != null;
+      const hasPallets = r.pallets_full_truck != null;
+      const anyTarget = hasCube || hasWeight || hasPallets;
+      return {
+        id: r.id, code: r.code, name: r.name, hub: r.hub, active: r.active,
+        rows: a.rows, covered: a.covered,
+        pct: a.rows === 0 ? null : a.covered / a.rows,
+        cube_full_truck_ft3: r.cube_full_truck_ft3 == null ? null : Number(r.cube_full_truck_ft3),
+        weight_full_truck_lbs: r.weight_full_truck_lbs == null ? null : Number(r.weight_full_truck_lbs),
+        pallets_full_truck: r.pallets_full_truck,
+        has_cube: hasCube, has_weight: hasWeight, has_pallets: hasPallets, has_any_target: anyTarget,
+      };
+    });
+
+    // Routes with demand but no cube AND no weight target — since Kevin's
+    // verified SQL leaves est_pallets NULL, these are the routes that make
+    // projected_capacity_frac null and are the highest-value backfill list.
+    const missingCubeAndWeight = perRoute
+      .filter((r) => r.rows > 0 && !r.has_cube && !r.has_weight)
+      .sort((a, b) => b.rows - a.rows);
+
+    // Routes with demand missing only one of cube/weight — less urgent but
+    // useful to know so both can be filled from the same trailer assumption.
+    const partialTargets = perRoute
+      .filter((r) => r.rows > 0 && (r.has_cube || r.has_weight) && !(r.has_cube && r.has_weight))
+      .sort((a, b) => b.rows - a.rows);
+
+    // Routes with no demand rows in-window but no cube/weight either —
+    // populate proactively before P21 starts sending demand.
+    const noDemandNoTargets = perRoute
+      .filter((r) => r.active && r.rows === 0 && !r.has_cube && !r.has_weight)
+      .map((r) => ({ id: r.id, code: r.code, name: r.name, hub: r.hub }));
+
+    return {
+      window_days: days,
+      totalRows,
+      totalCovered,
+      overallPct: totalRows === 0 ? null : totalCovered / totalRows,
+      perRoute: perRoute.sort((a, b) => b.rows - a.rows),
+      missingCubeAndWeight,
+      partialTargets,
+      noDemandNoTargets,
+    };
+  });
+
+
 
