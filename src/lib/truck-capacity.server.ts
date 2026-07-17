@@ -205,6 +205,41 @@ export async function computeBaselineForecastForRoute(routeId: string, horizonDa
 
 export type SnapshotKind = "orders" | "transfers";
 
+// Candidate quantity columns on dbo.transfer_line, in priority order. NDI's
+// P21 schema does NOT expose `qty_ordered` on transfer_line (that name only
+// exists on oe_line), so we discover the real column at runtime via
+// INFORMATION_SCHEMA and substitute it into the query before it ships to the
+// bridge. Same defensive pattern the SPIFF module uses for invoice_line.
+const TRANSFER_QTY_CANDIDATES = [
+  "qty_transferred",
+  "qty_requested",
+  "qty_to_transfer",
+  "transfer_qty",
+  "qty_ordered",
+  "quantity",
+  "qty",
+] as const;
+
+async function discoverTransferQtyColumn(
+  timeoutMs: number,
+): Promise<{ col: string | null; found: string[] }> {
+  const introspectSql =
+    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS " +
+    "WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'transfer_line'";
+  const { result } = await runJob(
+    "sql.select",
+    { sql: introspectSql, params: {}, slug: "truck-capacity-p21-transfers-schema" },
+    timeoutMs,
+  );
+  const rows = ((result as any)?.rows ?? []) as any[];
+  const found = rows
+    .map((r) => String(r.COLUMN_NAME ?? r.column_name ?? "").toLowerCase())
+    .filter(Boolean);
+  const set = new Set(found);
+  const col = TRANSFER_QTY_CANDIDATES.find((c) => set.has(c)) ?? null;
+  return { col, found };
+}
+
 export async function runP21Snapshot(
   opts: { timeoutMs?: number; kind?: SnapshotKind } = {},
 ): Promise<{
@@ -219,7 +254,7 @@ export async function runP21Snapshot(
     ? ((settings as any)?.p21_transfer_sql ?? "")
     : ((settings as any)?.p21_sql ?? "");
   const defaultSql = kind === "transfers" ? DEFAULT_P21_TRANSFER_SQL : DEFAULT_P21_SQL;
-  const sqlText = String(configuredSql).trim() || defaultSql;
+  let sqlText = String(configuredSql).trim() || defaultSql;
   const slug = kind === "transfers" ? "truck-capacity-p21-transfers" : "truck-capacity-p21";
   const kindLabel = kind === "transfers" ? "transfers" : "orders";
 
@@ -254,6 +289,54 @@ export async function runP21Snapshot(
       return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
     }
   }
+
+  // Transfers: discover the real quantity column on dbo.transfer_line at
+  // runtime and rewrite the SQL text before it ships. NDI's P21 doesn't use
+  // `qty_ordered` on transfer_line (that column only exists on oe_line), so
+  // hardcoding any single name would keep breaking. Discovery lists the
+  // actual columns and we pick the first candidate that exists.
+  if (kind === "transfers") {
+    let discovered: { col: string | null; found: string[] };
+    try {
+      discovered = await discoverTransferQtyColumn(timeoutMs);
+    } catch (e: any) {
+      const error = `transfer_line schema discovery failed: ${e?.message ?? String(e)}`;
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_failed",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 transfers snapshot rejected: ${error}`,
+        metadata: { stage: "discover_schema", kind },
+      });
+      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    }
+    if (!discovered.col) {
+      const error =
+        `transfer_line has no known quantity column; ` +
+        `tried [${TRANSFER_QTY_CANDIDATES.join(", ")}], found [${discovered.found.join(", ")}]`;
+      await supabaseAdmin.from("activity_events").insert({
+        event_type: "truck_capacity.snapshot_failed",
+        entity_type: "truck_capacity_p21_demand",
+        message: `Truck Capacity P21 transfers snapshot rejected: ${error}`,
+        metadata: { stage: "discover_schema", kind, columns_found: discovered.found },
+      });
+      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    }
+    // Substitute any candidate token referenced as `l.<cand>` (the transfer_line
+    // alias used in both the default SQL and any admin-authored SQL that
+    // followed the same shape) with the discovered column.
+    for (const cand of TRANSFER_QTY_CANDIDATES) {
+      if (cand === discovered.col) continue;
+      const re = new RegExp(`\\bl\\.${cand}\\b`, "gi");
+      sqlText = sqlText.replace(re, `l.${discovered.col}`);
+    }
+    await supabaseAdmin.from("activity_events").insert({
+      event_type: "truck_capacity.snapshot_info",
+      entity_type: "truck_capacity_p21_demand",
+      message: `Truck Capacity P21 transfers: using transfer_line.${discovered.col}`,
+      metadata: { stage: "discover_schema", kind, qty_column: discovered.col },
+    });
+  }
+
 
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
