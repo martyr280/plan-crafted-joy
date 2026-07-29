@@ -112,7 +112,7 @@ export const getTruckForecast = createServerFn({ method: "POST" })
 export const retrainTruckModel = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     const { trainAndMaybePromote } = await import("./truck-capacity/train");
     return trainAndMaybePromote(context.userId);
   });
@@ -165,7 +165,7 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
     excluded_p21_codes: z.array(z.string().max(64)).max(200).nullable().optional(),
   }).parse(i))
   .handler(async ({ data, context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     // Sanity-check any custom SQL text before persisting. Null/empty means
     // "use the default" — no check needed. A stored query that fails the
     // column contract would silently poison every nightly snapshot, so we
@@ -218,7 +218,7 @@ export const updateRoutePalletsPerTruck = createServerFn({ method: "POST" })
     })).max(200),
   }).parse(i))
   .handler(async ({ data, context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     for (const u of data.updates) {
       const { id, ...rest } = u;
       // Only include keys that were explicitly provided (undefined = untouched).
@@ -235,7 +235,7 @@ export const previewTruckImport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ fileBase64: z.string().min(1) }).parse(i))
   .handler(async ({ data, context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     const report = await parseImportWorkbook(data.fileBase64);
     return { sheets: report.sheets, totalOk: report.totalOk, rows: report.rows };
   });
@@ -256,7 +256,7 @@ export const commitTruckImport = createServerFn({ method: "POST" })
     })).max(20000),
   }).parse(i))
   .handler(async ({ data, context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     const result = await applyImportRows(data.rows);
     // Best-effort retrain after import so accuracy metrics reflect the new data.
     let retrain: any = null;
@@ -335,7 +335,7 @@ function plausibilityWarnings(
 export const runP21SnapshotNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     const startedAt = new Date();
     const result = await runP21Snapshot({ kind: "orders" });
     if (!result.ok) return { ...result, readout: null, warnings: [] as string[] };
@@ -350,7 +350,7 @@ export const runP21SnapshotNow = createServerFn({ method: "POST" })
 export const runP21TransferSnapshotNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     const startedAt = new Date();
     const result = await runP21Snapshot({ kind: "transfers" });
     if (!result.ok) return { ...result, readout: null, warnings: [] as string[] };
@@ -366,7 +366,7 @@ export const testP21Sql = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ sql: z.string().min(1).max(20000) }).parse(i))
   .handler(async ({ data, context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     // Defense-in-depth: block anything that isn't a read-only SELECT/WITH/DECLARE.
     validateSelectSql(data.sql);
     // Column-alias smell test before we ship the query to the bridge.
@@ -394,7 +394,7 @@ export const testP21TransferSql = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ sql: z.string().min(1).max(20000) }).parse(i))
   .handler(async ({ data, context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     validateSelectSql(data.sql);
     const textCheck = validateP21SqlText(data.sql, "transfers");
     if (textCheck.errors.length > 0) {
@@ -421,7 +421,7 @@ export const testP21TransferSql = createServerFn({ method: "POST" })
 export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     const { data: events } = await supabaseAdmin
       .from("activity_events")
       .select("created_at, message, metadata")
@@ -498,7 +498,7 @@ export const assignP21RouteCode = createServerFn({ method: "POST" })
     routeId: z.string().uuid(),
   }).parse(i))
   .handler(async ({ data, context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     const code = data.code.trim();
     if (!code) throw new Error("code required");
     const { data: route, error: rErr } = await supabaseAdmin
@@ -547,7 +547,7 @@ export const setP21RouteCodeIgnored = createServerFn({ method: "POST" })
     ignore: z.boolean(),
   }).parse(i))
   .handler(async ({ data, context }) => {
-    await assertAdmin(null, context.userId);
+    await requireLogisticsAdmin(context.userId);
     const code = data.code.trim();
     if (!code) throw new Error("code required");
     const { data: settings } = await supabaseAdmin
