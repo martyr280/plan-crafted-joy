@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sendNelsonInviteEmail, sendNelsonPasswordResetEmail, sendNelsonCredentialsEmail } from "./email/nelson-resend.server";
 
-const APP_ROLES = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_reports", "sales_rep"] as const;
+const APP_ROLES = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_logistics_admin", "ops_reports", "sales_rep"] as const;
 type AppRole = (typeof APP_ROLES)[number];
 
 async function assertAdmin(supabase: any, userId: string) {
