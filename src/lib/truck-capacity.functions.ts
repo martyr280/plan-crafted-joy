@@ -3,7 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { assertAdmin, runJob } from "./p21.server";
+import { runJob } from "./p21.server";
 import {
   computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
   runP21Snapshot, DEFAULT_P21_SQL, DEFAULT_P21_TRANSFER_SQL,
