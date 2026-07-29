@@ -11,11 +11,22 @@ import {
 } from "./truck-capacity.server";
 import { validateSelectSql, stripLeadingSqlComments } from "./sql-schedules.server";
 
+async function hasAnyRoleSrv(userId: string, roles: string[]): Promise<boolean> {
+  for (const role of roles) {
+    const { data } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: role as any });
+    if (data) return true;
+  }
+  return false;
+}
+
 async function requireOpsOrAdmin(userId: string) {
-  const { data } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
-  if (data) return;
-  const { data: ops } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "ops_orders" });
-  if (!ops) throw new Error("ops_orders or admin role required");
+  const ok = await hasAnyRoleSrv(userId, ["admin", "ops_logistics_admin", "ops_orders"]);
+  if (!ok) throw new Error("ops_orders, ops_logistics_admin, or admin role required");
+}
+
+async function requireLogisticsAdmin(userId: string) {
+  const ok = await hasAnyRoleSrv(userId, ["admin", "ops_logistics_admin"]);
+  if (!ok) throw new Error("Logistics admin or admin role required");
 }
 
 export const listTruckRoutes = createServerFn({ method: "GET" })
