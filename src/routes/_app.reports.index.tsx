@@ -20,7 +20,7 @@ import { REPORT_TYPES, DATE_RANGES, generateAndExport, type ReportType, type Dat
 
 export const Route = createFileRoute("/_app/reports/")({ component: ReportsPage });
 
-const ROLES: AppRole[] = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_reports", "sales_rep"];
+const ROLES: AppRole[] = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_logistics_admin", "ops_reports", "sales_rep"];
 
 type Schedule = {
   id: string;
