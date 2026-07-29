@@ -11,8 +11,8 @@ export const REPORT_TYPES: { value: ReportType; label: string; roles: string[] }
   { value: "orders", label: "Orders", roles: ["ops_orders", "admin"] },
   { value: "ar_aging", label: "AR Aging", roles: ["ops_ar", "admin"] },
   { value: "spiff", label: "SPIFF Calculations", roles: ["ops_ar", "admin"] },
-  { value: "fleet", label: "Fleet Loads", roles: ["ops_logistics", "admin"] },
-  { value: "damage", label: "Damage Reports", roles: ["ops_logistics", "admin"] },
+  { value: "fleet", label: "Fleet Loads", roles: ["ops_logistics", "ops_logistics_admin", "admin"] },
+  { value: "damage", label: "Damage Reports", roles: ["ops_logistics", "ops_logistics_admin", "admin"] },
 ];
 
 export const DATE_RANGES: { value: DateRangePreset; label: string }[] = [
