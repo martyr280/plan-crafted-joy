@@ -33,12 +33,13 @@ import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
-const ALL_ROLES: AppRole[] = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_reports", "sales_rep"];
+const ALL_ROLES: AppRole[] = ["admin", "ops_orders", "ops_ar", "ops_logistics", "ops_logistics_admin", "ops_reports", "sales_rep"];
 const ROLE_LABELS: Record<AppRole, string> = {
   admin: "Admin",
   ops_orders: "Orders",
   ops_ar: "AR/Collections",
   ops_logistics: "Logistics",
+  ops_logistics_admin: "Logistics Admin",
   ops_reports: "Reports",
   sales_rep: "Sales Rep",
 };
