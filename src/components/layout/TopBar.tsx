@@ -12,6 +12,7 @@ const ROLE_LABELS: Record<string, string> = {
   ops_orders: "Orders",
   ops_ar: "AR/Collections",
   ops_logistics: "Logistics",
+  ops_logistics_admin: "Logistics Admin",
   ops_reports: "Reports",
   sales_rep: "Sales Rep",
 };
