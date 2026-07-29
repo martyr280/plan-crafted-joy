@@ -867,9 +867,18 @@ export async function applyImportRows(rows: ImportRow[]): Promise<{ inserted: nu
       driver: r.driver, pallet_count: r.pallet_count, returned_pallets: r.returned_pallets,
       notes: r.notes, source: "import",
     }));
+  // Dedupe within the payload: Postgres rejects an ON CONFLICT DO UPDATE that
+  // would touch the same conflict target twice in one statement
+  // ("cannot affect row a second time"). Keep the last occurrence per key —
+  // matches "last write wins" if a workbook lists the same route/date/seq twice.
+  const dedup = new Map<string, (typeof inserts)[number]>();
+  for (const row of inserts) {
+    dedup.set(`${row.route_id}|${row.run_date}|${row.run_seq}`, row);
+  }
+  const deduped = Array.from(dedup.values());
   let inserted = 0;
-  for (let i = 0; i < inserts.length; i += 500) {
-    const batch = inserts.slice(i, i + 500);
+  for (let i = 0; i < deduped.length; i += 500) {
+    const batch = deduped.slice(i, i + 500);
     const { error } = await supabaseAdmin
       .from("truck_capacity_runs")
       .upsert(batch, { onConflict: "route_id,run_date,run_seq" });
