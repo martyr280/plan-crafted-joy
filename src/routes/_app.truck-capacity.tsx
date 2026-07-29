@@ -62,8 +62,8 @@ function flagFor(cap: number | null): { label: string; tone: "red" | "amber" | "
 
 function TruckCapacityPage() {
   const { hasRole, hasAnyRole } = useAuth();
-  const canWrite = hasAnyRole(["ops_orders", "admin"]);
-  const isAdmin = hasRole("admin");
+  const canWrite = hasAnyRole(["ops_orders", "ops_logistics_admin", "admin"]);
+  const isAdmin = hasAnyRole(["ops_logistics_admin", "admin"]);
 
   const list = useServerFn(listTruckRoutes);
   const routesQ = useQuery({ queryKey: ["tc-routes"], queryFn: () => list() });
