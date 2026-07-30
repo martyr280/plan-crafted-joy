@@ -14,24 +14,79 @@ export const Route = createFileRoute("/reset-password")({
 function ResetPasswordPage() {
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    // Supabase puts the recovery session in the URL hash; the JS client
-    // auto-detects it. Wait one tick, then verify we have a session.
-    const t = setTimeout(async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        toast.error("This password reset link is invalid or has expired.");
-        navigate({ to: "/auth" });
+    let cancelled = false;
+
+    async function establish() {
+      const url = new URL(window.location.href);
+      const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
+
+      // 1) Our own emailed link: ?token_hash=...&type=recovery
+      const tokenHash = url.searchParams.get("token_hash") ?? hash.get("token_hash");
+      if (tokenHash) {
+        const { error } = await supabase.auth.verifyOtp({ type: "recovery", token_hash: tokenHash });
+        if (cancelled) return;
+        if (error) {
+          setLinkError(error.message || "This password reset link is no longer valid.");
+          return;
+        }
+        window.history.replaceState({}, "", "/reset-password");
+        setReady(true);
         return;
       }
-      setReady(true);
-    }, 100);
-    return () => clearTimeout(t);
-  }, [navigate]);
+
+      // 2) Legacy Supabase verify redirect: #access_token=...&refresh_token=...
+      const accessToken = hash.get("access_token");
+      const refreshToken = hash.get("refresh_token");
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (cancelled) return;
+        if (error) {
+          setLinkError(error.message || "This password reset link is no longer valid.");
+          return;
+        }
+        window.history.replaceState({}, "", "/reset-password");
+        setReady(true);
+        return;
+      }
+
+      // 3) Error handed back by Supabase in the URL
+      const urlError = hash.get("error_description") ?? url.searchParams.get("error_description");
+      if (urlError) {
+        setLinkError(decodeURIComponent(urlError));
+        return;
+      }
+
+      // 4) Fall back to an already-established session (poll briefly instead
+      //    of assuming the client finished parsing the URL within 100ms).
+      for (let i = 0; i < 20; i++) {
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (data.session) {
+          setReady(true);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      if (!cancelled) {
+        setLinkError("This password reset link is invalid or has already been used.");
+      }
+    }
+
+    void establish();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
