@@ -108,9 +108,21 @@ function ResetPasswordPage() {
           <CardDescription>Choose a strong password for your Nelson AI account.</CardDescription>
         </CardHeader>
         <CardContent>
-          {!ready ? (
+          {linkError ? (
+            <div className="space-y-4">
+              <p className="text-sm text-destructive">{linkError}</p>
+              <p className="text-sm text-muted-foreground">
+                Reset links can only be used once and expire after 1 hour. Request a new one and open it in the
+                same browser you requested it from.
+              </p>
+              <Button className="w-full" onClick={() => navigate({ to: "/auth" })}>
+                Request a new reset link
+              </Button>
+            </div>
+          ) : !ready ? (
             <div className="text-sm text-muted-foreground">Validating reset link…</div>
           ) : (
+
             <form onSubmit={onSubmit} className="space-y-4">
               <div>
                 <Label>New password</Label>
