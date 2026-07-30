@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { logUsage, useModuleView } from "@/lib/usage-log";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +113,7 @@ function money(n: number | null | undefined) {
 }
 
 function SpiffPage() {
+  useModuleView("spiff");
   const { user } = useAuth();
   const generate = useServerFn(generateSpiffRun);
   const rebuild = useServerFn(rebuildSpiffChecks);
@@ -256,6 +258,7 @@ function SpiffPage() {
     setGenerating(true);
     try {
       const res = await generate({ data: { quarterLabel, dateFrom, dateTo } });
+      logUsage("feature_action", "spiff", "spiff_report_generated", { quarterLabel, dateFrom, dateTo });
       toast.success(
         `Generated SPIFF run for ${quarterLabel}` +
           (Object.keys(res.errors).length ? ` (${Object.keys(res.errors).length} customer errors)` : "")
@@ -392,6 +395,7 @@ function SpiffPage() {
     if (!currentRunId) return;
     try {
       const res = await downloadFn({ data: { runId: currentRunId } });
+      logUsage("feature_action", "spiff", "spiff_report_export", { runId: currentRunId });
       const bin = atob(res.contentBase64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);

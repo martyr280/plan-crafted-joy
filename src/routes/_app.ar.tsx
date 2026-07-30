@@ -1,3 +1,4 @@
+import { useModuleView } from "@/lib/usage-log";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +38,7 @@ function bucketKeyForDays(daysPastDue: number) {
 }
 
 function ArPage() {
+  useModuleView("ar");
   const syncArAgingFn = useServerFn(syncArAging);
   const { user, hasRole } = useAuth();
   const [rows, setRows] = useState<any[]>([]);

@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWebhooksRouteImport } from './routes/_app.webhooks'
+import { Route as AppUsageRouteImport } from './routes/_app.usage'
 import { Route as AppTruckCapacityRouteImport } from './routes/_app.truck-capacity'
 import { Route as AppSqlSchedulesRouteImport } from './routes/_app.sql-schedules'
 import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
@@ -74,6 +75,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppWebhooksRoute = AppWebhooksRouteImport.update({
   id: '/webhooks',
   path: '/webhooks',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUsageRoute = AppUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
   getParentRoute: () => AppRoute,
 } as any)
 const AppTruckCapacityRoute = AppTruckCapacityRouteImport.update({
@@ -263,6 +269,7 @@ export interface FileRoutesByFullPath {
   '/spiff': typeof AppSpiffRoute
   '/sql-schedules': typeof AppSqlSchedulesRoute
   '/truck-capacity': typeof AppTruckCapacityRoute
+  '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
@@ -300,6 +307,7 @@ export interface FileRoutesByTo {
   '/spiff': typeof AppSpiffRoute
   '/sql-schedules': typeof AppSqlSchedulesRoute
   '/truck-capacity': typeof AppTruckCapacityRoute
+  '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
   '/': typeof AppIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
@@ -340,6 +348,7 @@ export interface FileRoutesById {
   '/_app/spiff': typeof AppSpiffRoute
   '/_app/sql-schedules': typeof AppSqlSchedulesRoute
   '/_app/truck-capacity': typeof AppTruckCapacityRoute
+  '/_app/usage': typeof AppUsageRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/_app/': typeof AppIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
@@ -381,6 +390,7 @@ export interface FileRouteTypes {
     | '/spiff'
     | '/sql-schedules'
     | '/truck-capacity'
+    | '/usage'
     | '/webhooks'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
@@ -418,6 +428,7 @@ export interface FileRouteTypes {
     | '/spiff'
     | '/sql-schedules'
     | '/truck-capacity'
+    | '/usage'
     | '/webhooks'
     | '/'
     | '/.lovable/oauth/consent'
@@ -457,6 +468,7 @@ export interface FileRouteTypes {
     | '/_app/spiff'
     | '/_app/sql-schedules'
     | '/_app/truck-capacity'
+    | '/_app/usage'
     | '/_app/webhooks'
     | '/_app/'
     | '/.lovable/oauth/consent'
@@ -528,6 +540,13 @@ declare module '@tanstack/react-router' {
       path: '/webhooks'
       fullPath: '/webhooks'
       preLoaderRoute: typeof AppWebhooksRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/usage': {
+      id: '/_app/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof AppUsageRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/truck-capacity': {
@@ -771,6 +790,7 @@ interface AppRouteChildren {
   AppSpiffRoute: typeof AppSpiffRoute
   AppSqlSchedulesRoute: typeof AppSqlSchedulesRoute
   AppTruckCapacityRoute: typeof AppTruckCapacityRoute
+  AppUsageRoute: typeof AppUsageRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
   AppReportsE2gRoute: typeof AppReportsE2gRoute
@@ -798,6 +818,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSpiffRoute: AppSpiffRoute,
   AppSqlSchedulesRoute: AppSqlSchedulesRoute,
   AppTruckCapacityRoute: AppTruckCapacityRoute,
+  AppUsageRoute: AppUsageRoute,
   AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,
   AppReportsE2gRoute: AppReportsE2gRoute,

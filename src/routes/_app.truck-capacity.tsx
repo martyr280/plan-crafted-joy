@@ -1,3 +1,4 @@
+import { useModuleView } from "@/lib/usage-log";
 import { createFileRoute } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -61,6 +62,7 @@ function flagFor(cap: number | null): { label: string; tone: "red" | "amber" | "
 }
 
 function TruckCapacityPage() {
+  useModuleView("truck_capacity");
   const { hasAnyRole } = useAuth();
   const canWrite = hasAnyRole(["ops_orders", "ops_logistics_admin", "admin"]);
   const isAdmin = hasAnyRole(["ops_logistics_admin", "admin"]);

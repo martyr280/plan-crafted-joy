@@ -1,3 +1,4 @@
+import { useModuleView } from "@/lib/usage-log";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -50,6 +51,7 @@ function safeRelative(d: any): string {
 }
 
 function EmailMonitorPage() {
+  useModuleView("email_dashboard");
   const fn = useServerFn(getEmailMonitorStats);
   const [days, setDays] = useState(30);
   const [ordersOnly, setOrdersOnly] = useState(true);

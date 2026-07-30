@@ -1,3 +1,4 @@
+import { useModuleView } from "@/lib/usage-log";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +47,7 @@ function isWebSellable(category: string | null | undefined): boolean {
 type SortDir = "asc" | "desc";
 
 function InventorySyncPage() {
+  useModuleView("inventory");
   const [website, setWebsite] = useState<any[]>([]);
   const [pricer, setPricer] = useState<any[]>([]);
   const [crawls, setCrawls] = useState<any[]>([]);
