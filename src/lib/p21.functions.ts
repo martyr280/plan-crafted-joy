@@ -31,7 +31,10 @@ export const getBridgeStatus = createServerFn({ method: "GET" })
 
       const { data: recent, error: recentError } = await supabaseAdmin
         .from("p21_bridge_jobs")
-        .select("id, kind, status, created_at, claimed_at, completed_at, error, payload, result")
+        // NOTE: payload/result are intentionally excluded — bridge job results can be
+        // multi-MB (e.g. pricer.sync returns ~14k rows), and pulling 50 of them into the
+        // Worker blows the memory limit and 502s this endpoint.
+        .select("id, kind, status, created_at, claimed_at, completed_at, error")
         .order("created_at", { ascending: false })
         .limit(50);
       if (recentError) throw recentError;
