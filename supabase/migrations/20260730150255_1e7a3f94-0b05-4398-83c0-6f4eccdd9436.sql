@@ -1,0 +1,1 @@
+UPDATE public.profiles SET display_name = 'Jimmy Green', updated_at = now() WHERE display_name = 'Joe Green';
