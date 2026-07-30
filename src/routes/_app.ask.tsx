@@ -1,3 +1,4 @@
+import { useModuleView } from "@/lib/usage-log";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AskNelsonChat } from "@/components/ask-nelson/AskNelsonChat";
@@ -7,6 +8,7 @@ export const Route = createFileRoute("/_app/ask")({
 });
 
 function AskPage() {
+  useModuleView("ask_nelson");
   const [conversationId, setConversationId] = useState<string | null>(null);
   return (
     <div className="h-[calc(100vh-7rem)] flex flex-col">

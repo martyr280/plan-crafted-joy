@@ -1,3 +1,4 @@
+import { useModuleView } from "@/lib/usage-log";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/_app/")({
 });
 
 function HomePage() {
+  useModuleView("dashboard");
   const [kpi, setKpi] = useState<any>({});
 
   useEffect(() => {

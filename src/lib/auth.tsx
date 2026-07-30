@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logLoginOnce } from "@/lib/usage-log";
 import type { Session, User } from "@supabase/supabase-js";
 
 export type AppRole = "admin" | "ops_orders" | "ops_ar" | "ops_logistics" | "ops_logistics_admin" | "ops_reports" | "sales_rep";
@@ -30,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
+        if (_e === "SIGNED_IN") logLoginOnce(s.user.id);
         setLoading(true);
         setTimeout(() => {
           loadRoles(s.user.id).finally(() => setLoading(false));

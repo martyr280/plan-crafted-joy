@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { logUsage, useModuleView } from "@/lib/usage-log";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +76,7 @@ function blankSchedule(): Schedule {
 }
 
 function SqlSchedulesPage() {
+  useModuleView("scheduled_queries");
   const { hasRole } = useAuth();
   const list = useServerFn(listSqlSchedules);
   const upsert = useServerFn(upsertSqlSchedule);
@@ -293,6 +295,7 @@ function SqlSchedulesPage() {
                   active: s.active,
                 } as any,
               });
+              logUsage("feature_action", "scheduled_queries", s.id ? "scheduled_query_edited" : "scheduled_query_created", { name: s.name });
               toast.success("Saved");
               setEditing(null);
               refresh();

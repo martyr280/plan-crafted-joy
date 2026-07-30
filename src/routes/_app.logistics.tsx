@@ -1,3 +1,4 @@
+import { useModuleView } from "@/lib/usage-log";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -39,6 +40,7 @@ async function fetchAll(table: string) {
 }
 
 function LogisticsPage() {
+  useModuleView("fleet_map");
   const [loads, setLoads] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [damage, setDamage] = useState<any[]>([]);

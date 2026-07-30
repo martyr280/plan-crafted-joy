@@ -2215,6 +2215,36 @@ export type Database = {
         }
         Relationships: []
       }
+      usage_events: {
+        Row: {
+          action: string | null
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          module: string
+          user_id: string
+        }
+        Insert: {
+          action?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          module: string
+          user_id: string
+        }
+        Update: {
+          action?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          module?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

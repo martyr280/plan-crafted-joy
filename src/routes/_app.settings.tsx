@@ -1,3 +1,4 @@
+import { useModuleView } from "@/lib/usage-log";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,6 +49,7 @@ type ProfileRow = { id: string; email: string | null; display_name: string | nul
 type RoleRow = { user_id: string; role: AppRole };
 
 function SettingsPage() {
+  useModuleView("user_management");
   const { user, roles, hasRole } = useAuth();
   const [skus, setSkus] = useState<any[]>([]);
   useEffect(() => {

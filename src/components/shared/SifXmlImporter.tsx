@@ -9,6 +9,7 @@ import { Upload, FileUp, AlertCircle, CheckCircle2, Loader2 } from "lucide-react
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { parseSifText, type ImportKind, type ParsedOrder, type ParsedLoad, type RowError } from "@/lib/sif-parser";
+import { logUsage } from "@/lib/usage-log";
 
 type Props = {
   scope: "orders" | "loads" | "both";
@@ -44,6 +45,7 @@ export function SifXmlImporter({ scope, onImported, triggerLabel = "Import SIF/X
   async function doImport() {
     if (!parsed || !records.length || scopeMismatch) return;
     setImporting(true);
+    logUsage("feature_action", "imports", "sif_import", { kind: parsed.kind, count: records.length, file: fileName });
     try {
       const user = (await supabase.auth.getUser()).data.user;
       if (parsed.kind === "orders") {

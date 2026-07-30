@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { logUsage } from "@/lib/usage-log";
 import {
   useAskNelson,
   useConversation,
@@ -47,6 +48,7 @@ export function AskNelsonChat({ conversationId, setConversationId, compact }: Pr
     if (!text || ask.isPending) return;
     const id = await ensureConv();
     setInput("");
+    logUsage("feature_action", "ask_nelson", "ask_nelson_query", { escalate, length: text.length });
     ask.mutate({ message: text, escalate, conversationId: id });
   }
 
