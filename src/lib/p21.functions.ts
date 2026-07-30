@@ -31,7 +31,10 @@ export const getBridgeStatus = createServerFn({ method: "GET" })
 
       const { data: recent, error: recentError } = await supabaseAdmin
         .from("p21_bridge_jobs")
-        .select("id, kind, status, created_at, claimed_at, completed_at, error, payload, result")
+        // NOTE: payload/result are intentionally excluded — bridge job results can be
+        // multi-MB (e.g. pricer.sync returns ~14k rows), and pulling 50 of them into the
+        // Worker blows the memory limit and 502s this endpoint.
+        .select("id, kind, status, created_at, claimed_at, completed_at, error")
         .order("created_at", { ascending: false })
         .limit(50);
       if (recentError) throw recentError;
@@ -70,6 +73,36 @@ export const getBridgeStatus = createServerFn({ method: "GET" })
         transientError: message.slice(0, 300),
       };
     }
+  });
+
+// Fetch payload/result for a single job on demand. Kept out of getBridgeStatus
+// because these blobs can be multiple MB each.
+export const getBridgeJobDetail = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ jobId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { data: job, error } = await supabaseAdmin
+      .from("p21_bridge_jobs")
+      .select("id, kind, status, error, payload, result")
+      .eq("id", data.jobId)
+      .single();
+    if (error || !job) throw new Error(error?.message ?? "Job not found");
+
+    const MAX = 200_000; // ~200KB of JSON per blob is plenty for inspection
+    const clamp = (v: unknown) => {
+      if (v == null) return v;
+      const text = JSON.stringify(v);
+      if (text.length <= MAX) return v;
+      return {
+        truncated: true,
+        bytes: text.length,
+        note: `Output too large to display (${text.length.toLocaleString()} chars). Showing first ${MAX.toLocaleString()} chars.`,
+        preview: text.slice(0, MAX),
+      };
+    };
+
+    return { ...job, payload: clamp(job.payload), result: clamp(job.result) };
   });
 
 export const retryBridgeJob = createServerFn({ method: "POST" })
