@@ -56,7 +56,16 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
         console.error("generateLink(recovery) failed:", error.message);
         return { ok: true };
       }
-      const actionUrl = linkData?.properties?.action_link;
+      // Prefer the hashed token over Supabase's /auth/v1/verify action_link:
+      // that link is single-use and is frequently consumed by corporate email
+      // security scanners / link prefetchers before the user ever clicks it,
+      // which is what produces the immediate "link has expired" message.
+      // Sending users straight to our own page lets the browser exchange the
+      // token itself via verifyOtp().
+      const hashedToken = linkData?.properties?.hashed_token;
+      const actionUrl = hashedToken
+        ? `${origin}/reset-password?token_hash=${encodeURIComponent(hashedToken)}&type=recovery`
+        : linkData?.properties?.action_link;
       if (actionUrl) {
         await sendNelsonPasswordResetEmail(data.email, actionUrl);
       }
