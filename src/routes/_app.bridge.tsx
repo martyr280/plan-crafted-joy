@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, RefreshCw, Play, Wifi, WifiOff, RotateCcw, Eye, AlertCircle, Clock, CheckCircle2, Database, Copy, Download } from "lucide-react";
 import { toast } from "sonner";
-import { enqueueP21Job, getBridgeStatus, retryBridgeJob, runP21Sql } from "@/lib/p21.functions";
+import { enqueueP21Job, getBridgeJobDetail, getBridgeStatus, retryBridgeJob, runP21Sql } from "@/lib/p21.functions";
 import { formatDistanceToNow } from "date-fns";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
@@ -30,7 +30,7 @@ type Agent = { id: string; name: string; version: string | null; ip: string | nu
 type Job = {
   id: string; kind: string; status: string;
   created_at: string; claimed_at: string | null; completed_at: string | null;
-  error: string | null; payload: any; result: any;
+  error: string | null;
 };
 
 function agentHealth(lastSeenAt: string | null) {
@@ -132,6 +132,23 @@ function BridgeAdminPage() {
   const [pinging, setPinging] = useState(false);
   const [filter, setFilter] = useState<"all" | "pending" | "claimed" | "done" | "error">("all");
   const [selected, setSelected] = useState<Job | null>(null);
+  const [detail, setDetail] = useState<{ payload: any; result: any } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const getBridgeJobDetailFn = useServerFn(getBridgeJobDetail);
+
+  async function openJob(job: Job) {
+    setSelected(job);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const res: any = await getBridgeJobDetailFn({ data: { jobId: job.id } });
+      setDetail({ payload: res?.payload ?? null, result: res?.result ?? null });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to load job detail");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
   const [retrying, setRetrying] = useState<string | null>(null);
 
   async function refresh() {
@@ -468,7 +485,7 @@ function BridgeAdminPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
-                      <Button size="sm" variant="ghost" onClick={() => setSelected(j)}>
+                      <Button size="sm" variant="ghost" onClick={() => openJob(j)}>
                         <Eye className="w-4 h-4" />
                       </Button>
                       {j.status === "error" && (
@@ -490,7 +507,7 @@ function BridgeAdminPage() {
         )}
       </Card>
 
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) { setSelected(null); setDetail(null); } }}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
           <DialogHeader>
             <DialogTitle>
@@ -512,11 +529,11 @@ function BridgeAdminPage() {
               )}
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Payload</div>
-                <pre className="bg-muted p-2 rounded text-xs overflow-auto max-h-48">{JSON.stringify(selected.payload, null, 2)}</pre>
+                <pre className="bg-muted p-2 rounded text-xs overflow-auto max-h-48">{detailLoading ? "Loading…" : JSON.stringify(detail?.payload ?? null, null, 2)}</pre>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Result</div>
-                <pre className="bg-muted p-2 rounded text-xs overflow-auto max-h-72">{JSON.stringify(selected.result, null, 2)}</pre>
+                <pre className="bg-muted p-2 rounded text-xs overflow-auto max-h-72">{detailLoading ? "Loading…" : JSON.stringify(detail?.result ?? null, null, 2)}</pre>
               </div>
             </div>
           )}
