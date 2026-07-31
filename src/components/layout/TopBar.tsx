@@ -45,9 +45,11 @@ export function TopBar() {
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
           {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="gap-2">
