@@ -113,6 +113,230 @@ export type Database = {
         }
         Relationships: []
       }
+      capacity_alert_log: {
+        Row: {
+          alert_id: string | null
+          dry_run: boolean
+          evaluated_at: string
+          fired: boolean
+          id: string
+          reason: string
+          route_code: string | null
+          route_id: string | null
+          rule_id: string | null
+          streak_days: number | null
+          values: Json
+        }
+        Insert: {
+          alert_id?: string | null
+          dry_run?: boolean
+          evaluated_at?: string
+          fired?: boolean
+          id?: string
+          reason: string
+          route_code?: string | null
+          route_id?: string | null
+          rule_id?: string | null
+          streak_days?: number | null
+          values?: Json
+        }
+        Update: {
+          alert_id?: string | null
+          dry_run?: boolean
+          evaluated_at?: string
+          fired?: boolean
+          id?: string
+          reason?: string
+          route_code?: string | null
+          route_id?: string | null
+          rule_id?: string | null
+          streak_days?: number | null
+          values?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capacity_alert_log_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "capacity_alert_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      capacity_alert_prefs: {
+        Row: {
+          email_override: string | null
+          max_per_week: number
+          notes: string | null
+          opted_in: boolean
+          rep_code: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          email_override?: string | null
+          max_per_week?: number
+          notes?: string | null
+          opted_in?: boolean
+          rep_code: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          email_override?: string | null
+          max_per_week?: number
+          notes?: string | null
+          opted_in?: boolean
+          rep_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      capacity_alert_rules: {
+        Row: {
+          active: boolean
+          channels: string[]
+          consecutive_days: number
+          cooldown_days: number
+          created_at: string
+          created_by: string | null
+          id: string
+          lookback_days: number
+          manager_digest: boolean
+          name: string
+          owner_label: string | null
+          owner_user_id: string | null
+          route_codes: string[]
+          scope: string
+          threshold_pct: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          channels?: string[]
+          consecutive_days?: number
+          cooldown_days?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lookback_days?: number
+          manager_digest?: boolean
+          name: string
+          owner_label?: string | null
+          owner_user_id?: string | null
+          route_codes?: string[]
+          scope?: string
+          threshold_pct?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          channels?: string[]
+          consecutive_days?: number
+          cooldown_days?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lookback_days?: number
+          manager_digest?: boolean
+          name?: string
+          owner_label?: string | null
+          owner_user_id?: string | null
+          route_codes?: string[]
+          scope?: string
+          threshold_pct?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      capacity_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          avg_month: number | null
+          avg_quarter: number | null
+          avg_utilization_in_streak: number | null
+          avg_year: number | null
+          created_at: string
+          delivery: Json
+          fired_at: string
+          id: string
+          rep_codes: string[]
+          resolved_at: string | null
+          route_code: string
+          route_id: string | null
+          route_name: string | null
+          rule_id: string | null
+          status: string
+          streak_days: number
+          streak_from: string | null
+          streak_to: string | null
+          threshold_pct: number
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          avg_month?: number | null
+          avg_quarter?: number | null
+          avg_utilization_in_streak?: number | null
+          avg_year?: number | null
+          created_at?: string
+          delivery?: Json
+          fired_at?: string
+          id?: string
+          rep_codes?: string[]
+          resolved_at?: string | null
+          route_code: string
+          route_id?: string | null
+          route_name?: string | null
+          rule_id?: string | null
+          status?: string
+          streak_days: number
+          streak_from?: string | null
+          streak_to?: string | null
+          threshold_pct: number
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          avg_month?: number | null
+          avg_quarter?: number | null
+          avg_utilization_in_streak?: number | null
+          avg_year?: number | null
+          created_at?: string
+          delivery?: Json
+          fired_at?: string
+          id?: string
+          rep_codes?: string[]
+          resolved_at?: string | null
+          route_code?: string
+          route_id?: string | null
+          route_name?: string | null
+          rule_id?: string | null
+          status?: string
+          streak_days?: number
+          streak_from?: string | null
+          streak_to?: string | null
+          threshold_pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capacity_alerts_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capacity_alerts_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "capacity_alert_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       catalog_items: {
         Row: {
           catalog_id: string
@@ -2515,6 +2739,7 @@ export type Database = {
     Functions: {
       backfill_sku_crossref_from_formerly: { Args: never; Returns: number }
       claim_admin_if_none: { Args: never; Returns: boolean }
+      current_sales_rep_code: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2522,6 +2747,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_capacity_alert_manager: { Args: never; Returns: boolean }
     }
     Enums: {
       app_role:

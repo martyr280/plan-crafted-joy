@@ -156,3 +156,152 @@ export async function sendNelsonCredentialsEmail(to: string, password: string, s
 
 
 
+
+// ---------------------------------------------------------------------------
+// Capacity alerts (Truck Capacity module)
+// ---------------------------------------------------------------------------
+
+function pct(v: number | null | undefined): string {
+  return v == null ? "—" : `${Math.round(v * 100)}%`;
+}
+
+function statRow(label: string, value: string) {
+  return `<tr>
+    <td style="padding:10px 14px;border-bottom:1px solid ${BORDER};font-size:13px;color:${MUTED};">${label}</td>
+    <td style="padding:10px 14px;border-bottom:1px solid ${BORDER};font-size:15px;color:${NAVY};font-weight:600;text-align:right;">${value}</td>
+  </tr>`;
+}
+
+export type CapacityAlertEmailData = {
+  repName: string;
+  routeCode: string;
+  routeName: string;
+  thresholdPct: number;
+  streakDays: number;
+  streakFrom: string;
+  streakTo: string;
+  avgInStreak: number | null;
+  avgMonth: number | null;
+  avgQuarter: number | null;
+  avgYear: number | null;
+};
+
+export async function sendCapacityAlertEmail(to: string, d: CapacityAlertEmailData) {
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${TEXT};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;">
+        <tr><td style="background:${NAVY};padding:24px 28px;">
+          <div style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.01em;">Nelson <span style="color:${ORANGE};">AI</span></div>
+          <div style="font-size:12px;color:#cbd5e1;margin-top:2px;">Truck Capacity alert</div>
+        </td></tr>
+        <tr><td style="padding:32px 28px 8px;">
+          <h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:${NAVY};font-weight:600;">
+            ${d.routeCode} has run under ${d.thresholdPct}% for ${d.streakDays} days straight
+          </h1>
+          <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:${TEXT};">
+            Hi ${d.repName} — route <strong>${d.routeCode}</strong>${d.routeName ? ` (${d.routeName})` : ""} averaged
+            <strong>${pct(d.avgInStreak)}</strong> capacity across ${d.streakDays} consecutive delivery days
+            (${d.streakFrom} to ${d.streakTo}), below the ${d.thresholdPct}% target. Here's how that compares
+            to your longer-run averages:
+          </p>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f8fafc;border:1px solid ${BORDER};border-radius:8px;margin:0 0 24px;">
+            ${statRow("This streak", pct(d.avgInStreak))}
+            ${statRow("This month to date", pct(d.avgMonth))}
+            ${statRow("Past quarter (90 days)", pct(d.avgQuarter))}
+            ${statRow("Past 12 months", pct(d.avgYear))}
+          </table>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:${TEXT};">
+            Underfilled trucks running to your customers cost margin on every stop. Please review what's
+            scheduled on this route and consolidate where you can.
+          </p>
+        </td></tr>
+        <tr><td style="padding:24px 28px 28px;border-top:1px solid ${BORDER};">
+          <p style="margin:0;font-size:12px;color:${MUTED};line-height:1.5;">
+            Sent automatically by Nelson AI · NDI Office Furniture<br/>
+            Capacity thresholds and alert frequency are managed by your logistics admin.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+  return sendResend(to, `Capacity alert: ${d.routeCode} under ${d.thresholdPct}% for ${d.streakDays} days`, html);
+}
+
+export type CapacityDigestEmailData = {
+  ruleName: string;
+  thresholdPct: number;
+  rows: Array<{
+    routeCode: string;
+    routeName: string;
+    reps: string[];
+    streakDays: number;
+    avgInStreak: number | null;
+    avgMonth: number | null;
+    avgQuarter: number | null;
+    avgYear: number | null;
+  }>;
+};
+
+export async function sendCapacityDigestEmail(to: string[], d: CapacityDigestEmailData) {
+  const rows = d.rows.map((r) => `<tr>
+    <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${NAVY};font-weight:600;">${r.routeCode}<div style="font-weight:400;color:${MUTED};font-size:12px;">${r.routeName ?? ""}</div></td>
+    <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};">${r.reps.length ? r.reps.join(", ") : "<em>unassigned</em>"}</td>
+    <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:center;">${r.streakDays}d</td>
+    <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:right;">${pct(r.avgInStreak)}</td>
+    <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:right;">${pct(r.avgMonth)}</td>
+    <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:right;">${pct(r.avgQuarter)}</td>
+    <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:right;">${pct(r.avgYear)}</td>
+  </tr>`).join("");
+
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${TEXT};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="720" cellpadding="0" cellspacing="0" style="max-width:720px;background:#ffffff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;">
+        <tr><td style="background:${NAVY};padding:24px 28px;">
+          <div style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.01em;">Nelson <span style="color:${ORANGE};">AI</span></div>
+          <div style="font-size:12px;color:#cbd5e1;margin-top:2px;">Daily capacity alert digest</div>
+        </td></tr>
+        <tr><td style="padding:28px 28px 8px;">
+          <h1 style="margin:0 0 8px;font-size:20px;color:${NAVY};font-weight:600;">${d.rows.length} route(s) alerted — ${d.ruleName}</h1>
+          <p style="margin:0 0 20px;font-size:14px;color:${TEXT};line-height:1.6;">
+            Routes below the ${d.thresholdPct}% threshold for their configured consecutive-day streak.
+            Salespeople listed have been notified unless marked opted out or at their weekly cap.
+          </p>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border:1px solid ${BORDER};border-radius:8px;border-collapse:collapse;">
+            <tr style="background:#f8fafc;">
+              <th style="padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${MUTED};">Route</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${MUTED};">Rep(s)</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${MUTED};">Streak</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${MUTED};">Streak avg</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${MUTED};">Month</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${MUTED};">Quarter</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:${MUTED};">12 mo</th>
+            </tr>
+            ${rows}
+          </table>
+        </td></tr>
+        <tr><td style="padding:24px 28px 28px;border-top:1px solid ${BORDER};">
+          <p style="margin:0;font-size:12px;color:${MUTED};line-height:1.5;">Sent automatically by Nelson AI · NDI Office Furniture</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
+  const r = await fetch(RESEND_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: fromAddress(), to, subject: `Capacity alert digest — ${d.rows.length} route(s) underfilled`, html }),
+  });
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`Resend digest send failed [${r.status}]: ${body.slice(0, 300)}`);
+  }
+  return r.json();
+}

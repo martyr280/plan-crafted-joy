@@ -22,6 +22,8 @@ import {
 } from "recharts";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
+import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
+
 import { useAuth } from "@/lib/auth";
 import {
   listTruckRoutes, listTruckRuns, upsertTruckRun, deleteTruckRun, getTruckForecast,
@@ -146,6 +148,7 @@ function TruckCapacityPage() {
           <TabsTrigger value="route">Route</TabsTrigger>
           <TabsTrigger value="forecast">Forecast</TabsTrigger>
           <TabsTrigger value="underfilled">Underfilled</TabsTrigger>
+          <TabsTrigger value="alerts">Alerts</TabsTrigger>
           {isAdmin && <TabsTrigger value="import">Import</TabsTrigger>}
           {isAdmin && <TabsTrigger value="settings">Settings</TabsTrigger>}
         </TabsList>
@@ -153,8 +156,10 @@ function TruckCapacityPage() {
         <TabsContent value="route"><RouteTab routes={routes} canWrite={canWrite} /></TabsContent>
         <TabsContent value="forecast"><ForecastTab routes={routes} /></TabsContent>
         <TabsContent value="underfilled"><UnderfilledTab viewAsRep={scoped ? null : (viewAsRep || null)} /></TabsContent>
+        <TabsContent value="alerts"><AlertsTab routes={allRoutes} isManager={isAdmin} /></TabsContent>
         {isAdmin && <TabsContent value="import"><ImportTab /></TabsContent>}
         {isAdmin && <TabsContent value="settings"><SettingsTab routes={allRoutes} /></TabsContent>}
+
       </Tabs>
 
     </div>

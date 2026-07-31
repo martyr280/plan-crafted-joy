@@ -6,6 +6,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Moon, Sun, LogOut, User as UserIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { NotificationBell } from "@/components/layout/NotificationBell";
+
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -45,9 +47,11 @@ export function TopBar() {
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
           {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="gap-2">

@@ -102,7 +102,29 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, ranAt: new Date().toISOString() });
+          // Daily capacity-alert evaluation: 12:00–12:15 UTC (~08:00 ET), once per day.
+          // Dedup-guarded by a non-dry-run evaluation logged today so overlapping
+          // cron ticks can't double-alert a rep.
+          let capacityAlerts: any = null;
+          if (now.getUTCHours() === 12 && now.getUTCMinutes() < 15) {
+            const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+            const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
+            const { data: alreadyEvaluated } = await supabaseAdmin
+              .from("capacity_alert_log")
+              .select("id").eq("dry_run", false).gte("evaluated_at", todayStart).limit(1);
+            if (alreadyEvaluated && alreadyEvaluated.length > 0) {
+              capacityAlerts = { ok: true, skipped: true, reason: "already_evaluated_today" };
+            } else {
+              try {
+                const { evaluateCapacityAlerts } = await import("@/lib/capacity-alerts.server");
+                const res = await evaluateCapacityAlerts({ dryRun: false, now });
+                capacityAlerts = { ok: true, fired: res.fired, evaluatedRules: res.evaluatedRules, errors: res.errors };
+              } catch (e: any) { capacityAlerts = { ok: false, error: e?.message ?? String(e) }; }
+            }
+          }
+
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, capacityAlerts, ranAt: new Date().toISOString() });
+
 
         } catch (e: any) {
           return Response.json(
