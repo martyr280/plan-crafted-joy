@@ -1493,6 +1493,48 @@ export type Database = {
         }
         Relationships: []
       }
+      rma_entity_monthly: {
+        Row: {
+          dimension_key: string
+          dimension_label: string | null
+          dimension_type: string
+          id: string
+          month: string
+          reason_counts: Json
+          reason_values: Json
+          rma_count: number
+          rma_qty: number
+          rma_value: number
+          updated_at: string
+        }
+        Insert: {
+          dimension_key: string
+          dimension_label?: string | null
+          dimension_type: string
+          id?: string
+          month: string
+          reason_counts?: Json
+          reason_values?: Json
+          rma_count?: number
+          rma_qty?: number
+          rma_value?: number
+          updated_at?: string
+        }
+        Update: {
+          dimension_key?: string
+          dimension_label?: string | null
+          dimension_type?: string
+          id?: string
+          month?: string
+          reason_counts?: Json
+          reason_values?: Json
+          rma_count?: number
+          rma_qty?: number
+          rma_value?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       rma_requests: {
         Row: {
           created_at: string
@@ -1538,6 +1580,125 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      rma_snapshot_rows: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          driver_name: string | null
+          id: string
+          invoice_no: string | null
+          item_desc: string | null
+          item_id: string | null
+          order_no: string | null
+          picker_name: string | null
+          qty: number | null
+          raw: Json
+          reason_bucket: string
+          reason_code: string | null
+          reason_desc: string | null
+          rma_date: string | null
+          rma_no: string | null
+          route_code: string | null
+          snapshot_id: string
+          value: number | null
+          warehouse_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          driver_name?: string | null
+          id?: string
+          invoice_no?: string | null
+          item_desc?: string | null
+          item_id?: string | null
+          order_no?: string | null
+          picker_name?: string | null
+          qty?: number | null
+          raw?: Json
+          reason_bucket?: string
+          reason_code?: string | null
+          reason_desc?: string | null
+          rma_date?: string | null
+          rma_no?: string | null
+          route_code?: string | null
+          snapshot_id: string
+          value?: number | null
+          warehouse_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          driver_name?: string | null
+          id?: string
+          invoice_no?: string | null
+          item_desc?: string | null
+          item_id?: string | null
+          order_no?: string | null
+          picker_name?: string | null
+          qty?: number | null
+          raw?: Json
+          reason_bucket?: string
+          reason_code?: string | null
+          reason_desc?: string | null
+          rma_date?: string | null
+          rma_no?: string | null
+          route_code?: string | null
+          snapshot_id?: string
+          value?: number | null
+          warehouse_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rma_snapshot_rows_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "rma_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rma_snapshots: {
+        Row: {
+          completed_at: string | null
+          error: string | null
+          id: string
+          notes: string | null
+          rows_pulled: number
+          rows_written: number
+          sql_used: string | null
+          started_at: string
+          status: string
+          triggered_by: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          error?: string | null
+          id?: string
+          notes?: string | null
+          rows_pulled?: number
+          rows_written?: number
+          sql_used?: string | null
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          error?: string | null
+          id?: string
+          notes?: string | null
+          rows_pulled?: number
+          rows_written?: number
+          sql_used?: string | null
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
         }
         Relationships: []
       }
