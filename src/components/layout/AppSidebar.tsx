@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader } from "@/components/ui/sidebar";
-import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, Sparkles, MailWarning, Gauge } from "lucide-react";
+import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, Sparkles, MailWarning, Gauge, Undo2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
 
@@ -37,6 +37,7 @@ const groups = [
       { title: "Logistics", url: "/logistics", icon: Truck },
       { title: "Truck Capacity", url: "/truck-capacity", icon: Truck },
       { title: "Damage Tracker", url: "/damage", icon: AlertTriangle },
+      { title: "RMA Analytics", url: "/rma-analytics", icon: Undo2 },
     ],
   },
   {

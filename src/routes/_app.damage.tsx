@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, stripSearchParams } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, stripSearchParams, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -17,7 +17,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { format, formatDistanceToNow } from "date-fns";
 import { listDvirs, listDocuments } from "@/lib/samsara.functions";
-import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Loader2 } from "lucide-react";
+import { Paperclip, CheckCircle2, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Loader2, Undo2 } from "lucide-react";
+import { useRmaOrderIndex } from "@/hooks/useRmaAnalytics";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
@@ -234,11 +235,54 @@ function DamagePage() {
     reload();
   }
 
+  // Cross-link to RMA Analytics: which damage reports have a matching return
+  // (by P21 order number) in the active RMA snapshot. Read-only; does not
+  // change any existing Damage Tracker behaviour.
+  const rmaIndex = useRmaOrderIndex();
+  const rmaKeys = useMemo(
+    () => new Set((rmaIndex.data?.keys ?? []).map((k: string) => k.toUpperCase())),
+    [rmaIndex.data],
+  );
+  const hasRmaMatch = (orderNo?: string | null) => {
+    const k = String(orderNo ?? "").trim().toUpperCase();
+    return !!k && rmaKeys.has(k);
+  };
+  const matchedCount = useMemo(
+    () => filtered.filter((r: any) => hasRmaMatch(r.p21_order_id)).length,
+    [filtered, rmaKeys],
+  );
+
 
   return (
     <div>
-      <ModuleHeader title="Damage Tracker" description="RMA log linked to Samsara DVIRs and proof-of-delivery documents." />
+      <ModuleHeader
+        title="Damage Tracker"
+        description="RMA log linked to Samsara DVIRs and proof-of-delivery documents."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/rma-analytics">RMA Analytics</Link>
+          </Button>
+        }
+      />
+      <Card className="p-4 mb-6 flex flex-wrap items-center justify-between gap-3 border-primary/30 bg-primary/5">
+        <div className="flex items-start gap-3">
+          <Undo2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-medium">Looking for the pattern, not the incident?</p>
+            <p className="text-muted-foreground">
+              RMA Analytics attributes returns from the P21 reason codes to the driver, route, puller, or dealer behind them.
+              {rmaIndex.data?.snapshotId
+                ? ` ${matchedCount} of ${filtered.length} filtered reports match a return in the current RMA snapshot.`
+                : " No RMA snapshot has been pulled yet."}
+            </p>
+          </div>
+        </div>
+        <Button asChild size="sm">
+          <Link to="/rma-analytics">Open RMA Analytics</Link>
+        </Button>
+      </Card>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+
         <Card className="p-4"><p className="text-sm text-muted-foreground">Open (filtered)</p><p className="text-2xl font-bold">{open}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Severe (filtered)</p><p className="text-2xl font-bold text-destructive">{severe}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Matching / total</p><p className="text-2xl font-bold">{filtered.length} <span className="text-sm font-normal text-muted-foreground">/ {rows.length}</span></p></Card>
@@ -421,7 +465,22 @@ function DamagePage() {
                   />
                 </TableCell>
                 <TableCell title={new Date(r.created_at).toLocaleString()}>{formatDistanceToNow(new Date(r.created_at), { addSuffix: true })}</TableCell>
-                <TableCell>{r.p21_order_id ?? "—"}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1.5">
+                    <span>{r.p21_order_id ?? "—"}</span>
+                    {hasRmaMatch(r.p21_order_id) && (
+                      <Link
+                        to="/rma-analytics"
+                        title="A return for this order exists in the RMA snapshot — open RMA Analytics"
+                        className="inline-flex"
+                      >
+                        <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 cursor-pointer">
+                          <Undo2 className="w-3 h-3" /> RMA
+                        </Badge>
+                      </Link>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>{r.stage}</TableCell>
                 <TableCell>{r.damage_type}</TableCell>
                 <TableCell><Badge variant={r.severity === "severe" ? "destructive" : "secondary"}>{r.severity}</Badge></TableCell>
