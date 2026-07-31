@@ -237,8 +237,34 @@ function DamagePage() {
 
   return (
     <div>
-      <ModuleHeader title="Damage Tracker" description="RMA log linked to Samsara DVIRs and proof-of-delivery documents." />
+      <ModuleHeader
+        title="Damage Tracker"
+        description="RMA log linked to Samsara DVIRs and proof-of-delivery documents."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/rma-analytics">RMA Analytics</Link>
+          </Button>
+        }
+      />
+      <Card className="p-4 mb-6 flex flex-wrap items-center justify-between gap-3 border-primary/30 bg-primary/5">
+        <div className="flex items-start gap-3">
+          <Undo2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-medium">Looking for the pattern, not the incident?</p>
+            <p className="text-muted-foreground">
+              RMA Analytics attributes returns from the P21 reason codes to the driver, route, puller, or dealer behind them.
+              {rmaIndex.data?.snapshotId
+                ? ` ${matchedCount} of ${filtered.length} filtered reports match a return in the current RMA snapshot.`
+                : " No RMA snapshot has been pulled yet."}
+            </p>
+          </div>
+        </div>
+        <Button asChild size="sm">
+          <Link to="/rma-analytics">Open RMA Analytics</Link>
+        </Button>
+      </Card>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+
         <Card className="p-4"><p className="text-sm text-muted-foreground">Open (filtered)</p><p className="text-2xl font-bold">{open}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Severe (filtered)</p><p className="text-2xl font-bold text-destructive">{severe}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Matching / total</p><p className="text-2xl font-bold">{filtered.length} <span className="text-sm font-normal text-muted-foreground">/ {rows.length}</span></p></Card>
