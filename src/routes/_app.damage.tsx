@@ -465,7 +465,22 @@ function DamagePage() {
                   />
                 </TableCell>
                 <TableCell title={new Date(r.created_at).toLocaleString()}>{formatDistanceToNow(new Date(r.created_at), { addSuffix: true })}</TableCell>
-                <TableCell>{r.p21_order_id ?? "—"}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1.5">
+                    <span>{r.p21_order_id ?? "—"}</span>
+                    {hasRmaMatch(r.p21_order_id) && (
+                      <Link
+                        to="/rma-analytics"
+                        title="A return for this order exists in the RMA snapshot — open RMA Analytics"
+                        className="inline-flex"
+                      >
+                        <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 cursor-pointer">
+                          <Undo2 className="w-3 h-3" /> RMA
+                        </Badge>
+                      </Link>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>{r.stage}</TableCell>
                 <TableCell>{r.damage_type}</TableCell>
                 <TableCell><Badge variant={r.severity === "severe" ? "destructive" : "secondary"}>{r.severity}</Badge></TableCell>
