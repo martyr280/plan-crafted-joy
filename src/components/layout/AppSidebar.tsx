@@ -37,6 +37,7 @@ const groups = [
       { title: "Logistics", url: "/logistics", icon: Truck },
       { title: "Truck Capacity", url: "/truck-capacity", icon: Truck },
       { title: "Damage Tracker", url: "/damage", icon: AlertTriangle },
+      { title: "RMA Analytics", url: "/rma-analytics", icon: Undo2 },
     ],
   },
   {
