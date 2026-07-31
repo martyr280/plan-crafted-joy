@@ -203,10 +203,10 @@ function ManagerOverview({
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="YTD sales (all reps)" value={money(totals.ytd)} icon={BarChart3} />
-        <KpiCard title={`${monthLabel} sales`} value={money(totals.month)} icon={BarChart3} />
-        <KpiCard title="Keep-level at risk" value={String(totals.risk)} icon={AlertTriangle} />
-        <KpiCard title="Win-back candidates" value={String(totals.win)} icon={Undo2} />
+        <KpiCard label="YTD sales (all reps)" value={money(totals.ytd)} icon={<BarChart3 className="w-5 h-5" />} />
+        <KpiCard label={`${monthLabel} sales`} value={money(totals.month)} icon={<BarChart3 className="w-5 h-5" />} />
+        <KpiCard label="Keep-level at risk" value={String(totals.risk)} icon={<AlertTriangle className="w-5 h-5" />} />
+        <KpiCard label="Win-back candidates" value={String(totals.win)} icon={<Undo2 className="w-5 h-5" />} />
       </div>
 
       <Card className="p-0 overflow-hidden">
