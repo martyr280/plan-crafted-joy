@@ -1317,6 +1317,36 @@ export type Database = {
         }
         Relationships: []
       }
+      route_salespeople: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          rep_code: string
+          rep_name: string | null
+          route_code: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          rep_code: string
+          rep_name?: string | null
+          route_code: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          rep_code?: string
+          rep_name?: string | null
+          route_code?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sales_cache: {
         Row: {
           cached_at: string

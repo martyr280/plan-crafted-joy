@@ -16,11 +16,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Plus, Trash2, Upload, Download, Play, RefreshCw, ChevronDown, Truck } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Download, Play, RefreshCw, ChevronDown, Truck, TrendingDown, Users, AlertTriangle } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, Legend,
 } from "recharts";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
+import { KpiCard } from "@/components/shared/KpiCard";
 import { useAuth } from "@/lib/auth";
 import {
   listTruckRoutes, listTruckRuns, upsertTruckRun, deleteTruckRun, getTruckForecast,
@@ -31,6 +32,11 @@ import {
   listP21UnmatchedRouteCodes, assignP21RouteCode, setP21RouteCodeIgnored,
   getTruckCapacityCoverage,
 } from "@/lib/truck-capacity.functions";
+import {
+  getTruckRepScope, listRouteSalespeople, listKnownRepCodes, setRouteSalespeople,
+  importRouteSalespeople, deleteRouteSalesperson, getUnderfilledRoutes,
+} from "@/lib/truck-capacity-reps.functions";
+import { listP21SalesReps } from "@/lib/sales-annualized.functions";
 
 export const Route = createFileRoute("/_app/truck-capacity")({ component: TruckCapacityPage });
 
@@ -69,7 +75,35 @@ function TruckCapacityPage() {
 
   const list = useServerFn(listTruckRoutes);
   const routesQ = useQuery({ queryKey: ["tc-routes"], queryFn: () => list() });
-  const routes: RouteRow[] = routesQ.data?.routes ?? [];
+  const allRoutes: RouteRow[] = routesQ.data?.routes ?? [];
+
+  // Rep scoping. The server decides whether the caller is limited to their own
+  // routes; admins can additionally preview a rep's view.
+  const scopeFn = useServerFn(getTruckRepScope);
+  const scopeQ = useQuery({ queryKey: ["tc-rep-scope"], queryFn: () => scopeFn() });
+  const mapsFn = useServerFn(listRouteSalespeople);
+  const mapsQ = useQuery({ queryKey: ["tc-route-reps"], queryFn: () => mapsFn() });
+  const mappings = mapsQ.data?.mappings ?? [];
+
+  const [viewAsRep, setViewAsRep] = useState<string>("");
+  const scoped = scopeQ.data?.scoped ?? false;
+  const effectiveRep = scoped ? (scopeQ.data?.repCode ?? null) : (viewAsRep || null);
+
+  const routes = useMemo(() => {
+    if (!effectiveRep) return allRoutes;
+    const codes = new Set(
+      mappings.filter((m) => m.active && m.rep_code.toUpperCase() === effectiveRep.toUpperCase())
+        .map((m) => m.route_code.toUpperCase()),
+    );
+    return allRoutes.filter((r) => codes.has(r.code.toUpperCase()));
+  }, [allRoutes, mappings, effectiveRep]);
+
+  const repOptions = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const x of mappings) if (!m.has(x.rep_code)) m.set(x.rep_code, x.rep_name);
+    return Array.from(m.entries()).map(([rep_code, rep_name]) => ({ rep_code, rep_name }))
+      .sort((a, b) => a.rep_code.localeCompare(b.rep_code));
+  }, [mappings]);
 
   return (
     <div>
@@ -77,24 +111,192 @@ function TruckCapacityPage() {
         title="Truck Capacity"
         description="Route-level truck utilization: capture daily runs, forecast the next four weeks, and export the workbook."
       />
+
+      {scoped && (
+        <Card className="p-3 mb-4 flex items-center gap-2 text-sm">
+          <Users className="w-4 h-4 text-primary" />
+          {scopeQ.data?.repCode
+            ? <span>Showing only your routes ({scopeQ.data.repCode}) — {routes.length} route{routes.length === 1 ? "" : "s"} assigned.</span>
+            : <span className="text-amber-600">No sales rep code is linked to your profile yet, so no routes are visible. Ask an admin to set it.</span>}
+        </Card>
+      )}
+
+      {!scoped && isAdmin && (
+        <Card className="p-3 mb-4 flex flex-wrap items-center gap-3 text-sm">
+          <Users className="w-4 h-4 text-primary" />
+          <span className="text-muted-foreground">View as salesperson</span>
+          <Select value={viewAsRep || "__all"} onValueChange={(v) => setViewAsRep(v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-56"><SelectValue placeholder="All routes" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">All routes (full view)</SelectItem>
+              {repOptions.map((r) => (
+                <SelectItem key={r.rep_code} value={r.rep_code}>
+                  {r.rep_code}{r.rep_name ? ` — ${r.rep_name}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {viewAsRep && <Badge variant="outline">{routes.length} route{routes.length === 1 ? "" : "s"} visible</Badge>}
+        </Card>
+      )}
+
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="route">Route</TabsTrigger>
           <TabsTrigger value="forecast">Forecast</TabsTrigger>
+          <TabsTrigger value="underfilled">Underfilled</TabsTrigger>
           {isAdmin && <TabsTrigger value="import">Import</TabsTrigger>}
           {isAdmin && <TabsTrigger value="settings">Settings</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview"><OverviewTab routes={routes} /></TabsContent>
         <TabsContent value="route"><RouteTab routes={routes} canWrite={canWrite} /></TabsContent>
         <TabsContent value="forecast"><ForecastTab routes={routes} /></TabsContent>
+        <TabsContent value="underfilled"><UnderfilledTab viewAsRep={scoped ? null : (viewAsRep || null)} /></TabsContent>
         {isAdmin && <TabsContent value="import"><ImportTab /></TabsContent>}
-        {isAdmin && <TabsContent value="settings"><SettingsTab routes={routes} /></TabsContent>}
+        {isAdmin && <TabsContent value="settings"><SettingsTab routes={allRoutes} /></TabsContent>}
       </Tabs>
 
     </div>
   );
 }
+
+/* ============================== UNDERFILLED ============================== */
+
+type UnderRow = {
+  route_id: string; code: string; name: string; hub: string;
+  reps: Array<{ rep_code: string; rep_name: string | null }>;
+  avg: number | null; weeksBelow: number; weeksWithData: number;
+  worst: { week: string; value: number } | null;
+  latest: { week: string; value: number } | null;
+  series: Array<{ week: string; value: number | null; runs: number }>;
+  wasted: number; flagged: boolean;
+};
+
+function Sparkline({ series, threshold }: { series: UnderRow["series"]; threshold: number }) {
+  const data = series.map((s) => ({ week: s.week.slice(5), value: s.value == null ? null : s.value * 100 }));
+  return (
+    <div className="w-28 h-8">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <YAxis hide domain={[0, 100]} />
+          <ReferenceLine y={threshold * 100} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" />
+          <Line type="monotone" dataKey="value" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
+  const fn = useServerFn(getUnderfilledRoutes);
+  const [weeks, setWeeks] = useState(4);
+  const [threshold, setThreshold] = useState(0.6);
+  const [minWeeksBelow, setMinWeeksBelow] = useState(3);
+  const [showAll, setShowAll] = useState(false);
+
+  const q = useQuery({
+    queryKey: ["tc-underfilled", weeks, threshold, minWeeksBelow, viewAsRep],
+    queryFn: () => fn({ data: { weeks, threshold, minWeeksBelow, viewAsRep } }),
+  });
+
+  const flagged: UnderRow[] = (q.data?.rows ?? []) as UnderRow[];
+  const all: UnderRow[] = (((q.data as any)?.allRows ?? []) as UnderRow[]);
+  const rows = showAll ? all : flagged;
+
+  return (
+    <div className="space-y-4 pt-4">
+      <Card className="p-4 flex flex-wrap items-end gap-4">
+        <div>
+          <Label className="text-xs">Window (weeks)</Label>
+          <Input type="number" min={1} max={52} className="w-24" value={weeks}
+            onChange={(e) => setWeeks(Math.max(1, Math.min(52, Number(e.target.value) || 4)))} />
+        </div>
+        <div>
+          <Label className="text-xs">Threshold %</Label>
+          <Input type="number" min={5} max={100} className="w-24" value={Math.round(threshold * 100)}
+            onChange={(e) => setThreshold(Math.max(0.05, Math.min(1, (Number(e.target.value) || 60) / 100)))} />
+        </div>
+        <div>
+          <Label className="text-xs">Weeks below (min)</Label>
+          <Input type="number" min={1} max={weeks} className="w-24" value={minWeeksBelow}
+            onChange={(e) => setMinWeeksBelow(Math.max(1, Math.min(52, Number(e.target.value) || 3)))} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch checked={showAll} onCheckedChange={setShowAll} id="under-showall" />
+          <Label htmlFor="under-showall" className="text-xs">Show all routes</Label>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => q.refetch()} disabled={q.isFetching}>
+          {q.isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+        </Button>
+        <p className="text-xs text-muted-foreground basis-full">
+          A route is flagged when its average utilization over the window is below the threshold
+          <em> and </em> it was below the threshold in at least {minWeeksBelow} of the weeks with runs — consistency, not one bad week.
+        </p>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <KpiCard label="Persistently underfilled" value={q.data?.kpis.underfilledCount ?? "—"}
+          sub={`of ${q.data?.kpis.routesEvaluated ?? 0} routes with runs`} icon={<TrendingDown className="w-5 h-5" />} />
+        <KpiCard label="Wasted capacity" value={q.data ? `${(q.data.kpis.wastedCapacity * 100).toFixed(0)} pts` : "—"}
+          sub={`sum of (${Math.round(threshold * 100)}% − actual) across the window`} icon={<AlertTriangle className="w-5 h-5" />} />
+        <KpiCard label="Window" value={`${weeks} wk`} sub={q.data?.weekStarts?.join(" · ")} icon={<Truck className="w-5 h-5" />} />
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Route</TableHead>
+              <TableHead>Salesperson(s)</TableHead>
+              <TableHead className="text-right">Avg util</TableHead>
+              <TableHead className="text-right">Weeks below</TableHead>
+              <TableHead>Trend</TableHead>
+              <TableHead className="text-right">Worst week</TableHead>
+              <TableHead className="text-right">Latest week</TableHead>
+              <TableHead className="text-right">Wasted</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {q.isLoading && <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="w-4 h-4 animate-spin inline" /></TableCell></TableRow>}
+            {!q.isLoading && rows.length === 0 && (
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                No persistently underfilled routes for this window.
+              </TableCell></TableRow>
+            )}
+            {rows.map((r) => {
+              const bad = r.avg != null && r.avg < 0.5;
+              return (
+                <TableRow key={r.route_id} className={bad ? "bg-destructive/10" : undefined}>
+                  <TableCell>
+                    <div className="font-medium">{r.code}</div>
+                    <div className="text-xs text-muted-foreground">{r.hub} · {r.name}</div>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {r.reps.length === 0
+                      ? <span className="text-muted-foreground">Unassigned</span>
+                      : r.reps.map((x) => (
+                        <Badge key={x.rep_code} variant="outline" className="mr-1 mb-1">
+                          {x.rep_code}{x.rep_name ? ` · ${x.rep_name}` : ""}
+                        </Badge>
+                      ))}
+                  </TableCell>
+                  <TableCell className={`text-right font-medium ${bad ? "text-destructive" : ""}`}>{pct(r.avg)}</TableCell>
+                  <TableCell className="text-right">{r.weeksBelow} / {r.weeksWithData}</TableCell>
+                  <TableCell><Sparkline series={r.series} threshold={threshold} /></TableCell>
+                  <TableCell className="text-right">{r.worst ? `${pct(r.worst.value)} (${r.worst.week.slice(5)})` : "—"}</TableCell>
+                  <TableCell className="text-right">{r.latest ? `${pct(r.latest.value)} (${r.latest.week.slice(5)})` : "—"}</TableCell>
+                  <TableCell className="text-right">{(r.wasted * 100).toFixed(0)} pts</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+}
+
 
 /* ============================== OVERVIEW ============================== */
 
@@ -999,7 +1201,11 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 
       <CapacityCoverageCard />
 
+      <RouteSalespeopleCard routes={routes} />
+
       <UnmatchedRouteCodesCard routes={routes} />
+
+
 
       <RetrainCard />
 
@@ -1494,3 +1700,207 @@ function SnapshotResultView({ result }: { result: any }) {
   );
 }
 
+
+/* ==================== ROUTE → SALESPERSON ASSIGNMENTS ==================== */
+
+function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
+  const listFn = useServerFn(listRouteSalespeople);
+  const knownFn = useServerFn(listKnownRepCodes);
+  const p21Fn = useServerFn(listP21SalesReps);
+  const setFn = useServerFn(setRouteSalespeople);
+  const importFn = useServerFn(importRouteSalespeople);
+  const delFn = useServerFn(deleteRouteSalesperson);
+  const qc = useQueryClient();
+
+  const mapsQ = useQuery({ queryKey: ["tc-route-reps"], queryFn: () => listFn() });
+  const knownQ = useQuery({ queryKey: ["tc-known-reps"], queryFn: () => knownFn() });
+  const p21Q = useQuery({
+    queryKey: ["tc-p21-reps"],
+    queryFn: async () => {
+      try { return await p21Fn(); } catch { return { reps: [] as any[] }; }
+    },
+    retry: false,
+  });
+
+  const mappings = mapsQ.data?.mappings ?? [];
+
+  const repOptions = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const r of ((p21Q.data as any)?.reps ?? []) as any[]) {
+      const code = String(r.rep_code ?? r.salesrep_id ?? r.code ?? "").trim().toUpperCase();
+      if (code) m.set(code, r.rep_name ?? r.name ?? null);
+    }
+    for (const r of knownQ.data?.reps ?? []) if (!m.has(r.rep_code)) m.set(r.rep_code, r.rep_name);
+    return Array.from(m.entries()).map(([rep_code, rep_name]) => ({ rep_code, rep_name }))
+      .sort((a, b) => a.rep_code.localeCompare(b.rep_code));
+  }, [p21Q.data, knownQ.data]);
+
+  const [addRoute, setAddRoute] = useState<string>("");
+  const [addRep, setAddRep] = useState<string>("");
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [replaceAll, setReplaceAll] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["tc-route-reps"] });
+    qc.invalidateQueries({ queryKey: ["tc-underfilled"] });
+    qc.invalidateQueries({ queryKey: ["tc-rep-scope"] });
+  };
+
+  async function add() {
+    if (!addRoute || !addRep) { toast.error("Pick a route and a salesperson"); return; }
+    const existing = mappings.filter((m) => m.route_code.toUpperCase() === addRoute.toUpperCase());
+    const next = [
+      ...existing.map((m) => ({ rep_code: m.rep_code, rep_name: m.rep_name })),
+      { rep_code: addRep, rep_name: repOptions.find((r) => r.rep_code === addRep)?.rep_name ?? null },
+    ];
+    setBusy(true);
+    try {
+      await setFn({ data: { route_code: addRoute, reps: next } });
+      toast.success(`${addRep} assigned to ${addRoute}`);
+      setAddRep("");
+      invalidate();
+    } catch (e: any) { toast.error(e?.message ?? "Failed to assign"); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    try { await delFn({ data: { id } }); invalidate(); }
+    catch (e: any) { toast.error(e?.message ?? "Failed to remove"); }
+    finally { setBusy(false); }
+  }
+
+  async function runImport() {
+    setBusy(true); setImportResult(null);
+    try {
+      const res = await importFn({ data: { text: pasteText, replaceAll } });
+      setImportResult(res);
+      toast.success(`Imported ${res.inserted} assignment${res.inserted === 1 ? "" : "s"}`);
+      invalidate();
+    } catch (e: any) { toast.error(e?.message ?? "Import failed"); }
+    finally { setBusy(false); }
+  }
+
+  const byRoute = useMemo(() => {
+    const m = new Map<string, typeof mappings>();
+    for (const x of mappings) {
+      const key = x.route_code.toUpperCase();
+      m.set(key, [...(m.get(key) ?? []), x]);
+    }
+    return m;
+  }, [mappings]);
+
+  return (
+    <Card className="p-4 space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2"><Users className="w-4 h-4" /> Route salespeople</h3>
+          <p className="text-xs text-muted-foreground">
+            Assign one or more salespeople per route. Reps with the sales rep role only see their own routes.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setPasteOpen(true)}>
+          <Upload className="w-4 h-4 mr-1" /> Paste import
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <Label className="text-xs">Route</Label>
+          <Select value={addRoute} onValueChange={setAddRoute}>
+            <SelectTrigger className="w-64"><SelectValue placeholder="Select route" /></SelectTrigger>
+            <SelectContent>
+              {routes.map((r) => (
+                <SelectItem key={r.id} value={r.code}>{r.code} — {r.hub} · {r.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Salesperson</Label>
+          <Select value={addRep} onValueChange={setAddRep}>
+            <SelectTrigger className="w-64"><SelectValue placeholder="Select rep" /></SelectTrigger>
+            <SelectContent>
+              {repOptions.map((r) => (
+                <SelectItem key={r.rep_code} value={r.rep_code}>
+                  {r.rep_code}{r.rep_name ? ` — ${r.rep_name}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" onClick={add} disabled={busy}>
+          {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}Assign
+        </Button>
+      </div>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Route</TableHead>
+            <TableHead>Salespeople</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {routes.map((r) => {
+            const assigned = byRoute.get(r.code.toUpperCase()) ?? [];
+            return (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <div className="font-medium">{r.code}</div>
+                  <div className="text-xs text-muted-foreground">{r.hub} · {r.name}</div>
+                </TableCell>
+                <TableCell>
+                  {assigned.length === 0
+                    ? <span className="text-xs text-muted-foreground">Unassigned</span>
+                    : assigned.map((m) => (
+                      <Badge key={m.id} variant="outline" className="mr-1 mb-1 gap-1">
+                        {m.rep_code}{m.rep_name ? ` · ${m.rep_name}` : ""}
+                        <button type="button" onClick={() => remove(m.id)} className="ml-1 text-muted-foreground hover:text-destructive">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+
+      <Dialog open={pasteOpen} onOpenChange={setPasteOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader><DialogTitle>Paste route / salesperson pairs</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            One pair per line: <code>route_code, rep_code[, rep name]</code>. Tabs, commas, semicolons and pipes all work.
+          </p>
+          <Textarea rows={10} value={pasteText} onChange={(e) => setPasteText(e.target.value)}
+            placeholder={"DAL-1, 101, Jane Doe\nBHM-2, 214"} />
+          <div className="flex items-center gap-2">
+            <Switch id="rs-replace" checked={replaceAll} onCheckedChange={setReplaceAll} />
+            <Label htmlFor="rs-replace" className="text-xs">Replace all existing assignments</Label>
+          </div>
+          {importResult && (
+            <div className="text-xs">
+              Imported {importResult.inserted}, skipped {importResult.skipped}.
+              {importResult.errors?.length ? (
+                <ul className="list-disc ml-4 text-destructive mt-1">
+                  {importResult.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasteOpen(false)}>Close</Button>
+            <Button onClick={runImport} disabled={busy || !pasteText.trim()}>
+              {busy && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
