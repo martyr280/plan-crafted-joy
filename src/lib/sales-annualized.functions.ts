@@ -3,21 +3,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertAdmin, runJob } from "./p21.server";
 import { computeNextRun } from "./sql-schedules.server";
-import { SALES_ANNUALIZED_SQL } from "./sales-annualized-template";
+import { SALES_ANNUALIZED_SQL, REP_DISCOVERY_SQL } from "./sales-annualized-template";
 
-// Discovery query: every active P21 salesrep with email if available.
-// Tries common P21 column shapes (salesrep_id/id, name/salesperson_name,
-// email_address/email) and falls back gracefully so the bridge call
-// succeeds across schema variants.
-const REP_DISCOVERY_SQL = `
-SELECT
-  s.salesrep_id                        AS rep_code,
-  ISNULL(s.salesperson_name, s.salesrep_id) AS rep_name,
-  s.email_address                      AS rep_email
-FROM dbo.salesrep s
-WHERE ISNULL(s.delete_flag, 'N') = 'N'
-ORDER BY rep_name
-`;
 
 export const listP21SalesReps = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

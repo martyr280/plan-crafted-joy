@@ -1347,6 +1347,131 @@ export type Database = {
         }
         Relationships: []
       }
+      sales_report_rows: {
+        Row: {
+          ann_current: number | null
+          bg: string | null
+          city: string | null
+          created_at: string
+          cust_code: string
+          customer_name: string | null
+          id: string
+          keep_lvl_code: string | null
+          keep_lvl_shortfall: number | null
+          keep_lvl_threshold: number | null
+          month_profit: number | null
+          month_sales: number | null
+          pct: number | null
+          price_level: string | null
+          rep_code: string
+          rep_name: string | null
+          run_id: string
+          state: string | null
+          total_value: number | null
+          y_current: number | null
+          y2022: number | null
+          y2023: number | null
+          y2024: number | null
+          y2025: number | null
+        }
+        Insert: {
+          ann_current?: number | null
+          bg?: string | null
+          city?: string | null
+          created_at?: string
+          cust_code: string
+          customer_name?: string | null
+          id?: string
+          keep_lvl_code?: string | null
+          keep_lvl_shortfall?: number | null
+          keep_lvl_threshold?: number | null
+          month_profit?: number | null
+          month_sales?: number | null
+          pct?: number | null
+          price_level?: string | null
+          rep_code: string
+          rep_name?: string | null
+          run_id: string
+          state?: string | null
+          total_value?: number | null
+          y_current?: number | null
+          y2022?: number | null
+          y2023?: number | null
+          y2024?: number | null
+          y2025?: number | null
+        }
+        Update: {
+          ann_current?: number | null
+          bg?: string | null
+          city?: string | null
+          created_at?: string
+          cust_code?: string
+          customer_name?: string | null
+          id?: string
+          keep_lvl_code?: string | null
+          keep_lvl_shortfall?: number | null
+          keep_lvl_threshold?: number | null
+          month_profit?: number | null
+          month_sales?: number | null
+          pct?: number | null
+          price_level?: string | null
+          rep_code?: string
+          rep_name?: string | null
+          run_id?: string
+          state?: string | null
+          total_value?: number | null
+          y_current?: number | null
+          y2022?: number | null
+          y2023?: number | null
+          y2024?: number | null
+          y2025?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_report_rows_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "sales_report_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_report_runs: {
+        Row: {
+          error: string | null
+          id: string
+          period_month: number
+          period_year: number
+          rep_count: number
+          rep_status: Json
+          run_at: string
+          status: string
+          triggered_by: string | null
+        }
+        Insert: {
+          error?: string | null
+          id?: string
+          period_month: number
+          period_year: number
+          rep_count?: number
+          rep_status?: Json
+          run_at?: string
+          status?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          error?: string | null
+          id?: string
+          period_month?: number
+          period_year?: number
+          rep_count?: number
+          rep_status?: Json
+          run_at?: string
+          status?: string
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
       sku_crossref: {
         Row: {
           competitor_sku: string
@@ -2377,6 +2502,7 @@ export type Database = {
         | "ops_reports"
         | "sales_rep"
         | "ops_logistics_admin"
+        | "sales_manager"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2512,6 +2638,7 @@ export const Constants = {
         "ops_reports",
         "sales_rep",
         "ops_logistics_admin",
+        "sales_manager",
       ],
     },
   },
