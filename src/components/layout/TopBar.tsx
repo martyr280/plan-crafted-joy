@@ -6,6 +6,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Moon, Sun, LogOut, User as UserIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { NotificationBell } from "@/components/layout/NotificationBell";
+
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
