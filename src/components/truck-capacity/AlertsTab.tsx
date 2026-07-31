@@ -97,9 +97,10 @@ export function AlertsTab({ routes, isManager }: { routes: RouteRow[]; isManager
   return (
     <div className="space-y-4 mt-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard title="Open alerts" value={String(openCount)} icon={Bell} />
-        <KpiCard title="Active rules" value={String((rules.data?.rules ?? []).filter((r: any) => r.active).length)} icon={AlertTriangle} />
-        <KpiCard title="Alerts (all time)" value={String(alertRows.length)} icon={Bell} />
+        <KpiCard label="Open alerts" value={String(openCount)} icon={<Bell className="w-5 h-5" />} />
+        <KpiCard label="Active rules" value={String((rules.data?.rules ?? []).filter((r: any) => r.active).length)} icon={<AlertTriangle className="w-5 h-5" />} />
+        <KpiCard label="Alerts (all time)" value={String(alertRows.length)} icon={<Bell className="w-5 h-5" />} />
+
       </div>
 
       {/* Rules */}
