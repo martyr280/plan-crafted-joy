@@ -36,6 +36,7 @@ import {
   getTruckRepScope, listRouteSalespeople, listKnownRepCodes, setRouteSalespeople,
   importRouteSalespeople, deleteRouteSalesperson, getUnderfilledRoutes,
 } from "@/lib/truck-capacity-reps.functions";
+import { listP21SalesReps } from "@/lib/sales-annualized.functions";
 
 export const Route = createFileRoute("/_app/truck-capacity")({ component: TruckCapacityPage });
 
