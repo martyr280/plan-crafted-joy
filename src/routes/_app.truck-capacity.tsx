@@ -1699,3 +1699,207 @@ function SnapshotResultView({ result }: { result: any }) {
   );
 }
 
+
+/* ==================== ROUTE → SALESPERSON ASSIGNMENTS ==================== */
+
+function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
+  const listFn = useServerFn(listRouteSalespeople);
+  const knownFn = useServerFn(listKnownRepCodes);
+  const p21Fn = useServerFn(listP21SalesReps);
+  const setFn = useServerFn(setRouteSalespeople);
+  const importFn = useServerFn(importRouteSalespeople);
+  const delFn = useServerFn(deleteRouteSalesperson);
+  const qc = useQueryClient();
+
+  const mapsQ = useQuery({ queryKey: ["tc-route-reps"], queryFn: () => listFn() });
+  const knownQ = useQuery({ queryKey: ["tc-known-reps"], queryFn: () => knownFn() });
+  const p21Q = useQuery({
+    queryKey: ["tc-p21-reps"],
+    queryFn: async () => {
+      try { return await p21Fn(); } catch { return { reps: [] as any[] }; }
+    },
+    retry: false,
+  });
+
+  const mappings = mapsQ.data?.mappings ?? [];
+
+  const repOptions = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const r of ((p21Q.data as any)?.reps ?? []) as any[]) {
+      const code = String(r.rep_code ?? r.salesrep_id ?? r.code ?? "").trim().toUpperCase();
+      if (code) m.set(code, r.rep_name ?? r.name ?? null);
+    }
+    for (const r of knownQ.data?.reps ?? []) if (!m.has(r.rep_code)) m.set(r.rep_code, r.rep_name);
+    return Array.from(m.entries()).map(([rep_code, rep_name]) => ({ rep_code, rep_name }))
+      .sort((a, b) => a.rep_code.localeCompare(b.rep_code));
+  }, [p21Q.data, knownQ.data]);
+
+  const [addRoute, setAddRoute] = useState<string>("");
+  const [addRep, setAddRep] = useState<string>("");
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [replaceAll, setReplaceAll] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["tc-route-reps"] });
+    qc.invalidateQueries({ queryKey: ["tc-underfilled"] });
+    qc.invalidateQueries({ queryKey: ["tc-rep-scope"] });
+  };
+
+  async function add() {
+    if (!addRoute || !addRep) { toast.error("Pick a route and a salesperson"); return; }
+    const existing = mappings.filter((m) => m.route_code.toUpperCase() === addRoute.toUpperCase());
+    const next = [
+      ...existing.map((m) => ({ rep_code: m.rep_code, rep_name: m.rep_name })),
+      { rep_code: addRep, rep_name: repOptions.find((r) => r.rep_code === addRep)?.rep_name ?? null },
+    ];
+    setBusy(true);
+    try {
+      await setFn({ data: { route_code: addRoute, reps: next } });
+      toast.success(`${addRep} assigned to ${addRoute}`);
+      setAddRep("");
+      invalidate();
+    } catch (e: any) { toast.error(e?.message ?? "Failed to assign"); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    try { await delFn({ data: { id } }); invalidate(); }
+    catch (e: any) { toast.error(e?.message ?? "Failed to remove"); }
+    finally { setBusy(false); }
+  }
+
+  async function runImport() {
+    setBusy(true); setImportResult(null);
+    try {
+      const res = await importFn({ data: { text: pasteText, replaceAll } });
+      setImportResult(res);
+      toast.success(`Imported ${res.inserted} assignment${res.inserted === 1 ? "" : "s"}`);
+      invalidate();
+    } catch (e: any) { toast.error(e?.message ?? "Import failed"); }
+    finally { setBusy(false); }
+  }
+
+  const byRoute = useMemo(() => {
+    const m = new Map<string, typeof mappings>();
+    for (const x of mappings) {
+      const key = x.route_code.toUpperCase();
+      m.set(key, [...(m.get(key) ?? []), x]);
+    }
+    return m;
+  }, [mappings]);
+
+  return (
+    <Card className="p-4 space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2"><Users className="w-4 h-4" /> Route salespeople</h3>
+          <p className="text-xs text-muted-foreground">
+            Assign one or more salespeople per route. Reps with the sales rep role only see their own routes.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setPasteOpen(true)}>
+          <Upload className="w-4 h-4 mr-1" /> Paste import
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <Label className="text-xs">Route</Label>
+          <Select value={addRoute} onValueChange={setAddRoute}>
+            <SelectTrigger className="w-64"><SelectValue placeholder="Select route" /></SelectTrigger>
+            <SelectContent>
+              {routes.map((r) => (
+                <SelectItem key={r.id} value={r.code}>{r.code} — {r.hub} · {r.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Salesperson</Label>
+          <Select value={addRep} onValueChange={setAddRep}>
+            <SelectTrigger className="w-64"><SelectValue placeholder="Select rep" /></SelectTrigger>
+            <SelectContent>
+              {repOptions.map((r) => (
+                <SelectItem key={r.rep_code} value={r.rep_code}>
+                  {r.rep_code}{r.rep_name ? ` — ${r.rep_name}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" onClick={add} disabled={busy}>
+          {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}Assign
+        </Button>
+      </div>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Route</TableHead>
+            <TableHead>Salespeople</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {routes.map((r) => {
+            const assigned = byRoute.get(r.code.toUpperCase()) ?? [];
+            return (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <div className="font-medium">{r.code}</div>
+                  <div className="text-xs text-muted-foreground">{r.hub} · {r.name}</div>
+                </TableCell>
+                <TableCell>
+                  {assigned.length === 0
+                    ? <span className="text-xs text-muted-foreground">Unassigned</span>
+                    : assigned.map((m) => (
+                      <Badge key={m.id} variant="outline" className="mr-1 mb-1 gap-1">
+                        {m.rep_code}{m.rep_name ? ` · ${m.rep_name}` : ""}
+                        <button type="button" onClick={() => remove(m.id)} className="ml-1 text-muted-foreground hover:text-destructive">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+
+      <Dialog open={pasteOpen} onOpenChange={setPasteOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader><DialogTitle>Paste route / salesperson pairs</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            One pair per line: <code>route_code, rep_code[, rep name]</code>. Tabs, commas, semicolons and pipes all work.
+          </p>
+          <Textarea rows={10} value={pasteText} onChange={(e) => setPasteText(e.target.value)}
+            placeholder={"DAL-1, 101, Jane Doe\nBHM-2, 214"} />
+          <div className="flex items-center gap-2">
+            <Switch id="rs-replace" checked={replaceAll} onCheckedChange={setReplaceAll} />
+            <Label htmlFor="rs-replace" className="text-xs">Replace all existing assignments</Label>
+          </div>
+          {importResult && (
+            <div className="text-xs">
+              Imported {importResult.inserted}, skipped {importResult.skipped}.
+              {importResult.errors?.length ? (
+                <ul className="list-disc ml-4 text-destructive mt-1">
+                  {importResult.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasteOpen(false)}>Close</Button>
+            <Button onClick={runImport} disabled={busy || !pasteText.trim()}>
+              {busy && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
