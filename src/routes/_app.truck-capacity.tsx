@@ -200,8 +200,7 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
   });
 
   const flagged: UnderRow[] = (q.data?.rows ?? []) as UnderRow[];
-  const all: UnderRow[] = ((q.data 
-    as any)?.allRows ?? []) as UnderRow[];
+  const all: UnderRow[] = (((q.data as any)?.allRows ?? []) as UnderRow[]);
   const rows = showAll ? all : flagged;
 
   return (
