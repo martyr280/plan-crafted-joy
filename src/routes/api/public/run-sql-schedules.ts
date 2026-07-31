@@ -82,7 +82,27 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, ranAt: new Date().toISOString() });
+          // Monthly Sales Reports run: 1st of the month, 08:00–08:15 UTC.
+          // Dedup-guarded by an existing run in the current calendar month so
+          // overlapping cron ticks don't produce duplicate runs.
+          let salesReports: any = null;
+          if (now.getUTCDate() === 1 && now.getUTCHours() === 8 && now.getUTCMinutes() < 15) {
+            const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+            const monthStart = `${now.toISOString().slice(0, 7)}-01T00:00:00Z`;
+            const { data: alreadyRan } = await supabaseAdmin
+              .from("sales_report_runs")
+              .select("id").gte("run_at", monthStart).limit(1);
+            if (alreadyRan && alreadyRan.length > 0) {
+              salesReports = { ok: true, skipped: true, reason: "already_ran_this_month" };
+            } else {
+              try {
+                const { runSalesReports } = await import("@/lib/sales-reports.server");
+                salesReports = await runSalesReports({ triggeredBy: null, now });
+              } catch (e: any) { salesReports = { ok: false, error: e?.message ?? String(e) }; }
+            }
+          }
+
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, ranAt: new Date().toISOString() });
 
         } catch (e: any) {
           return Response.json(
