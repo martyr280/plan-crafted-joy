@@ -74,7 +74,35 @@ function TruckCapacityPage() {
 
   const list = useServerFn(listTruckRoutes);
   const routesQ = useQuery({ queryKey: ["tc-routes"], queryFn: () => list() });
-  const routes: RouteRow[] = routesQ.data?.routes ?? [];
+  const allRoutes: RouteRow[] = routesQ.data?.routes ?? [];
+
+  // Rep scoping. The server decides whether the caller is limited to their own
+  // routes; admins can additionally preview a rep's view.
+  const scopeFn = useServerFn(getTruckRepScope);
+  const scopeQ = useQuery({ queryKey: ["tc-rep-scope"], queryFn: () => scopeFn() });
+  const mapsFn = useServerFn(listRouteSalespeople);
+  const mapsQ = useQuery({ queryKey: ["tc-route-reps"], queryFn: () => mapsFn() });
+  const mappings = mapsQ.data?.mappings ?? [];
+
+  const [viewAsRep, setViewAsRep] = useState<string>("");
+  const scoped = scopeQ.data?.scoped ?? false;
+  const effectiveRep = scoped ? (scopeQ.data?.repCode ?? null) : (viewAsRep || null);
+
+  const routes = useMemo(() => {
+    if (!effectiveRep) return allRoutes;
+    const codes = new Set(
+      mappings.filter((m) => m.active && m.rep_code.toUpperCase() === effectiveRep.toUpperCase())
+        .map((m) => m.route_code.toUpperCase()),
+    );
+    return allRoutes.filter((r) => codes.has(r.code.toUpperCase()));
+  }, [allRoutes, mappings, effectiveRep]);
+
+  const repOptions = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const x of mappings) if (!m.has(x.rep_code)) m.set(x.rep_code, x.rep_name);
+    return Array.from(m.entries()).map(([rep_code, rep_name]) => ({ rep_code, rep_name }))
+      .sort((a, b) => a.rep_code.localeCompare(b.rep_code));
+  }, [mappings]);
 
   return (
     <div>
@@ -82,24 +110,193 @@ function TruckCapacityPage() {
         title="Truck Capacity"
         description="Route-level truck utilization: capture daily runs, forecast the next four weeks, and export the workbook."
       />
+
+      {scoped && (
+        <Card className="p-3 mb-4 flex items-center gap-2 text-sm">
+          <Users className="w-4 h-4 text-primary" />
+          {scopeQ.data?.repCode
+            ? <span>Showing only your routes ({scopeQ.data.repCode}) — {routes.length} route{routes.length === 1 ? "" : "s"} assigned.</span>
+            : <span className="text-amber-600">No sales rep code is linked to your profile yet, so no routes are visible. Ask an admin to set it.</span>}
+        </Card>
+      )}
+
+      {!scoped && isAdmin && (
+        <Card className="p-3 mb-4 flex flex-wrap items-center gap-3 text-sm">
+          <Users className="w-4 h-4 text-primary" />
+          <span className="text-muted-foreground">View as salesperson</span>
+          <Select value={viewAsRep || "__all"} onValueChange={(v) => setViewAsRep(v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-56"><SelectValue placeholder="All routes" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">All routes (full view)</SelectItem>
+              {repOptions.map((r) => (
+                <SelectItem key={r.rep_code} value={r.rep_code}>
+                  {r.rep_code}{r.rep_name ? ` — ${r.rep_name}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {viewAsRep && <Badge variant="outline">{routes.length} route{routes.length === 1 ? "" : "s"} visible</Badge>}
+        </Card>
+      )}
+
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="route">Route</TabsTrigger>
           <TabsTrigger value="forecast">Forecast</TabsTrigger>
+          <TabsTrigger value="underfilled">Underfilled</TabsTrigger>
           {isAdmin && <TabsTrigger value="import">Import</TabsTrigger>}
           {isAdmin && <TabsTrigger value="settings">Settings</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview"><OverviewTab routes={routes} /></TabsContent>
         <TabsContent value="route"><RouteTab routes={routes} canWrite={canWrite} /></TabsContent>
         <TabsContent value="forecast"><ForecastTab routes={routes} /></TabsContent>
+        <TabsContent value="underfilled"><UnderfilledTab viewAsRep={scoped ? null : (viewAsRep || null)} /></TabsContent>
         {isAdmin && <TabsContent value="import"><ImportTab /></TabsContent>}
-        {isAdmin && <TabsContent value="settings"><SettingsTab routes={routes} /></TabsContent>}
+        {isAdmin && <TabsContent value="settings"><SettingsTab routes={allRoutes} /></TabsContent>}
       </Tabs>
 
     </div>
   );
 }
+
+/* ============================== UNDERFILLED ============================== */
+
+type UnderRow = {
+  route_id: string; code: string; name: string; hub: string;
+  reps: Array<{ rep_code: string; rep_name: string | null }>;
+  avg: number | null; weeksBelow: number; weeksWithData: number;
+  worst: { week: string; value: number } | null;
+  latest: { week: string; value: number } | null;
+  series: Array<{ week: string; value: number | null; runs: number }>;
+  wasted: number; flagged: boolean;
+};
+
+function Sparkline({ series, threshold }: { series: UnderRow["series"]; threshold: number }) {
+  const data = series.map((s) => ({ week: s.week.slice(5), value: s.value == null ? null : s.value * 100 }));
+  return (
+    <div className="w-28 h-8">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <YAxis hide domain={[0, 100]} />
+          <ReferenceLine y={threshold * 100} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" />
+          <Line type="monotone" dataKey="value" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
+  const fn = useServerFn(getUnderfilledRoutes);
+  const [weeks, setWeeks] = useState(4);
+  const [threshold, setThreshold] = useState(0.6);
+  const [minWeeksBelow, setMinWeeksBelow] = useState(3);
+  const [showAll, setShowAll] = useState(false);
+
+  const q = useQuery({
+    queryKey: ["tc-underfilled", weeks, threshold, minWeeksBelow, viewAsRep],
+    queryFn: () => fn({ data: { weeks, threshold, minWeeksBelow, viewAsRep } }),
+  });
+
+  const flagged: UnderRow[] = (q.data?.rows ?? []) as UnderRow[];
+  const all: UnderRow[] = ((q.data 
+    as any)?.allRows ?? []) as UnderRow[];
+  const rows = showAll ? all : flagged;
+
+  return (
+    <div className="space-y-4 pt-4">
+      <Card className="p-4 flex flex-wrap items-end gap-4">
+        <div>
+          <Label className="text-xs">Window (weeks)</Label>
+          <Input type="number" min={1} max={52} className="w-24" value={weeks}
+            onChange={(e) => setWeeks(Math.max(1, Math.min(52, Number(e.target.value) || 4)))} />
+        </div>
+        <div>
+          <Label className="text-xs">Threshold %</Label>
+          <Input type="number" min={5} max={100} className="w-24" value={Math.round(threshold * 100)}
+            onChange={(e) => setThreshold(Math.max(0.05, Math.min(1, (Number(e.target.value) || 60) / 100)))} />
+        </div>
+        <div>
+          <Label className="text-xs">Weeks below (min)</Label>
+          <Input type="number" min={1} max={weeks} className="w-24" value={minWeeksBelow}
+            onChange={(e) => setMinWeeksBelow(Math.max(1, Math.min(52, Number(e.target.value) || 3)))} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch checked={showAll} onCheckedChange={setShowAll} id="under-showall" />
+          <Label htmlFor="under-showall" className="text-xs">Show all routes</Label>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => q.refetch()} disabled={q.isFetching}>
+          {q.isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+        </Button>
+        <p className="text-xs text-muted-foreground basis-full">
+          A route is flagged when its average utilization over the window is below the threshold
+          <em> and </em> it was below the threshold in at least {minWeeksBelow} of the weeks with runs — consistency, not one bad week.
+        </p>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <KpiCard label="Persistently underfilled" value={q.data?.kpis.underfilledCount ?? "—"}
+          sub={`of ${q.data?.kpis.routesEvaluated ?? 0} routes with runs`} icon={<TrendingDown className="w-5 h-5" />} />
+        <KpiCard label="Wasted capacity" value={q.data ? `${(q.data.kpis.wastedCapacity * 100).toFixed(0)} pts` : "—"}
+          sub={`sum of (${Math.round(threshold * 100)}% − actual) across the window`} icon={<AlertTriangle className="w-5 h-5" />} />
+        <KpiCard label="Window" value={`${weeks} wk`} sub={q.data?.weekStarts?.join(" · ")} icon={<Truck className="w-5 h-5" />} />
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Route</TableHead>
+              <TableHead>Salesperson(s)</TableHead>
+              <TableHead className="text-right">Avg util</TableHead>
+              <TableHead className="text-right">Weeks below</TableHead>
+              <TableHead>Trend</TableHead>
+              <TableHead className="text-right">Worst week</TableHead>
+              <TableHead className="text-right">Latest week</TableHead>
+              <TableHead className="text-right">Wasted</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {q.isLoading && <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="w-4 h-4 animate-spin inline" /></TableCell></TableRow>}
+            {!q.isLoading && rows.length === 0 && (
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                No persistently underfilled routes for this window.
+              </TableCell></TableRow>
+            )}
+            {rows.map((r) => {
+              const bad = r.avg != null && r.avg < 0.5;
+              return (
+                <TableRow key={r.route_id} className={bad ? "bg-destructive/10" : undefined}>
+                  <TableCell>
+                    <div className="font-medium">{r.code}</div>
+                    <div className="text-xs text-muted-foreground">{r.hub} · {r.name}</div>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {r.reps.length === 0
+                      ? <span className="text-muted-foreground">Unassigned</span>
+                      : r.reps.map((x) => (
+                        <Badge key={x.rep_code} variant="outline" className="mr-1 mb-1">
+                          {x.rep_code}{x.rep_name ? ` · ${x.rep_name}` : ""}
+                        </Badge>
+                      ))}
+                  </TableCell>
+                  <TableCell className={`text-right font-medium ${bad ? "text-destructive" : ""}`}>{pct(r.avg)}</TableCell>
+                  <TableCell className="text-right">{r.weeksBelow} / {r.weeksWithData}</TableCell>
+                  <TableCell><Sparkline series={r.series} threshold={threshold} /></TableCell>
+                  <TableCell className="text-right">{r.worst ? `${pct(r.worst.value)} (${r.worst.week.slice(5)})` : "—"}</TableCell>
+                  <TableCell className="text-right">{r.latest ? `${pct(r.latest.value)} (${r.latest.week.slice(5)})` : "—"}</TableCell>
+                  <TableCell className="text-right">{(r.wasted * 100).toFixed(0)} pts</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+}
+
 
 /* ============================== OVERVIEW ============================== */
 
