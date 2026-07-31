@@ -49,6 +49,7 @@ const groups = [
   {
     label: "Insights",
     items: [
+      { title: "Sales Reports", url: "/sales-reports", icon: BarChart3 },
       { title: "Reports", url: "/reports", icon: FileBarChart },
       { title: "Audit Log", url: "/audit", icon: ScrollText },
     ],

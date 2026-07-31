@@ -20,6 +20,7 @@ import { Route as AppTruckCapacityRouteImport } from './routes/_app.truck-capaci
 import { Route as AppSqlSchedulesRouteImport } from './routes/_app.sql-schedules'
 import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppSalesReportsRouteImport } from './routes/_app.sales-reports'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
 import { Route as AppQuotesRouteImport } from './routes/_app.quotes'
 import { Route as AppPricingRouteImport } from './routes/_app.pricing'
@@ -100,6 +101,11 @@ const AppSpiffRoute = AppSpiffRouteImport.update({
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSalesReportsRoute = AppSalesReportsRouteImport.update({
+  id: '/sales-reports',
+  path: '/sales-reports',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSalesRoute = AppSalesRouteImport.update({
@@ -265,6 +271,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof AppPricingRoute
   '/quotes': typeof AppQuotesRoute
   '/sales': typeof AppSalesRoute
+  '/sales-reports': typeof AppSalesReportsRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
   '/sql-schedules': typeof AppSqlSchedulesRoute
@@ -303,6 +310,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof AppPricingRoute
   '/quotes': typeof AppQuotesRoute
   '/sales': typeof AppSalesRoute
+  '/sales-reports': typeof AppSalesReportsRoute
   '/settings': typeof AppSettingsRoute
   '/spiff': typeof AppSpiffRoute
   '/sql-schedules': typeof AppSqlSchedulesRoute
@@ -344,6 +352,7 @@ export interface FileRoutesById {
   '/_app/pricing': typeof AppPricingRoute
   '/_app/quotes': typeof AppQuotesRoute
   '/_app/sales': typeof AppSalesRoute
+  '/_app/sales-reports': typeof AppSalesReportsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/spiff': typeof AppSpiffRoute
   '/_app/sql-schedules': typeof AppSqlSchedulesRoute
@@ -386,6 +395,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/quotes'
     | '/sales'
+    | '/sales-reports'
     | '/settings'
     | '/spiff'
     | '/sql-schedules'
@@ -424,6 +434,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/quotes'
     | '/sales'
+    | '/sales-reports'
     | '/settings'
     | '/spiff'
     | '/sql-schedules'
@@ -464,6 +475,7 @@ export interface FileRouteTypes {
     | '/_app/pricing'
     | '/_app/quotes'
     | '/_app/sales'
+    | '/_app/sales-reports'
     | '/_app/settings'
     | '/_app/spiff'
     | '/_app/sql-schedules'
@@ -575,6 +587,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sales-reports': {
+      id: '/_app/sales-reports'
+      path: '/sales-reports'
+      fullPath: '/sales-reports'
+      preLoaderRoute: typeof AppSalesReportsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/sales': {
@@ -786,6 +805,7 @@ interface AppRouteChildren {
   AppPricingRoute: typeof AppPricingRoute
   AppQuotesRoute: typeof AppQuotesRoute
   AppSalesRoute: typeof AppSalesRoute
+  AppSalesReportsRoute: typeof AppSalesReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSpiffRoute: typeof AppSpiffRoute
   AppSqlSchedulesRoute: typeof AppSqlSchedulesRoute
@@ -814,6 +834,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPricingRoute: AppPricingRoute,
   AppQuotesRoute: AppQuotesRoute,
   AppSalesRoute: AppSalesRoute,
+  AppSalesReportsRoute: AppSalesReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSpiffRoute: AppSpiffRoute,
   AppSqlSchedulesRoute: AppSqlSchedulesRoute,

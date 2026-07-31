@@ -87,7 +87,8 @@ SELECT
   END                                                                           AS [Pct],
   agg.m_sales                                                                   AS [{Mon} Sales],
   agg.m_profit                                                                  AS [{Mon} Profit],
-  CASE WHEN c.class_id1 IN ('ISG','OP','MML1','MML3','L5') THEN c.class_id1
+  CASE WHEN c.class_id1 IN ('ISG','OP','MML1','MML3','L5','E2G','EMPLOYEE') THEN c.class_id1
+       WHEN c.price1 IN ('E2G','EMPLOYEE') THEN c.price1
        WHEN c.price1 = 'L1'   THEN '450000'
        WHEN c.price1 = 'L2'   THEN '200000'
        WHEN c.price1 = 'L3'   THEN '100000'
@@ -118,3 +119,41 @@ export function interpolateScheduleTokens(sql: string, now: Date = new Date()): 
   const mon = SHORT_MONTHS[prevIdx];
   return sql.replace(/\{cy\}/g, String(cy)).replace(/\{Mon\}/g, mon);
 }
+
+/**
+ * Rep discovery: every active P21 salesrep with email when available.
+ * Shared by the scheduled-email seeder and the Sales Reports runner so both
+ * resolve the same rep universe.
+ */
+export const REP_DISCOVERY_SQL = `
+SELECT
+  s.salesrep_id                        AS rep_code,
+  ISNULL(s.salesperson_name, s.salesrep_id) AS rep_name,
+  s.email_address                      AS rep_email
+FROM dbo.salesrep s
+WHERE ISNULL(s.delete_flag, 'N') = 'N'
+ORDER BY rep_name
+`;
+
+/** Classification codes that are exempt from keep-level thresholds. */
+export const KEEP_LEVEL_EXEMPT = ["ISG", "OP", "MML1", "MML3", "L5", "E2G", "EMPLOYEE"] as const;
+
+/** Annual sales required to keep each price level. */
+export const KEEP_LEVEL_THRESHOLDS: Record<string, number> = {
+  L1: 450000,
+  L2: 200000,
+  L3: 100000,
+  L4: 25000,
+};
+
+/** Workbook column order, matching the original Upshaw reports. */
+export function workbookHeaders(year: number, monthLabel: string): string[] {
+  return [
+    "Cust Code", "Price", "BG", "Customer Name", "City", "St",
+    "Total Value", "Year 2022", "Year 2023", "Year 2024", "Year 2025",
+    `Year ${year}`, `Ann ${year}`, "Pct",
+    `${monthLabel} Sales`, `${monthLabel} Profit`, "Keep Lvl",
+  ];
+}
+
+export const SHORT_MONTH_NAMES = SHORT_MONTHS;
