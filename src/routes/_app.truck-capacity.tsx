@@ -22,6 +22,8 @@ import {
 } from "recharts";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
+import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
+
 import { useAuth } from "@/lib/auth";
 import {
   listTruckRoutes, listTruckRuns, upsertTruckRun, deleteTruckRun, getTruckForecast,
