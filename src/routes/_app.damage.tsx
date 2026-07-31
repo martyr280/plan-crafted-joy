@@ -234,6 +234,23 @@ function DamagePage() {
     reload();
   }
 
+  // Cross-link to RMA Analytics: which damage reports have a matching return
+  // (by P21 order number) in the active RMA snapshot. Read-only; does not
+  // change any existing Damage Tracker behaviour.
+  const rmaIndex = useRmaOrderIndex();
+  const rmaKeys = useMemo(
+    () => new Set((rmaIndex.data?.keys ?? []).map((k: string) => k.toUpperCase())),
+    [rmaIndex.data],
+  );
+  const hasRmaMatch = (orderNo?: string | null) => {
+    const k = String(orderNo ?? "").trim().toUpperCase();
+    return !!k && rmaKeys.has(k);
+  };
+  const matchedCount = useMemo(
+    () => filtered.filter((r: any) => hasRmaMatch(r.p21_order_id)).length,
+    [filtered, rmaKeys],
+  );
+
 
   return (
     <div>
