@@ -1200,7 +1200,11 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 
       <CapacityCoverageCard />
 
+      <RouteSalespeopleCard routes={routes} />
+
       <UnmatchedRouteCodesCard routes={routes} />
+
+
 
       <RetrainCard />
 
