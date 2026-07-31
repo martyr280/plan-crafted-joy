@@ -16,11 +16,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Plus, Trash2, Upload, Download, Play, RefreshCw, ChevronDown, Truck } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Download, Play, RefreshCw, ChevronDown, Truck, TrendingDown, Users, AlertTriangle } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, Legend,
 } from "recharts";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
+import { KpiCard } from "@/components/shared/KpiCard";
 import { useAuth } from "@/lib/auth";
 import {
   listTruckRoutes, listTruckRuns, upsertTruckRun, deleteTruckRun, getTruckForecast,
@@ -31,6 +32,10 @@ import {
   listP21UnmatchedRouteCodes, assignP21RouteCode, setP21RouteCodeIgnored,
   getTruckCapacityCoverage,
 } from "@/lib/truck-capacity.functions";
+import {
+  getTruckRepScope, listRouteSalespeople, listKnownRepCodes, setRouteSalespeople,
+  importRouteSalespeople, deleteRouteSalesperson, getUnderfilledRoutes,
+} from "@/lib/truck-capacity-reps.functions";
 
 export const Route = createFileRoute("/_app/truck-capacity")({ component: TruckCapacityPage });
 
