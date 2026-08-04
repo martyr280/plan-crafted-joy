@@ -117,7 +117,7 @@ agg AS (
 SELECT
   c.customer_id                                                                 AS [Cust Code],
   -- TODO: price level source unidentified at NDI (dbo.customer has no price1).
-  -- Probably comes from whatever feeds Joseph's report; NULL until confirmed.
+  -- Probably comes from whatever feeds Joseph's report, NULL until confirmed.
   CAST(NULL AS varchar(20))                                                     AS [Price],
   -- TODO: buying group source unidentified at NDI (no class_id1).
   CAST(NULL AS varchar(20))                                                     AS [BG],
@@ -136,7 +136,7 @@ SELECT
   END                                                                           AS [Pct],
   agg.m_sales                                                                   AS [{Mon} Sales],
   agg.m_profit                                                                  AS [{Mon} Profit],
-  -- TODO: keep-level depends on the price-level mapping above; NULL until then.
+  -- TODO: keep-level depends on the price-level mapping above, NULL until then.
   CAST(NULL AS varchar(20))                                                     AS [Keep Lvl]
 FROM dbo.customer c
 JOIN agg ON agg.customer_id = c.customer_id

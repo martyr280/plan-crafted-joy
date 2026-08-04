@@ -33,6 +33,33 @@ type Job = {
   error: string | null;
 };
 
+/**
+ * Agent build this app expects. Builds older than this enforce a stricter SQL
+ * guard that rejects any semicolon or comment in the query body with
+ * "Only a single statement is allowed".
+ */
+export const EXPECTED_AGENT_VERSION = "1.1.0";
+
+function parseVersion(v: string | null | undefined): number[] | null {
+  if (!v) return null;
+  const parts = String(v).trim().replace(/^v/i, "").split(".").map((p) => Number.parseInt(p, 10));
+  if (parts.length === 0 || parts.some((n) => !Number.isFinite(n))) return null;
+  return parts;
+}
+
+function isOutdatedAgent(version: string | null | undefined): boolean {
+  const got = parseVersion(version);
+  const want = parseVersion(EXPECTED_AGENT_VERSION)!;
+  if (!got) return false;
+  for (let i = 0; i < Math.max(got.length, want.length); i++) {
+    const a = got[i] ?? 0;
+    const b = want[i] ?? 0;
+    if (a !== b) return a < b;
+  }
+  return false;
+}
+
+
 function agentHealth(lastSeenAt: string | null) {
   if (!lastSeenAt) return { label: "never", color: "bg-muted text-muted-foreground", icon: WifiOff };
   const ageMs = Date.now() - new Date(lastSeenAt).getTime();
@@ -237,6 +264,14 @@ function BridgeAdminPage() {
 
       <Card className="p-4">
         <h3 className="font-semibold mb-3">Agent heartbeats</h3>
+        {agents.some((a) => isOutdatedAgent(a.version)) && (
+          <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            One or more agents report a build older than {EXPECTED_AGENT_VERSION}. This agent build rejects
+            comments/semicolons in SQL (&quot;Only a single statement is allowed&quot;); update recommended. Queries are
+            sanitized server-side in the meantime.
+          </div>
+        )}
+
         {agents.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No agents have checked in yet. Install the agent following <code>agent/README.md</code>.
@@ -268,7 +303,21 @@ function BridgeAdminPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {a.last_seen_at ? formatDistanceToNow(new Date(a.last_seen_at), { addSuffix: true }) : "—"}
                     </TableCell>
-                    <TableCell className="text-sm">{a.version ?? "—"}</TableCell>
+                    <TableCell className="text-sm">
+                      <div className="flex items-center gap-2">
+                        <span>{a.version ?? "—"}</span>
+                        {isOutdatedAgent(a.version) && (
+                          <Badge
+                            variant="outline"
+                            className="text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                            title={`Expected ${EXPECTED_AGENT_VERSION} or newer. This agent build rejects comments/semicolons in SQL ("Only a single statement is allowed"); update recommended.`}
+                          >
+                            outdated
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+
                     <TableCell className="text-sm text-muted-foreground">{a.ip ?? "—"}</TableCell>
                   </TableRow>
                 );

@@ -60,13 +60,94 @@ export async function assertAdmin(_supabase: any, userId: string) {
   throw new Error(`Role check failed (backend unreachable): ${short}`);
 }
 
+/**
+ * Strip comments and trailing semicolons from SQL before it ships to the P21
+ * bridge agent.
+ *
+ * WHY: the agent build installed at NDI (v1.0.0) rejects any SQL text whose
+ * raw body contains a semicolon with "Only a single statement is allowed" —
+ * and it counts semicolons that live inside `--` comments. Our templates carry
+ * explanatory comments (some with semicolons in prose) plus a trailing `;`,
+ * so every Sales Reports job failed. The current agent handler is tolerant,
+ * but we cannot depend on the client's installed .exe being current.
+ *
+ * Quote- and bracket-aware so real SQL is never damaged: `'--'`, `';'` inside
+ * string literals and `[weird;name]` identifiers survive untouched.
+ */
+export function sanitizeBridgeSql(text: string): string {
+  const src = String(text ?? "");
+  let out = "";
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    const next = src[i + 1];
+    // Single-quoted string literal (SQL escapes '' inside).
+    if (ch === "'") {
+      out += ch;
+      for (i++; i < src.length; i++) {
+        out += src[i];
+        if (src[i] === "'") {
+          if (src[i + 1] === "'") {
+            out += src[i + 1];
+            i++;
+            continue;
+          }
+          break;
+        }
+      }
+      continue;
+    }
+    // [bracketed identifier]
+    if (ch === "[") {
+      out += ch;
+      for (i++; i < src.length; i++) {
+        out += src[i];
+        if (src[i] === "]") break;
+      }
+      continue;
+    }
+    // -- line comment
+    if (ch === "-" && next === "-") {
+      while (i < src.length && src[i] !== "\n") i++;
+      // keep the newline so line structure survives
+      if (i < src.length) out += "\n";
+      continue;
+    }
+    // /* block comment */ (non-nested, matching the agent's own handling)
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i++;
+      i += 1; // loop's i++ consumes the '/'
+      continue;
+    }
+    out += ch;
+  }
+  // Collapse whitespace-only lines left behind by removed comments.
+  out = out
+    .split("\n")
+    .filter((line, idx, arr) => line.trim() !== "" || (idx > 0 && arr[idx - 1].trim() !== ""))
+    .join("\n");
+  // Drop trailing semicolons / whitespace entirely.
+  return out.replace(/[\s;]+$/, "");
+}
+
+/** Payload kinds whose `sql` field goes straight to the agent's SELECT guard. */
+const SQL_PAYLOAD_KINDS = new Set(["sql.select", "sales.query"]);
+
+function sanitizeJobPayload(kind: string, payload: any) {
+  if (!payload || typeof payload !== "object") return payload ?? {};
+  if (!SQL_PAYLOAD_KINDS.has(kind)) return payload;
+  if (typeof payload.sql !== "string") return payload;
+  return { ...payload, sql: sanitizeBridgeSql(payload.sql) };
+}
+
 export async function runJob(kind: string, payload: any, timeoutMs = 30000) {
   const { data: job, error } = await supabaseAdmin
     .from("p21_bridge_jobs")
-    .insert({ kind, payload: payload ?? {} })
+    .insert({ kind, payload: sanitizeJobPayload(kind, payload) })
     .select("id")
     .single();
   if (error || !job) throw new Error(error?.message ?? "Failed to enqueue job");
+
 
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
