@@ -220,25 +220,69 @@ const TRANSFER_QTY_CANDIDATES = [
   "qty",
 ] as const;
 
-async function discoverTransferQtyColumn(
+async function discoverColumns(
+  table: string,
+  slug: string,
   timeoutMs: number,
-): Promise<{ col: string | null; found: string[] }> {
+): Promise<string[]> {
   const introspectSql =
     "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS " +
-    "WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'transfer_line'";
+    `WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '${table}'`;
   const { result } = await runJob(
     "sql.select",
-    { sql: introspectSql, params: {}, slug: "truck-capacity-p21-transfers-schema" },
+    { sql: introspectSql, params: {}, slug },
     timeoutMs,
   );
   const rows = ((result as any)?.rows ?? []) as any[];
-  const found = rows
+  return rows
     .map((r) => String(r.COLUMN_NAME ?? r.column_name ?? "").toLowerCase())
     .filter(Boolean);
+}
+
+async function discoverTransferQtyColumn(
+  timeoutMs: number,
+): Promise<{ col: string | null; found: string[] }> {
+  const found = await discoverColumns("transfer_line", "truck-capacity-p21-transfers-schema", timeoutMs);
   const set = new Set(found);
   const col = TRANSFER_QTY_CANDIDATES.find((c) => set.has(c)) ?? null;
   return { col, found };
 }
+
+// Flag predicates the transfers SQL emits, keyed by the alias used in the
+// default SQL. Any of these columns can be absent in a given P21 install
+// (NDI's transfer_hdr has no `cancel_flag`), so we neutralize the predicate
+// instead of hardcoding it and blowing up with "Invalid column name".
+const TRANSFER_FLAG_PREDICATES = [
+  { alias: "h", table: "transfer_hdr", column: "completed" },
+  { alias: "h", table: "transfer_hdr", column: "cancel_flag" },
+  { alias: "h", table: "transfer_hdr", column: "delete_flag" },
+  { alias: "l", table: "transfer_line", column: "delete_flag" },
+] as const;
+
+/**
+ * Replaces `ISNULL(<alias>.<col>, 'N')` with `ISNULL('N', 'N')` for every flag
+ * column that does not exist on its table, leaving a valid always-true
+ * predicate rather than removing clause text (which risks breaking WHERE/AND
+ * chaining in admin-authored SQL).
+ */
+function neutralizeMissingFlagPredicates(
+  sqlText: string,
+  cols: { transfer_hdr: Set<string>; transfer_line: Set<string> },
+): { sql: string; neutralized: string[] } {
+  let out = sqlText;
+  const neutralized: string[] = [];
+  for (const p of TRANSFER_FLAG_PREDICATES) {
+    if (cols[p.table].has(p.column)) continue;
+    const re = new RegExp(`ISNULL\\(\\s*${p.alias}\\.${p.column}\\s*,`, "gi");
+    const next = out.replace(re, "ISNULL('N',");
+    if (next === out) continue;
+    out = next;
+    neutralized.push(`${p.table}.${p.column}`);
+  }
+
+  return { sql: out, neutralized };
+}
+
 
 export async function runP21Snapshot(
   opts: { timeoutMs?: number; kind?: SnapshotKind } = {},
@@ -297,10 +341,12 @@ export async function runP21Snapshot(
   // actual columns and we pick the first candidate that exists.
   if (kind === "transfers") {
     let discovered: { col: string | null; found: string[] };
+    let hdrCols: string[];
     try {
       discovered = await discoverTransferQtyColumn(timeoutMs);
+      hdrCols = await discoverColumns("transfer_hdr", "truck-capacity-p21-transfers-hdr-schema", timeoutMs);
     } catch (e: any) {
-      const error = `transfer_line schema discovery failed: ${e?.message ?? String(e)}`;
+      const error = `transfer schema discovery failed: ${e?.message ?? String(e)}`;
       await supabaseAdmin.from("activity_events").insert({
         event_type: "truck_capacity.snapshot_failed",
         entity_type: "truck_capacity_p21_demand",
@@ -329,13 +375,31 @@ export async function runP21Snapshot(
       const re = new RegExp(`\\bl\\.${cand}\\b`, "gi");
       sqlText = sqlText.replace(re, `l.${discovered.col}`);
     }
+    // Drop flag predicates (cancel_flag, completed, delete_flag) whose column
+    // doesn't exist on this install — otherwise P21 rejects the whole query
+    // with "Invalid column name 'cancel_flag'".
+    const neutralizeResult = neutralizeMissingFlagPredicates(sqlText, {
+      transfer_hdr: new Set(hdrCols),
+      transfer_line: new Set(discovered.found),
+    });
+    sqlText = neutralizeResult.sql;
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.snapshot_info",
       entity_type: "truck_capacity_p21_demand",
-      message: `Truck Capacity P21 transfers: using transfer_line.${discovered.col}`,
-      metadata: { stage: "discover_schema", kind, qty_column: discovered.col },
+      message:
+        `Truck Capacity P21 transfers: using transfer_line.${discovered.col}` +
+        (neutralizeResult.neutralized.length
+          ? `; skipped missing flag predicates [${neutralizeResult.neutralized.join(", ")}]`
+          : ""),
+      metadata: {
+        stage: "discover_schema",
+        kind,
+        qty_column: discovered.col,
+        skipped_flag_predicates: neutralizeResult.neutralized,
+      },
     });
   }
+
 
 
   const { data: routes } = await supabaseAdmin
