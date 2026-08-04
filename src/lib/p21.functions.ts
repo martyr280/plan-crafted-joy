@@ -116,11 +116,19 @@ export const retryBridgeJob = createServerFn({ method: "POST" })
       .eq("id", data.jobId)
       .single();
     if (error || !orig) throw new Error("Job not found");
+    // Sanitize on requeue too: an old job row may still carry the comment /
+    // semicolon-laden SQL that the deployed agent build rejects.
+    const rawPayload: any = orig.payload ?? {};
+    const payload =
+      typeof rawPayload?.sql === "string"
+        ? { ...rawPayload, sql: sanitizeBridgeSql(rawPayload.sql) }
+        : rawPayload;
     const { data: created, error: insErr } = await supabaseAdmin
       .from("p21_bridge_jobs")
-      .insert({ kind: orig.kind, payload: orig.payload ?? {} })
+      .insert({ kind: orig.kind, payload })
       .select("id")
       .single();
+
     if (insErr || !created) throw new Error(insErr?.message ?? "Failed to requeue");
     return { jobId: created.id };
   });
