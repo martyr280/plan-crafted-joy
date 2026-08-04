@@ -7,17 +7,25 @@
 //                  e.g. "May" when run in June.
 //
 // The literal token __REPCODE__ is left in the template body; the schedule
-// author replaces it with the rep's P21 salesrep_id when creating the row.
+// author replaces it with the rep's salesrep id (= contacts.id) when creating
+// the row.
 //
 // Keep this as a single WITH/SELECT statement. Some deployed P21 bridge agents
 // still enforce an older "SELECT or WITH only" guard and reject DECLARE batches.
 //
-// NOTE on P21 column names: this codebase consistently uses customer_id,
-// customer_name, salesrep_id, invoice_hdr, invoice_line, extended_price,
-// extended_cost. The price-level and business-group columns on dbo.customer
-// vary by P21 install; the template uses `price1` and `class_id1`, which are
-// the standard P21 customer-classification columns. Verify against the live
-// schema before seeding production schedules.
+// ─── VERIFIED SCHEMA (Kevin, NDI P21 admin — 2026-08-03) ────────────────────
+//  * dbo.customer HAS salesrep_id, customer_name.
+//    It does NOT have price1, class_id1, mail_city, mail_state.
+//  * dbo.invoice_line has NO extended_cost. Cost columns are cogs_amount
+//    (decimal 19,4), sales_cost, commission_cost, other_cost. It has
+//    invoice_no, order_no (varchar 8), item_id, item_desc, extended_price,
+//    inv_mast_uid, qty_shipped, line_no, product_group_id.
+//  * There is no usable dbo.salesrep. Reps are contacts. The primary rep for an
+//    order resolves via oe_hdr_salesrep (order_number = oe_hdr.order_no,
+//    primary_salesrep = 'Y') -> contacts.id.
+//  * oe_hdr has ship2_city / ship2_state / ship2_zip, shipping_route_uid,
+//    carrier_id, freight_code_uid.
+// ────────────────────────────────────────────────────────────────────────────
 
 export const SALES_ANNUALIZED_SQL = `WITH ctx AS (
   SELECT
@@ -30,27 +38,65 @@ export const SALES_ANNUALIZED_SQL = `WITH ctx AS (
     DATEDIFF(day, DATEFROMPARTS(YEAR(GETDATE()), 1, 1), CAST(GETDATE() AS date)) + 1 AS days_elapsed
 ),
 scope AS (
+  -- Secondary scope source: customer-level default rep assignment.
   SELECT c.customer_id
   FROM dbo.customer c
   CROSS JOIN ctx
   WHERE c.salesrep_id = ctx.rep_code
   UNION
-  SELECT DISTINCT ih.customer_id
-  FROM dbo.invoice_hdr ih
+  -- Primary scope source: orders where this rep is the primary salesrep.
+  SELECT DISTINCT h.customer_id
+  FROM dbo.oe_hdr h
+  JOIN dbo.oe_hdr_salesrep hs
+    ON hs.order_number = h.order_no
+   AND hs.primary_salesrep = 'Y'
   CROSS JOIN ctx
-  WHERE ih.salesrep_id = ctx.rep_code
-    AND ih.invoice_date >= '2022-01-01'
+  WHERE hs.salesrep_id = ctx.rep_code
+    AND h.order_date >= '2022-01-01'
 ),
 inv AS (
+  -- Attribution: invoice_line.order_no -> oe_hdr -> oe_hdr_salesrep (primary).
+  -- Orders that carry no primary-salesrep row fall back to the customer's
+  -- default rep on dbo.customer.salesrep_id.
   SELECT
     ih.customer_id,
     ih.invoice_date,
     il.extended_price AS net,
-    (il.extended_price - ISNULL(il.extended_cost, 0)) AS gp
+    -- >>> PROFIT BASIS — SINGLE POINT OF CHANGE <<<
+    -- invoice_line has no extended_cost at NDI. cogs_amount is used here.
+    -- TODO(go-live): reconcile cogs_amount vs sales_cost against ONE month of
+    -- Joseph's actual workbook numbers before trusting the profit column.
+    (il.extended_price - ISNULL(il.cogs_amount, 0)) AS gp
   FROM dbo.invoice_hdr ih
   JOIN dbo.invoice_line il ON il.invoice_no = ih.invoice_no
-  WHERE ih.customer_id IN (SELECT customer_id FROM scope)
-    AND ih.invoice_date >= '2022-01-01'
+  LEFT JOIN dbo.oe_hdr h ON h.order_no = il.order_no
+  LEFT JOIN dbo.oe_hdr_salesrep hs
+    ON hs.order_number = h.order_no
+   AND hs.primary_salesrep = 'Y'
+  LEFT JOIN dbo.customer c2 ON c2.customer_id = ih.customer_id
+  CROSS JOIN ctx
+  WHERE ih.invoice_date >= '2022-01-01'
+    AND ih.customer_id IN (SELECT customer_id FROM scope)
+    AND (
+      hs.salesrep_id = ctx.rep_code
+      OR (hs.salesrep_id IS NULL AND c2.salesrep_id = ctx.rep_code)
+    )
+),
+geo AS (
+  -- Interim City/St source: most-frequent ship-to on the customer's orders.
+  -- TODO: replace if NDI exposes a customer-level address source.
+  SELECT customer_id, ship_city, ship_state
+  FROM (
+    SELECT
+      h.customer_id,
+      h.ship2_city  AS ship_city,
+      h.ship2_state AS ship_state,
+      ROW_NUMBER() OVER (PARTITION BY h.customer_id ORDER BY COUNT(*) DESC) AS rn
+    FROM dbo.oe_hdr h
+    WHERE h.order_date >= '2022-01-01'
+    GROUP BY h.customer_id, h.ship2_city, h.ship2_state
+  ) g
+  WHERE g.rn = 1
 ),
 agg AS (
   SELECT
@@ -70,11 +116,14 @@ agg AS (
 )
 SELECT
   c.customer_id                                                                 AS [Cust Code],
-  c.price1                                                                      AS [Price],
-  c.class_id1                                                                   AS [BG],
+  -- TODO: price level source unidentified at NDI (dbo.customer has no price1).
+  -- Probably comes from whatever feeds Joseph's report; NULL until confirmed.
+  CAST(NULL AS varchar(20))                                                     AS [Price],
+  -- TODO: buying group source unidentified at NDI (no class_id1).
+  CAST(NULL AS varchar(20))                                                     AS [BG],
   c.customer_name                                                               AS [Customer Name],
-  c.mail_city                                                                   AS [City],
-  c.mail_state                                                                  AS [St],
+  geo.ship_city                                                                 AS [City],
+  geo.ship_state                                                                AS [St],
   agg.total_value                                                               AS [Total Value],
   agg.y2022                                                                     AS [Year 2022],
   agg.y2023                                                                     AS [Year 2023],
@@ -87,19 +136,15 @@ SELECT
   END                                                                           AS [Pct],
   agg.m_sales                                                                   AS [{Mon} Sales],
   agg.m_profit                                                                  AS [{Mon} Profit],
-  CASE WHEN c.class_id1 IN ('ISG','OP','MML1','MML3','L5','E2G','EMPLOYEE') THEN c.class_id1
-       WHEN c.price1 IN ('E2G','EMPLOYEE') THEN c.price1
-       WHEN c.price1 = 'L1'   THEN '450000'
-       WHEN c.price1 = 'L2'   THEN '200000'
-       WHEN c.price1 = 'L3'   THEN '100000'
-       WHEN c.price1 = 'L4'   THEN '25000'
-       ELSE NULL
-  END                                                                           AS [Keep Lvl]
+  -- TODO: keep-level depends on the price-level mapping above; NULL until then.
+  CAST(NULL AS varchar(20))                                                     AS [Keep Lvl]
 FROM dbo.customer c
 JOIN agg ON agg.customer_id = c.customer_id
+LEFT JOIN geo ON geo.customer_id = c.customer_id
 CROSS JOIN ctx
 ORDER BY agg.m_sales DESC, agg.y_cy DESC;
 `;
+
 
 const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
