@@ -110,5 +110,13 @@ export const seedSalesAnnualizedSchedules = createServerFn({ method: "POST" })
       created.push({ rep_code: r.rep_code, rep_name: repName, id: data.id });
     }
 
-    return { reps: reps.length, created, skipped };
+    const withEmail = reps.filter((r) => !!r.rep_email).length;
+    return {
+      reps: reps.length,
+      created,
+      skipped,
+      withEmail,
+      withoutEmail: reps.length - withEmail,
+    };
+
   });
