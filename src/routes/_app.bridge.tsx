@@ -268,7 +268,21 @@ function BridgeAdminPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {a.last_seen_at ? formatDistanceToNow(new Date(a.last_seen_at), { addSuffix: true }) : "—"}
                     </TableCell>
-                    <TableCell className="text-sm">{a.version ?? "—"}</TableCell>
+                    <TableCell className="text-sm">
+                      <div className="flex items-center gap-2">
+                        <span>{a.version ?? "—"}</span>
+                        {isOutdatedAgent(a.version) && (
+                          <Badge
+                            variant="outline"
+                            className="text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                            title={`Expected ${EXPECTED_AGENT_VERSION} or newer. This agent build rejects comments/semicolons in SQL ("Only a single statement is allowed"); update recommended.`}
+                          >
+                            outdated
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+
                     <TableCell className="text-sm text-muted-foreground">{a.ip ?? "—"}</TableCell>
                   </TableRow>
                 );
