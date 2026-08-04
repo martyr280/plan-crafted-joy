@@ -5,9 +5,11 @@
 //   -> textual output-contract check -> bridge runJob("sql.select")
 //   -> runtime output-shape check -> rma_snapshot_rows -> rma_entity_monthly.
 //
-// The exact P21 RMA schema is NOT verified against NDI's install yet, which is
-// why the query is admin-editable and every failure is recorded on the
-// snapshot row + activity_events instead of throwing.
+// The P21 RMA table chain was verified against NDI's install on 2026-08-03
+// (see DEFAULT_RMA_SQL). The query stays admin-editable — open items remain
+// (own-truck carrier ids, warehouse/location column) and every failure is
+// recorded on the snapshot row + activity_events instead of throwing.
+
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
