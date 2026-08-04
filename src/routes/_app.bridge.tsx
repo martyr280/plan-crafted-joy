@@ -264,6 +264,14 @@ function BridgeAdminPage() {
 
       <Card className="p-4">
         <h3 className="font-semibold mb-3">Agent heartbeats</h3>
+        {agents.some((a) => isOutdatedAgent(a.version)) && (
+          <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            One or more agents report a build older than {EXPECTED_AGENT_VERSION}. This agent build rejects
+            comments/semicolons in SQL (&quot;Only a single statement is allowed&quot;); update recommended. Queries are
+            sanitized server-side in the meantime.
+          </div>
+        )}
+
         {agents.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No agents have checked in yet. Install the agent following <code>agent/README.md</code>.
