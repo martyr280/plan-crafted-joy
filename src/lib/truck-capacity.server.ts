@@ -220,25 +220,67 @@ const TRANSFER_QTY_CANDIDATES = [
   "qty",
 ] as const;
 
-async function discoverTransferQtyColumn(
+async function discoverColumns(
+  table: string,
+  slug: string,
   timeoutMs: number,
-): Promise<{ col: string | null; found: string[] }> {
+): Promise<string[]> {
   const introspectSql =
     "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS " +
-    "WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'transfer_line'";
+    `WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '${table}'`;
   const { result } = await runJob(
     "sql.select",
-    { sql: introspectSql, params: {}, slug: "truck-capacity-p21-transfers-schema" },
+    { sql: introspectSql, params: {}, slug },
     timeoutMs,
   );
   const rows = ((result as any)?.rows ?? []) as any[];
-  const found = rows
+  return rows
     .map((r) => String(r.COLUMN_NAME ?? r.column_name ?? "").toLowerCase())
     .filter(Boolean);
+}
+
+async function discoverTransferQtyColumn(
+  timeoutMs: number,
+): Promise<{ col: string | null; found: string[] }> {
+  const found = await discoverColumns("transfer_line", "truck-capacity-p21-transfers-schema", timeoutMs);
   const set = new Set(found);
   const col = TRANSFER_QTY_CANDIDATES.find((c) => set.has(c)) ?? null;
   return { col, found };
 }
+
+// Flag predicates the transfers SQL emits, keyed by the alias used in the
+// default SQL. Any of these columns can be absent in a given P21 install
+// (NDI's transfer_hdr has no `cancel_flag`), so we neutralize the predicate
+// instead of hardcoding it and blowing up with "Invalid column name".
+const TRANSFER_FLAG_PREDICATES = [
+  { alias: "h", table: "transfer_hdr", column: "completed" },
+  { alias: "h", table: "transfer_hdr", column: "cancel_flag" },
+  { alias: "h", table: "transfer_hdr", column: "delete_flag" },
+  { alias: "l", table: "transfer_line", column: "delete_flag" },
+] as const;
+
+/**
+ * Replaces `ISNULL(<alias>.<col>, 'N')` with `ISNULL('N', 'N')` for every flag
+ * column that does not exist on its table, leaving a valid always-true
+ * predicate rather than removing clause text (which risks breaking WHERE/AND
+ * chaining in admin-authored SQL).
+ */
+function neutralizeMissingFlagPredicates(
+  sqlText: string,
+  cols: { transfer_hdr: Set<string>; transfer_line: Set<string> },
+): { sql: string; neutralized: string[] } {
+  let out = sqlText;
+  const neutralized: string[] = [];
+  for (const p of TRANSFER_FLAG_PREDICATES) {
+    if (cols[p.table].has(p.column)) continue;
+    const re = new RegExp(`ISNULL\\(\\s*${p.alias}\\.${p.column}\\s*,`, "gi");
+    if (!re.test(out)) continue;
+    out = out.replace(re, "ISNULL('N',");
+    neutralized.push(`${p.table}.${p.column}`);
+  }
+  return { sql: out, neutralized };
+}
+
 
 export async function runP21Snapshot(
   opts: { timeoutMs?: number; kind?: SnapshotKind } = {},
