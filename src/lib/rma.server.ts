@@ -33,70 +33,91 @@ export type { SqlValidation };
 export const RMA_SQL_SETTING_KEY = "rma_snapshot_sql";
 
 /**
- * Default RMA extract. UNVERIFIED against NDI's P21 install — Kevin (NDI P21
- * admin) must confirm table + column names before production use, exactly as
- * we did for the truck-capacity demand query.
+ * Default RMA extract. The TABLE CHAIN below was VERIFIED against NDI's live
+ * P21 install by Kevin (NDI P21 admin) on 2026-08-03:
  *
- * Written against the most common P21 shape: returns live on oe_hdr/oe_line
- * with a negative-quantity / RMA class marker, reason codes on oe_line
- * (`return_reason` or similar) resolved through a reason lookup table. Where
- * the install has dedicated rma_hdr/rma_line tables, swap the FROM/JOINs and
- * keep the output aliases identical.
+ *   oe_hdr / oe_line -> rma_receipt_hdr / rma_receipt_line -> reason
+ *
+ *   rma_receipt_hdr : oe_hdr_uid, receipt_no, receipt_date, invoice_no,
+ *                     freight_out, confirmed
+ *   rma_receipt_line: rma_receipt_hdr_uid, oe_line_uid, receipt_line_no,
+ *                     qty_received, qty_to_stock, qty_to_adjust,
+ *                     qty_to_supplier, reason_adjustment_id, freight_in
+ *   reason          : id, reason, rma_reason_flag, return_to_stock_flag,
+ *                     return_action, delete_flag
+ *   oe_line also has reason_id.
+ *   oe_pick_ticket has BOTH picker and driver_id. contacts flags drivers.
+ *
+ * REMAINING OPEN ITEMS: NDI's own-truck carrier_id values (for own-truck vs LTL
+ * filtering) and confirmation of the location/warehouse column on oe_hdr.
+ *
+ * Only the OUTPUT ALIASES are contractual — rewrite the FROM/JOIN freely.
  */
 export const DEFAULT_RMA_SQL = `-- RMA Analytics :: return / RMA line extract.
 --
--- ⚠️ UNVERIFIED SCHEMA. NDI's P21 admin must confirm these table/column names
--- against the live install before this is trusted in production. Only the
--- OUTPUT ALIASES below are contractual — rewrite the FROM/JOIN freely.
+-- Table chain VERIFIED by NDI's P21 admin on 2026-08-03:
+--   rma_receipt_hdr -> oe_hdr, rma_receipt_line -> oe_line, reason lookup.
+-- Open items: own-truck carrier_id values (own-truck vs LTL filter, see the
+-- commented WHERE below) and the oe_hdr location/warehouse column name.
 --
 -- Required output columns (exact names):
---   rma_no        text     -- RMA / return document number
---   rma_date      date     -- date the return was entered
+--   rma_no        text     -- RMA / return receipt number
+--   rma_date      date     -- date the return was received
 --   qty           numeric  -- returned quantity (positive)
 --   value         numeric  -- extended credit value (positive)
 --   reason_code   text     -- P21 reason code as entered
 -- Optional (each missing column just empties that breakdown):
---   reason_desc   text     -- human reason description
---   customer_id   text
---   customer_name text
---   order_no      text     -- original sales order, for damage-report matching
---   invoice_no    text
---   item_id       text
---   item_desc     text
---   route_code    text     -- delivery route the original shipment went out on
---   driver_name   text     -- driver on that route
---   picker_name   text     -- warehouse puller who built the pallet
---   warehouse_id  text     -- location the return came back to
---
--- If dedicated RMA tables exist, the equivalent is roughly:
---   FROM dbo.rma_hdr h JOIN dbo.rma_line l ON l.rma_no = h.rma_no
-SELECT h.order_no                                   AS rma_no,
-       CAST(h.order_date AS DATE)                   AS rma_date,
-       h.customer_id                                AS customer_id,
-       c.customer_name                              AS customer_name,
-       h.po_no                                      AS order_no,
-       NULL                                         AS invoice_no,
-       im.item_id                                   AS item_id,
-       im.item_desc                                 AS item_desc,
-       ABS(SUM(l.qty_ordered))                      AS qty,
-       ABS(SUM(l.extended_price))                   AS value,
-       l.return_reason                              AS reason_code,
-       NULL                                         AS reason_desc,
-       sr.route_code                                AS route_code,
-       NULL                                         AS driver_name,
-       NULL                                         AS picker_name,
-       h.location_id                                AS warehouse_id
-  FROM dbo.oe_hdr h
-  JOIN dbo.oe_line l   ON l.order_no = h.order_no
-  JOIN dbo.inv_mast im ON im.inv_mast_uid = l.inv_mast_uid
-  LEFT JOIN dbo.customer c ON c.customer_id = h.customer_id
+--   reason_desc, customer_id, customer_name, order_no, invoice_no,
+--   item_id, item_desc, route_code, driver_name, picker_name, warehouse_id
+SELECT rh.receipt_no                                  AS rma_no,
+       CAST(rh.receipt_date AS DATE)                  AS rma_date,
+       h.customer_id                                  AS customer_id,
+       c.customer_name                                AS customer_name,
+       h.order_no                                     AS order_no,
+       rh.invoice_no                                  AS invoice_no,
+       im.item_id                                     AS item_id,
+       im.item_desc                                   AS item_desc,
+       ABS(rl.qty_received)                           AS qty,
+       -- Value: prorate the original line's extended price by the returned qty.
+       ABS(CASE WHEN ISNULL(l.qty_ordered, 0) <> 0
+                THEN l.extended_price * (rl.qty_received / l.qty_ordered)
+                ELSE ISNULL(l.unit_price, 0) * rl.qty_received
+           END)                                       AS value,
+       COALESCE(rl.reason_adjustment_id, l.reason_id) AS reason_code,
+       rsn.reason                                     AS reason_desc,
+       sr.route_code                                  AS route_code,
+       -- Driver: oe_pick_ticket.driver_id, resolved through contacts when the
+       -- id matches a contact record; falls back to the raw id.
+       COALESCE(
+         NULLIF(LTRIM(RTRIM(ISNULL(dc.first_name, '') + ' ' + ISNULL(dc.last_name, ''))), ''),
+         pt.driver_id
+       )                                              AS driver_name,
+       pt.picker                                      AS picker_name,
+       -- UNVERIFIED: oe_hdr.location_id is assumed; confirm with NDI.
+       h.location_id                                  AS warehouse_id,
+       -- Kept for own-truck vs LTL segmentation once NDI supplies carrier ids.
+       h.carrier_id                                   AS carrier_id
+  FROM dbo.rma_receipt_hdr rh
+  JOIN dbo.oe_hdr h            ON h.oe_hdr_uid = rh.oe_hdr_uid
+  JOIN dbo.rma_receipt_line rl ON rl.rma_receipt_hdr_uid = rh.rma_receipt_hdr_uid
+  JOIN dbo.oe_line l           ON l.oe_line_uid = rl.oe_line_uid
+  LEFT JOIN dbo.inv_mast im    ON im.inv_mast_uid = l.inv_mast_uid
+  LEFT JOIN dbo.customer c     ON c.customer_id = h.customer_id
   LEFT JOIN dbo.shipping_route sr ON sr.shipping_route_uid = h.shipping_route_uid
- WHERE ISNULL(h.delete_flag, 'N') = 'N'
-   AND ISNULL(l.delete_flag, 'N') = 'N'
-   AND l.qty_ordered < 0
-   AND h.order_date >= DATEADD(month, -24, CAST(GETDATE() AS DATE))
- GROUP BY h.order_no, CAST(h.order_date AS DATE), h.customer_id, c.customer_name,
-          h.po_no, im.item_id, im.item_desc, l.return_reason, sr.route_code, h.location_id;`;
+  LEFT JOIN dbo.reason rsn     ON rsn.id = COALESCE(rl.reason_adjustment_id, l.reason_id)
+  -- First pick ticket per order carries the puller and the driver.
+  LEFT JOIN (
+    SELECT order_no, MIN(picker) AS picker, MIN(driver_id) AS driver_id
+    FROM dbo.oe_pick_ticket
+    GROUP BY order_no
+  ) pt ON pt.order_no = h.order_no
+  LEFT JOIN dbo.contacts dc ON dc.id = pt.driver_id
+ WHERE rh.receipt_date >= DATEADD(month, -24, CAST(GETDATE() AS DATE))
+   AND ISNULL(rl.qty_received, 0) <> 0
+   -- Own-truck only (enable once NDI provides their own-truck carrier ids):
+   -- AND h.carrier_id IN (/* TBD own-truck carrier_id values */)
+ ORDER BY rh.receipt_date DESC;`;
+
 
 export async function getRmaSqlSetting(): Promise<{ sql: string | null; updatedAt: string | null }> {
   const { data } = await supabaseAdmin
