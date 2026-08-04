@@ -191,6 +191,12 @@ function SqlSchedulesPage() {
                 try {
                   const r = (await seedRepSchedules()) as any;
                   toast.success(`Seeded ${r.created.length} of ${r.reps} reps (${r.skipped.length} skipped). All paused — review and activate.`);
+                  if (r.withoutEmail > 0) {
+                    toast.warning(
+                      `${r.withEmail} of ${r.reps} reps have an email in P21 — ${r.withoutEmail} need a recipient entered manually before activating.`,
+                      { duration: 10000 },
+                    );
+                  }
                   refresh();
                 } catch (e: any) {
                   toast.error(e?.message ?? "Seed failed");
