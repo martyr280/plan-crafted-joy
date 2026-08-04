@@ -33,6 +33,33 @@ type Job = {
   error: string | null;
 };
 
+/**
+ * Agent build this app expects. Builds older than this enforce a stricter SQL
+ * guard that rejects any semicolon or comment in the query body with
+ * "Only a single statement is allowed".
+ */
+export const EXPECTED_AGENT_VERSION = "1.1.0";
+
+function parseVersion(v: string | null | undefined): number[] | null {
+  if (!v) return null;
+  const parts = String(v).trim().replace(/^v/i, "").split(".").map((p) => Number.parseInt(p, 10));
+  if (parts.length === 0 || parts.some((n) => !Number.isFinite(n))) return null;
+  return parts;
+}
+
+function isOutdatedAgent(version: string | null | undefined): boolean {
+  const got = parseVersion(version);
+  const want = parseVersion(EXPECTED_AGENT_VERSION)!;
+  if (!got) return false;
+  for (let i = 0; i < Math.max(got.length, want.length); i++) {
+    const a = got[i] ?? 0;
+    const b = want[i] ?? 0;
+    if (a !== b) return a < b;
+  }
+  return false;
+}
+
+
 function agentHealth(lastSeenAt: string | null) {
   if (!lastSeenAt) return { label: "never", color: "bg-muted text-muted-foreground", icon: WifiOff };
   const ageMs = Date.now() - new Date(lastSeenAt).getTime();
