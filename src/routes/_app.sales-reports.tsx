@@ -220,7 +220,7 @@ function ManagerOverview({
         <KpiCard
           label="Keep-level at risk"
           value={priceLevelMapped ? String(totals.risk) : "—"}
-          hint={priceLevelMapped ? undefined : "Awaiting price-level mapping from P21"}
+          sub={priceLevelMapped ? undefined : "Awaiting price-level mapping"}
           icon={<AlertTriangle className="w-5 h-5" />}
         />
         <KpiCard label="Win-back candidates" value={String(totals.win)} icon={<Undo2 className="w-5 h-5" />} />
