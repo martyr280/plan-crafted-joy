@@ -339,10 +339,12 @@ export async function runP21Snapshot(
   // actual columns and we pick the first candidate that exists.
   if (kind === "transfers") {
     let discovered: { col: string | null; found: string[] };
+    let hdrCols: string[];
     try {
       discovered = await discoverTransferQtyColumn(timeoutMs);
+      hdrCols = await discoverColumns("transfer_hdr", "truck-capacity-p21-transfers-hdr-schema", timeoutMs);
     } catch (e: any) {
-      const error = `transfer_line schema discovery failed: ${e?.message ?? String(e)}`;
+      const error = `transfer schema discovery failed: ${e?.message ?? String(e)}`;
       await supabaseAdmin.from("activity_events").insert({
         event_type: "truck_capacity.snapshot_failed",
         entity_type: "truck_capacity_p21_demand",
@@ -371,13 +373,31 @@ export async function runP21Snapshot(
       const re = new RegExp(`\\bl\\.${cand}\\b`, "gi");
       sqlText = sqlText.replace(re, `l.${discovered.col}`);
     }
+    // Drop flag predicates (cancel_flag, completed, delete_flag) whose column
+    // doesn't exist on this install — otherwise P21 rejects the whole query
+    // with "Invalid column name 'cancel_flag'".
+    const neutralizeResult = neutralizeMissingFlagPredicates(sqlText, {
+      transfer_hdr: new Set(hdrCols),
+      transfer_line: new Set(discovered.found),
+    });
+    sqlText = neutralizeResult.sql;
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.snapshot_info",
       entity_type: "truck_capacity_p21_demand",
-      message: `Truck Capacity P21 transfers: using transfer_line.${discovered.col}`,
-      metadata: { stage: "discover_schema", kind, qty_column: discovered.col },
+      message:
+        `Truck Capacity P21 transfers: using transfer_line.${discovered.col}` +
+        (neutralizeResult.neutralized.length
+          ? `; skipped missing flag predicates [${neutralizeResult.neutralized.join(", ")}]`
+          : ""),
+      metadata: {
+        stage: "discover_schema",
+        kind,
+        qty_column: discovered.col,
+        skipped_flag_predicates: neutralizeResult.neutralized,
+      },
     });
   }
+
 
 
   const { data: routes } = await supabaseAdmin
