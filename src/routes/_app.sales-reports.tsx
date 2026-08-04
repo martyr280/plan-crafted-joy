@@ -344,6 +344,7 @@ function RepDetail({
     filtered.reduce((a, r) => a + (f(r) ?? 0), 0);
 
   const repName = rows[0]?.rep_name ?? repCode;
+  const detailPriceLevelMapped = rows.length === 0 || hasPriceLevelMapping(rows);
 
   return (
     <div className="space-y-4">
@@ -372,13 +373,19 @@ function RepDetail({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Badge
-          variant={insight === "risk" ? "default" : "outline"}
-          className="cursor-pointer"
-          onClick={() => setInsight(insight === "risk" ? "none" : "risk")}
-        >
-          <AlertTriangle className="w-3 h-3 mr-1" /> Keep-level at risk · {counts.risk}
-        </Badge>
+        {detailPriceLevelMapped ? (
+          <Badge
+            variant={insight === "risk" ? "default" : "outline"}
+            className="cursor-pointer"
+            onClick={() => setInsight(insight === "risk" ? "none" : "risk")}
+          >
+            <AlertTriangle className="w-3 h-3 mr-1" /> Keep-level at risk · {counts.risk}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-muted-foreground">
+            <AlertTriangle className="w-3 h-3 mr-1" /> Keep-level: awaiting price-level mapping
+          </Badge>
+        )}
         <Badge
           variant={insight === "declining" ? "default" : "outline"}
           className="cursor-pointer"
