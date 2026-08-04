@@ -274,10 +274,12 @@ function neutralizeMissingFlagPredicates(
   for (const p of TRANSFER_FLAG_PREDICATES) {
     if (cols[p.table].has(p.column)) continue;
     const re = new RegExp(`ISNULL\\(\\s*${p.alias}\\.${p.column}\\s*,`, "gi");
-    if (!re.test(out)) continue;
-    out = out.replace(re, "ISNULL('N',");
+    const next = out.replace(re, "ISNULL('N',");
+    if (next === out) continue;
+    out = next;
     neutralized.push(`${p.table}.${p.column}`);
   }
+
   return { sql: out, neutralized };
 }
 
