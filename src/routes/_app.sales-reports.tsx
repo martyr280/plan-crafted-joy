@@ -18,7 +18,7 @@ import {
   useRunSalesReports,
   useExportRepWorkbook,
 } from "@/hooks/useSalesReports";
-import { isAtRisk, isDeclining, isWinBack, isKeepLevelExempt, keepThresholdFor, type SalesReportRow, type RepSummary } from "@/lib/sales-reports.shared";
+import { isAtRisk, isDeclining, isWinBack, isKeepLevelExempt, keepThresholdFor, hasPriceLevelMapping, type SalesReportRow, type RepSummary } from "@/lib/sales-reports.shared";
 
 export const Route = createFileRoute("/_app/sales-reports")({
   component: SalesReportsPage,
@@ -200,12 +200,29 @@ function ManagerOverview({
     [reps],
   );
 
+  const priceLevelMapped = reps.length === 0 || reps.some((r) => r.price_level_mapped);
+
   return (
     <div className="space-y-4">
+      {!priceLevelMapped && reps.length > 0 && (
+        <Card className="p-3 text-sm flex items-start gap-2 border-amber-500/40 bg-amber-500/5">
+          <AlertTriangle className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
+          <span>
+            <strong>Awaiting price-level mapping.</strong> P21 at NDI has no identified price-level or
+            buying-group source yet, so Price, BG and keep-level risk are blank rather than zero. Every other
+            column is live.
+          </span>
+        </Card>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="YTD sales (all reps)" value={money(totals.ytd)} icon={<BarChart3 className="w-5 h-5" />} />
         <KpiCard label={`${monthLabel} sales`} value={money(totals.month)} icon={<BarChart3 className="w-5 h-5" />} />
-        <KpiCard label="Keep-level at risk" value={String(totals.risk)} icon={<AlertTriangle className="w-5 h-5" />} />
+        <KpiCard
+          label="Keep-level at risk"
+          value={priceLevelMapped ? String(totals.risk) : "—"}
+          sub={priceLevelMapped ? undefined : "Awaiting price-level mapping"}
+          icon={<AlertTriangle className="w-5 h-5" />}
+        />
         <KpiCard label="Win-back candidates" value={String(totals.win)} icon={<Undo2 className="w-5 h-5" />} />
       </div>
 
@@ -327,6 +344,7 @@ function RepDetail({
     filtered.reduce((a, r) => a + (f(r) ?? 0), 0);
 
   const repName = rows[0]?.rep_name ?? repCode;
+  const detailPriceLevelMapped = rows.length === 0 || hasPriceLevelMapping(rows);
 
   return (
     <div className="space-y-4">
@@ -355,13 +373,19 @@ function RepDetail({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Badge
-          variant={insight === "risk" ? "default" : "outline"}
-          className="cursor-pointer"
-          onClick={() => setInsight(insight === "risk" ? "none" : "risk")}
-        >
-          <AlertTriangle className="w-3 h-3 mr-1" /> Keep-level at risk · {counts.risk}
-        </Badge>
+        {detailPriceLevelMapped ? (
+          <Badge
+            variant={insight === "risk" ? "default" : "outline"}
+            className="cursor-pointer"
+            onClick={() => setInsight(insight === "risk" ? "none" : "risk")}
+          >
+            <AlertTriangle className="w-3 h-3 mr-1" /> Keep-level at risk · {counts.risk}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-muted-foreground">
+            <AlertTriangle className="w-3 h-3 mr-1" /> Keep-level: awaiting price-level mapping
+          </Badge>
+        )}
         <Badge
           variant={insight === "declining" ? "default" : "outline"}
           className="cursor-pointer"

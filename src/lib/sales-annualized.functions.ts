@@ -20,8 +20,12 @@ export const listP21SalesReps = createServerFn({ method: "POST" })
       rep_name: string | null;
       rep_email: string | null;
     }>;
-    return { reps: rows };
+    // Email coverage matters: at NDI only ~8 of 51 reps have an email in P21,
+    // so the rest need manually-entered schedule recipients.
+    const withEmail = rows.filter((r) => !!r.rep_email).length;
+    return { reps: rows, total: rows.length, withEmail, withoutEmail: rows.length - withEmail };
   });
+
 
 export const seedSalesAnnualizedSchedules = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -106,5 +110,13 @@ export const seedSalesAnnualizedSchedules = createServerFn({ method: "POST" })
       created.push({ rep_code: r.rep_code, rep_name: repName, id: data.id });
     }
 
-    return { reps: reps.length, created, skipped };
+    const withEmail = reps.filter((r) => !!r.rep_email).length;
+    return {
+      reps: reps.length,
+      created,
+      skipped,
+      withEmail,
+      withoutEmail: reps.length - withEmail,
+    };
+
   });

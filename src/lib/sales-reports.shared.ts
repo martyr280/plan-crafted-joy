@@ -40,7 +40,24 @@ export type RepSummary = {
   at_risk: number;
   declining: number;
   win_backs: number;
+  /** False when P21 returned no price-level / keep-level data for this rep. */
+  price_level_mapped: boolean;
 };
+
+/**
+ * NDI's P21 install has no identified price-level / buying-group source yet
+ * (dbo.customer has no price1/class_id1 — verified 2026-08-03), so those come
+ * back NULL. Keep-level risk is meaningless until that mapping exists; callers
+ * should show an "awaiting price-level mapping" state instead of zeros.
+ */
+export function hasPriceLevelMapping(rows: SalesReportRow[]): boolean {
+  return rows.some(
+    (r) =>
+      !!r.price_level ||
+      !!r.keep_lvl_code ||
+      (r.keep_lvl_threshold !== null && r.keep_lvl_threshold !== undefined),
+  );
+}
 
 export function isKeepLevelExempt(code: string | null | undefined): boolean {
   return !!code && (KEEP_LEVEL_EXEMPT as readonly string[]).includes(code.toUpperCase());
@@ -87,10 +104,14 @@ export function summarizeByRep(rows: SalesReportRow[]): RepSummary[] {
         at_risk: 0,
         declining: 0,
         win_backs: 0,
+        price_level_mapped: false,
       };
       map.set(r.rep_code, s);
     }
     s.customers += 1;
+    if (!!r.price_level || !!r.keep_lvl_code || (r.keep_lvl_threshold !== null && r.keep_lvl_threshold !== undefined)) {
+      s.price_level_mapped = true;
+    }
     s.ytd += r.y_current ?? 0;
     s.annualized += r.ann_current ?? 0;
     s.prior_year += r.y2025 ?? 0;
