@@ -166,19 +166,35 @@ export function interpolateScheduleTokens(sql: string, now: Date = new Date()): 
 }
 
 /**
- * Rep discovery: every active P21 salesrep with email when available.
- * Shared by the scheduled-email seeder and the Sales Reports runner so both
- * resolve the same rep universe.
+ * Rep discovery. VERIFIED 2026-08-03: NDI has no usable dbo.salesrep — reps are
+ * contacts, discovered through the distinct salesrep ids used on
+ * oe_hdr_salesrep and resolved to dbo.contacts by contacts.id.
+ *
+ * NDI has 51 reps this way, but only 8 have an email populated in P21; the
+ * other 43 need manually-entered recipients on their schedule.
+ *
+ * NOTE: the contacts name/email column names were NOT in Kevin's extract.
+ * first_name / last_name / email_address are the standard P21 contacts shape —
+ * CONFIRM before go-live and adjust the COALESCE below if this install differs.
  */
 export const REP_DISCOVERY_SQL = `
 SELECT
-  s.salesrep_id                        AS rep_code,
-  ISNULL(s.salesperson_name, s.salesrep_id) AS rep_name,
-  s.email_address                      AS rep_email
-FROM dbo.salesrep s
-WHERE ISNULL(s.delete_flag, 'N') = 'N'
+  reps.salesrep_id AS rep_code,
+  COALESCE(
+    NULLIF(LTRIM(RTRIM(ISNULL(ct.first_name, '') + ' ' + ISNULL(ct.last_name, ''))), ''),
+    reps.salesrep_id
+  ) AS rep_name,
+  NULLIF(LTRIM(RTRIM(ISNULL(ct.email_address, ''))), '') AS rep_email
+FROM (
+  SELECT DISTINCT hs.salesrep_id
+  FROM dbo.oe_hdr_salesrep hs
+  WHERE hs.salesrep_id IS NOT NULL
+    AND LTRIM(RTRIM(hs.salesrep_id)) <> ''
+) reps
+LEFT JOIN dbo.contacts ct ON ct.id = reps.salesrep_id
 ORDER BY rep_name
 `;
+
 
 /** Classification codes that are exempt from keep-level thresholds. */
 export const KEEP_LEVEL_EXEMPT = ["ISG", "OP", "MML1", "MML3", "L5", "E2G", "EMPLOYEE"] as const;
