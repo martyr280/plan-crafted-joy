@@ -558,18 +558,21 @@ function DataSourceTab() {
         <div className="flex gap-3">
           <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
           <div className="text-sm">
-            <p className="font-medium">Schema not yet verified against the live P21 install.</p>
+            <p className="font-medium">Table chain verified by NDI's P21 admin on 2026-08-03.</p>
             <p className="text-muted-foreground mt-1">
-              The default query is written against common P21 RMA shapes (oe_hdr/oe_line with negative
-              quantities, or rma_hdr/rma_line where present). <strong>Kevin must confirm the table and column
-              names</strong> before these numbers are used in production — same process we followed for the
-              truck-capacity demand query. Only the output aliases are contractual: rewrite the FROM/JOIN
-              freely as long as <code>rma_no</code>, <code>rma_date</code>, <code>qty</code>,{" "}
-              <code>value</code> and <code>reason_code</code> come back with those names.
+              The default query now follows the confirmed chain:{" "}
+              <code>oe_hdr/oe_line → rma_receipt_hdr/rma_receipt_line → reason</code>, with the puller and
+              driver taken from <code>oe_pick_ticket</code> (<code>picker</code>, <code>driver_id</code>).{" "}
+              <strong>Remaining open items:</strong> NDI's own-truck <code>carrier_id</code> values (needed to
+              separate own-truck from LTL — a commented-out filter is in the query), and confirmation of the
+              warehouse/location column on <code>oe_hdr</code>. Only the output aliases are contractual:
+              rewrite the FROM/JOIN freely as long as <code>rma_no</code>, <code>rma_date</code>,{" "}
+              <code>qty</code>, <code>value</code> and <code>reason_code</code> come back with those names.
             </p>
           </div>
         </div>
       </Card>
+
 
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
