@@ -1,6 +1,6 @@
 {
   "name": "ndi-p21-bridge-agent",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local agent that runs P21 SQL jobs on behalf of NDI Ops Hub via your FortiClient VPN.",
   "type": "module",
   "main": "agent.js",
@@ -10,7 +10,9 @@
     "uninstall-service": "node uninstall-service.js",
     "build:exe": "bun build --compile --target=bun-windows-x64-baseline --minify --outfile dist/ndiOS-agent.exe ./agent.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "dotenv": "^16.4.5",
     "mssql": "^11.0.1",
