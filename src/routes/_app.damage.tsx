@@ -103,7 +103,7 @@ function DamagePage() {
   const [rows, setRows] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
-  const navigate = useNavigate({ from: "/_app/damage" });
+  const navigate = Route.useNavigate();
   const {
     search,
     status,

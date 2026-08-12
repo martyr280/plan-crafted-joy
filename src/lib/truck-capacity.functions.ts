@@ -664,3 +664,74 @@ export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
 
 
 
+
+/* ============================ FORECAST BOARD ============================ */
+
+// All-routes board (Joe's default landing view). Rep scoping is applied by the
+// caller's route list; this returns every active route the caller may see.
+export const getForecastBoard = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({
+    routeIds: z.array(z.string().uuid()).max(500).optional(),
+  }).parse(i ?? {}))
+  .handler(async ({ data }) => {
+    const { computeForecastBoard } = await import("./truck-capacity/board");
+    return computeForecastBoard({ routeIds: data.routeIds });
+  });
+
+export const listRouteCutoffs = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const { data, error } = await supabaseAdmin
+      .from("route_cutoffs").select("*")
+      .order("route_id", { ascending: true })
+      .order("sort_order", { ascending: true })
+      .limit(2000);
+    if (error) throw new Error(error.message);
+    return { cutoffs: data ?? [] };
+  });
+
+const cutoffInput = z.object({
+  id: z.string().uuid().optional(),
+  route_id: z.string().uuid(),
+  p21_code: z.string().max(40).nullable().optional(),
+  cutoff_dow: z.number().int().min(0).max(6),
+  cutoff_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
+  tz: z.string().min(3).max(64),
+  run_dows: z.array(z.number().int().min(0).max(6)).max(7),
+  run_days_label: z.string().max(200).nullable().optional(),
+  driver_name: z.string().max(120).nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+  sort_order: z.number().int().min(0).max(100000).optional(),
+  active: z.boolean().optional(),
+});
+
+export const upsertRouteCutoff = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => cutoffInput.parse(i))
+  .handler(async ({ data, context }) => {
+    await requireLogisticsAdmin(context.userId);
+    const row = {
+      ...data,
+      p21_code: data.p21_code || null,
+      run_days_label: data.run_days_label || null,
+      driver_name: data.driver_name || null,
+      notes: data.notes || null,
+      sort_order: data.sort_order ?? 0,
+      active: data.active ?? true,
+    };
+    const { data: saved, error } = await supabaseAdmin
+      .from("route_cutoffs").upsert(row).select("*").maybeSingle();
+    if (error) throw new Error(error.message);
+    return { cutoff: saved };
+  });
+
+export const deleteRouteCutoff = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    await requireLogisticsAdmin(context.userId);
+    const { error } = await supabaseAdmin.from("route_cutoffs").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
