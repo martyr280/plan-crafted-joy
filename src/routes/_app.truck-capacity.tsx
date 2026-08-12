@@ -1079,6 +1079,10 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 
   return (
     <div className="space-y-4 pt-4">
+      <RouteCutoffsEditor
+        routes={routes.map((r) => ({ id: r.id, code: r.code, name: r.name, hub: r.hub }))}
+        canEdit
+      />
       <Card className="p-4 space-y-3">
         <div className="text-sm font-medium">Capacity model</div>
         <div className="grid grid-cols-2 gap-4">
