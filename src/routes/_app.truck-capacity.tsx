@@ -23,6 +23,8 @@ import {
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
+import { ForecastBoard } from "@/components/truck-capacity/ForecastBoard";
+import { RouteCutoffsEditor } from "@/components/truck-capacity/RouteCutoffsEditor";
 
 import { useAuth } from "@/lib/auth";
 import {
@@ -644,6 +646,7 @@ Serving:
 Thresholds: ≥ 0.90 = at-capacity (second-truck risk); ≤ 0.30 = consolidation candidate.`;
 
 function ForecastTab({ routes }: { routes: RouteRow[] }) {
+  const [view, setView] = useState<"board" | "route">("board");
   const [routeId, setRouteId] = useState<string>("");
   const [method, setMethod] = useState<"auto" | "baseline" | "model">(() => {
     if (typeof window === "undefined") return "auto";
@@ -675,9 +678,20 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
   const version = q.data?.version;
   const servingMethod = q.data?.servingMethod ?? "baseline";
 
+  if (view === "board") {
+    return (
+      <div className="space-y-4 pt-4">
+        <ForecastBoard onSelectRoute={(id) => { setRouteId(id); setView("route"); }} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 pt-4">
       <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" size="sm" onClick={() => setView("board")}>
+          <ChevronDown className="mr-1 h-3 w-3 rotate-90" /> All routes
+        </Button>
         <Label className="text-sm">Route</Label>
         <Select value={routeId} onValueChange={setRouteId}>
           <SelectTrigger className="w-72"><SelectValue /></SelectTrigger>
@@ -1065,6 +1079,10 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 
   return (
     <div className="space-y-4 pt-4">
+      <RouteCutoffsEditor
+        routes={routes.map((r) => ({ id: r.id, code: r.code, name: r.name, hub: r.hub }))}
+        canEdit
+      />
       <Card className="p-4 space-y-3">
         <div className="text-sm font-medium">Capacity model</div>
         <div className="grid grid-cols-2 gap-4">

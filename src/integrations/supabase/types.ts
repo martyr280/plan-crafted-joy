@@ -1702,6 +1702,65 @@ export type Database = {
         }
         Relationships: []
       }
+      route_cutoffs: {
+        Row: {
+          active: boolean
+          created_at: string
+          cutoff_dow: number
+          cutoff_time: string
+          driver_name: string | null
+          id: string
+          notes: string | null
+          p21_code: string | null
+          route_id: string
+          run_days_label: string | null
+          run_dows: number[]
+          sort_order: number
+          tz: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          cutoff_dow: number
+          cutoff_time: string
+          driver_name?: string | null
+          id?: string
+          notes?: string | null
+          p21_code?: string | null
+          route_id: string
+          run_days_label?: string | null
+          run_dows?: number[]
+          sort_order?: number
+          tz?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          cutoff_dow?: number
+          cutoff_time?: string
+          driver_name?: string | null
+          id?: string
+          notes?: string | null
+          p21_code?: string | null
+          route_id?: string
+          run_days_label?: string | null
+          run_dows?: number[]
+          sort_order?: number
+          tz?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "route_cutoffs_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       route_salespeople: {
         Row: {
           active: boolean

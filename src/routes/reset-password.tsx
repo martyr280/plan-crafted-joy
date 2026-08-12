@@ -115,7 +115,7 @@ function ResetPasswordPage() {
                 Reset links can only be used once and expire after 1 hour. Request a new one and open it in the
                 same browser you requested it from.
               </p>
-              <Button className="w-full" onClick={() => navigate({ to: "/auth" })}>
+              <Button className="w-full" onClick={() => navigate({ to: "/auth", search: { next: "" } })}>
                 Request a new reset link
               </Button>
             </div>
