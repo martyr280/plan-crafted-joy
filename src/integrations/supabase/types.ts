@@ -710,6 +710,191 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_pay_rates: {
+        Row: {
+          created_at: string
+          driver_id: string
+          driver_name: string | null
+          effective_date: string
+          hourly_rate: number
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          driver_id: string
+          driver_name?: string | null
+          effective_date?: string
+          hourly_rate: number
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          driver_id?: string
+          driver_name?: string | null
+          effective_date?: string
+          hourly_rate?: number
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      driver_time_week_overrides: {
+        Row: {
+          created_at: string
+          driver_id: string
+          id: string
+          notes: string | null
+          paycom_hours: number | null
+          updated_at: string
+          updated_by: string | null
+          week_start: string
+        }
+        Insert: {
+          created_at?: string
+          driver_id: string
+          id?: string
+          notes?: string | null
+          paycom_hours?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          week_start: string
+        }
+        Update: {
+          created_at?: string
+          driver_id?: string
+          id?: string
+          notes?: string | null
+          paycom_hours?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          week_start?: string
+        }
+        Relationships: []
+      }
+      driver_warehouse_events: {
+        Row: {
+          address_id: string | null
+          address_name: string | null
+          created_at: string
+          driver_id: string
+          driver_name: string | null
+          duration_min: number
+          end_ts: string
+          event_date: string
+          hub: string | null
+          id: string
+          location_source: string
+          needs_review: boolean
+          notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          run_id: string | null
+          start_ts: string
+          status: string
+          statuses: string[]
+          updated_at: string
+        }
+        Insert: {
+          address_id?: string | null
+          address_name?: string | null
+          created_at?: string
+          driver_id: string
+          driver_name?: string | null
+          duration_min: number
+          end_ts: string
+          event_date: string
+          hub?: string | null
+          id?: string
+          location_source?: string
+          needs_review?: boolean
+          notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_id?: string | null
+          start_ts: string
+          status?: string
+          statuses?: string[]
+          updated_at?: string
+        }
+        Update: {
+          address_id?: string | null
+          address_name?: string | null
+          created_at?: string
+          driver_id?: string
+          driver_name?: string | null
+          duration_min?: number
+          end_ts?: string
+          event_date?: string
+          hub?: string | null
+          id?: string
+          location_source?: string
+          needs_review?: boolean
+          notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_id?: string | null
+          start_ts?: string
+          status?: string
+          statuses?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_warehouse_events_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "driver_warehouse_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_warehouse_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          drivers_scanned: number
+          error: string | null
+          events_found: number
+          id: string
+          started_at: string
+          status: string
+          triggered_by: string | null
+          updated_at: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          drivers_scanned?: number
+          error?: string | null
+          events_found?: number
+          id?: string
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+          updated_at?: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          drivers_scanned?: number
+          error?: string | null
+          events_found?: number
+          id?: string
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+          updated_at?: string
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
       e2g_inventory_snapshot: {
         Row: {
           birm: number | null
@@ -2968,6 +3153,7 @@ export type Database = {
         Returns: boolean
       }
       is_capacity_alert_manager: { Args: never; Returns: boolean }
+      is_driver_time_viewer: { Args: never; Returns: boolean }
     }
     Enums: {
       app_role:
