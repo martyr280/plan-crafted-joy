@@ -123,7 +123,27 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, capacityAlerts, ranAt: new Date().toISOString() });
+          // Weekly Driver Warehouse Time sweep: Mondays 13:00–13:15 UTC.
+          // Dedup-guarded by a run already started today so overlapping ticks
+          // can't double-sweep. Fully try/caught: it must not starve the rest.
+          let driverTime: any = null;
+          if (now.getUTCDay() === 1 && now.getUTCHours() === 13 && now.getUTCMinutes() < 15) {
+            try {
+              const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+              const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
+              const { data: alreadySwept } = await supabaseAdmin
+                .from("driver_warehouse_runs")
+                .select("id").gte("started_at", todayStart).limit(1);
+              if (alreadySwept && alreadySwept.length > 0) {
+                driverTime = { ok: true, skipped: true, reason: "already_swept_today" };
+              } else {
+                const { runDriverTimeSweep } = await import("@/lib/driver-time.server");
+                driverTime = await runDriverTimeSweep({ now, triggeredBy: null });
+              }
+            } catch (e: any) { driverTime = { ok: false, error: e?.message ?? String(e) }; }
+          }
+
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, capacityAlerts, driverTime, ranAt: new Date().toISOString() });
 
 
         } catch (e: any) {

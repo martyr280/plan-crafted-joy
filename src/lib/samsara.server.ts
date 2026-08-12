@@ -110,12 +110,30 @@ export async function fetchDocumentById(id: string) {
   return data.data;
 }
 
-// Health check used by Settings → Integrations.
-export async function samsaraHealthCheck(): Promise<{ ok: boolean; message: string; orgName?: string }> {
+// Health check used by Settings → Integrations. Probes every endpoint the app
+// needs (vehicles, drivers, addresses, HOS logs) and names each missing scope,
+// since Driver Warehouse Time silently produces nothing without them.
+export async function samsaraHealthCheck(): Promise<{
+  ok: boolean;
+  message: string;
+  orgName?: string;
+  scopes: Array<{ endpoint: string; ok: boolean; detail: string }>;
+}> {
   try {
-    const data = await samsaraFetch<{ data: any[] }>(`/fleet/vehicles?limit=1`);
-    return { ok: true, message: `Connected. ${data.data?.length ?? 0} vehicle(s) accessible.` };
+    const { probeSamsaraScopes } = await import("@/lib/samsara/hos.server");
+    const scopes = await probeSamsaraScopes();
+    const missing = scopes.filter((s) => !s.ok);
+    if (!missing.length) {
+      return { ok: true, message: `Connected. All ${scopes.length} endpoint(s) accessible.`, scopes };
+    }
+    return {
+      ok: false,
+      message: `Connected, but ${missing.length} endpoint(s) not permitted: ${missing
+        .map((m) => m.endpoint)
+        .join(", ")}. Grant these scopes to the Samsara API token.`,
+      scopes,
+    };
   } catch (e: any) {
-    return { ok: false, message: e?.message ?? "Unknown error" };
+    return { ok: false, message: e?.message ?? "Unknown error", scopes: [] };
   }
 }
