@@ -64,6 +64,7 @@ function SettingsPage() {
       name: "Samsara",
       status: samsaraQ.isLoading ? "stub" : samsaraQ.data?.ok ? "live" : "stub",
       note: samsaraQ.isLoading ? "Checking connection…" : samsaraQ.data?.message ?? "Not connected.",
+      scopes: samsaraQ.data?.scopes ?? [],
     },
     { name: "Lovable AI Gateway", status: "live", note: "PO parser and reminder generator active." },
   ];
@@ -92,6 +93,17 @@ function SettingsPage() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">{i.note}</p>
+                {!!(i as any).scopes?.length && (
+                  <ul className="mt-2 space-y-1">
+                    {((i as any).scopes as Array<{ endpoint: string; ok: boolean; detail: string }>).map((s) => (
+                      <li key={s.endpoint} className="text-[11px] flex items-start gap-1">
+                        <span className={s.ok ? "text-success" : "text-destructive"}>{s.ok ? "✓" : "✕"}</span>
+                        <span className="font-medium">{s.endpoint}:</span>
+                        <span className="text-muted-foreground">{s.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Card>
             ))}
           </div>
