@@ -173,14 +173,15 @@ function DriverTimePage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <KpiCard title="Drivers flagged" value={String(totals?.drivers ?? 0)} icon={Users} />
-        <KpiCard title="Flagged hours" value={`${totals?.flaggedHours ?? 0}`} icon={Clock} />
-        <KpiCard title="Needs review" value={String(totals?.needsReview ?? 0)} icon={AlertTriangle} />
+        <KpiCard label="Drivers flagged" value={String(totals?.drivers ?? 0)} icon={<Users className="w-5 h-5" />} />
+        <KpiCard label="Flagged hours" value={`${totals?.flaggedHours ?? 0}`} icon={<Clock className="w-5 h-5" />} />
+        <KpiCard label="Needs review" value={String(totals?.needsReview ?? 0)} icon={<AlertTriangle className="w-5 h-5" />} />
         <KpiCard
-          title="Estimated cost"
+          label="Estimated cost"
           value={isAdmin ? money(totals?.estimatedCost ?? 0) : "—"}
-          icon={CheckCircle2}
+          icon={<CheckCircle2 className="w-5 h-5" />}
         />
+
       </div>
 
       {isAdmin && (totals?.driversWithoutRate ?? 0) > 0 && (
