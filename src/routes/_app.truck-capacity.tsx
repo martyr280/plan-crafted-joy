@@ -676,9 +676,20 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
   const version = q.data?.version;
   const servingMethod = q.data?.servingMethod ?? "baseline";
 
+  if (view === "board") {
+    return (
+      <div className="space-y-4 pt-4">
+        <ForecastBoard onSelectRoute={(id) => { setRouteId(id); setView("route"); }} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 pt-4">
       <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" size="sm" onClick={() => setView("board")}>
+          <ChevronDown className="mr-1 h-3 w-3 rotate-90" /> All routes
+        </Button>
         <Label className="text-sm">Route</Label>
         <Select value={routeId} onValueChange={setRouteId}>
           <SelectTrigger className="w-72"><SelectValue /></SelectTrigger>
