@@ -644,6 +644,7 @@ Serving:
 Thresholds: ≥ 0.90 = at-capacity (second-truck risk); ≤ 0.30 = consolidation candidate.`;
 
 function ForecastTab({ routes }: { routes: RouteRow[] }) {
+  const [view, setView] = useState<"board" | "route">("board");
   const [routeId, setRouteId] = useState<string>("");
   const [method, setMethod] = useState<"auto" | "baseline" | "model">(() => {
     if (typeof window === "undefined") return "auto";
