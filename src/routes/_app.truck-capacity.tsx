@@ -23,6 +23,8 @@ import {
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
+import { ForecastBoard } from "@/components/truck-capacity/ForecastBoard";
+import { RouteCutoffsEditor } from "@/components/truck-capacity/RouteCutoffsEditor";
 
 import { useAuth } from "@/lib/auth";
 import {
