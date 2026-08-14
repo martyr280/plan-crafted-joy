@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader } from "@/components/ui/sidebar";
-import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, Sparkles, MailWarning, Gauge, Undo2, Timer } from "lucide-react";
+import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, Sparkles, MailWarning, Gauge, Undo2, Timer, FileUp } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
 
@@ -53,7 +53,9 @@ const groups = [
     items: [
       { title: "Sales Reports", url: "/sales-reports", icon: BarChart3 },
       { title: "Reports", url: "/reports", icon: FileBarChart },
+      { title: "Website Export", url: "/website-export", icon: FileUp },
       { title: "Audit Log", url: "/audit", icon: ScrollText },
+
     ],
   },
   {

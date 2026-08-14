@@ -3050,6 +3050,72 @@ export type Database = {
         }
         Relationships: []
       }
+      web_export_runs: {
+        Row: {
+          byte_size: number | null
+          columns: Json | null
+          created_at: string
+          database_name: string | null
+          dry_run: boolean
+          error: string | null
+          finished_at: string | null
+          id: string
+          job_id: string | null
+          preview: Json | null
+          procedure_name: string | null
+          remote_filename: string | null
+          remote_folder: string | null
+          row_count: number | null
+          started_at: string
+          status: string
+          trigger: string
+          triggered_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          byte_size?: number | null
+          columns?: Json | null
+          created_at?: string
+          database_name?: string | null
+          dry_run?: boolean
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string | null
+          preview?: Json | null
+          procedure_name?: string | null
+          remote_filename?: string | null
+          remote_folder?: string | null
+          row_count?: number | null
+          started_at?: string
+          status?: string
+          trigger?: string
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          byte_size?: number | null
+          columns?: Json | null
+          created_at?: string
+          database_name?: string | null
+          dry_run?: boolean
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string | null
+          preview?: Json | null
+          procedure_name?: string | null
+          remote_filename?: string | null
+          remote_folder?: string | null
+          row_count?: number | null
+          started_at?: string
+          status?: string
+          trigger?: string
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       website_crawls: {
         Row: {
           completed_at: string | null

@@ -1,6 +1,6 @@
 {
   "name": "ndi-p21-bridge-agent",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Local agent that runs P21 SQL jobs on behalf of NDI Ops Hub via your FortiClient VPN.",
   "type": "module",
   "main": "agent.js",
@@ -16,6 +16,7 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "mssql": "^11.0.1",
-    "node-windows": "^1.0.0-beta.8"
+    "node-windows": "^1.0.0-beta.8",
+    "ssh2-sftp-client": "^12.1.1"
   }
 }
