@@ -19,6 +19,9 @@
 // and is not sent to SQL Server.
 
 import sql from "mssql";
+import fs from "node:fs/promises";
+// Static imports so `bun build --compile` definitely bundles them into the .exe.
+import SftpClient from "ssh2-sftp-client";
 import { renderCsv } from "./csv.js";
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_$#]*$/;
@@ -84,7 +87,6 @@ async function upload(csvText, remoteFolder, filename) {
     );
   }
 
-  const fs = await import("node:fs/promises");
   let privateKey;
   try {
     privateKey = await fs.readFile(keyPath);
@@ -92,7 +94,6 @@ async function upload(csvText, remoteFolder, filename) {
     throw new Error(`Cannot read SSH private key at ${keyPath}: ${e?.message ?? e}`);
   }
 
-  const { default: SftpClient } = await import("ssh2-sftp-client");
   const client = new SftpClient();
   const folder = String(remoteFolder ?? "").replace(/\/+$/, "");
   const finalPath = folder ? `${folder}/${filename}` : filename;
