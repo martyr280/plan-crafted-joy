@@ -143,7 +143,31 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             } catch (e: any) { driverTime = { ok: false, error: e?.message ?? String(e) }; }
           }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, capacityAlerts, driverTime, ranAt: new Date().toISOString() });
+          // Nightly Charlston Office Furniture website export → partner SFTP.
+          // Hour is configurable (app_settings.website_export.cronHourUtc, default 09:00 UTC),
+          // gated on the enabled flag, deduped by a non-dry-run started today, and fully
+          // try/caught so a bad SFTP night can't starve the other blocks.
+          let websiteExport: any = null;
+          try {
+            const { getWebsiteExportSettings } = await import("@/lib/website-export.server");
+            const wes = await getWebsiteExportSettings();
+            if (wes.enabled && now.getUTCHours() === wes.cronHourUtc && now.getUTCMinutes() < 15) {
+              const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+              const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
+              const { data: alreadyExported } = await supabaseAdmin
+                .from("web_export_runs")
+                .select("id").eq("dry_run", false).gte("started_at", todayStart).limit(1);
+              if (alreadyExported && alreadyExported.length > 0) {
+                websiteExport = { ok: true, skipped: true, reason: "already_exported_today" };
+              } else {
+                const { runWebsiteExport } = await import("@/lib/website-export.server");
+                websiteExport = await runWebsiteExport({ trigger: "cron", triggeredBy: null, now });
+              }
+            }
+          } catch (e: any) { websiteExport = { ok: false, error: e?.message ?? String(e) }; }
+
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, capacityAlerts, driverTime, websiteExport, ranAt: new Date().toISOString() });
+
 
 
         } catch (e: any) {
