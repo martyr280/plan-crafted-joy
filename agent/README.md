@@ -191,3 +191,48 @@ The kind name is a string — `sales.query`, `ar.aging`, etc. Use parameterized 
 - **"Login failed for user…"** — check `P21_SQL_USER` / `P21_SQL_PASS`. Make sure FortiClient is connected.
 - **"connect ETIMEDOUT"** — VPN is not connected or `P21_SQL_HOST` is unreachable.
 - **App says "Bridge job timed out"** — agent isn't running, or the secret is wrong, or the job kind isn't in the handler allowlist.
+
+## Charlston Office Furniture website export (job kind `website.export.sftp`)
+
+Requires **agent v1.2.0 or newer**. Older builds fail the job with
+`Unknown job kind: website.export.sftp`.
+
+What the handler does, in one job:
+
+1. Opens its own SQL connection to the database named in the job payload
+   (default `P21_Analytics_PLAY` — the shared pool is bound to P21, so this
+   handler does not use it) and runs `EXEC Website.usp_ExportSuiteCommerceTest`.
+   This replaces the manual SSMS script; `USE` becomes the connection database
+   and `GO` is a client batch separator that is never sent to SQL Server.
+   This cannot go through `sql.select` — that handler requires the statement to
+   begin with `SELECT`/`WITH`/`DECLARE`.
+2. Renders the last result set (columns verbatim, in order) as CSV:
+   comma-delimited, header row, CRLF, UTF-8 no BOM, RFC-4180 quoting, NULL →
+   empty, dates `YYYY-MM-DD`, datetimes `YYYY-MM-DD HH:MM:SS`, booleans 1/0.
+3. Uploads over SFTP with SSH key auth to `<remoteFolder>/NDI_YYYYMMDD.csv`,
+   writing `<name>.part` first and renaming into place so the partner never
+   reads a partial file.
+
+`dryRun: true` does steps 1–2 only and returns row count, byte size, column
+list and a 3-row preview. Use it first.
+
+### Setup on the NDI Windows server
+
+Add to `.env` (see `.env.example`):
+
+```
+SFTP_HOST=ssh.ndiofficefurniture.net
+SFTP_PORT=18765
+SFTP_USERNAME=u2323-uw7q3pmmnio7
+SFTP_PRIVATE_KEY_PATH=C:\ndiOS\keys\NDI-Charlston-Automation
+SFTP_PRIVATE_KEY_PASSPHRASE=
+```
+
+The `NDI-Charlston-Automation` private key stays on this machine — it is never
+uploaded to Nelson and never stored in the database. The partner allow-lists
+**this server's public egress IP** (expected `142.190.99.117`); confirm that
+with `curl https://api.ipify.org` from this box before the first live run.
+
+Database, procedure, filename pattern, remote folder, delimiter/header and the
+nightly hour are all settings in the app (Insights → Website Export → Settings),
+so a play→production cutover is a settings edit, not an agent release.

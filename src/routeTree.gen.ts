@@ -14,6 +14,7 @@ import { Route as McpRouteImport } from './routes/mcp'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppWebsiteExportRouteImport } from './routes/_app.website-export'
 import { Route as AppWebhooksRouteImport } from './routes/_app.webhooks'
 import { Route as AppUsageRouteImport } from './routes/_app.usage'
 import { Route as AppTruckCapacityRouteImport } from './routes/_app.truck-capacity'
@@ -73,6 +74,11 @@ const AppRoute = AppRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWebsiteExportRoute = AppWebsiteExportRouteImport.update({
+  id: '/website-export',
+  path: '/website-export',
   getParentRoute: () => AppRoute,
 } as any)
 const AppWebhooksRoute = AppWebhooksRouteImport.update({
@@ -292,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/truck-capacity': typeof AppTruckCapacityRoute
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
+  '/website-export': typeof AppWebsiteExportRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/reports/e2g': typeof AppReportsE2gRoute
@@ -333,6 +340,7 @@ export interface FileRoutesByTo {
   '/truck-capacity': typeof AppTruckCapacityRoute
   '/usage': typeof AppUsageRoute
   '/webhooks': typeof AppWebhooksRoute
+  '/website-export': typeof AppWebsiteExportRoute
   '/': typeof AppIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
@@ -377,6 +385,7 @@ export interface FileRoutesById {
   '/_app/truck-capacity': typeof AppTruckCapacityRoute
   '/_app/usage': typeof AppUsageRoute
   '/_app/webhooks': typeof AppWebhooksRoute
+  '/_app/website-export': typeof AppWebsiteExportRoute
   '/_app/': typeof AppIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
@@ -422,6 +431,7 @@ export interface FileRouteTypes {
     | '/truck-capacity'
     | '/usage'
     | '/webhooks'
+    | '/website-export'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/reports/e2g'
@@ -463,6 +473,7 @@ export interface FileRouteTypes {
     | '/truck-capacity'
     | '/usage'
     | '/webhooks'
+    | '/website-export'
     | '/'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
@@ -506,6 +517,7 @@ export interface FileRouteTypes {
     | '/_app/truck-capacity'
     | '/_app/usage'
     | '/_app/webhooks'
+    | '/_app/website-export'
     | '/_app/'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
@@ -569,6 +581,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/website-export': {
+      id: '/_app/website-export'
+      path: '/website-export'
+      fullPath: '/website-export'
+      preLoaderRoute: typeof AppWebsiteExportRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/webhooks': {
@@ -852,6 +871,7 @@ interface AppRouteChildren {
   AppTruckCapacityRoute: typeof AppTruckCapacityRoute
   AppUsageRoute: typeof AppUsageRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
+  AppWebsiteExportRoute: typeof AppWebsiteExportRoute
   AppIndexRoute: typeof AppIndexRoute
   AppReportsE2gRoute: typeof AppReportsE2gRoute
   AppReportsIndexRoute: typeof AppReportsIndexRoute
@@ -883,6 +903,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppTruckCapacityRoute: AppTruckCapacityRoute,
   AppUsageRoute: AppUsageRoute,
   AppWebhooksRoute: AppWebhooksRoute,
+  AppWebsiteExportRoute: AppWebsiteExportRoute,
   AppIndexRoute: AppIndexRoute,
   AppReportsE2gRoute: AppReportsE2gRoute,
   AppReportsIndexRoute: AppReportsIndexRoute,

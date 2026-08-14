@@ -14,7 +14,7 @@ if (!BRIDGE_URL || !BRIDGE_SECRET) {
   process.exit(1);
 }
 
-const VERSION = "1.0.0";
+const VERSION = "1.2.0";
 const pollMs = Number(POLL_INTERVAL_MS);
 
 function sign(bodyText) {
