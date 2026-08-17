@@ -12,6 +12,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { fetchDrivers, fetchAddresses, fetchHosLogs, fetchVehicleGpsHistory } from "@/lib/samsara/hos.server";
 import { detectWarehouseEvents, isExcludedDriver, type HosSegment, type WarehouseEvent } from "@/lib/driver-time/detect";
 import type { Geofence } from "@/lib/driver-time/geo";
+import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
 
 const db = () => supabaseAdmin as any;
 
@@ -187,7 +188,7 @@ export async function runDriverTimeSweep(opts?: {
     for (const d of roster) {
       const segs = byDriver.get(d.id);
       if (!segs?.length) continue;
-      const tzOffsetMinutes = offsetForTz(d.timezone);
+      const tzOffsetMinutes = offsetForTz(d.timezone, now);
       events.push(
         ...detectWarehouseEvents({
           driver: { id: d.id, name: d.name },
