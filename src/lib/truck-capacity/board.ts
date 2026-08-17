@@ -4,6 +4,7 @@
 // Reuses computeForecastForRoute (the promoted model / blend / P21-guard path)
 // rather than re-implementing the model, batched with a small concurrency cap.
 
+import { dateStrInTz } from "@/lib/tz";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { computeForecastForRoute } from "./serve";
 import {

@@ -2,6 +2,7 @@
 // applies P21 max-guard, returns per-day forecast with driver breakdown.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { dateStrInTz } from "@/lib/tz";
 import { clamp, predict as vecPredict, mad as madFn } from "./linalg";
 import { baselineFromSnapshot, addDaysISO, dowOf, monthOf, type BaselineDay, type RunPoint } from "./baseline";
 import {
