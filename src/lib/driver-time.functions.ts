@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { dateStrInTz } from "@/lib/driver-time/tz";
 
 const db = () => supabaseAdmin as any;
 
@@ -42,7 +43,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     const isAdmin = await hasAnyRoleSrv(context.userId, ["admin"]);
-    const weekStart = mondayOf(data.weekStart ?? new Date().toISOString().slice(0, 10));
+    const weekStart = mondayOf(data.weekStart ?? dateStrInTz(new Date()));
     const weekEndDate = new Date(`${weekStart}T00:00:00Z`);
     weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
     const weekEnd = weekEndDate.toISOString().slice(0, 10);

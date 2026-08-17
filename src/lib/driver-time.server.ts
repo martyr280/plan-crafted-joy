@@ -12,6 +12,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { fetchDrivers, fetchAddresses, fetchHosLogs, fetchVehicleGpsHistory } from "@/lib/samsara/hos.server";
 import { detectWarehouseEvents, isExcludedDriver, type HosSegment, type WarehouseEvent } from "@/lib/driver-time/detect";
 import type { Geofence } from "@/lib/driver-time/geo";
+import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
 
 const db = () => supabaseAdmin as any;
 
@@ -47,9 +48,10 @@ export async function saveDriverTimeSettings(patch: Partial<DriverTimeSettings>)
   return next;
 }
 
-/** Monday-start week containing `d` (UTC dates). */
+/** Monday-start week containing `d`, anchored to the Central calendar date. */
 export function weekBounds(d: Date): { weekStart: string; weekEnd: string } {
-  const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const central = dateStrInTz(d, CENTRAL_TZ);
+  const x = new Date(`${central}T00:00:00Z`);
   const dow = x.getUTCDay(); // 0=Sun
   const back = dow === 0 ? 6 : dow - 1;
   x.setUTCDate(x.getUTCDate() - back);
@@ -58,16 +60,27 @@ export function weekBounds(d: Date): { weekStart: string; weekEnd: string } {
   return { weekStart: x.toISOString().slice(0, 10), weekEnd: end.toISOString().slice(0, 10) };
 }
 
-/** Hub offset (minutes from UTC) used for local rendering / ELD day math. */
-function offsetForTz(tz: string | null | undefined): number {
-  switch ((tz ?? "").toLowerCase()) {
-    case "america/new_york":
-    case "est":
-    case "et":
-      return -300;
-    default:
-      return -360; // Dallas / Birmingham (CST-ish)
+/** Resolve a loose driver timezone string to an IANA zone. */
+function ianaZoneFor(tz: string | null | undefined): string {
+  const raw = (tz ?? "").trim();
+  const lower = raw.toLowerCase();
+  if (lower === "america/new_york" || lower === "est" || lower === "edt" || lower === "et") {
+    return "America/New_York";
   }
+  if (raw.includes("/")) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: raw }).format(new Date());
+      return raw;
+    } catch {
+      /* fall through */
+    }
+  }
+  return CENTRAL_TZ;
+}
+
+/** Hub offset (minutes from UTC) at `at`, DST-aware. */
+function offsetForTz(tz: string | null | undefined, at: Date): number {
+  return tzOffsetMinutesAt(at, ianaZoneFor(tz));
 }
 
 export type SweepResult = {
@@ -175,7 +188,7 @@ export async function runDriverTimeSweep(opts?: {
     for (const d of roster) {
       const segs = byDriver.get(d.id);
       if (!segs?.length) continue;
-      const tzOffsetMinutes = offsetForTz(d.timezone);
+      const tzOffsetMinutes = offsetForTz(d.timezone, now);
       events.push(
         ...detectWarehouseEvents({
           driver: { id: d.id, name: d.name },

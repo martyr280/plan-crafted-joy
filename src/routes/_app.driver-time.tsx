@@ -21,6 +21,7 @@ import {
   useDriverTimeWeek, useUpdateDriverTimeEvent, useSetPaycomHours, useRunDriverTimeSweep,
   useDriverTimeConfig, useSaveDriverTimeConfig, useDriverPayRates, useImportDriverPayRates,
 } from "@/hooks/useDriverTime";
+import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
 
 export const Route = createFileRoute("/_app/driver-time")({
   head: () => ({
@@ -40,7 +41,7 @@ const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 function mondayOf(d: Date) {
-  const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const x = new Date(`${dateStrInTz(d, CENTRAL_TZ)}T00:00:00Z`);
   const dow = x.getUTCDay();
   x.setUTCDate(x.getUTCDate() - (dow === 0 ? 6 : dow - 1));
   return x.toISOString().slice(0, 10);
@@ -59,12 +60,12 @@ function hm(minutes: number) {
 }
 
 function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: CENTRAL_TZ });
 }
 
 function dayLabel(date: string) {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
-    weekday: "short", month: "short", day: "numeric",
+    weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
   });
 }
 
@@ -231,7 +232,7 @@ function DriverTimePage() {
               <TableBody>
                 {(data?.runs ?? []).map((r: any) => (
                   <TableRow key={r.id}>
-                    <TableCell className="text-xs">{new Date(r.started_at).toLocaleString()}</TableCell>
+                    <TableCell className="text-xs">{new Date(r.started_at).toLocaleString("en-US", { timeZone: CENTRAL_TZ })}</TableCell>
                     <TableCell className="text-xs">{r.week_start} → {r.week_end}</TableCell>
                     <TableCell>
                       <Badge variant={r.status === "completed" ? "secondary" : "destructive"}>{r.status}</Badge>
