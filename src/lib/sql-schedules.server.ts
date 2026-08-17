@@ -4,6 +4,7 @@ import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob, applyPricerSync } from "./p21.server";
 import { interpolateScheduleTokens } from "./sales-annualized-template";
+import { CENTRAL_TZ, dateStrInTz } from "@/lib/tz";
 
 export type ScheduleRow = {
   id: string;
@@ -341,12 +342,12 @@ export async function executeSchedule(scheduleId: string): Promise<{
       if (schedule.recipients.length === 0) {
         throw new Error("No recipients configured");
       }
-      const dateStr = startedAt.toISOString().slice(0, 10).replace(/-/g, "");
+      const dateStr = dateStrInTz(startedAt).replace(/-/g, "");
       const subject = renderTemplate(
         schedule.email_subject || "{{name}} — {{date}} ({{rows}} rows)",
         { name: schedule.name, date: dateStr, rows: rowCount }
       );
-      const html = `<p>Scheduled report <strong>${schedule.name}</strong> ran at ${startedAt.toISOString()} and returned <strong>${rowCount}</strong> row${rowCount === 1 ? "" : "s"}.</p><p>Results are attached as an Excel workbook.</p>`;
+      const html = `<p>Scheduled report <strong>${schedule.name}</strong> ran at ${startedAt.toLocaleString("en-US", { timeZone: CENTRAL_TZ })} CT and returned <strong>${rowCount}</strong> row${rowCount === 1 ? "" : "s"}.</p><p>Results are attached as an Excel workbook.</p>`;
       const safeName = schedule.name.replace(/[^a-z0-9-_]+/gi, "_");
       const filename = `${safeName}-${dateStr}.xlsx`;
       const content = await buildXlsx(rows, columns, schedule.name);

@@ -2,6 +2,7 @@
 // applies P21 max-guard, returns per-day forecast with driver breakdown.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { dateStrInTz } from "@/lib/tz";
 import { clamp, predict as vecPredict, mad as madFn } from "./linalg";
 import { baselineFromSnapshot, addDaysISO, dowOf, monthOf, type BaselineDay, type RunPoint } from "./baseline";
 import {
@@ -113,7 +114,7 @@ export async function computeForecastForRoute(
     .from("truck_capacity_routes").select("*").eq("id", routeId).maybeSingle();
   if (!route) return { route: null, days: [], servingMethod: "baseline", version: null };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateStrInTz(new Date());
   const from = addDaysISO(today, -84);
   const horizonEnd = addDaysISO(today, horizonDays);
 

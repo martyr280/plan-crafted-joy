@@ -4,6 +4,7 @@
 // Reuses computeForecastForRoute (the promoted model / blend / P21-guard path)
 // rather than re-implementing the model, batched with a small concurrency cap.
 
+import { dateStrInTz } from "@/lib/tz";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { computeForecastForRoute } from "./serve";
 import {
@@ -133,7 +134,7 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
     cutoffsByRoute.set(c.route_id, list);
   }
 
-  const todayUtc = now.toISOString().slice(0, 10);
+  const todayUtc = dateStrInTz(now);
   const windowEnd = addDaysISO(todayUtc, HORIZON_DAYS);
 
   // Latest P21 demand per (route, ship_date) inside the board window.

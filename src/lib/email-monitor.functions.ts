@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
+import { dateStrInTz } from "@/lib/tz";
 
 // Orders-focused recipients we monitor for delivery / bounce visibility.
 const ORDER_RECIPIENT_PATTERNS = ["order", "toorders"];
@@ -38,7 +39,7 @@ export const getEmailMonitorStats = createServerFn({ method: "POST" })
     // Daily series
     const seriesMap = new Map<string, { date: string; delivered: number; errors: number; dismissed: number }>();
     for (let i = 0; i < data.days; i++) {
-      const d = new Date(Date.now() - (data.days - 1 - i) * 86400000).toISOString().slice(0, 10);
+      const d = dateStrInTz(new Date(Date.now() - (data.days - 1 - i) * 86400000));
       seriesMap.set(d, { date: d, delivered: 0, errors: 0, dismissed: 0 });
     }
     let totalDelivered = 0;
@@ -59,7 +60,7 @@ export const getEmailMonitorStats = createServerFn({ method: "POST" })
     }> = [];
 
     for (const r of filtered) {
-      const day = (r.received_at ?? "").slice(0, 10);
+      const day = r.received_at ? dateStrInTz(new Date(r.received_at)) : "";
       const bucket = seriesMap.get(day);
       const st = String(r.status ?? "");
       if (st === "error") {
