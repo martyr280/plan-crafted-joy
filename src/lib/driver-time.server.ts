@@ -147,7 +147,7 @@ export async function runDriverTimeSweep(opts?: {
     );
     if (!roster.length) return await fail("No drivers to scan after exclusions.");
 
-    const endMs = Date.parse(`${weekEnd}T23:59:59Z`);
+    const endMs = Math.min(Date.parse(`${weekEnd}T23:59:59Z`), now.getTime());
     const startMs = endMs - lookbackDays * 86_400_000;
 
     const segments = await fetchHosLogs({ startMs, endMs, driverIds: roster.map((d) => d.id) });
