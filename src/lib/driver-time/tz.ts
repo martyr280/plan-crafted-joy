@@ -36,6 +36,5 @@ export function tzOffsetMinutesAt(d: Date, tz: string = CENTRAL_TZ): number {
     get("second"),
   );
   // Round to the nearest minute to absorb the dropped milliseconds.
-  return Math.round((asUtc - d.getTime() - d.getMilliseconds() * 0) / 60000) -
-    Math.round(d.getMilliseconds() / 60000);
+  return Math.round((asUtc - d.getTime()) / 60000);
 }
