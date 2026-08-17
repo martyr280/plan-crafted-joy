@@ -173,8 +173,10 @@ export async function fetchHosLogs(opts: {
   driverIds: string[];
   batchSize?: number;
 }): Promise<NormalizedHosSegment[]> {
+  const clampedEnd = Math.min(opts.endMs, Date.now());
+  if (opts.startMs >= clampedEnd) return [];
   const startTime = new Date(opts.startMs).toISOString();
-  const endTime = new Date(opts.endMs).toISOString();
+  const endTime = new Date(clampedEnd).toISOString();
   const batchSize = opts.batchSize ?? 25;
   const out: NormalizedHosSegment[] = [];
 
@@ -220,12 +222,14 @@ export async function fetchVehicleGpsHistory(opts: {
   stepMs?: number;
 }): Promise<Array<{ vehicleId: string; timeMs: number; latitude: number; longitude: number }>> {
   if (!opts.vehicleIds.length) return [];
+  const clampedEnd = Math.min(opts.endMs, Date.now());
+  if (opts.startMs >= clampedEnd) return [];
   const out: Array<{ vehicleId: string; timeMs: number; latitude: number; longitude: number }> = [];
   for (let i = 0; i < opts.vehicleIds.length; i += 20) {
     const ids = opts.vehicleIds.slice(i, i + 20);
     const params = new URLSearchParams({
       startTime: new Date(opts.startMs).toISOString(),
-      endTime: new Date(opts.endMs).toISOString(),
+      endTime: new Date(clampedEnd).toISOString(),
       types: "gps",
       ids: ids.join(","),
     });
