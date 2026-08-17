@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useModuleView } from "@/lib/usage-log";
 import {
+import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
   useDriverTimeWeek, useUpdateDriverTimeEvent, useSetPaycomHours, useRunDriverTimeSweep,
   useDriverTimeConfig, useSaveDriverTimeConfig, useDriverPayRates, useImportDriverPayRates,
 } from "@/hooks/useDriverTime";
@@ -59,12 +60,12 @@ function hm(minutes: number) {
 }
 
 function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: CENTRAL_TZ });
 }
 
 function dayLabel(date: string) {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
-    weekday: "short", month: "short", day: "numeric",
+    weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
   });
 }
 
@@ -231,7 +232,7 @@ function DriverTimePage() {
               <TableBody>
                 {(data?.runs ?? []).map((r: any) => (
                   <TableRow key={r.id}>
-                    <TableCell className="text-xs">{new Date(r.started_at).toLocaleString()}</TableCell>
+                    <TableCell className="text-xs">{new Date(r.started_at).toLocaleString("en-US", { timeZone: CENTRAL_TZ })}</TableCell>
                     <TableCell className="text-xs">{r.week_start} → {r.week_end}</TableCell>
                     <TableCell>
                       <Badge variant={r.status === "completed" ? "secondary" : "destructive"}>{r.status}</Badge>
