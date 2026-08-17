@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { weekBounds } from "../server";
+import { weekBounds } from "../../driver-time.server";
 
 describe("weekBounds", () => {
   it("returns Monday through Sunday for a mid-week date", () => {
