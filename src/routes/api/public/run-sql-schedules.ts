@@ -15,6 +15,13 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // Central wall-clock parts for cron gating (DST-stable).
+        const ctParts = (d: Date) => {
+          const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hourCycle: "h23", hour: "2-digit", minute: "2-digit", day: "2-digit", weekday: "short" }).formatToParts(d);
+          const get = (t: string) => p.find((x) => x.type === t)?.value ?? "";
+          return { hour: Number(get("hour")), minute: Number(get("minute")), day: Number(get("day")), dow: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(get("weekday")) };
+        };
+
         const secret = process.env.CRON_SECRET;
         const anonKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
 
@@ -38,12 +45,15 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
           } catch (e: any) {
             spiff = { ran: false, error: e?.message ?? String(e) };
           }
-          // Nightly truck-capacity P21 snapshot: run once per day between 07:00–07:15 UTC (~03:00 EDT).
+          // Nightly truck-capacity P21 snapshot: run once per day 3:00–3:15 AM Central, DST-stable.
           // Dedup: skip if a demand row already carries a snapshot_at on today's UTC date, so
           // overlapping cron ticks in the window don't double-insert.
           let truckCapacity: any = null;
           const now = new Date();
-          if (now.getUTCHours() === 7 && now.getUTCMinutes() < 15) {
+          const ct = ctParts(now);
+          // Dedup guards below compare against the UTC date; at 3–8am Central the
+          // UTC date equals the Central date, so they remain correct.
+          if (ct.hour === 3 && ct.minute < 15) {
             const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
             const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
             const { data: already } = await supabaseAdmin
@@ -66,7 +76,7 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
 
           // Nightly truck-capacity model retrain (dedup-guarded by trained_at ≥ todayUTC).
           let truckCapacityRetrain: any = null;
-          if (now.getUTCHours() === 7 && now.getUTCMinutes() < 15) {
+          if (ct.hour === 3 && ct.minute < 15) {
             const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
             const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
             const { data: alreadyRetrained } = await supabaseAdmin
@@ -82,11 +92,11 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
-          // Monthly Sales Reports run: 1st of the month, 08:00–08:15 UTC.
+          // Monthly Sales Reports run: 1st of the month, 3:00–3:15 AM Central.
           // Dedup-guarded by an existing run in the current calendar month so
           // overlapping cron ticks don't produce duplicate runs.
           let salesReports: any = null;
-          if (now.getUTCDate() === 1 && now.getUTCHours() === 8 && now.getUTCMinutes() < 15) {
+          if (ct.day === 1 && ct.hour === 3 && ct.minute < 15) {
             const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
             const monthStart = `${now.toISOString().slice(0, 7)}-01T00:00:00Z`;
             const { data: alreadyRan } = await supabaseAdmin
@@ -102,11 +112,11 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
-          // Daily capacity-alert evaluation: 12:00–12:15 UTC (~08:00 ET), once per day.
+          // Daily capacity-alert evaluation: 7:00–7:15 AM Central, once per day.
           // Dedup-guarded by a non-dry-run evaluation logged today so overlapping
           // cron ticks can't double-alert a rep.
           let capacityAlerts: any = null;
-          if (now.getUTCHours() === 12 && now.getUTCMinutes() < 15) {
+          if (ct.hour === 7 && ct.minute < 15) {
             const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
             const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
             const { data: alreadyEvaluated } = await supabaseAdmin
@@ -123,11 +133,11 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
-          // Weekly Driver Warehouse Time sweep: Mondays 13:00–13:15 UTC.
+          // Weekly Driver Warehouse Time sweep: Mondays 8:00–8:15 AM Central.
           // Dedup-guarded by a run already started today so overlapping ticks
           // can't double-sweep. Fully try/caught: it must not starve the rest.
           let driverTime: any = null;
-          if (now.getUTCDay() === 1 && now.getUTCHours() === 13 && now.getUTCMinutes() < 15) {
+          if (ct.dow === 1 && ct.hour === 8 && ct.minute < 15) {
             try {
               const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
               const todayStart = `${now.toISOString().slice(0, 10)}T00:00:00Z`;
