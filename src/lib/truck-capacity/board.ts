@@ -133,7 +133,7 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
     cutoffsByRoute.set(c.route_id, list);
   }
 
-  const todayUtc = now.toISOString().slice(0, 10);
+  const todayUtc = dateStrInTz(now);
   const windowEnd = addDaysISO(todayUtc, HORIZON_DAYS);
 
   // Latest P21 demand per (route, ship_date) inside the board window.

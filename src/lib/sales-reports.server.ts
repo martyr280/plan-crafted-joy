@@ -8,6 +8,7 @@
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
+import { dateStrInTz } from "@/lib/tz";
 import {
   SALES_ANNUALIZED_SQL,
   REP_DISCOVERY_SQL,
@@ -42,10 +43,10 @@ function str(v: any): string | null {
 
 /** Previous completed month, which is what the workbook's [Month] columns show. */
 export function reportPeriod(now: Date = new Date()): { year: number; month: number; monthLabel: string; currentYear: number } {
-  const m = now.getMonth();
-  const prevIdx = m === 0 ? 11 : m - 1;
-  const year = m === 0 ? now.getFullYear() - 1 : now.getFullYear();
-  return { year, month: prevIdx + 1, monthLabel: SHORT_MONTH_NAMES[prevIdx], currentYear: now.getFullYear() };
+  const [y, m] = dateStrInTz(now).split("-").map(Number);
+  const prevIdx = m === 1 ? 11 : m - 2;
+  const year = m === 1 ? y - 1 : y;
+  return { year, month: prevIdx + 1, monthLabel: SHORT_MONTH_NAMES[prevIdx], currentYear: y };
 }
 
 export async function discoverSalesReps(timeoutMs = 60_000): Promise<Rep[]> {

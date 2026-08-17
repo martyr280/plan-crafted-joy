@@ -182,7 +182,7 @@ export async function computeBaselineForecastForRoute(routeId: string, horizonDa
   const { data: route } = await supabaseAdmin
     .from("truck_capacity_routes").select("*").eq("id", routeId).maybeSingle();
   if (!route) return { route: null, days: [] };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateStrInTz(new Date());
   const from = addDaysISO(today, -84);
   const { data: runsRaw } = await supabaseAdmin
     .from("truck_capacity_runs").select("run_date, capacity_frac")

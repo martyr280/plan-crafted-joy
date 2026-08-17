@@ -1,3 +1,4 @@
+import { CENTRAL_TZ, dateStrInTz } from "@/lib/tz";
 // Template SQL + helpers for the per-rep "Sales Annualized" scheduled report.
 // Reproduces the layout of the Olivia/Mark/Hector/Michelle/Nikki workbooks.
 //
@@ -157,10 +158,10 @@ const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
  */
 export function interpolateScheduleTokens(sql: string, now: Date = new Date()): string {
   if (!sql.includes("{cy}") && !sql.includes("{Mon}")) return sql;
-  const cy = now.getUTCFullYear();
-  // Previous completed month: subtract 1 from the local month index, wrap.
-  const m = now.getMonth();
-  const prevIdx = m === 0 ? 11 : m - 1;
+  // Anchor to the Central calendar date: the P21 server's GETDATE() is Central wall-clock.
+  const [cyNum, mNum] = dateStrInTz(now, CENTRAL_TZ).split("-").map(Number);
+  const cy = cyNum;
+  const prevIdx = mNum === 1 ? 11 : mNum - 2;
   const mon = SHORT_MONTHS[prevIdx];
   return sql.replace(/\{cy\}/g, String(cy)).replace(/\{Mon\}/g, mon);
 }

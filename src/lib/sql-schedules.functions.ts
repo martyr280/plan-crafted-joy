@@ -26,7 +26,7 @@ const UpsertSchema = z.object({
   recipients: RecipientsSchema.optional(),
   email_subject: z.string().max(200).optional().nullable(),
   schedule_cron: z.string().min(1).max(100),
-  timezone: z.string().min(1).max(64).default("America/New_York"),
+  timezone: z.string().min(1).max(64).default("America/Chicago"),
   active: z.boolean().default(true),
 });
 

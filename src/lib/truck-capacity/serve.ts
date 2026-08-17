@@ -113,7 +113,7 @@ export async function computeForecastForRoute(
     .from("truck_capacity_routes").select("*").eq("id", routeId).maybeSingle();
   if (!route) return { route: null, days: [], servingMethod: "baseline", version: null };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateStrInTz(new Date());
   const from = addDaysISO(today, -84);
   const horizonEnd = addDaysISO(today, horizonDays);
 

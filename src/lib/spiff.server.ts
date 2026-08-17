@@ -4,6 +4,7 @@
 // everything under a spiff_runs row.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { dateStrInTz } from "@/lib/tz";
 import { runJob } from "./p21.server";
 import {
   buildSpiffLinesSql,
@@ -806,10 +807,10 @@ export async function sendToApCore(opts: {
 // Quarterly automation hook (called from /api/public/run-sql-schedules)
 // =====================================================================
 
-function quarterLabelForDate(d: Date): { quarter: string; from: string; toExclusive: string } {
-  // Returns the JUST-ENDED quarter relative to d (i.e. the one we should generate now).
-  const y = d.getUTCFullYear();
-  const m = d.getUTCMonth() + 1; // 1..12
+function quarterLabelForDate(d: Date, tz: string): { quarter: string; from: string; toExclusive: string } {
+  // Returns the JUST-ENDED quarter relative to d (i.e. the one we should generate now),
+  // using the business calendar date in `tz` (Central by default) rather than UTC.
+  const [y, m] = dateStrInTz(d, tz).split("-").map(Number);
   // Determine which quarter we are currently IN, then walk back one.
   let qIn: number;
   if (m <= 3) qIn = 1;
@@ -862,7 +863,7 @@ export async function runSpiffAutomationTick(now: Date = new Date()): Promise<{
   if (day !== Number(cfg.day_of_month)) return { ran: false, reason: "wrong day" };
   if (hour < Number(cfg.send_hour)) return { ran: false, reason: "too early" };
 
-  const { quarter, from, toExclusive } = quarterLabelForDate(now);
+  const { quarter, from, toExclusive } = quarterLabelForDate(now, tz);
   if (cfg.last_auto_quarter === quarter) return { ran: false, reason: "already ran for this quarter" };
 
   try {

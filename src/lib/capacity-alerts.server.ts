@@ -15,6 +15,7 @@
 //    and reflected in capacity_alerts.delivery for the manager view.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { dateStrInTz } from "@/lib/tz";
 import { sendCapacityAlertEmail, sendCapacityDigestEmail } from "@/lib/email/nelson-resend.server";
 
 const db = () => supabaseAdmin as any;
@@ -148,7 +149,7 @@ export async function evaluateCapacityAlerts(opts: {
 } = {}): Promise<{ ok: true; dryRun: boolean; evaluatedRules: number; decisions: EvaluationDecision[]; fired: number; errors: string[] }> {
   const dryRun = !!opts.dryRun;
   const now = opts.now ?? new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const today = new Date(`${dateStrInTz(now)}T00:00:00Z`);
   const errors: string[] = [];
 
   let rules = (await listAlertRules()).filter((r) => (opts.ruleId ? r.id === opts.ruleId : r.active));
