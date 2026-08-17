@@ -40,7 +40,7 @@ const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 function mondayOf(d: Date) {
-  const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const x = new Date(`${dateStrInTz(d, CENTRAL_TZ)}T00:00:00Z`);
   const dow = x.getUTCDay();
   x.setUTCDate(x.getUTCDate() - (dow === 0 ? 6 : dow - 1));
   return x.toISOString().slice(0, 10);
