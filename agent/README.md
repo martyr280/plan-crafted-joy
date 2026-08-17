@@ -236,3 +236,18 @@ with `curl https://api.ipify.org` from this box before the first live run.
 Database, procedure, filename pattern, remote folder, delimiter/header and the
 nightly hour are all settings in the app (Insights → Website Export → Settings),
 so a play→production cutover is a settings edit, not an agent release.
+
+### One-shot update on an already-installed server (setup.ps1)
+
+When the new `ndiOS-agent.exe` is staged in `C:\ndiOS-agent\newagent` on a
+server that already runs the agent, run this from an elevated prompt instead of
+`install.ps1`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1
+```
+
+It generates the `NDI-Charlston-Automation` SSH key pair, adds the SFTP `.env`
+settings without touching existing values, swaps the `.exe` with backups, and
+prints the public key to send back. No prompts, no destructive edits to the
+existing bridge secret or SQL credentials.
