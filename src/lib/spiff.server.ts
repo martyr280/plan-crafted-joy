@@ -807,7 +807,7 @@ export async function sendToApCore(opts: {
 // Quarterly automation hook (called from /api/public/run-sql-schedules)
 // =====================================================================
 
-function quarterLabelForDate(d: Date, tz: string): { quarter: string; from: string; toExclusive: string } {
+export function quarterLabelForDate(d: Date, tz: string): { quarter: string; from: string; toExclusive: string } {
   // Returns the JUST-ENDED quarter relative to d (i.e. the one we should generate now),
   // using the business calendar date in `tz` (Central by default) rather than UTC.
   const [y, m] = dateStrInTz(d, tz).split("-").map(Number);
