@@ -45,3 +45,11 @@ describe("runDriverTimeSweep window clamping", () => {
     expect(rawEndMs - endMs).toBeLessThanOrEqual(60_000);
   });
 });
+
+describe("weekBounds Central anchoring", () => {
+  it("treats Sunday 8pm Chicago (01:00Z Monday) as the week ending that Sunday", () => {
+    const { weekStart, weekEnd } = weekBounds(new Date("2026-08-17T01:00:00Z"));
+    expect(weekStart).toBe("2026-08-10");
+    expect(weekEnd).toBe("2026-08-16");
+  });
+});
