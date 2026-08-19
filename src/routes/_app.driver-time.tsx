@@ -737,6 +737,11 @@ function DiagnosticsTab() {
                 value={d.funnel.blocksOverThreshold}
               />
               <FunnelRow label="Blocks inside a warehouse fence" value={d.funnel.blocksInsideFence} />
+              <FunnelRow
+                label="Blocks both in-fence and over threshold"
+                value={d.funnel.blocksOverThresholdAndInsideFence}
+              />
+
               <FunnelRow label="Events the engine would emit" value={d.funnel.eventsEmitted} />
             </Card>
 
