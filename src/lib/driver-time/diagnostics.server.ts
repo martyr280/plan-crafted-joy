@@ -7,7 +7,6 @@ import {
   fetchAddresses,
   fetchDrivers,
   fetchHosLogs,
-  fetchRawHosStatusCounts,
   fetchVehicleGpsHistory,
   probeSamsaraScopes,
   type SamsaraAddress,
@@ -66,6 +65,7 @@ export type DriverRow = {
 
 export type SamsaraDiagnostics = {
   ranAt: string;
+  fatalError: string | null;
   windowStartIso: string;
   windowEndIso: string;
   lookbackDays: number;
@@ -152,15 +152,19 @@ export function nearestFence(
 
 /** Status vocabulary rows with the engine's recognition verdict attached. */
 export function buildStatusVocabulary(
-  rawCounts: Array<{ status: string; segments: number }>,
-  minutesByStatus: Map<string, number>,
+  segments: Array<{ status: string; startMs: number; endMs: number }>,
 ): StatusRow[] {
-  const statuses = new Set<string>([...rawCounts.map((r) => r.status), ...minutesByStatus.keys()]);
-  return Array.from(statuses)
+  const counts = new Map<string, number>();
+  const minutes = new Map<string, number>();
+  for (const s of segments) {
+    counts.set(s.status, (counts.get(s.status) ?? 0) + 1);
+    minutes.set(s.status, (minutes.get(s.status) ?? 0) + (s.endMs - s.startMs) / MINUTE);
+  }
+  return Array.from(counts.keys())
     .map((status) => ({
       status,
-      segments: rawCounts.find((r) => r.status === status)?.segments ?? 0,
-      minutes: Math.round(minutesByStatus.get(status) ?? 0),
+      segments: counts.get(status) ?? 0,
+      minutes: Math.round(minutes.get(status) ?? 0),
       countedAsWarehouseTime: KEPT_STATUSES.has(status),
     }))
     .sort((a, b) => b.segments - a.segments || b.minutes - a.minutes);
@@ -324,10 +328,7 @@ export async function runSamsaraDiagnostics(opts?: {
   const roster = drivers.filter((d) => !isExcludedDriver({ id: d.id, name: d.name }, exclusionOpts));
 
   const driverIds = roster.map((d) => d.id);
-  const [segments, rawCounts] = await Promise.all([
-    driverIds.length ? fetchHosLogs({ startMs, endMs, driverIds }) : Promise.resolve([]),
-    driverIds.length ? fetchRawHosStatusCounts({ startMs, endMs, driverIds }) : Promise.resolve([]),
-  ]);
+  const segments = driverIds.length ? await fetchHosLogs({ startMs, endMs, driverIds }) : [];
 
   let gpsSamples: Array<{ vehicleId: string; timeMs: number; latitude: number; longitude: number }> = [];
   const needGps = segments.some((s) => s.latitude === null || s.longitude === null);
@@ -345,11 +346,6 @@ export async function runSamsaraDiagnostics(opts?: {
     const arr = byDriver.get(s.driverId) ?? [];
     arr.push(s as HosSegment);
     byDriver.set(s.driverId, arr);
-  }
-
-  const minutesByStatus = new Map<string, number>();
-  for (const s of segments) {
-    minutesByStatus.set(s.status, (minutesByStatus.get(s.status) ?? 0) + (s.endMs - s.startMs) / MINUTE);
   }
 
   let blocksBuilt = 0;
@@ -457,6 +453,7 @@ export async function runSamsaraDiagnostics(opts?: {
 
   return {
     ranAt: new Date().toISOString(),
+    fatalError: null,
     windowStartIso: new Date(startMs).toISOString(),
     windowEndIso: new Date(endMs).toISOString(),
     lookbackDays,
@@ -468,7 +465,7 @@ export async function runSamsaraDiagnostics(opts?: {
     },
     probes,
     fences,
-    statusVocabulary: buildStatusVocabulary(rawCounts, minutesByStatus),
+    statusVocabulary: buildStatusVocabulary(segments),
     funnel: {
       driversOnRoster: drivers.length,
       driversAfterExclusions: roster.length,
