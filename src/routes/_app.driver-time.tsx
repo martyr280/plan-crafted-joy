@@ -20,6 +20,7 @@ import { useModuleView } from "@/lib/usage-log";
 import {
   useDriverTimeWeek, useUpdateDriverTimeEvent, useSetPaycomHours, useRunDriverTimeSweep,
   useDriverTimeConfig, useSaveDriverTimeConfig, useDriverPayRates, useImportDriverPayRates,
+  useSamsaraDiagnostics,
 } from "@/hooks/useDriverTime";
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
 
@@ -197,7 +198,9 @@ function DriverTimePage() {
           <TabsTrigger value="report">Weekly report</TabsTrigger>
           <TabsTrigger value="runs">Sweeps</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          {isAdmin && <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>}
         </TabsList>
+
 
         <TabsContent value="report" className="mt-4 space-y-4">
           {weekQ.isLoading && (
@@ -253,10 +256,17 @@ function DriverTimePage() {
         <TabsContent value="settings" className="mt-4">
           <DriverTimeSettings isAdmin={isAdmin} />
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="diagnostics" className="mt-4">
+            <DiagnosticsTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
 }
+
 
 /* ------------------------------------------------------------- driver card */
 
@@ -513,6 +523,248 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
             )}
           </div>
         </Card>
+      )}
+    </div>
+  );
+}
+
+function FunnelRow({ label, value, note }: { label: string; value: number | string; note?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-border/60 py-2 last:border-0">
+      <div>
+        <div className="text-sm">{label}</div>
+        {note && <div className="text-xs text-muted-foreground">{note}</div>}
+      </div>
+      <div className="font-mono text-sm tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function DiagnosticsTab() {
+  const diag = useSamsaraDiagnostics();
+  const [lookbackDays, setLookbackDays] = useState(8);
+  const d = diag.data as any | undefined;
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="dt-lookback">Lookback days</Label>
+            <Input
+              id="dt-lookback"
+              type="number"
+              min={1}
+              max={30}
+              className="w-28"
+              value={lookbackDays}
+              onChange={(e) => setLookbackDays(Number(e.target.value) || 8)}
+            />
+          </div>
+          <Button
+            onClick={() =>
+              diag.mutate({ lookbackDays }, {
+                onError: (e: any) => toast.error(e?.message ?? "Diagnostics failed"),
+              })
+            }
+            disabled={diag.isPending}
+          >
+            {diag.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Run diagnostics
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Read-only. Pulls the same Samsara window the sweep uses and writes nothing.
+          </p>
+        </div>
+      </Card>
+
+      {!d && !diag.isPending && (
+        <Card className="p-6 text-sm text-muted-foreground">
+          Run diagnostics to see the raw Samsara data behind the last sweep.
+        </Card>
+      )}
+
+      {d && (
+        <>
+          {d.warnings?.length > 0 && (
+            <Card className="border-destructive/40 bg-destructive/5 p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-destructive">
+                <AlertTriangle className="h-4 w-4" /> Warnings
+              </div>
+              <ul className="list-inside list-disc space-y-1 text-sm">
+                {d.warnings.map((w: string, i: number) => <li key={i}>{w}</li>)}
+              </ul>
+            </Card>
+          )}
+
+          <Card className="p-4">
+            <h3 className="mb-1 text-sm font-semibold">Window</h3>
+            <p className="text-xs text-muted-foreground">
+              {new Date(d.windowStartIso).toLocaleString("en-US", { timeZone: CENTRAL_TZ })} →{" "}
+              {new Date(d.windowEndIso).toLocaleString("en-US", { timeZone: CENTRAL_TZ })} CT ({d.lookbackDays} days) ·
+              threshold {d.settings.thresholdMinutes} min · merge gap {d.settings.mergeGapMinutes} min
+            </p>
+          </Card>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="p-4">
+              <h3 className="mb-2 text-sm font-semibold">Pipeline funnel</h3>
+              <FunnelRow label="Drivers on roster" value={d.funnel.driversOnRoster} />
+              <FunnelRow label="After exclusions" value={d.funnel.driversAfterExclusions} />
+              <FunnelRow label="HOS segments fetched" value={d.funnel.segmentsFetched} />
+              <FunnelRow label="Segments with coordinates" value={d.funnel.segmentsWithCoords} />
+              <FunnelRow label="GPS fallback samples" value={d.funnel.gpsSamples} />
+              <FunnelRow label="Non-driving blocks built" value={d.funnel.blocksBuilt} />
+              <FunnelRow
+                label={`Blocks ≥ ${d.settings.thresholdMinutes} min`}
+                value={d.funnel.blocksOverThreshold}
+              />
+              <FunnelRow label="Blocks inside a warehouse fence" value={d.funnel.blocksInsideFence} />
+              <FunnelRow label="Events the engine would emit" value={d.funnel.eventsEmitted} />
+            </Card>
+
+            <Card className="p-4">
+              <h3 className="mb-2 text-sm font-semibold">Samsara scopes</h3>
+              <div className="space-y-2">
+                {d.probes.map((p: any) => (
+                  <div key={p.endpoint} className="flex items-start gap-2 text-sm">
+                    {p.ok
+                      ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
+                      : <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />}
+                    <div>
+                      <div>{p.endpoint}</div>
+                      <div className="text-xs text-muted-foreground">{p.detail}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          <Card className="p-4">
+            <h3 className="mb-2 text-sm font-semibold">Raw duty-status vocabulary</h3>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Exactly what Samsara sent. A status the engine does not count can never produce an event.
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Segments</TableHead>
+                  <TableHead className="text-right">Minutes</TableHead>
+                  <TableHead>Counted as warehouse time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {d.statusVocabulary.length === 0 && (
+                  <TableRow><TableCell colSpan={4} className="text-sm text-muted-foreground">No logs in the window.</TableCell></TableRow>
+                )}
+                {d.statusVocabulary.map((s: any) => (
+                  <TableRow key={s.status}>
+                    <TableCell className="font-mono text-xs">{s.status}</TableCell>
+                    <TableCell className="text-right tabular-nums">{s.segments}</TableCell>
+                    <TableCell className="text-right tabular-nums">{s.minutes}</TableCell>
+                    <TableCell>
+                      {s.countedAsWarehouseTime
+                        ? <Badge variant="secondary">yes</Badge>
+                        : <Badge variant="outline">no</Badge>}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <Card className="p-4">
+            <h3 className="mb-2 text-sm font-semibold">Selected warehouse geofences</h3>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Shape</TableHead>
+                  <TableHead className="text-right">Radius (m)</TableHead>
+                  <TableHead>Center</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {d.fences.length === 0 && (
+                  <TableRow><TableCell colSpan={4} className="text-sm text-muted-foreground">No warehouse addresses selected in Settings.</TableCell></TableRow>
+                )}
+                {d.fences.map((f: any) => (
+                  <TableRow key={f.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-muted-foreground" />{f.name}</div>
+                      <div className="text-xs text-muted-foreground">{f.formattedAddress ?? ""}</div>
+                    </TableCell>
+                    <TableCell>
+                      {f.kind === "none"
+                        ? <Badge variant="destructive">none</Badge>
+                        : <Badge variant="outline">{f.kind}{f.kind === "polygon" ? ` (${f.vertexCount})` : ""}</Badge>}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{f.radiusMeters ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {f.latitude !== null && f.longitude !== null ? `${f.latitude.toFixed(5)}, ${f.longitude.toFixed(5)}` : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <Card className="p-4">
+            <h3 className="mb-2 text-sm font-semibold">Per-driver detail</h3>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Driver</TableHead>
+                    <TableHead className="text-right">Segs</TableHead>
+                    <TableHead className="text-right">w/ GPS</TableHead>
+                    <TableHead className="text-right">Driving</TableHead>
+                    <TableHead className="text-right">On-duty non-driving</TableHead>
+                    <TableHead className="text-right">Longest block</TableHead>
+                    <TableHead>Location source</TableHead>
+                    <TableHead>Matched fence</TableHead>
+                    <TableHead>Nearest fence</TableHead>
+                    <TableHead className="text-right">Events</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {d.drivers.map((r: any) => (
+                    <TableRow key={r.driverId} className={r.excluded ? "opacity-50" : undefined}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                          {r.driverName}
+                          {r.excluded && <Badge variant="outline">excluded</Badge>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{r.activationStatus ?? ""}</div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{r.segments}</TableCell>
+                      <TableCell className="text-right tabular-nums">{r.segmentsWithCoords}</TableCell>
+                      <TableCell className="text-right tabular-nums">{hm(r.drivingMin)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{hm(r.onDutyNonDrivingMin)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.longestNonDrivingMin ? hm(r.longestNonDrivingMin) : "—"}
+                        {r.longestBlockStartIso && (
+                          <div className="text-xs text-muted-foreground">
+                            {clock(r.longestBlockStartIso)}–{clock(r.longestBlockEndIso)}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs">{r.longestBlockLocationSource}</TableCell>
+                      <TableCell className="text-xs">{r.matchedFenceName ?? "—"}</TableCell>
+                      <TableCell className="text-xs">
+                        {r.nearestFenceName ? `${r.nearestFenceName} · ${r.nearestFenceMeters} m` : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{r.eventsEmitted}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </>
       )}
     </div>
   );
