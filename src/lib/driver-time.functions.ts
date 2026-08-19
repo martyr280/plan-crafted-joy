@@ -327,3 +327,46 @@ export const importDriverPayRates = createServerFn({ method: "POST" })
     }
     return { ok: true as const, imported: rows.length, unmatched };
   });
+
+/* ------------------------------------------------------------ diagnostics */
+
+export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ lookbackDays: z.number().int().min(1).max(30).optional() }).parse(i ?? {}))
+  .handler(async ({ data, context }) => {
+    await requireViewer(context.userId);
+    try {
+      const { runSamsaraDiagnostics } = await import("@/lib/driver-time/diagnostics.server");
+      return await runSamsaraDiagnostics({ lookbackDays: data.lookbackDays });
+    } catch (e: any) {
+      const now = new Date().toISOString();
+      return {
+        ranAt: now,
+        windowStartIso: now,
+        windowEndIso: now,
+        lookbackDays: data.lookbackDays ?? 8,
+        settings: {
+          thresholdMinutes: 0,
+          mergeGapMinutes: 0,
+          warehouseAddressIds: [] as string[],
+          excludedDriverNamePatterns: [] as string[],
+        },
+        probes: [] as Array<{ endpoint: string; ok: boolean; detail: string }>,
+        fences: [] as any[],
+        statusVocabulary: [] as any[],
+        funnel: {
+          driversOnRoster: 0,
+          driversAfterExclusions: 0,
+          segmentsFetched: 0,
+          segmentsWithCoords: 0,
+          gpsSamples: 0,
+          blocksBuilt: 0,
+          blocksOverThreshold: 0,
+          blocksInsideFence: 0,
+          eventsEmitted: 0,
+        },
+        drivers: [] as any[],
+        warnings: [`Diagnostics failed: ${e?.message ?? String(e)}`],
+      };
+    }
+  });

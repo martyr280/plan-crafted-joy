@@ -9,6 +9,7 @@ import {
   saveDriverTimeConfig,
   listDriverPayRates,
   importDriverPayRates,
+  getSamsaraDiagnostics,
 } from "@/lib/driver-time.functions";
 
 export function useDriverTimeWeek(weekStart?: string, enabled = true) {
@@ -85,5 +86,12 @@ export function useImportDriverPayRates() {
       qc.invalidateQueries({ queryKey: ["driver-pay-rates"] });
       qc.invalidateQueries({ queryKey: ["driver-time-week"] });
     },
+  });
+}
+
+export function useSamsaraDiagnostics() {
+  const fn = useServerFn(getSamsaraDiagnostics);
+  return useMutation({
+    mutationFn: (vars?: { lookbackDays?: number }) => fn({ data: vars ?? {} }),
   });
 }
