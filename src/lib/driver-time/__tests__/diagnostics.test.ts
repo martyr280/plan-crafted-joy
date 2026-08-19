@@ -3,6 +3,7 @@ import {
   buildStatusVocabulary,
   classifyFence,
   nearestFence,
+  buildDiagnosticBlocks,
 } from "@/lib/driver-time/diagnostics.server";
 import type { Geofence } from "@/lib/driver-time/geo";
 
@@ -63,5 +64,45 @@ describe("diagnostics helpers", () => {
         ],
       }),
     ).toBe("polygon");
+  });
+});
+
+describe("in-fence + over-threshold intersection", () => {
+  const fences: Geofence[] = [
+    { id: "wh", name: "Warehouse", circle: { latitude: 32.0, longitude: -96.0, radiusMeters: 300 } },
+  ];
+  const seg = (startMin: number, endMin: number, inFence: boolean) => ({
+    driverId: "d1",
+    vehicleId: "v1",
+    status: "onDuty",
+    startMs: startMin * 60_000,
+    endMs: endMin * 60_000,
+    latitude: inFence ? 32.0 : 41.0,
+    longitude: -96.0,
+  });
+
+  it("counts blocks that are both over threshold and inside a fence separately from the disjoint case", () => {
+    // Block A: 120 min, outside the fence. Block B: 10 min, inside the fence.
+    const blocks = buildDiagnosticBlocks({
+      segments: [seg(0, 120, false), seg(200, 210, true)] as any,
+      fences,
+      gpsSamples: [],
+      mergeGapMinutes: 30,
+      tzOffsetMinutes: 0,
+    });
+    expect(blocks).toHaveLength(2);
+    const threshold = 90;
+    let over = 0;
+    let inFence = 0;
+    let both = 0;
+    for (const b of blocks) {
+      const o = (b.endMs - b.startMs) / 60_000 >= threshold;
+      if (o) over++;
+      if (b.fenceId) inFence++;
+      if (o && b.fenceId) both++;
+    }
+    expect(over).toBe(1);
+    expect(inFence).toBe(1);
+    expect(both).toBe(0);
   });
 });

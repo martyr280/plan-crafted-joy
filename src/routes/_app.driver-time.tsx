@@ -540,9 +540,10 @@ function FunnelRow({ label, value, note }: { label: string; value: number | stri
   );
 }
 
-type Rag = "green" | "yellow" | "red";
+type Rag = "green" | "yellow" | "red" | "none";
 
 function ragOf(min: number, greenUnder: number, redAtOrOver: number): Rag {
+  if (!min) return "none";
   if (min >= redAtOrOver) return "red";
   if (min >= greenUnder) return "yellow";
   return "green";
@@ -552,7 +553,18 @@ const RAG_CLASS: Record<Rag, string> = {
   green: "text-success bg-success/10",
   yellow: "text-warning bg-warning/10",
   red: "text-destructive bg-destructive/10",
+  none: "text-muted-foreground",
 };
+
+/** Parse a numeric input to null when empty or non-numeric. */
+function parseMinInput(raw: string, floor: number): number | null {
+  const t = raw.trim();
+  if (t === "") return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(floor, Math.round(n));
+}
+
 
 function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
   if (d.fatalError) return { ok: false, text: `Diagnostics could not run: ${d.fatalError}` };
@@ -582,11 +594,12 @@ function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
       ok: false,
       text: "Blocks were built and located, but none fell inside a selected geofence. Check the nearest-fence distances in the driver grid.",
     };
-  if (f.blocksOverThreshold === 0)
+  if (f.blocksOverThresholdAndInsideFence === 0)
     return {
       ok: false,
-      text: `Blocks matched a warehouse but none reached the ${d.settings.thresholdMinutes}-minute threshold.`,
+      text: `Blocks were located inside a warehouse and other blocks cleared the ${d.settings.thresholdMinutes}-minute threshold, but no single block did both.`,
     };
+
   return {
     ok: false,
     text: "Blocks cleared the threshold inside a geofence but no events were emitted — this is unexpected, check the driver grid.",
@@ -597,10 +610,11 @@ function DiagnosticsTab() {
   const diag = useSamsaraDiagnostics();
   const [lookbackDays, setLookbackDays] = useState(8);
   const d = diag.data as any | undefined;
-  const [greenUnderRaw, setGreenUnder] = useState(45);
+  const [greenUnderRaw, setGreenUnder] = useState<number | null>(45);
   const [redAtOrOverRaw, setRedAtOrOver] = useState<number | null>(null);
-  const redAtOrOver = redAtOrOverRaw ?? d?.settings?.thresholdMinutes ?? 90;
-  const greenUnder = Math.min(greenUnderRaw, Math.max(1, redAtOrOver - 1));
+  const redAtOrOver = Math.max(2, redAtOrOverRaw ?? d?.settings?.thresholdMinutes ?? 90);
+  const greenUnder = Math.min(greenUnderRaw ?? 45, Math.max(1, redAtOrOver - 1));
+
   const verdict = d ? diagnosticsVerdict(d) : null;
 
   function downloadDiagCsv() {
@@ -723,6 +737,11 @@ function DiagnosticsTab() {
                 value={d.funnel.blocksOverThreshold}
               />
               <FunnelRow label="Blocks inside a warehouse fence" value={d.funnel.blocksInsideFence} />
+              <FunnelRow
+                label="Blocks both in-fence and over threshold"
+                value={d.funnel.blocksOverThresholdAndInsideFence}
+              />
+
               <FunnelRow label="Events the engine would emit" value={d.funnel.eventsEmitted} />
             </Card>
 
@@ -824,8 +843,8 @@ function DiagnosticsTab() {
                   type="number"
                   min={1}
                   className="w-28"
-                  value={greenUnderRaw}
-                  onChange={(e) => setGreenUnder(Number(e.target.value) || 0)}
+                  value={greenUnder}
+                  onChange={(e) => setGreenUnder(parseMinInput(e.target.value, 1))}
                 />
               </div>
               <div className="space-y-1">
@@ -836,7 +855,7 @@ function DiagnosticsTab() {
                   min={2}
                   className="w-28"
                   value={redAtOrOver}
-                  onChange={(e) => setRedAtOrOver(Number(e.target.value) || 0)}
+                  onChange={(e) => setRedAtOrOver(parseMinInput(e.target.value, 2))}
                 />
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -845,7 +864,9 @@ function DiagnosticsTab() {
                   {greenUnder}–{Math.max(greenUnder, redAtOrOver - 1)} min
                 </span>
                 <span className="rounded px-2 py-1 text-destructive bg-destructive/10">≥ {redAtOrOver} min</span>
+                <span className="rounded px-2 py-1 text-muted-foreground bg-muted">no data</span>
               </div>
+
             </div>
             <div className="overflow-x-auto">
               <Table>
