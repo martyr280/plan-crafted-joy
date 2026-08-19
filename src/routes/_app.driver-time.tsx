@@ -540,9 +540,10 @@ function FunnelRow({ label, value, note }: { label: string; value: number | stri
   );
 }
 
-type Rag = "green" | "yellow" | "red";
+type Rag = "green" | "yellow" | "red" | "none";
 
 function ragOf(min: number, greenUnder: number, redAtOrOver: number): Rag {
+  if (!min) return "none";
   if (min >= redAtOrOver) return "red";
   if (min >= greenUnder) return "yellow";
   return "green";
@@ -552,7 +553,18 @@ const RAG_CLASS: Record<Rag, string> = {
   green: "text-success bg-success/10",
   yellow: "text-warning bg-warning/10",
   red: "text-destructive bg-destructive/10",
+  none: "text-muted-foreground",
 };
+
+/** Parse a numeric input to null when empty or non-numeric. */
+function parseMinInput(raw: string, floor: number): number | null {
+  const t = raw.trim();
+  if (t === "") return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(floor, Math.round(n));
+}
+
 
 function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
   if (d.fatalError) return { ok: false, text: `Diagnostics could not run: ${d.fatalError}` };
