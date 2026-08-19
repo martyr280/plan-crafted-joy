@@ -188,16 +188,23 @@ export async function fetchHosLogs(opts: {
     for (const row of rows) {
       const driverId = String(row.driver?.id ?? row.driverId ?? "");
       const driverName = row.driver?.name ?? null;
-      const logs = [...(row.logs ?? [])].sort(
+      // Samsara's response field is `hosLogs`; `logs` is kept only as a fallback.
+      const logs = [...(row.hosLogs ?? row.logs ?? [])].sort(
         (a: any, b: any) => Date.parse(a.logStartTime ?? 0) - Date.parse(b.logStartTime ?? 0),
       );
       for (let k = 0; k < logs.length; k++) {
         const entry = logs[k];
         const s = Date.parse(entry.logStartTime ?? "");
         if (!Number.isFinite(s)) continue;
+        const ownEnd = Date.parse(entry.logEndTime ?? "");
         const nextStart = k + 1 < logs.length ? Date.parse(logs[k + 1].logStartTime ?? "") : NaN;
-        const e = Number.isFinite(nextStart) ? nextStart : Math.min(opts.endMs, Date.now());
+        const e = Number.isFinite(ownEnd)
+          ? ownEnd
+          : Number.isFinite(nextStart)
+            ? nextStart
+            : Math.min(opts.endMs, Date.now());
         if (!(e > s)) continue;
+
         const { latitude, longitude } = coordOf(entry);
         out.push({
           driverId,
