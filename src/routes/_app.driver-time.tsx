@@ -594,11 +594,12 @@ function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
       ok: false,
       text: "Blocks were built and located, but none fell inside a selected geofence. Check the nearest-fence distances in the driver grid.",
     };
-  if (f.blocksOverThreshold === 0)
+  if (f.blocksOverThresholdAndInsideFence === 0)
     return {
       ok: false,
-      text: `Blocks matched a warehouse but none reached the ${d.settings.thresholdMinutes}-minute threshold.`,
+      text: `Blocks were located inside a warehouse and other blocks cleared the ${d.settings.thresholdMinutes}-minute threshold, but no single block did both.`,
     };
+
   return {
     ok: false,
     text: "Blocks cleared the threshold inside a geofence but no events were emitted — this is unexpected, check the driver grid.",
