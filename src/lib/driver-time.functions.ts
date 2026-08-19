@@ -334,7 +334,7 @@ export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ lookbackDays: z.number().int().min(1).max(30).optional() }).parse(i ?? {}))
   .handler(async ({ data, context }) => {
-    await requireViewer(context.userId);
+    await requireAdmin(context.userId);
     try {
       const { runSamsaraDiagnostics } = await import("@/lib/driver-time/diagnostics.server");
       return await runSamsaraDiagnostics({ lookbackDays: data.lookbackDays });
@@ -342,6 +342,7 @@ export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
       const now = new Date().toISOString();
       return {
         ranAt: now,
+        fatalError: e?.message ?? String(e),
         windowStartIso: now,
         windowEndIso: now,
         lookbackDays: data.lookbackDays ?? 8,

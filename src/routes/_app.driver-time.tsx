@@ -540,10 +540,93 @@ function FunnelRow({ label, value, note }: { label: string; value: number | stri
   );
 }
 
+type Rag = "green" | "yellow" | "red";
+
+function ragOf(min: number, greenUnder: number, redAtOrOver: number): Rag {
+  if (min >= redAtOrOver) return "red";
+  if (min >= greenUnder) return "yellow";
+  return "green";
+}
+
+const RAG_CLASS: Record<Rag, string> = {
+  green: "text-success bg-success/10",
+  yellow: "text-warning bg-warning/10",
+  red: "text-destructive bg-destructive/10",
+};
+
+function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
+  if (d.fatalError) return { ok: false, text: `Diagnostics could not run: ${d.fatalError}` };
+  const f = d.funnel;
+  if (f.eventsEmitted > 0) {
+    const withEvents = (d.drivers ?? []).filter((r: any) => r.eventsEmitted > 0).length;
+    return {
+      ok: true,
+      text: `Pipeline healthy — ${f.eventsEmitted} event(s) detected across ${withEvents} driver(s).`,
+    };
+  }
+  if (f.segmentsFetched === 0)
+    return { ok: false, text: "Samsara returned no HOS logs for this window. Check the Samsara scopes list below." };
+  if (!(d.statusVocabulary ?? []).some((s: any) => s.countedAsWarehouseTime))
+    return {
+      ok: false,
+      text: "Samsara is sending duty-status values the detector does not recognise. The engine only counts onDuty and yardMove — see the raw duty-status vocabulary below.",
+    };
+  if ((d.fences ?? []).some((x: any) => x.kind === "none"))
+    return {
+      ok: false,
+      text: "One or more selected warehouse addresses have no geofence shape in Samsara, so nothing can ever match them.",
+    };
+  if (f.blocksBuilt === 0) return { ok: false, text: "Logs arrived but no non-driving blocks were built." };
+  if (f.blocksInsideFence === 0)
+    return {
+      ok: false,
+      text: "Blocks were built and located, but none fell inside a selected geofence. Check the nearest-fence distances in the driver grid.",
+    };
+  if (f.blocksOverThreshold === 0)
+    return {
+      ok: false,
+      text: `Blocks matched a warehouse but none reached the ${d.settings.thresholdMinutes}-minute threshold.`,
+    };
+  return {
+    ok: false,
+    text: "Blocks cleared the threshold inside a geofence but no events were emitted — this is unexpected, check the driver grid.",
+  };
+}
+
 function DiagnosticsTab() {
   const diag = useSamsaraDiagnostics();
   const [lookbackDays, setLookbackDays] = useState(8);
   const d = diag.data as any | undefined;
+  const [greenUnderRaw, setGreenUnder] = useState(45);
+  const [redAtOrOverRaw, setRedAtOrOver] = useState<number | null>(null);
+  const redAtOrOver = redAtOrOverRaw ?? d?.settings?.thresholdMinutes ?? 90;
+  const greenUnder = Math.min(greenUnderRaw, Math.max(1, redAtOrOver - 1));
+  const verdict = d ? diagnosticsVerdict(d) : null;
+
+  function downloadDiagCsv() {
+    if (!d) return;
+    const header = [
+      "Driver", "Activation", "Excluded", "Segs", "w/ GPS", "Driving (min)",
+      "On-duty non-driving (min)", "Longest block (min)", "RAG",
+      "Location source", "Matched fence", "Nearest fence", "Nearest fence (m)", "Events",
+    ];
+    const rows = [header, ...d.drivers.map((r: any) => [
+      r.driverName, r.activationStatus ?? "", r.excluded ? "yes" : "no",
+      String(r.segments), String(r.segmentsWithCoords), String(r.drivingMin),
+      String(r.onDutyNonDrivingMin), String(r.longestNonDrivingMin),
+      r.excluded ? "" : ragOf(r.longestNonDrivingMin, greenUnder, redAtOrOver),
+      r.longestBlockLocationSource, r.matchedFenceName ?? "", r.nearestFenceName ?? "",
+      r.nearestFenceMeters === null ? "" : String(r.nearestFenceMeters), String(r.eventsEmitted),
+    ])];
+    const csv = (rows as string[][]).map((r) => r.map((c) => `"${String(c ?? "")}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `samsara-diagnostics-${String(d.ranAt).slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="space-y-4">
@@ -572,11 +655,31 @@ function DiagnosticsTab() {
             {diag.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Run diagnostics
           </Button>
+          {d && (
+            <Button variant="outline" onClick={downloadDiagCsv}>
+              <Download className="mr-2 h-4 w-4" /> CSV
+            </Button>
+          )}
           <p className="text-xs text-muted-foreground">
             Read-only. Pulls the same Samsara window the sweep uses and writes nothing.
           </p>
         </div>
       </Card>
+
+      {verdict && (
+        <Card
+          className={
+            verdict.ok
+              ? "border-success/50 bg-success/10 p-5"
+              : "border-destructive/50 bg-destructive/10 p-5"
+          }
+        >
+          <div className={`flex items-start gap-3 ${verdict.ok ? "text-success" : "text-destructive"}`}>
+            {verdict.ok ? <CheckCircle2 className="mt-0.5 h-6 w-6" /> : <AlertTriangle className="mt-0.5 h-6 w-6" />}
+            <p className="text-lg font-semibold leading-snug">{verdict.text}</p>
+          </div>
+        </Card>
+      )}
 
       {!d && !diag.isPending && (
         <Card className="p-6 text-sm text-muted-foreground">
@@ -584,7 +687,7 @@ function DiagnosticsTab() {
         </Card>
       )}
 
-      {d && (
+      {d && !d.fatalError && (
         <>
           {d.warnings?.length > 0 && (
             <Card className="border-destructive/40 bg-destructive/5 p-4">
@@ -609,7 +712,7 @@ function DiagnosticsTab() {
           <div className="grid gap-4 md:grid-cols-2">
             <Card className="p-4">
               <h3 className="mb-2 text-sm font-semibold">Pipeline funnel</h3>
-              <FunnelRow label="Drivers on roster" value={d.funnel.driversOnRoster} />
+              <FunnelRow label="Drivers in Samsara (incl. deactivated)" value={d.funnel.driversOnRoster} />
               <FunnelRow label="After exclusions" value={d.funnel.driversAfterExclusions} />
               <FunnelRow label="HOS segments fetched" value={d.funnel.segmentsFetched} />
               <FunnelRow label="Segments with coordinates" value={d.funnel.segmentsWithCoords} />
@@ -713,6 +816,37 @@ function DiagnosticsTab() {
 
           <Card className="p-4">
             <h3 className="mb-2 text-sm font-semibold">Per-driver detail</h3>
+            <div className="mb-3 flex flex-wrap items-end gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="dt-rag-green">Green under (min)</Label>
+                <Input
+                  id="dt-rag-green"
+                  type="number"
+                  min={1}
+                  className="w-28"
+                  value={greenUnderRaw}
+                  onChange={(e) => setGreenUnder(Number(e.target.value) || 0)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="dt-rag-red">Red at or over (min)</Label>
+                <Input
+                  id="dt-rag-red"
+                  type="number"
+                  min={2}
+                  className="w-28"
+                  value={redAtOrOver}
+                  onChange={(e) => setRedAtOrOver(Number(e.target.value) || 0)}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span className="rounded px-2 py-1 text-success bg-success/10">&lt; {greenUnder} min</span>
+                <span className="rounded px-2 py-1 text-warning bg-warning/10">
+                  {greenUnder}–{Math.max(greenUnder, redAtOrOver - 1)} min
+                </span>
+                <span className="rounded px-2 py-1 text-destructive bg-destructive/10">≥ {redAtOrOver} min</span>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -744,7 +878,11 @@ function DiagnosticsTab() {
                       <TableCell className="text-right tabular-nums">{r.segmentsWithCoords}</TableCell>
                       <TableCell className="text-right tabular-nums">{hm(r.drivingMin)}</TableCell>
                       <TableCell className="text-right tabular-nums">{hm(r.onDutyNonDrivingMin)}</TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell
+                        className={`text-right tabular-nums ${
+                          r.excluded ? "text-muted-foreground" : RAG_CLASS[ragOf(r.longestNonDrivingMin, greenUnder, redAtOrOver)]
+                        }`}
+                      >
                         {r.longestNonDrivingMin ? hm(r.longestNonDrivingMin) : "—"}
                         {r.longestBlockStartIso && (
                           <div className="text-xs text-muted-foreground">
@@ -763,6 +901,10 @@ function DiagnosticsTab() {
                 </TableBody>
               </Table>
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Longest block is computed without the ELD-day split the detector applies, so a block spanning midnight
+              may read longer here than the sweep sees.
+            </p>
           </Card>
         </>
       )}
