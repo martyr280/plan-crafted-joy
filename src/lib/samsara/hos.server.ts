@@ -306,38 +306,3 @@ export async function probeSamsaraScopes(): Promise<ScopeProbe[]> {
   }
   return out;
 }
-
-/* -------------------------------------------------- raw status vocabulary */
-
-/**
- * Diagnostics helper: tally the RAW `hosStatusType` strings Samsara sends,
- * with no normalization, so we can see the exact casing/spelling.
- */
-export async function fetchRawHosStatusCounts(opts: {
-  startMs: number;
-  endMs: number;
-  driverIds: string[];
-  batchSize?: number;
-}): Promise<Array<{ status: string; segments: number }>> {
-  const clampedEnd = Math.min(opts.endMs, Date.now());
-  if (opts.startMs >= clampedEnd) return [];
-  const startTime = new Date(opts.startMs).toISOString();
-  const endTime = new Date(clampedEnd).toISOString();
-  const batchSize = opts.batchSize ?? 25;
-  const tally = new Map<string, number>();
-
-  for (let i = 0; i < opts.driverIds.length; i += batchSize) {
-    const batch = opts.driverIds.slice(i, i + batchSize);
-    const params = new URLSearchParams({ startTime, endTime, driverIds: batch.join(",") });
-    const rows = await paged<any>(`/fleet/hos/logs?${params.toString()}`, (d) => d.data ?? []);
-    for (const row of rows) {
-      for (const entry of row.logs ?? []) {
-        const status = String(entry.hosStatusType ?? entry.status ?? "unknown");
-        tally.set(status, (tally.get(status) ?? 0) + 1);
-      }
-    }
-  }
-  return Array.from(tally.entries())
-    .map(([status, segments]) => ({ status, segments }))
-    .sort((a, b) => b.segments - a.segments);
-}
