@@ -4,8 +4,10 @@ import {
   classifyFence,
   nearestFence,
   buildDiagnosticBlocks,
+  tallyBlocks,
 } from "@/lib/driver-time/diagnostics.server";
 import type { Geofence } from "@/lib/driver-time/geo";
+
 
 describe("diagnostics helpers", () => {
   it("marks Samsara's SCREAMING_SNAKE statuses as not counted", () => {
@@ -91,18 +93,25 @@ describe("in-fence + over-threshold intersection", () => {
       tzOffsetMinutes: 0,
     });
     expect(blocks).toHaveLength(2);
-    const threshold = 90;
-    let over = 0;
-    let inFence = 0;
-    let both = 0;
-    for (const b of blocks) {
-      const o = (b.endMs - b.startMs) / 60_000 >= threshold;
-      if (o) over++;
-      if (b.fenceId) inFence++;
-      if (o && b.fenceId) both++;
-    }
-    expect(over).toBe(1);
-    expect(inFence).toBe(1);
-    expect(both).toBe(0);
+    const counts = tallyBlocks(blocks, 90);
+    expect(counts.blocksOverThreshold).toBe(1);
+    expect(counts.blocksInsideFence).toBe(1);
+    expect(counts.blocksOverThresholdAndInsideFence).toBe(0);
+  });
+
+  it("counts a single block that is both over threshold and inside the fence", () => {
+    const blocks = buildDiagnosticBlocks({
+      segments: [seg(0, 120, true)] as any,
+      fences,
+      gpsSamples: [],
+      mergeGapMinutes: 30,
+      tzOffsetMinutes: 0,
+    });
+    expect(blocks).toHaveLength(1);
+    const counts = tallyBlocks(blocks, 90);
+    expect(counts.blocksOverThreshold).toBe(1);
+    expect(counts.blocksInsideFence).toBe(1);
+    expect(counts.blocksOverThresholdAndInsideFence).toBe(1);
   });
 });
+
