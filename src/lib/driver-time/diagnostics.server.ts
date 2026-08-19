@@ -87,6 +87,7 @@ export type SamsaraDiagnostics = {
     blocksBuilt: number;
     blocksOverThreshold: number;
     blocksInsideFence: number;
+    blocksOverThresholdAndInsideFence: number;
     eventsEmitted: number;
   };
   drivers: DriverRow[];
@@ -351,6 +352,7 @@ export async function runSamsaraDiagnostics(opts?: {
   let blocksBuilt = 0;
   let blocksOverThreshold = 0;
   let blocksInsideFence = 0;
+  let blocksOverThresholdAndInsideFence = 0;
   let eventsEmitted = 0;
 
   const rows: DriverRow[] = [];
@@ -385,8 +387,10 @@ export async function runSamsaraDiagnostics(opts?: {
 
     blocksBuilt += blocks.length;
     for (const b of blocks) {
-      if ((b.endMs - b.startMs) / MINUTE >= settings.thresholdMinutes) blocksOverThreshold++;
+      const overThreshold = (b.endMs - b.startMs) / MINUTE >= settings.thresholdMinutes;
+      if (overThreshold) blocksOverThreshold++;
       if (b.fenceId) blocksInsideFence++;
+      if (overThreshold && b.fenceId) blocksOverThresholdAndInsideFence++;
     }
 
     const longest = blocks.reduce<(typeof blocks)[number] | null>(
@@ -475,6 +479,7 @@ export async function runSamsaraDiagnostics(opts?: {
       blocksBuilt,
       blocksOverThreshold,
       blocksInsideFence,
+      blocksOverThresholdAndInsideFence,
       eventsEmitted,
     },
     drivers: rows,
