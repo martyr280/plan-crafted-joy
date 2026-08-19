@@ -273,6 +273,23 @@ export function buildDiagnosticBlocks(input: {
   }));
 }
 
+export function tallyBlocks(
+  blocks: Array<DiagBlock & { fenceId: string | null; fenceName: string | null }>,
+  thresholdMinutes: number,
+): { blocksOverThreshold: number; blocksInsideFence: number; blocksOverThresholdAndInsideFence: number } {
+  let over = 0;
+  let inside = 0;
+  let both = 0;
+  for (const b of blocks) {
+    const overThreshold = (b.endMs - b.startMs) / MINUTE >= thresholdMinutes;
+    if (overThreshold) over++;
+    if (b.fenceId) inside++;
+    if (overThreshold && b.fenceId) both++;
+  }
+  return { blocksOverThreshold: over, blocksInsideFence: inside, blocksOverThresholdAndInsideFence: both };
+}
+
+
 const OFF_DUTY = new Set(["offDuty", "sleeperBerth", "sleeperBed"]);
 
 /* ------------------------------------------------------------------ runner */
@@ -386,12 +403,11 @@ export async function runSamsaraDiagnostics(opts?: {
         });
 
     blocksBuilt += blocks.length;
-    for (const b of blocks) {
-      const overThreshold = (b.endMs - b.startMs) / MINUTE >= settings.thresholdMinutes;
-      if (overThreshold) blocksOverThreshold++;
-      if (b.fenceId) blocksInsideFence++;
-      if (overThreshold && b.fenceId) blocksOverThresholdAndInsideFence++;
-    }
+    const counts = tallyBlocks(blocks, settings.thresholdMinutes);
+    blocksOverThreshold += counts.blocksOverThreshold;
+    blocksInsideFence += counts.blocksInsideFence;
+    blocksOverThresholdAndInsideFence += counts.blocksOverThresholdAndInsideFence;
+
 
     const longest = blocks.reduce<(typeof blocks)[number] | null>(
       (best, b) => (!best || b.endMs - b.startMs > best.endMs - best.startMs ? b : best),

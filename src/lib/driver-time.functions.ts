@@ -364,8 +364,10 @@ export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
           blocksBuilt: 0,
           blocksOverThreshold: 0,
           blocksInsideFence: 0,
+          blocksOverThresholdAndInsideFence: 0,
           eventsEmitted: 0,
         },
+
         drivers: [] as any[],
         warnings: [`Diagnostics failed: ${e?.message ?? String(e)}`],
       };
