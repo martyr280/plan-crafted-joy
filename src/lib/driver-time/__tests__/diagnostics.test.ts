@@ -8,16 +8,11 @@ import type { Geofence } from "@/lib/driver-time/geo";
 
 describe("diagnostics helpers", () => {
   it("marks Samsara's SCREAMING_SNAKE statuses as not counted", () => {
-    const rows = buildStatusVocabulary(
-      [
-        { status: "ON_DUTY", segments: 12 },
-        { status: "DRIVING", segments: 30 },
-      ],
-      new Map([
-        ["ON_DUTY", 610.4],
-        ["DRIVING", 900],
-      ]),
-    );
+    const seg = (status: string, minutes: number) => ({ status, startMs: 0, endMs: minutes * 60_000 });
+    const rows = buildStatusVocabulary([
+      ...Array.from({ length: 12 }, () => seg("ON_DUTY", 610.4 / 12)),
+      ...Array.from({ length: 30 }, () => seg("DRIVING", 30)),
+    ]);
     expect(rows).toHaveLength(2);
     expect(rows.every((r) => r.countedAsWarehouseTime === false)).toBe(true);
     expect(rows[0]).toMatchObject({ status: "DRIVING", segments: 30, minutes: 900 });
@@ -25,14 +20,12 @@ describe("diagnostics helpers", () => {
   });
 
   it("recognises the engine's canonical statuses", () => {
-    const rows = buildStatusVocabulary(
-      [
-        { status: "onDuty", segments: 3 },
-        { status: "yardMove", segments: 1 },
-        { status: "driving", segments: 5 },
-      ],
-      new Map(),
-    );
+    const seg = (status: string) => ({ status, startMs: 0, endMs: 60_000 });
+    const rows = buildStatusVocabulary([
+      ...Array.from({ length: 3 }, () => seg("onDuty")),
+      seg("yardMove"),
+      ...Array.from({ length: 5 }, () => seg("driving")),
+    ]);
     expect(rows.find((r) => r.status === "onDuty")?.countedAsWarehouseTime).toBe(true);
     expect(rows.find((r) => r.status === "yardMove")?.countedAsWarehouseTime).toBe(true);
     expect(rows.find((r) => r.status === "driving")?.countedAsWarehouseTime).toBe(false);
