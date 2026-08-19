@@ -153,7 +153,7 @@ export type NormalizedHosSegment = {
 };
 
 function coordOf(entry: any): { latitude: number | null; longitude: number | null } {
-  const loc = entry?.location ?? entry?.startLocation ?? null;
+  const loc = entry?.logRecordedLocation ?? entry?.location ?? entry?.startLocation ?? null;
   const lat = loc?.latitude ?? entry?.latitude ?? null;
   const lon = loc?.longitude ?? entry?.longitude ?? null;
   return {
@@ -161,6 +161,7 @@ function coordOf(entry: any): { latitude: number | null; longitude: number | nul
     longitude: typeof lon === "number" ? lon : null,
   };
 }
+
 
 /**
  * HOS duty logs for the given drivers, normalized into closed segments.
