@@ -292,8 +292,11 @@ export async function probeSamsaraScopes(): Promise<ScopeProbe[]> {
           endTime: end.toISOString(),
         });
         const d = await api<{ data?: any[] }>(`/fleet/hos/logs?${params.toString()}`);
-        return `${d.data?.length ?? 0} driver log group(s) in the last 24h`;
+        const groups = d.data ?? [];
+        const entries = groups.reduce((n, g: any) => n + (g.hosLogs ?? g.logs ?? []).length, 0);
+        return `${groups.length} driver log group(s), ${entries} log entr(ies) in the last 24h`;
       },
+
     },
   ];
 
