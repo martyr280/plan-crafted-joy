@@ -610,10 +610,11 @@ function DiagnosticsTab() {
   const diag = useSamsaraDiagnostics();
   const [lookbackDays, setLookbackDays] = useState(8);
   const d = diag.data as any | undefined;
-  const [greenUnderRaw, setGreenUnder] = useState(45);
+  const [greenUnderRaw, setGreenUnder] = useState<number | null>(45);
   const [redAtOrOverRaw, setRedAtOrOver] = useState<number | null>(null);
-  const redAtOrOver = redAtOrOverRaw ?? d?.settings?.thresholdMinutes ?? 90;
-  const greenUnder = Math.min(greenUnderRaw, Math.max(1, redAtOrOver - 1));
+  const redAtOrOver = Math.max(2, redAtOrOverRaw ?? d?.settings?.thresholdMinutes ?? 90);
+  const greenUnder = Math.min(greenUnderRaw ?? 45, Math.max(1, redAtOrOver - 1));
+
   const verdict = d ? diagnosticsVerdict(d) : null;
 
   function downloadDiagCsv() {
