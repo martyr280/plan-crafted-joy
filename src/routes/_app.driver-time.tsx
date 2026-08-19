@@ -838,8 +838,8 @@ function DiagnosticsTab() {
                   type="number"
                   min={1}
                   className="w-28"
-                  value={greenUnderRaw}
-                  onChange={(e) => setGreenUnder(Number(e.target.value) || 0)}
+                  value={greenUnder}
+                  onChange={(e) => setGreenUnder(parseMinInput(e.target.value, 1))}
                 />
               </div>
               <div className="space-y-1">
@@ -850,7 +850,7 @@ function DiagnosticsTab() {
                   min={2}
                   className="w-28"
                   value={redAtOrOver}
-                  onChange={(e) => setRedAtOrOver(Number(e.target.value) || 0)}
+                  onChange={(e) => setRedAtOrOver(parseMinInput(e.target.value, 2))}
                 />
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -859,7 +859,9 @@ function DiagnosticsTab() {
                   {greenUnder}–{Math.max(greenUnder, redAtOrOver - 1)} min
                 </span>
                 <span className="rounded px-2 py-1 text-destructive bg-destructive/10">≥ {redAtOrOver} min</span>
+                <span className="rounded px-2 py-1 text-muted-foreground bg-muted">no data</span>
               </div>
+
             </div>
             <div className="overflow-x-auto">
               <Table>
