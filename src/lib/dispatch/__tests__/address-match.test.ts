@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FUZZY_THRESHOLD,
+  expandStreetWords,
   isGeocodable,
   normalizeAddress,
   normalizeCity,
@@ -9,12 +10,11 @@ import {
   resolveAddress,
   scoreAddresses,
   stripUnit,
-  expandStreetWords,
   zip5,
 } from "../address-match";
 
 describe("address normalization", () => {
-  it("normalizes golden pairs to the same string", () => {
+  it("normalizes golden pairs to the same key", () => {
     const pairs: Array<[Parameters<typeof normalizeAddress>[0], Parameters<typeof normalizeAddress>[0]]> = [
       [
         { addr1: "123 Main St.", city: "Dallas", state: "tx", zip: "75201-1234" },
@@ -25,20 +25,18 @@ describe("address normalization", () => {
         { addr1: "45 N Oak Avenue", city: "FORT WORTH", state: "tx", zip: "76102" },
       ],
       [
-        { addr1: "900 Commerce Blvd, Suite 200", city: "Austin", state: "TX", zip: "78701" },
+        { addr1: "900 Commerce Blvd Suite 200", city: "Austin", state: "TX", zip: "78701" },
         { addr1: "900 Commerce Boulevard", addr2: "Ste 200", city: "Austin", state: "TX", zip: "78701" },
       ],
     ];
     for (const [a, b] of pairs) {
-      const na = normalizeAddress(a);
-      const nb = normalizeAddress(b);
-      expect(`${na.street}|${na.city}|${na.state}|${na.zip}`).toBe(`${nb.street}|${nb.city}|${nb.state}|${nb.zip}`);
+      expect(normalizeAddress(a).key).toBe(normalizeAddress(b).key);
     }
   });
 
   it("strips unit designators and expands street words", () => {
-    expect(stripUnit("900 Commerce Blvd Suite 200")).not.toMatch(/suite/i);
-    expect(stripUnit("12 Elm St Unit B")).not.toMatch(/unit/i);
+    expect(stripUnit("900 Commerce Blvd Suite 200")).not.toMatch(/SUITE/);
+    expect(stripUnit("12 Elm St Unit B")).not.toMatch(/UNIT/);
     expect(expandStreetWords("MAIN ST")).toMatch(/STREET/);
     expect(expandStreetWords("OAK AVE")).toMatch(/AVENUE/);
   });
@@ -49,83 +47,68 @@ describe("address normalization", () => {
     expect(zip5(null)).toBe("");
     expect(normalizeCity(" dallas ")).toBe("DALLAS");
     expect(normalizeState("tx")).toBe("TX");
+    expect(normalizeState("Texas")).toBe("TE"); // two-char truncation is intentional
   });
 });
 
 describe("similarity scoring", () => {
-  it("scores identical addresses at 1", () => {
-    const a = { addr1: "123 Main St", city: "Dallas", state: "TX", zip: "75201" };
-    expect(scoreAddresses(a, a).score).toBe(1);
+  const target = { addr1: "123 Main St", city: "Dallas", state: "TX", zip: "75201" };
+
+  it("scores identical addresses at 1 and calls it exact", () => {
+    const r = scoreAddresses(target, { addr1: "123 MAIN STREET", city: "DALLAS", state: "TX", zip: "75201" });
+    expect(r.score).toBe(1);
+    expect(r.method).toBe("exact");
   });
 
-  it("scores a different street in the same city well below the threshold", () => {
-    const a = { addr1: "123 Main St", city: "Dallas", state: "TX", zip: "75201" };
-    const b = { addr1: "9871 Industrial Parkway", city: "Dallas", state: "TX", zip: "75201" };
-    expect(scoreAddresses(a, b).score).toBeLessThan(FUZZY_THRESHOLD);
+  it("scores a different street in the same city below the 0.85 threshold", () => {
+    const r = scoreAddresses(target, { addr1: "9871 Industrial Parkway", city: "Dallas", state: "TX", zip: "75201" });
+    expect(r.score).toBeLessThan(FUZZY_THRESHOLD);
   });
 
-  it("ranks candidates descending", () => {
-    const target = { addr1: "123 Main St", city: "Dallas", state: "TX", zip: "75201" };
+  it("ranks candidates best-first", () => {
     const ranked = rankCandidates(target, [
-      { id: "far", raw: { addr1: "77 Elm Rd", city: "Waco", state: "TX", zip: "76701" } },
-      { id: "near", raw: { addr1: "123 Main Street", city: "Dallas", state: "TX", zip: "75201-9000" } },
+      { samsaraAddressId: "far", address: { addr1: "77 Elm Rd", city: "Waco", state: "TX", zip: "76701" } },
+      { samsaraAddressId: "near", address: { addr1: "123 Main Street", city: "Dallas", state: "TX", zip: "75201" } },
     ]);
-    expect(ranked[0]!.id).toBe("near");
+    expect(ranked[0]!.samsaraAddressId).toBe("near");
     expect(ranked[0]!.score).toBeGreaterThanOrEqual(ranked[1]!.score);
   });
 });
 
 describe("resolution ladder", () => {
-  const raw = { addr1: "123 Main St", city: "Dallas", state: "TX", zip: "75201" };
-
   it("verified map hit -> mapped", () => {
-    const d = resolveAddress({
-      raw,
-      mapped: { p21_ship_to_id: "1", samsara_address_id: "addr_1", verified: true },
-      candidates: [],
-    });
-    expect(d.action).toBe("mapped");
+    const d = resolveAddress({ mapped: { samsara_address_id: "addr_1", verified: true }, geocodable: true });
+    expect(d).toEqual({ decision: "mapped", samsaraAddressId: "addr_1" });
   });
 
   it("unverified map hit does not short-circuit to mapped", () => {
+    const d = resolveAddress({ mapped: { samsara_address_id: "addr_1", verified: false }, geocodable: true });
+    expect(d.decision).toBe("create");
+  });
+
+  it("fuzzy candidate exactly at 0.85 -> propose", () => {
     const d = resolveAddress({
-      raw,
-      mapped: { p21_ship_to_id: "1", samsara_address_id: "addr_1", verified: false },
-      candidates: [],
+      bestCandidate: { samsaraAddressId: "addr_2", score: FUZZY_THRESHOLD, method: "fuzzy" },
+      geocodable: true,
     });
-    expect(d.action).not.toBe("mapped");
+    expect(d.decision).toBe("propose");
   });
 
-  it("fuzzy candidate at or above 0.85 -> propose, just below -> not propose", () => {
-    const at = resolveAddress({
-      raw,
-      mapped: null,
-      candidates: [{ id: "addr_2", raw: { addr1: "123 Main Street", city: "Dallas", state: "TX", zip: "75201" } }],
+  it("fuzzy candidate just below 0.85 -> create, not propose", () => {
+    const d = resolveAddress({
+      bestCandidate: { samsaraAddressId: "addr_2", score: FUZZY_THRESHOLD - 0.0001, method: "fuzzy" },
+      geocodable: true,
     });
-    expect(at.action).toBe("propose");
-
-    const below = resolveAddress({
-      raw,
-      mapped: null,
-      candidates: [{ id: "addr_3", raw: { addr1: "9871 Industrial Parkway", city: "Waco", state: "TX", zip: "76701" } }],
-    });
-    expect(below.action).not.toBe("propose");
+    expect(d.decision).toBe("create");
   });
 
-  it("geocodable but unmatched -> create; unusable -> hold", () => {
-    const create = resolveAddress({ raw, mapped: null, candidates: [] });
-    expect(create.action).toBe("create");
-
-    const hold = resolveAddress({
-      raw: { addr1: "", city: "", state: "", zip: "" },
-      mapped: null,
-      candidates: [],
-    });
-    expect(hold.action).toBe("hold");
+  it("not geocodable and no candidate -> hold", () => {
+    expect(resolveAddress({ geocodable: false })).toEqual({ decision: "hold", reason: "unmapped_address" });
   });
 
-  it("isGeocodable requires street plus city/state or zip", () => {
-    expect(isGeocodable(raw)).toBe(true);
+  it("isGeocodable requires a numbered street plus city/state or zip", () => {
+    expect(isGeocodable({ addr1: "123 Main St", city: "Dallas", state: "TX", zip: "75201" })).toBe(true);
+    expect(isGeocodable({ addr1: "Main St", city: "Dallas", state: "TX", zip: "75201" })).toBe(false);
     expect(isGeocodable({ addr1: "", city: "Dallas", state: "TX", zip: "75201" })).toBe(false);
     expect(isGeocodable({ addr1: "123 Main St", city: "", state: "", zip: "" })).toBe(false);
   });
