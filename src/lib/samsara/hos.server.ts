@@ -37,6 +37,18 @@ export class SamsaraScopeError extends Error {
   }
 }
 
+/** Thrown on GET 404 so create-or-patch can treat "absent" as a normal branch. */
+export class SamsaraNotFoundError extends Error {
+  constructor(
+    public readonly path: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "SamsaraNotFoundError";
+  }
+}
+
+
 async function api<T = any>(
   path: string,
   init: { method?: string; body?: unknown } = {},
