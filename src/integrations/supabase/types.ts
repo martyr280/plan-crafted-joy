@@ -710,6 +710,213 @@ export type Database = {
         }
         Relationships: []
       }
+      dispatch_driver_map: {
+        Row: {
+          confirmed: boolean
+          created_at: string
+          driver_name_raw: string | null
+          id: string
+          route_id: string
+          samsara_driver_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          confirmed?: boolean
+          created_at?: string
+          driver_name_raw?: string | null
+          id?: string
+          route_id: string
+          samsara_driver_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confirmed?: boolean
+          created_at?: string
+          driver_name_raw?: string | null
+          id?: string
+          route_id?: string
+          samsara_driver_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_driver_map_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: true
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dispatch_runs: {
+        Row: {
+          bridge_job_id: string | null
+          created_at: string
+          cutoff_at: string | null
+          error: string | null
+          est_cube_ft: number | null
+          est_pallets: number | null
+          est_weight_lbs: number | null
+          id: string
+          last_reconciled_at: string | null
+          lock_at: string | null
+          orders_total: number | null
+          pushed_at: string | null
+          pushed_by: string | null
+          pushed_payload: Json | null
+          route_code: string | null
+          route_id: string | null
+          run_date: string
+          run_seq: number
+          samsara_external_id: string | null
+          samsara_route_id: string | null
+          status: string
+          stops_held: number | null
+          stops_total: number | null
+          updated_at: string
+        }
+        Insert: {
+          bridge_job_id?: string | null
+          created_at?: string
+          cutoff_at?: string | null
+          error?: string | null
+          est_cube_ft?: number | null
+          est_pallets?: number | null
+          est_weight_lbs?: number | null
+          id?: string
+          last_reconciled_at?: string | null
+          lock_at?: string | null
+          orders_total?: number | null
+          pushed_at?: string | null
+          pushed_by?: string | null
+          pushed_payload?: Json | null
+          route_code?: string | null
+          route_id?: string | null
+          run_date: string
+          run_seq?: number
+          samsara_external_id?: string | null
+          samsara_route_id?: string | null
+          status?: string
+          stops_held?: number | null
+          stops_total?: number | null
+          updated_at?: string
+        }
+        Update: {
+          bridge_job_id?: string | null
+          created_at?: string
+          cutoff_at?: string | null
+          error?: string | null
+          est_cube_ft?: number | null
+          est_pallets?: number | null
+          est_weight_lbs?: number | null
+          id?: string
+          last_reconciled_at?: string | null
+          lock_at?: string | null
+          orders_total?: number | null
+          pushed_at?: string | null
+          pushed_by?: string | null
+          pushed_payload?: Json | null
+          route_code?: string | null
+          route_id?: string | null
+          run_date?: string
+          run_seq?: number
+          samsara_external_id?: string | null
+          samsara_route_id?: string | null
+          status?: string
+          stops_held?: number | null
+          stops_total?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_runs_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dispatch_stops: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          dispatch_run_id: string
+          est_cube_ft: number | null
+          est_pallets: number | null
+          est_weight_lbs: number | null
+          hold: boolean
+          hold_reason: string | null
+          id: string
+          order_no: string | null
+          p21_ship_to_id: string | null
+          pick_ticket_no: string | null
+          position: number
+          run_day: string | null
+          samsara_address_id: string | null
+          samsara_stop_id: string | null
+          scheduled_arrival: string | null
+          state: string | null
+          stop_notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          dispatch_run_id: string
+          est_cube_ft?: number | null
+          est_pallets?: number | null
+          est_weight_lbs?: number | null
+          hold?: boolean
+          hold_reason?: string | null
+          id?: string
+          order_no?: string | null
+          p21_ship_to_id?: string | null
+          pick_ticket_no?: string | null
+          position?: number
+          run_day?: string | null
+          samsara_address_id?: string | null
+          samsara_stop_id?: string | null
+          scheduled_arrival?: string | null
+          state?: string | null
+          stop_notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          dispatch_run_id?: string
+          est_cube_ft?: number | null
+          est_pallets?: number | null
+          est_weight_lbs?: number | null
+          hold?: boolean
+          hold_reason?: string | null
+          id?: string
+          order_no?: string | null
+          p21_ship_to_id?: string | null
+          pick_ticket_no?: string | null
+          position?: number
+          run_day?: string | null
+          samsara_address_id?: string | null
+          samsara_stop_id?: string | null
+          scheduled_arrival?: string | null
+          state?: string | null
+          stop_notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_stops_dispatch_run_id_fkey"
+            columns: ["dispatch_run_id"]
+            isOneToOne: false
+            referencedRelation: "dispatch_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_pay_rates: {
         Row: {
           created_at: string
@@ -1976,6 +2183,53 @@ export type Database = {
         }
         Relationships: []
       }
+      route_stop_sequences: {
+        Row: {
+          city_norm: string
+          created_at: string
+          delivery_dow_label: string | null
+          id: string
+          is_pickup: boolean
+          notes: string | null
+          position: number
+          route_id: string
+          state: string | null
+          updated_at: string
+        }
+        Insert: {
+          city_norm: string
+          created_at?: string
+          delivery_dow_label?: string | null
+          id?: string
+          is_pickup?: boolean
+          notes?: string | null
+          position?: number
+          route_id: string
+          state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city_norm?: string
+          created_at?: string
+          delivery_dow_label?: string | null
+          id?: string
+          is_pickup?: boolean
+          notes?: string | null
+          position?: number
+          route_id?: string
+          state?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "route_stop_sequences_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales_cache: {
         Row: {
           cached_at: string
@@ -2128,6 +2382,69 @@ export type Database = {
           run_at?: string
           status?: string
           triggered_by?: string | null
+        }
+        Relationships: []
+      }
+      samsara_address_map: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          id: string
+          match_confidence: number | null
+          match_method: string | null
+          notes: string | null
+          p21_ship_to_id: string
+          raw_addr1: string | null
+          raw_addr2: string | null
+          raw_city: string | null
+          raw_state: string | null
+          raw_zip: string | null
+          samsara_address_id: string | null
+          updated_at: string
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          id?: string
+          match_confidence?: number | null
+          match_method?: string | null
+          notes?: string | null
+          p21_ship_to_id: string
+          raw_addr1?: string | null
+          raw_addr2?: string | null
+          raw_city?: string | null
+          raw_state?: string | null
+          raw_zip?: string | null
+          samsara_address_id?: string | null
+          updated_at?: string
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          id?: string
+          match_confidence?: number | null
+          match_method?: string | null
+          notes?: string | null
+          p21_ship_to_id?: string
+          raw_addr1?: string | null
+          raw_addr2?: string | null
+          raw_city?: string | null
+          raw_state?: string | null
+          raw_zip?: string | null
+          samsara_address_id?: string | null
+          updated_at?: string
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: []
       }

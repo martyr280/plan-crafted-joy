@@ -37,16 +37,42 @@ export class SamsaraScopeError extends Error {
   }
 }
 
-async function api<T = any>(path: string, attempt = 0): Promise<T> {
+/** Thrown on GET 404 so create-or-patch can treat "absent" as a normal branch. */
+export class SamsaraNotFoundError extends Error {
+  constructor(
+    public readonly path: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "SamsaraNotFoundError";
+  }
+}
+
+
+async function api<T = any>(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+  attempt = 0,
+): Promise<T> {
   await throttle();
+  const method = init.method ?? "GET";
   const res = await fetch(`${BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token()}`, Accept: "application/json" },
+    method,
+    headers: {
+      Authorization: `Bearer ${token()}`,
+      Accept: "application/json",
+      ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
   });
   if (res.status === 429) {
     if (attempt >= 4) throw new Error(`Samsara rate limited on ${path} after ${attempt} retries`);
     const retryAfter = Number(res.headers.get("retry-after") ?? 0);
     await sleep(retryAfter > 0 ? retryAfter * 1000 : 500 * 2 ** attempt);
-    return api<T>(path, attempt + 1);
+    return api<T>(path, init, attempt + 1);
+  }
+  if (res.status === 404 && method === "GET") {
+    throw new SamsaraNotFoundError(path, `Samsara 404 on ${path}`);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -54,6 +80,7 @@ async function api<T = any>(path: string, attempt = 0): Promise<T> {
     if (res.status === 401 || res.status === 403) throw new SamsaraScopeError(path, res.status, msg);
     throw new Error(msg);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -70,6 +97,11 @@ async function paged<T = any>(path: string, pick: (d: any) => any[]): Promise<T[
   } while (after && ++guard < 200);
   return out;
 }
+
+/** Shared, throttled Samsara transport for other server modules (routes, addresses). */
+export const samsaraApi = api;
+export const samsaraPaged = paged;
+
 
 /* ----------------------------------------------------------------- drivers */
 
@@ -298,7 +330,47 @@ export async function probeSamsaraScopes(): Promise<ScopeProbe[]> {
       },
 
     },
+    {
+      endpoint: "Routes (read)",
+      run: async () => {
+        const end = new Date();
+        const start = new Date(end.getTime() - 24 * 3600_000);
+        const params = new URLSearchParams({
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+        });
+        const d = await api<{ data?: any[] }>(`/fleet/routes?${params.toString()}&limit=1`);
+        return `${d.data?.length ?? 0} route(s) visible in the last 24h`;
+      },
+    },
+    {
+      endpoint: "Routes (write)",
+      run: async () => {
+        // Write-scope probe without side effects: a deliberately invalid body.
+        // 400 proves the token may write; 401/403 proves it may not.
+        try {
+          await api(`/fleet/routes`, { method: "POST", body: {} });
+          return "Write accepted (unexpected — no route was intended)";
+        } catch (e: any) {
+          if (e instanceof SamsaraScopeError) throw e;
+          return "Write scope present (validation rejected the probe body, as expected)";
+        }
+      },
+    },
+    {
+      endpoint: "Addresses (write)",
+      run: async () => {
+        try {
+          await api(`/addresses`, { method: "POST", body: {} });
+          return "Write accepted (unexpected — no address was intended)";
+        } catch (e: any) {
+          if (e instanceof SamsaraScopeError) throw e;
+          return "Write scope present (validation rejected the probe body, as expected)";
+        }
+      },
+    },
   ];
+
 
   const out: ScopeProbe[] = [];
   for (const p of probes) {
