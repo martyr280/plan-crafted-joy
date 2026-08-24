@@ -37,16 +37,30 @@ export class SamsaraScopeError extends Error {
   }
 }
 
-async function api<T = any>(path: string, attempt = 0): Promise<T> {
+async function api<T = any>(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+  attempt = 0,
+): Promise<T> {
   await throttle();
+  const method = init.method ?? "GET";
   const res = await fetch(`${BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token()}`, Accept: "application/json" },
+    method,
+    headers: {
+      Authorization: `Bearer ${token()}`,
+      Accept: "application/json",
+      ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
   });
   if (res.status === 429) {
     if (attempt >= 4) throw new Error(`Samsara rate limited on ${path} after ${attempt} retries`);
     const retryAfter = Number(res.headers.get("retry-after") ?? 0);
     await sleep(retryAfter > 0 ? retryAfter * 1000 : 500 * 2 ** attempt);
-    return api<T>(path, attempt + 1);
+    return api<T>(path, init, attempt + 1);
+  }
+  if (res.status === 404 && method === "GET") {
+    throw new SamsaraNotFoundError(path, `Samsara 404 on ${path}`);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -54,6 +68,7 @@ async function api<T = any>(path: string, attempt = 0): Promise<T> {
     if (res.status === 401 || res.status === 403) throw new SamsaraScopeError(path, res.status, msg);
     throw new Error(msg);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -70,6 +85,11 @@ async function paged<T = any>(path: string, pick: (d: any) => any[]): Promise<T[
   } while (after && ++guard < 200);
   return out;
 }
+
+/** Shared, throttled Samsara transport for other server modules (routes, addresses). */
+export const samsaraApi = api;
+export const samsaraPaged = paged;
+
 
 /* ----------------------------------------------------------------- drivers */
 
