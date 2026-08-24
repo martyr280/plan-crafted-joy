@@ -32,7 +32,7 @@ function run(over: Partial<DispatchPlanRun> = {}): DispatchPlanRun {
     stop(),
     stop({ position: 2, orderNo: "O2", p21ShipToId: "ST2", samsaraAddressId: "addr_2", scheduledArrival: "2026-08-26T12:40:00.000Z" }),
   ];
-  return {
+  const base: DispatchPlanRun = {
     routeCode: "MSL01",
     runDate: RUN_DATE,
     runSeq: 1,
@@ -49,10 +49,10 @@ function run(over: Partial<DispatchPlanRun> = {}): DispatchPlanRun {
       estCubeFt: 0,
       estWeightLbs: 0,
     },
-    ...over,
-    stops,
   };
+  return { ...base, ...over, stops };
 }
+
 
 const NOW = new Date("2026-08-26T11:00:00.000Z");
 
