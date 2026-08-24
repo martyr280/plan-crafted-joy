@@ -115,10 +115,10 @@ function DispatchPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <KpiCard title="Routes enabled" value={String(totals.enabled)} icon={<Truck className="w-4 h-4" />} />
-        <KpiCard title="Runs planned" value={String(totals.planned)} icon={<Clock className="w-4 h-4" />} />
-        <KpiCard title="Runs pushed" value={String(totals.pushed)} icon={<Send className="w-4 h-4" />} />
-        <KpiCard title="Stops held" value={String(totals.held)} icon={<AlertTriangle className="w-4 h-4" />} />
+        <KpiCard label="Routes enabled" value={String(totals.enabled)} icon={<Truck className="w-4 h-4" />} />
+        <KpiCard label="Runs planned" value={String(totals.planned)} icon={<Clock className="w-4 h-4" />} />
+        <KpiCard label="Runs pushed" value={String(totals.pushed)} icon={<Send className="w-4 h-4" />} />
+        <KpiCard label="Stops held" value={String(totals.held)} icon={<AlertTriangle className="w-4 h-4" />} />
       </div>
 
       <Tabs defaultValue="board">
