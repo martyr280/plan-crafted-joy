@@ -330,7 +330,47 @@ export async function probeSamsaraScopes(): Promise<ScopeProbe[]> {
       },
 
     },
+    {
+      endpoint: "Routes (read)",
+      run: async () => {
+        const end = new Date();
+        const start = new Date(end.getTime() - 24 * 3600_000);
+        const params = new URLSearchParams({
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+        });
+        const d = await api<{ data?: any[] }>(`/fleet/routes?${params.toString()}&limit=1`);
+        return `${d.data?.length ?? 0} route(s) visible in the last 24h`;
+      },
+    },
+    {
+      endpoint: "Routes (write)",
+      run: async () => {
+        // Write-scope probe without side effects: a deliberately invalid body.
+        // 400 proves the token may write; 401/403 proves it may not.
+        try {
+          await api(`/fleet/routes`, { method: "POST", body: {} });
+          return "Write accepted (unexpected — no route was intended)";
+        } catch (e: any) {
+          if (e instanceof SamsaraScopeError) throw e;
+          return "Write scope present (validation rejected the probe body, as expected)";
+        }
+      },
+    },
+    {
+      endpoint: "Addresses (write)",
+      run: async () => {
+        try {
+          await api(`/addresses`, { method: "POST", body: {} });
+          return "Write accepted (unexpected — no address was intended)";
+        } catch (e: any) {
+          if (e instanceof SamsaraScopeError) throw e;
+          return "Write scope present (validation rejected the probe body, as expected)";
+        }
+      },
+    },
   ];
+
 
   const out: ScopeProbe[] = [];
   for (const p of probes) {
