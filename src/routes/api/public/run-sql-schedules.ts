@@ -176,7 +176,26 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           } catch (e: any) { websiteExport = { ok: false, error: e?.message ?? String(e) }; }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, capacityAlerts, driverTime, websiteExport, ranAt: new Date().toISOString() });
+          // Samsara Route Dispatch — builder. Watermark-driven (not hour-gated):
+          // it builds every cutoff that fired since the last tick, after the
+          // configured build delay. Shadow-mode routes are skipped inside, and
+          // auto-push only fires for routes explicitly opted in.
+          let dispatchBuilder: any = null;
+          try {
+            const { runDispatchBuilderTick } = await import("@/lib/dispatch.server");
+            dispatchBuilder = await runDispatchBuilderTick(now);
+          } catch (e: any) { dispatchBuilder = { ok: false, error: e?.message ?? String(e) }; }
+
+          // Samsara Route Dispatch — reconciler. Re-diffs pushed runs against
+          // Samsara until their lock time, then flips them to locked.
+          let dispatchReconciler: any = null;
+          try {
+            const { runDispatchReconcilerTick } = await import("@/lib/dispatch.server");
+            dispatchReconciler = await runDispatchReconcilerTick(now);
+          } catch (e: any) { dispatchReconciler = { ok: false, error: e?.message ?? String(e) }; }
+
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, capacityAlerts, driverTime, websiteExport, dispatchBuilder, dispatchReconciler, ranAt: new Date().toISOString() });
+
 
 
 
