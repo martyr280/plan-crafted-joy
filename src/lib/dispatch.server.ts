@@ -99,9 +99,10 @@ function lockAtFor(runDate: string, lockOffset: string, tz: string): string | nu
   const [hh, mm] = String(lockOffset ?? "").split(":").map(Number);
   if (!Number.isFinite(hh)) return null;
   // Lock at HH:MM local on the run day.
-  const { zonedWallToUtc } = require("./truck-capacity/cutoffs") as typeof import("./truck-capacity/cutoffs");
-  return zonedWallToUtc(runDate, `${String(hh).padStart(2, "0")}:${String(mm || 0).padStart(2, "0")}`, tz).toISOString();
+  const time = `${String(hh).padStart(2, "0")}:${String(mm || 0).padStart(2, "0")}`;
+  return zonedWallToUtc(runDate, time, tz).toISOString();
 }
+
 
 /* ------------------------------------------------------------- plan builder */
 
