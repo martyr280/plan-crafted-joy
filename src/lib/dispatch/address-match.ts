@@ -136,9 +136,22 @@ export function normalizeStreet(addr1: string | null | undefined, addr2?: string
   return [a1, a2].filter(Boolean).join(" ").trim();
 }
 
+/**
+ * Cities get their OWN normalizer. Running street-word expansion over a city
+ * name is a latent data-corruption trap: MOAR1 serves St. Louis suburbs, and
+ * expandStreetWords would turn "St Louis" into "STREET LOUIS" while a P21 row
+ * spelled "Saint Louis" normalized to "SAINT LOUIS" — two keys for one city,
+ * so the template lookup silently misses and the stop lands unslotted.
+ *
+ * So: no street-word expansion here. The one expansion a city name needs is a
+ * leading "St"/"St." -> "SAINT".
+ */
 export function normalizeCity(city: string | null | undefined): string {
-  return expandStreetWords(city ?? "");
+  const tokens = upperClean(city).split(" ").filter(Boolean);
+  if (tokens.length > 1 && (tokens[0] === "ST" || tokens[0] === "SAINT")) tokens[0] = "SAINT";
+  return tokens.join(" ");
 }
+
 
 export function normalizeState(state: string | null | undefined): string {
   return upperClean(state).replace(/\s+/g, "").slice(0, 2);

@@ -39,10 +39,13 @@ import type { SequenceTemplateRow } from "./dispatch/sequence";
 import { diffRun } from "./dispatch/diff";
 import {
   createRoute,
+  deleteRoute,
+  externalIdPath,
   getRouteByExternalId,
   patchRoute,
   type SamsaraRoutePayload,
 } from "./samsara/routes.server";
+import { cutoffsFiredSince, dueCutoffs, nextWatermark } from "./dispatch/watermark";
 
 export { buildDispatchPlanFromRows };
 
@@ -50,6 +53,11 @@ const db = () => supabaseAdmin;
 
 export type DispatchSettings = {
   enabledRouteIds: string[];
+  /**
+   * Routes the cron may push WITHOUT a human clicking Approve. Empty by
+   * default: Phase 2 is a settings change, not a code change.
+   */
+  autoPushRouteIds: string[];
   depotDepartLocal: string;
   stopIncrementMin: number;
   lockOffset: string;
@@ -57,16 +65,23 @@ export type DispatchSettings = {
   viewName: string;
   /** Set true only once Kevin has published the view. */
   viewAvailable: boolean;
+  /** Minutes to wait after a cutoff before building (P21 finishes allocating). */
+  buildDelayMin: number;
+  /** Watermark: UTC ms of the last builder tick. */
+  lastBuilderTickMs: number | null;
 };
 
 const DEFAULT_SETTINGS: DispatchSettings = {
   enabledRouteIds: [],
+  autoPushRouteIds: [],
   depotDepartLocal: "07:00",
   stopIncrementMin: 20,
   lockOffset: "04:00",
   geocoder: null,
   viewName: "p21_analytics_play.dbo.vw_route_dispatch",
   viewAvailable: false,
+  buildDelayMin: 10,
+  lastBuilderTickMs: null,
 };
 
 export async function getDispatchSettings(): Promise<DispatchSettings> {
@@ -74,6 +89,15 @@ export async function getDispatchSettings(): Promise<DispatchSettings> {
   const v = (data?.value ?? {}) as Partial<DispatchSettings>;
   return { ...DEFAULT_SETTINGS, ...v };
 }
+
+export async function saveDispatchSettings(patch: Partial<DispatchSettings>): Promise<DispatchSettings> {
+  const current = await getDispatchSettings();
+  const next = { ...current, ...patch };
+  const { error } = await db().from("app_settings").upsert({ key: "dispatch", value: next as any }, { onConflict: "key" });
+  if (error) throw new Error(error.message);
+  return next;
+}
+
 
 /* -------------------------------------------------------------- bridge SQL */
 
@@ -429,4 +453,213 @@ export function pushRun(runId: string, pushedBy?: string): Promise<PushResult> {
 /** Re-pull from Samsara, diff, and patch only the deltas. Respects the lock. */
 export function reconcileRun(runId: string): Promise<PushResult> {
   return pushOrReconcile(runId, "reconcile");
+}
+
+/* ------------------------------------------------------------ preview/cancel */
+
+export type DeltaPreview = {
+  ok: boolean;
+  action: "create" | "patch" | "noop";
+  reason: string;
+  error?: string;
+  changes: Array<{ kind: "add" | "remove" | "retime" | "assign"; label: string; detail: string }>;
+};
+
+/** Diff against live Samsara WITHOUT writing anything. */
+export async function previewRunDelta(runId: string): Promise<DeltaPreview> {
+  const loaded = await loadRunAsPlan(runId);
+  if (!loaded) return { ok: false, action: "noop", reason: "not_found", error: "Dispatch run not found", changes: [] };
+  const { run, row } = loaded;
+
+  const { data: driverMap } = await db()
+    .from("dispatch_driver_map")
+    .select("samsara_driver_id, confirmed")
+    .eq("route_id", row.route_id)
+    .maybeSingle();
+  const driverId = driverMap?.confirmed ? driverMap.samsara_driver_id ?? null : null;
+
+  let existing: any = null;
+  try {
+    existing = await getRouteByExternalId(run.externalId);
+  } catch (e: any) {
+    return { ok: false, action: "noop", reason: "samsara_error", error: e?.message ?? String(e), changes: [] };
+  }
+
+  const decision = diffRun(run, existing, new Date(), { driverId });
+  const changes: DeltaPreview["changes"] = [];
+
+  if (decision.action === "create") {
+    for (const s of (decision.payload.stops ?? [])) {
+      changes.push({ kind: "add", label: String(s.name ?? ""), detail: String(s.scheduledArrivalTime ?? "") });
+    }
+  } else if (decision.action === "patch") {
+    const keyOf = (s: any) => String(s?.externalIds?.nelsonStop ?? s?.id ?? s?.name ?? "");
+    const before = new Map<string, any>((existing?.stops ?? []).map((s: any) => [keyOf(s), s]));
+    const after = new Map<string, any>((decision.payload.stops ?? []).map((s: any) => [keyOf(s), s]));
+    for (const [k, s] of after) {
+      const prev = before.get(k);
+      if (!prev) changes.push({ kind: "add", label: String(s.name ?? k), detail: String(s.scheduledArrivalTime ?? "") });
+      else if (String(prev.scheduledArrivalTime ?? "") !== String(s.scheduledArrivalTime ?? "")) {
+        changes.push({
+          kind: "retime",
+          label: String(s.name ?? k),
+          detail: `${prev.scheduledArrivalTime ?? "?"} → ${s.scheduledArrivalTime ?? "?"}`,
+        });
+      }
+    }
+    for (const [k, s] of before) {
+      if (!after.has(k)) changes.push({ kind: "remove", label: String(s.name ?? k), detail: String(s.scheduledArrivalTime ?? "") });
+    }
+    const beforeAssign = String(existing?.driverId ?? existing?.vehicleId ?? "");
+    const afterAssign = String(decision.payload.driverId ?? decision.payload.vehicleId ?? "");
+    if (beforeAssign !== afterAssign) {
+      changes.push({ kind: "assign", label: "Assignment", detail: `${beforeAssign || "unassigned"} → ${afterAssign || "unassigned"}` });
+    }
+  }
+
+  return { ok: true, action: decision.action, reason: decision.reason, changes };
+}
+
+export type CancelResult = { ok: boolean; deletedInSamsara: boolean; error?: string };
+
+/**
+ * Cancel a run. The Samsara route is deleted only when we actually pushed it and
+ * the lock has not passed; past the lock we leave Samsara alone (a driver may
+ * already be running it) and only mark our record cancelled.
+ */
+export async function cancelDispatchRun(runId: string): Promise<CancelResult> {
+  const { data: row } = await db().from("dispatch_runs").select("*").eq("id", runId).maybeSingle();
+  if (!row) return { ok: false, deletedInSamsara: false, error: "Dispatch run not found" };
+
+  const lockMs = row.lock_at ? Date.parse(row.lock_at) : NaN;
+  const beforeLock = !Number.isFinite(lockMs) || Date.now() < lockMs;
+  let deleted = false;
+  if (row.status === "pushed" && beforeLock && (row.samsara_route_id || row.samsara_external_id)) {
+    try {
+      await deleteRoute(String(row.samsara_route_id || externalIdPath(String(row.samsara_external_id ?? ""))));
+      deleted = true;
+    } catch (e: any) {
+      await db().from("dispatch_runs").update({ status: "cancelled", error: `Samsara delete failed: ${e?.message ?? String(e)}` }).eq("id", runId);
+      return { ok: false, deletedInSamsara: false, error: e?.message ?? String(e) };
+    }
+  }
+  await db().from("dispatch_runs").update({ status: "cancelled", error: null }).eq("id", runId);
+  return { ok: true, deletedInSamsara: deleted };
+}
+
+/* ---------------------------------------------------------------- cron ticks */
+
+export type BuilderTickResult = {
+  ok: boolean;
+  watermarkFrom: number;
+  watermarkTo: number;
+  builds: Array<{ routeId: string; routeCode: string; runDates: string[]; ok: boolean; error?: string; runIds?: string[] }>;
+  pushes: Array<{ runId: string; ok: boolean; action?: string; error?: string }>;
+  skippedNotDue: number;
+};
+
+/**
+ * Builder tick. Enabled routes only; shadow-mode routes (enabled off) are not
+ * built by cron at all — Joe builds those by hand from the board.
+ *
+ * Auto-push requires BOTH enabled and autoPush for the route.
+ */
+export async function runDispatchBuilderTick(now: Date = new Date()): Promise<BuilderTickResult> {
+  const settings = await getDispatchSettings();
+  const nowMs = now.getTime();
+  const from = settings.lastBuilderTickMs ?? nowMs - 15 * 60_000;
+  const result: BuilderTickResult = {
+    ok: true, watermarkFrom: from, watermarkTo: nowMs, builds: [], pushes: [], skippedNotDue: 0,
+  };
+  const routeIds = settings.enabledRouteIds ?? [];
+  if (!routeIds.length) {
+    await saveDispatchSettings({ lastBuilderTickMs: nowMs });
+    result.watermarkTo = nowMs;
+    return result;
+  }
+
+  const { data: cutoffRows } = await db()
+    .from("route_cutoffs")
+    .select("*")
+    .in("route_id", routeIds)
+    .eq("active", true)
+    .limit(2000);
+  const { data: routes } = await db()
+    .from("truck_capacity_routes")
+    .select("id, code")
+    .in("id", routeIds)
+    .limit(2000);
+  const codeById = new Map((routes ?? []).map((r: any) => [r.id as string, r.code as string]));
+
+  const allFired = cutoffsFiredSince((cutoffRows ?? []) as unknown as RouteCutoff[], from, nowMs, settings.buildDelayMin);
+  const due = dueCutoffs(allFired, nowMs);
+  result.skippedNotDue = allFired.length - due.length;
+
+  for (const f of due) {
+    const routeId = f.cutoff.route_id;
+    const routeCode = codeById.get(routeId) ?? "";
+    for (const runDate of f.runDates) {
+      try {
+        const built = await buildDispatchPlanForRun(routeId, runDate);
+        result.builds.push({
+          routeId, routeCode, runDates: [runDate],
+          ok: built.ok,
+          error: built.ok ? undefined : built.error,
+          runIds: built.ok ? built.runIds : undefined,
+        });
+        if (built.ok && (settings.autoPushRouteIds ?? []).includes(routeId)) {
+          for (const runId of built.runIds) {
+            try {
+              const p = await pushRun(runId);
+              result.pushes.push({ runId, ok: p.ok, action: p.ok ? p.action : undefined, error: p.ok ? undefined : p.error });
+            } catch (e: any) {
+              result.pushes.push({ runId, ok: false, error: e?.message ?? String(e) });
+            }
+          }
+        }
+      } catch (e: any) {
+        result.builds.push({ routeId, routeCode, runDates: [runDate], ok: false, error: e?.message ?? String(e) });
+      }
+    }
+  }
+
+  const watermark = nextWatermark(allFired, nowMs);
+  await saveDispatchSettings({ lastBuilderTickMs: watermark });
+  result.watermarkTo = watermark;
+  return result;
+}
+
+export type ReconcilerTickResult = {
+  ok: boolean;
+  reconciled: Array<{ runId: string; ok: boolean; action?: string; error?: string }>;
+  locked: string[];
+};
+
+/** Reconcile pushed runs before their lock; flip pushed -> locked at the lock. */
+export async function runDispatchReconcilerTick(now: Date = new Date()): Promise<ReconcilerTickResult> {
+  const nowIso = now.toISOString();
+  const out: ReconcilerTickResult = { ok: true, reconciled: [], locked: [] };
+
+  const { data: rows } = await db()
+    .from("dispatch_runs")
+    .select("id, lock_at")
+    .eq("status", "pushed")
+    .limit(500);
+
+  for (const r of rows ?? []) {
+    const lockMs = r.lock_at ? Date.parse(r.lock_at) : NaN;
+    if (Number.isFinite(lockMs) && now.getTime() >= lockMs) {
+      await db().from("dispatch_runs").update({ status: "locked" }).eq("id", r.id);
+      out.locked.push(r.id as string);
+      continue;
+    }
+    try {
+      const res = await reconcileRun(r.id as string);
+      out.reconciled.push({ runId: r.id as string, ok: res.ok, action: res.ok ? res.action : undefined, error: res.ok ? undefined : res.error });
+    } catch (e: any) {
+      out.reconciled.push({ runId: r.id as string, ok: false, error: e?.message ?? String(e) });
+    }
+  }
+  void nowIso;
+  return out;
 }

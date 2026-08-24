@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader } from "@/components/ui/sidebar";
-import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, Sparkles, MailWarning, Gauge, Undo2, Timer, FileUp } from "lucide-react";
+import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, Sparkles, MailWarning, Gauge, Undo2, Timer, FileUp, Route as RouteIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
 
@@ -39,6 +39,8 @@ const groups = [
       { title: "Damage Tracker", url: "/damage", icon: AlertTriangle },
       { title: "RMA Analytics", url: "/rma-analytics", icon: Undo2 },
       { title: "Driver Time", url: "/driver-time", icon: Timer },
+      { title: "Dispatch", url: "/dispatch", icon: RouteIcon, roles: ["admin", "ops_logistics", "ops_logistics_admin"] },
+
     ],
   },
   {
@@ -106,7 +108,7 @@ export function AppSidebar() {
             <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {g.items.map((it) => (
+                {g.items.filter((it) => !(it as any).roles || (it as any).roles.some((r: string) => hasRole(r as any))).map((it) => (
                   <SidebarMenuItem key={it.url}>
                     <SidebarMenuButton asChild isActive={isActive(it.url)} tooltip={it.title}>
                       <Link to={it.url}>

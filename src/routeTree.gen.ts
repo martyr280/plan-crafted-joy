@@ -34,6 +34,7 @@ import { Route as AppInventoryRouteImport } from './routes/_app.inventory'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppEmailMonitorRouteImport } from './routes/_app.email-monitor'
 import { Route as AppDriverTimeRouteImport } from './routes/_app.driver-time'
+import { Route as AppDispatchRouteImport } from './routes/_app.dispatch'
 import { Route as AppDamageRouteImport } from './routes/_app.damage'
 import { Route as AppCatalogsRouteImport } from './routes/_app.catalogs'
 import { Route as AppBridgeRouteImport } from './routes/_app.bridge'
@@ -176,6 +177,11 @@ const AppDriverTimeRoute = AppDriverTimeRouteImport.update({
   path: '/driver-time',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDispatchRoute = AppDispatchRouteImport.update({
+  id: '/dispatch',
+  path: '/dispatch',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDamageRoute = AppDamageRouteImport.update({
   id: '/damage',
   path: '/damage',
@@ -279,6 +285,7 @@ export interface FileRoutesByFullPath {
   '/bridge': typeof AppBridgeRoute
   '/catalogs': typeof AppCatalogsRoute
   '/damage': typeof AppDamageRoute
+  '/dispatch': typeof AppDispatchRoute
   '/driver-time': typeof AppDriverTimeRoute
   '/email-monitor': typeof AppEmailMonitorRoute
   '/inbox': typeof AppInboxRoute
@@ -321,6 +328,7 @@ export interface FileRoutesByTo {
   '/bridge': typeof AppBridgeRoute
   '/catalogs': typeof AppCatalogsRoute
   '/damage': typeof AppDamageRoute
+  '/dispatch': typeof AppDispatchRoute
   '/driver-time': typeof AppDriverTimeRoute
   '/email-monitor': typeof AppEmailMonitorRoute
   '/inbox': typeof AppInboxRoute
@@ -366,6 +374,7 @@ export interface FileRoutesById {
   '/_app/bridge': typeof AppBridgeRoute
   '/_app/catalogs': typeof AppCatalogsRoute
   '/_app/damage': typeof AppDamageRoute
+  '/_app/dispatch': typeof AppDispatchRoute
   '/_app/driver-time': typeof AppDriverTimeRoute
   '/_app/email-monitor': typeof AppEmailMonitorRoute
   '/_app/inbox': typeof AppInboxRoute
@@ -412,6 +421,7 @@ export interface FileRouteTypes {
     | '/bridge'
     | '/catalogs'
     | '/damage'
+    | '/dispatch'
     | '/driver-time'
     | '/email-monitor'
     | '/inbox'
@@ -454,6 +464,7 @@ export interface FileRouteTypes {
     | '/bridge'
     | '/catalogs'
     | '/damage'
+    | '/dispatch'
     | '/driver-time'
     | '/email-monitor'
     | '/inbox'
@@ -498,6 +509,7 @@ export interface FileRouteTypes {
     | '/_app/bridge'
     | '/_app/catalogs'
     | '/_app/damage'
+    | '/_app/dispatch'
     | '/_app/driver-time'
     | '/_app/email-monitor'
     | '/_app/inbox'
@@ -723,6 +735,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDriverTimeRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/dispatch': {
+      id: '/_app/dispatch'
+      path: '/dispatch'
+      fullPath: '/dispatch'
+      preLoaderRoute: typeof AppDispatchRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/damage': {
       id: '/_app/damage'
       path: '/damage'
@@ -852,6 +871,7 @@ interface AppRouteChildren {
   AppBridgeRoute: typeof AppBridgeRoute
   AppCatalogsRoute: typeof AppCatalogsRoute
   AppDamageRoute: typeof AppDamageRoute
+  AppDispatchRoute: typeof AppDispatchRoute
   AppDriverTimeRoute: typeof AppDriverTimeRoute
   AppEmailMonitorRoute: typeof AppEmailMonitorRoute
   AppInboxRoute: typeof AppInboxRoute
@@ -884,6 +904,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBridgeRoute: AppBridgeRoute,
   AppCatalogsRoute: AppCatalogsRoute,
   AppDamageRoute: AppDamageRoute,
+  AppDispatchRoute: AppDispatchRoute,
   AppDriverTimeRoute: AppDriverTimeRoute,
   AppEmailMonitorRoute: AppEmailMonitorRoute,
   AppInboxRoute: AppInboxRoute,
