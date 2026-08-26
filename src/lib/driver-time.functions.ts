@@ -33,6 +33,24 @@ function mondayOf(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Same hub ordering the Truck Capacity module uses. Re-declared here rather than
+ * imported: the canonical HUB_ORDER lives in a route component
+ * (src/routes/_app.truck-capacity.tsx) and in src/lib/truck-capacity/board.ts,
+ * and a server function must not pull a route module into its graph.
+ */
+export const DRIVER_TIME_HUB_ORDER = ["Dallas", "Birmingham", "Ocala"] as const;
+export const UNASSIGNED_HUB = "Unassigned warehouse";
+
+function compareHubs(a: string, b: string): number {
+  if (a === UNASSIGNED_HUB) return b === UNASSIGNED_HUB ? 0 : 1;
+  if (b === UNASSIGNED_HUB) return -1;
+  const ia = DRIVER_TIME_HUB_ORDER.indexOf(a as any);
+  const ib = DRIVER_TIME_HUB_ORDER.indexOf(b as any);
+  return (ia + 1 || 99) - (ib + 1 || 99) || a.localeCompare(b);
+}
+
+
 /* ------------------------------------------------------------------ report */
 
 export const getDriverTimeWeek = createServerFn({ method: "POST" })
