@@ -760,3 +760,90 @@ export const deleteRouteCutoff = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/**
+ * Forecast vs actual — scores the LOGGED predictions in truck_capacity_forecast_log
+ * against the imported actuals in truck_capacity_runs. Read-only.
+ *
+ * Distinct from getTruckAccuracy, which reports holdout backtest MAE from
+ * truck_capacity_model_versions. Do not conflate the two.
+ *
+ * Actual for a (route, date) = avg(capacity_frac) across all run_seq rows for that
+ * route-day, so a route with a Run 2 is averaged rather than double-counted or dropped.
+ * Join is strict on (route_id, forecast_date = run_date): no date fuzzing.
+ */
+export const getForecastVsActual = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ days: z.number().int().min(1).max(3650).optional() }).parse(i ?? {}))
+  .handler(async ({ data }) => {
+    const { actualsByRouteDay, summarize } = await import("./truck-capacity/score");
+    const days = data.days ?? 365;
+    const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+
+    const [logRes, runRes] = await Promise.all([
+      supabaseAdmin
+        .from("truck_capacity_forecast_log")
+        .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied")
+        .gte("forecast_date", since)
+        .order("forecast_date", { ascending: true })
+        .limit(50000),
+      supabaseAdmin
+        .from("truck_capacity_runs")
+        .select("route_id, run_date, capacity_frac")
+        .gte("run_date", since)
+        .limit(50000),
+    ]);
+    if (logRes.error) throw new Error(logRes.error.message);
+    if (runRes.error) throw new Error(runRes.error.message);
+
+    const logs = logRes.data ?? [];
+    const runs = runRes.data ?? [];
+    const actuals = actualsByRouteDay(runs as any);
+
+    const scored = logs
+      .map((l: any) => {
+        const actual = actuals.get(`${l.route_id}|${l.forecast_date}`);
+        if (actual == null || l.served == null) return null;
+        return {
+          routeId: l.route_id as string,
+          forecastDate: l.forecast_date as string,
+          madeOn: l.made_on as string,
+          served: Number(l.served),
+          predicted: l.predicted == null ? null : Number(l.predicted),
+          actual,
+          guard: !!l.p21_guard_applied,
+          method: l.method as string | null,
+        };
+      })
+      .filter(Boolean) as Array<any>;
+
+    const summary = summarize(scored);
+
+    const maxForecastDate = logs.length ? logs[logs.length - 1]!.forecast_date : null;
+    const maxRunDate = runs.reduce<string | null>((m, r: any) => (m && m >= r.run_date ? m : r.run_date), null);
+
+    const { data: routes } = await supabaseAdmin
+      .from("truck_capacity_routes")
+      .select("id, code, hub");
+    const routeMap = new Map((routes ?? []).map((r: any) => [r.id, { code: r.code, hub: r.hub }]));
+
+    return {
+      since,
+      coverage: {
+        loggedRows: logs.length,
+        scoredRows: scored.length,
+        unscoredRows: logs.length - scored.length,
+        routesScored: summary.byRoute.length,
+        routesLogged: new Set(logs.map((l: any) => l.route_id)).size,
+        maxRunDate,
+        maxForecastDate,
+      },
+      overall: summary.overall,
+      byBucket: summary.byBucket,
+      byRoute: summary.byRoute.map((r: any) => ({
+        ...r,
+        code: routeMap.get(r.routeId)?.code ?? r.routeId.slice(0, 8),
+        hub: routeMap.get(r.routeId)?.hub ?? null,
+      })),
+    };
+  });
