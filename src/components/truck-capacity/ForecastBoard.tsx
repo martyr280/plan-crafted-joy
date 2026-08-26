@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, ChevronRight, Clock, RefreshCw } from "lucide-react";
 import { getForecastBoard } from "@/lib/truck-capacity.functions";
+import { cutoffSortKey } from "@/lib/truck-capacity/cutoffs";
 import { UtilizationBar } from "./UtilizationBar";
+
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -34,8 +36,20 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
   const byHub = useMemo(() => {
     const rows = q.data?.rows ?? [];
     const hubs = q.data?.hubs ?? [];
-    return hubs.map((hub) => ({ hub, rows: rows.filter((r) => r.hub === hub) }));
+    // Joe's ask: inside a hub, the truck that cuts off soonest goes first;
+    // routes with no cutoff configured sink to the bottom. cutoffSortKey()
+    // already encodes that ordering — the wire form is an ISO string.
+    const keyOf = (r: (typeof rows)[number]) =>
+      cutoffSortKey(r.next_cutoff ? ({ atUtc: new Date(Date.parse(r.next_cutoff.atUtc)) } as any) : null);
+    return hubs.map((hub) => ({
+      hub,
+      rows: rows
+        .filter((r) => r.hub === hub)
+        .slice()
+        .sort((a, b) => keyOf(a) - keyOf(b) || a.code.localeCompare(b.code)),
+    }));
   }, [q.data]);
+
 
   const snap = q.data;
 
@@ -84,7 +98,7 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
               <TableRow>
                 <TableHead className="w-[16%]">Route</TableHead>
                 <TableHead className="w-[16%]">Next cutoff</TableHead>
-                <TableHead className="w-[16%]">Runs</TableHead>
+                <TableHead className="w-[16%]">Ships on</TableHead>
                 <TableHead className="w-[24%]">Projected fill</TableHead>
                 <TableHead className="w-[12%]">On the books</TableHead>
                 <TableHead className="w-[12%]">Last actual</TableHead>
@@ -122,9 +136,10 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
                     <div>{r.next_cutoff ? fmtRunDates(r.next_cutoff.runDates) : "—"}</div>
                     {r.next_cutoff?.windowFrom && (
                       <div className="text-muted-foreground">
-                        orders counted through {r.next_cutoff.label}
+                        orders counted through {r.next_cutoff.timeLabel}
                       </div>
                     )}
+
                   </TableCell>
                   <TableCell className="align-top">
                     <UtilizationBar value={r.final} secondary={r.current} />

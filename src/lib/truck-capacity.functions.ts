@@ -39,7 +39,32 @@ export const listTruckRoutes = createServerFn({ method: "GET" })
     return { routes: data ?? [] };
   });
 
+/**
+ * Freshness of the imported actuals, computed across ALL runs — deliberately not
+ * from the 84-day window the Overview tab fetches, so the staleness banner stays
+ * honest if Joe's tracker uploads lapse past that window.
+ */
+export const getTruckRunsFreshness = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const { data, error } = await supabaseAdmin
+      .from("truck_capacity_runs")
+      .select("run_date")
+      .order("run_date", { ascending: false })
+      .limit(1);
+    if (error) throw new Error(error.message);
+    const maxRunDate: string | null = data?.[0]?.run_date ?? null;
+    let ageDays: number | null = null;
+    if (maxRunDate) {
+      const today = new Date();
+      const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+      ageDays = Math.round((todayUtc - Date.parse(`${maxRunDate}T00:00:00Z`)) / 86_400_000);
+    }
+    return { maxRunDate, ageDays };
+  });
+
 export const listTruckRuns = createServerFn({ method: "POST" })
+
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({
     routeId: z.string().uuid().optional(),

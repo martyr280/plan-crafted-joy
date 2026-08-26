@@ -236,9 +236,16 @@ export const getUnderfilledRoutes = createServerFn({ method: "POST" })
       if (!scopeRepCode) {
         return {
           weeks, threshold, minWeeksBelow, weekStarts, scoped: true,
-          repCode: null, rows: [], kpis: { underfilledCount: 0, wastedCapacity: 0, routesEvaluated: 0 },
+          repCode: null, rows: [], allRows: [],
+          coverage: {
+            weeksInWindow: weekStarts.length, weeksWithData: 0, routesWithRuns: 0, routesInScope: 0,
+            latestRunDate: null as string | null, latestRunDateAnyTime: null as string | null,
+            insufficient: true,
+          },
+          kpis: { underfilledCount: 0, wastedCapacity: 0, routesEvaluated: 0 },
         };
       }
+
     } else if (data.viewAsRep) {
       scopeRepCode = data.viewAsRep.trim().toUpperCase();
     }
@@ -309,12 +316,44 @@ export const getUnderfilledRoutes = createServerFn({ method: "POST" })
     const flaggedRows = rows.filter((r: any) => r.flagged)
       .sort((a: any, b: any) => (a.avg ?? 1) - (b.avg ?? 1));
 
+    // Coverage: how much of the window actually has actuals. Without this the UI
+    // cannot tell "nothing is underfilled" apart from "nothing was evaluated".
+    const weeksWithData = weekStarts.filter((w) =>
+      rows.some((r: any) => r.series.some((s: any) => s.week === w && s.value != null))).length;
+    const routesWithRuns = rows.filter((r: any) => r.weeksWithData > 0).length;
+    let latestRunDate: string | null = null;
+    for (const r of runs ?? []) {
+      if (!allowedIds.has(r.route_id)) continue;
+      if (!latestRunDate || r.run_date > latestRunDate) latestRunDate = r.run_date;
+    }
+    // Max(run_date) across ALL history for the allowed routes, so the UI can say
+    // how stale the tracker is even when the window is empty.
+    const { data: latestAny } = await db()
+      .from("truck_capacity_runs")
+      .select("run_date, route_id")
+      .order("run_date", { ascending: false })
+      .limit(500);
+    let latestRunDateAnyTime: string | null = null;
+    for (const r of latestAny ?? []) {
+      if (!allowedIds.has(r.route_id)) continue;
+      if (!latestRunDateAnyTime || r.run_date > latestRunDateAnyTime) latestRunDateAnyTime = r.run_date;
+    }
+
     return {
       weeks, threshold, minWeeksBelow, weekStarts,
       scoped: !full || !!data.viewAsRep,
       repCode: scopeRepCode,
       rows: flaggedRows,
       allRows: rows.sort((a: any, b: any) => (a.avg ?? 2) - (b.avg ?? 2)),
+      coverage: {
+        weeksInWindow: weekStarts.length,
+        weeksWithData,
+        routesWithRuns,
+        routesInScope: rows.length,
+        latestRunDate,
+        latestRunDateAnyTime,
+        insufficient: weeksWithData < minWeeksBelow,
+      },
       kpis: {
         underfilledCount: flaggedRows.length,
         wastedCapacity: flaggedRows.reduce((s: number, r: any) => s + r.wasted, 0),
@@ -322,3 +361,4 @@ export const getUnderfilledRoutes = createServerFn({ method: "POST" })
       },
     };
   });
+
