@@ -214,9 +214,22 @@ function DriverTimePage() {
               Settings.
             </Card>
           )}
-          {drivers.map((d: any) => (
-            <DriverCard key={d.driverId} driver={d} weekStart={weekStart} isAdmin={!!data?.isAdmin} />
+          {hubGroups.map((g: any) => (
+            <Card key={g.hub} className="p-0 overflow-hidden">
+              <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2">
+                <div className="text-sm font-semibold">{g.hub}</div>
+                <div className="text-xs text-muted-foreground">
+                  {g.drivers.length} driver{g.drivers.length === 1 ? "" : "s"} · {hm(g.flaggedMinutes)} flagged
+                </div>
+              </div>
+              <div className="space-y-4 p-3">
+                {g.drivers.map((d: any) => (
+                  <DriverCard key={d.driverId} driver={d} weekStart={weekStart} isAdmin={!!data?.isAdmin} />
+                ))}
+              </div>
+            </Card>
           ))}
+
         </TabsContent>
 
         <TabsContent value="runs" className="mt-4">
