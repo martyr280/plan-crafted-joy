@@ -34,7 +34,7 @@ import {
   runP21SnapshotNow, testP21Sql, runP21TransferSnapshotNow, testP21TransferSql,
   retrainTruckModel, listTruckModelVersions, getTruckAccuracy,
   listP21UnmatchedRouteCodes, assignP21RouteCode, setP21RouteCodeIgnored,
-  getTruckCapacityCoverage,
+  getTruckCapacityCoverage, getForecastVsActual,
 } from "@/lib/truck-capacity.functions";
 import {
   getTruckRepScope, listRouteSalespeople, listKnownRepCodes, setRouteSalespeople,
@@ -962,7 +962,12 @@ function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[]
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-sm font-medium">Model accuracy</div>
+        <div>
+          <div className="text-sm font-medium">Model accuracy (holdout backtest)</div>
+          <div className="text-xs text-muted-foreground">
+            MAE from the trained model's holdout split, not from predictions scored against real runs.
+          </div>
+        </div>
         <div className="text-xs text-muted-foreground">
           {v.promoted ? "Promoted" : "Latest (not promoted)"} · trained {new Date(v.trained_at).toLocaleString()}
         </div>
