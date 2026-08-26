@@ -194,3 +194,30 @@ describe("edge cases", () => {
     expect(cutoffSortKey(today)).toBeLessThan(cutoffSortKey(tomorrow));
   });
 });
+
+describe("run-days wording (Joe, 2026-08-26: 'Runs column has some weird wording')", () => {
+  const at = new Date("2026-08-10T14:00:00Z"); // Mon
+
+  const labelFor = (run_dows: number[]) =>
+    nextCutoff([cut({ cutoff_dow: 2, cutoff_time: "16:00", run_dows })], at)!.label;
+
+  it("single run day keeps the bare form", () => {
+    expect(labelFor([3])).toBe("Orders counted through Tue 4:00p (Wed run)");
+  });
+
+  it("two consecutive run days stay an en-dash range", () => {
+    expect(labelFor([3, 4])).toBe("Orders counted through Tue 4:00p (Wed\u2013Thu run)");
+  });
+
+  it("two non-consecutive run days use an ampersand, not a range", () => {
+    expect(labelFor([1, 3])).toBe("Orders counted through Tue 4:00p (Mon & Wed run)");
+  });
+
+  it("three non-consecutive run days use a comma list, not a range", () => {
+    expect(labelFor([1, 3, 5])).toBe("Orders counted through Tue 4:00p (Mon, Wed, Fri run)");
+  });
+
+  it("three consecutive run days may still collapse to a range", () => {
+    expect(labelFor([3, 4, 5])).toBe("Orders counted through Tue 4:00p (Wed\u2013Fri run)");
+  });
+});

@@ -131,9 +131,16 @@ export function formatTimeLabel(timeHHMM: string): string {
 
 function runDaysText(runDows: number[]): string {
   if (!runDows.length) return "";
-  const names = [...new Set(runDows)].sort((a, b) => a - b).map((d) => DOW_SHORT[d] ?? String(d));
-  return names.length === 1 ? `${names[0]} run` : `${names.join("\u2013")} run`;
+  const uniq = [...new Set(runDows)].sort((a, b) => a - b);
+  const names = uniq.map((d) => DOW_SHORT[d] ?? String(d));
+  if (names.length === 1) return `${names[0]} run`;
+  // A true en-dash range is only honest when the days are genuinely consecutive.
+  const consecutive = uniq.every((d, i) => i === 0 || d === uniq[i - 1]! + 1);
+  if (consecutive) return `${names[0]}\u2013${names[names.length - 1]} run`;
+  if (names.length === 2) return `${names[0]} & ${names[1]} run`;
+  return `${names.join(", ")} run`;
 }
+
 
 /* ------------------------------- core engine ------------------------------- */
 

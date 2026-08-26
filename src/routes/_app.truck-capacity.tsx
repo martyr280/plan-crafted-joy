@@ -28,7 +28,7 @@ import { RouteCutoffsEditor } from "@/components/truck-capacity/RouteCutoffsEdit
 
 import { useAuth } from "@/lib/auth";
 import {
-  listTruckRoutes, listTruckRuns, upsertTruckRun, deleteTruckRun, getTruckForecast,
+  listTruckRoutes, listTruckRuns, getTruckRunsFreshness, upsertTruckRun, deleteTruckRun, getTruckForecast,
   getTruckSettings, updateTruckSettings, updateRoutePalletsPerTruck,
   previewTruckImport, commitTruckImport, exportTruckWorkbook,
   runP21SnapshotNow, testP21Sql, runP21TransferSnapshotNow, testP21TransferSql,
@@ -209,7 +209,12 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
 
   const flagged: UnderRow[] = (q.data?.rows ?? []) as UnderRow[];
   const all: UnderRow[] = (((q.data as any)?.allRows ?? []) as UnderRow[]);
+  const cov = (q.data as any)?.coverage as {
+    weeksInWindow: number; weeksWithData: number; routesWithRuns: number; routesInScope: number;
+    latestRunDate: string | null; latestRunDateAnyTime: string | null; insufficient: boolean;
+  } | undefined;
   const rows = showAll ? all : flagged;
+
 
   return (
     <div className="space-y-4 pt-4">
@@ -266,11 +271,25 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
           </TableHeader>
           <TableBody>
             {q.isLoading && <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="w-4 h-4 animate-spin inline" /></TableCell></TableRow>}
-            {!q.isLoading && rows.length === 0 && (
+            {!q.isLoading && rows.length === 0 && cov?.insufficient && (
+              <TableRow><TableCell colSpan={8} className="py-6">
+                <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-3 text-sm text-left">
+                  <div className="font-medium">Not enough run data to flag anything yet.</div>
+                  <div className="mt-1 text-muted-foreground">
+                    Only {cov.weeksWithData} of the {cov.weeksInWindow} weeks in this window contain any runs
+                    (need at least {minWeeksBelow}), across {cov.routesWithRuns} of {cov.routesInScope} routes.
+                    Latest run on record: {cov.latestRunDateAnyTime ?? cov.latestRunDate ?? "none"}.
+                    Upload a fresh capacity tracker in the Import tab before this report can flag underfilled routes.
+                  </div>
+                </div>
+              </TableCell></TableRow>
+            )}
+            {!q.isLoading && rows.length === 0 && !cov?.insufficient && (
               <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                 No persistently underfilled routes for this window.
               </TableCell></TableRow>
             )}
+
             {rows.map((r) => {
               const bad = r.avg != null && r.avg < 0.5;
               return (
@@ -309,6 +328,7 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
 
 function OverviewTab({ routes }: { routes: RouteRow[] }) {
   const listRuns = useServerFn(listTruckRuns);
+  const freshnessFn = useServerFn(getTruckRunsFreshness);
   const from = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - 84); return d.toISOString().slice(0, 10);
   }, []);
@@ -316,7 +336,10 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
     queryKey: ["tc-runs-overview", from],
     queryFn: () => listRuns({ data: { from, limit: 5000 } }),
   });
+  // Max(run_date) across ALL runs, not just the 84-day window above.
+  const freshQ = useQuery({ queryKey: ["tc-runs-freshness"], queryFn: () => freshnessFn() });
   const runs: RunRow[] = runsQ.data?.rows ?? [];
+
 
   const byRoute = useMemo(() => {
     const m = new Map<string, RunRow[]>();
@@ -409,21 +432,42 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
       </div>
       {runsQ.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
 
+      {freshQ.data?.maxRunDate && (freshQ.data.ageDays ?? 0) > 10 && (
+        <Card className="p-3 border-amber-500/60 bg-amber-500/10 text-sm">
+          <span className="font-medium">Actuals loaded through {freshQ.data.maxRunDate} — {freshQ.data.ageDays} days ago.</span>{" "}
+          Upload the latest capacity workbook in the Import tab to refresh.
+        </Card>
+      )}
+
       {sortedRoutes.length > 0 && (
         <Card className="p-4">
           <div className="font-semibold text-sm mb-1">Utilization heatmap — last 12 weeks</div>
-          <div className="text-xs text-muted-foreground mb-3">Mean capacity per (route, week). Empty cell = no runs.</div>
+          <div className="text-xs text-muted-foreground mb-3">
+            One column = one week (Sunday-anchored week start). Mean capacity per (route, week). Empty cell = no runs.
+          </div>
           <div className="overflow-x-auto">
             <div
               className="grid gap-[2px] text-[10px]"
               style={{ gridTemplateColumns: `minmax(140px, 180px) repeat(${heat.weekStarts.length}, minmax(28px, 1fr))` }}
             >
               <div />
-              {heat.weekStarts.map((w) => (
-                <div key={w} className="text-center text-muted-foreground pb-1" title={`Week of ${w}`}>
-                  {w.slice(5)}
-                </div>
-              ))}
+              {heat.weekStarts.map((w, i) => {
+                const isCurrent = i === heat.weekStarts.length - 1;
+                const end = new Date(`${w}T00:00:00Z`);
+                end.setUTCDate(end.getUTCDate() + 6);
+                const range = `${w.slice(5)} – ${end.toISOString().slice(5, 10)}`;
+                return (
+                  <div
+                    key={w}
+                    className={`text-center pb-1 ${isCurrent ? "font-bold text-foreground" : "text-muted-foreground"}`}
+                    title={`Week of ${w} (${range})${isCurrent ? " — current week" : ""}`}
+                  >
+                    {w.slice(5)}
+                    {isCurrent && <div className="text-[9px] font-normal">current</div>}
+                  </div>
+                );
+              })}
+
               {sortedRoutes.map((r) => (
                 <Fragment key={r.id}>
                   <div className="pr-2 truncate text-xs" title={`${r.hub} — ${r.name}`}>
@@ -556,10 +600,14 @@ function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean 
                 <YAxis domain={[0, 1.25]} tickFormatter={(v) => `${Math.round(v * 100)}%`} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v: any) => `${(Number(v) * 100).toFixed(1)}%`} />
                 <Legend />
-                <Area type="monotone" dataKey="capacity" stackId="a" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.4)" />
-                <Area type="monotone" dataKey="unused" stackId="a" stroke="hsl(var(--muted-foreground))" fill="hsl(var(--muted) / 0.4)" />
+                {/* The "unused" companion area is gone: stacked on a muted card it
+                    swallowed the capacity line (Joe, 2026-07-16 and 2026-08-26).
+                    Capacity is now the single dominant series. */}
+                <Line type="monotone" dataKey="capacity" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} name="Capacity" />
+
                 <ReferenceLine y={0.9} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
               </ComposedChart>
+
             </ResponsiveContainer>
           </div>
         </Card>
