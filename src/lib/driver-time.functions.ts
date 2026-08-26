@@ -95,9 +95,12 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
         driverName: ev.driver_name ?? key,
         events: [] as any[],
         flaggedMinutes: 0,
+        minutesByHub: {} as Record<string, number>,
       };
       bucket.events.push(ev);
       bucket.flaggedMinutes += Number(ev.duration_min ?? 0);
+      const hubKey = ev.hub && String(ev.hub).trim() ? String(ev.hub).trim() : UNASSIGNED_HUB;
+      bucket.minutesByHub[hubKey] = (bucket.minutesByHub[hubKey] ?? 0) + Number(ev.duration_min ?? 0);
       byDriver.set(key, bucket);
     }
 
@@ -112,15 +115,43 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
           flaggedHours,
           hourlyRate: isAdmin ? Number(rateFor(b.driverId) ?? 0) || null : null,
         });
-        return { ...b, flaggedHours: Math.round(flaggedHours * 100) / 100, cost };
+        // A driver is filed under the warehouse where most of their flagged time
+        // sat that week. Cost/Paycom stay driver-week scoped so the numbers are
+        // unchanged by the grouping; individual event rows still name their own
+        // warehouse, so a split week is still readable.
+        const hubEntries = Object.entries(b.minutesByHub as Record<string, number>)
+          .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+        return {
+          ...b,
+          flaggedHours: Math.round(flaggedHours * 100) / 100,
+          cost,
+          hub: hubEntries[0]?.[0] ?? UNASSIGNED_HUB,
+          multiHub: hubEntries.length > 1,
+        };
       })
       .sort((a, b) => b.flaggedMinutes - a.flaggedMinutes);
+
+    // Hub groups in the Truck Capacity order, worst offender first inside a hub.
+    const hubGroups = Array.from(new Set(driverRows.map((d) => d.hub)))
+      .sort(compareHubs)
+      .map((hub) => {
+        const list = driverRows
+          .filter((d) => d.hub === hub)
+          .sort((a, b) => b.flaggedMinutes - a.flaggedMinutes || a.driverName.localeCompare(b.driverName));
+        return {
+          hub,
+          drivers: list,
+          flaggedMinutes: list.reduce((s, d) => s + d.flaggedMinutes, 0),
+          events: list.reduce((s, d) => s + d.events.length, 0),
+        };
+      });
 
     return {
       weekStart,
       weekEnd,
       isAdmin,
       drivers: driverRows,
+      hubGroups,
       totals: {
         drivers: driverRows.length,
         events: (events ?? []).length,
@@ -132,6 +163,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       runs: runs ?? [],
     };
   });
+
 
 export const updateDriverTimeEventStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
