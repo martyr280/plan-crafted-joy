@@ -830,7 +830,9 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
         </Card>
       )}
 
+      <ForecastVsActualPanel />
       <AccuracyPanel accQuery={accQ} routes={routes} />
+
     </div>
   );
 }
