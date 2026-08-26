@@ -848,7 +848,109 @@ function ForecastTooltip({ active, payload }: any) {
   );
 }
 
+/**
+ * Forecast vs actual — scores the predictions Nelson actually logged against the
+ * imported actuals. Deliberately separate from AccuracyPanel below it, which
+ * reports holdout backtest MAE from the trained model versions.
+ */
+function ForecastVsActualPanel() {
+  const fn = useServerFn(getForecastVsActual);
+  const q = useQuery({ queryKey: ["tc-forecast-vs-actual"], queryFn: () => fn({ data: {} }) });
+  const d = q.data;
+  const num = (v: number | null | undefined, digits = 3, signed = false) =>
+    v == null ? "—" : `${signed && v > 0 ? "+" : ""}${v.toFixed(digits)}`;
+
+  return (
+    <Card className="p-3">
+      <div className="text-sm font-medium">Forecast vs actual (logged predictions)</div>
+      <div className="mb-3 text-xs text-muted-foreground">
+        Scored against predictions Nelson logged at the time and the real runs you uploaded. This is not a backtest.
+      </div>
+
+      {q.isLoading && <div className="text-xs text-muted-foreground">Scoring logged forecasts…</div>}
+      {q.error && <div className="text-xs text-destructive">{(q.error as Error).message}</div>}
+
+      {d && (
+        <>
+          <div className="mb-3 rounded-md border border-amber-500/60 bg-amber-500/10 p-3 text-sm">
+            <div className="flex items-center gap-2 font-medium text-amber-700">
+              <AlertTriangle className="h-4 w-4" /> Coverage
+            </div>
+            <div className="mt-1 text-muted-foreground">
+              Scored {d.coverage.scoredRows} of {d.coverage.loggedRows} logged forecasts across{" "}
+              {d.coverage.routesScored} of {d.coverage.routesLogged} routes. The remaining{" "}
+              {d.coverage.unscoredRows} are unscored because no actual run is on record for that route and date —
+              actuals stop at {d.coverage.maxRunDate ?? "—"}, while forecasts run out to{" "}
+              {d.coverage.maxForecastDate ?? "—"}. Upload the tracker through {d.coverage.maxForecastDate ?? "—"} to
+              score the rest.
+            </div>
+          </div>
+
+          <div className="mb-3 grid grid-cols-4 gap-3">
+            <StatCell label="MAE (served)" value={d.overall.mae} />
+            <StatCell label="Signed bias" value={d.overall.bias} />
+            <StatCell label="MAE (pre-guard)" value={d.overall.predictedMae} />
+            <div className="rounded border p-2">
+              <div className="text-[10px] uppercase text-muted-foreground">Scored rows</div>
+              <div className="text-sm font-semibold">{d.overall.n}</div>
+            </div>
+          </div>
+          <div className="mb-3 text-[11px] text-muted-foreground">
+            Bias is served − actual: positive means Nelson forecast high, negative means it forecast low.
+          </div>
+
+          <div className="mb-1 text-xs font-medium">By lead time (forecast date − date made)</div>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Lead (days)</TableHead><TableHead>n</TableHead><TableHead>MAE</TableHead><TableHead>Bias</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {d.byBucket.map((b) => (
+                <TableRow key={b.bucket}>
+                  <TableCell className="text-xs">{b.bucket}</TableCell>
+                  <TableCell className="text-xs">{b.n === 0 ? "—" : b.n}</TableCell>
+                  <TableCell className="text-xs">{num(b.mae)}</TableCell>
+                  <TableCell className="text-xs">{num(b.bias, 3, true)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          <div className="mb-1 mt-4 text-xs font-medium">By route (worst MAE first)</div>
+          {d.byRoute.length === 0 ? (
+            <div className="text-xs text-muted-foreground">No route has a scored forecast yet.</div>
+          ) : (
+            <Table>
+              <TableHeader><TableRow>
+                <TableHead>Lane</TableHead><TableHead>n</TableHead><TableHead>MAE</TableHead><TableHead>Bias</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {d.byRoute.map((r) => (
+                  <TableRow key={r.routeId}>
+                    <TableCell className="text-xs">
+                      {r.hub ? `${r.hub[0]}·${r.code}` : r.code}
+                      {r.n < 3 && (
+                        <Badge variant="outline" className="ml-2 text-[10px] text-amber-700 border-amber-500/60">
+                          n&lt;3 · not yet meaningful
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">{r.n}</TableCell>
+                    <TableCell className="text-xs font-medium">{num(r.mae)}</TableCell>
+                    <TableCell className="text-xs">{num(r.bias, 3, true)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[] }) {
+
   const v = accQuery.data?.promoted ?? accQuery.data?.latest;
   if (!v) return <Card className="p-3 text-xs text-muted-foreground">No trained model yet. Import history and run a retrain to populate accuracy.</Card>;
   const per = (v.per_route_mae ?? {}) as Record<string, { baseline: number; model: number; blend: number; n: number }>;
