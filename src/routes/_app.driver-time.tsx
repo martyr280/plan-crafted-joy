@@ -88,6 +88,8 @@ function DriverTimePage() {
 
   const data = weekQ.data;
   const drivers = data?.drivers ?? [];
+  const hubGroups = (data as any)?.hubGroups ?? [];
+
   const totals = data?.totals;
 
   const csv = useMemo(() => {
