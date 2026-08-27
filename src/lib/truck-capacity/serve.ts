@@ -21,6 +21,10 @@ export type ForecastDay = {
   seasonal: number;
   forecast: number | null;   // baseline forecast (legacy field)
   model: number | null;
+  model_raw: number | null;      // pre-clamp ridge output
+  model_saturated: boolean;      // raw <= 0 or raw >= 1.25 → carries no information
+  low_confidence: boolean;       // baseline fell back, or served value is not baseline-backed
+  baseline_source: string;
   blend: number | null;
   mad: number;
   p21: number | null;
@@ -30,6 +34,7 @@ export type ForecastDay = {
   explain: string;
   driverSummary?: string;
 };
+
 
 export type ForecastResponse = {
   route: any | null;
