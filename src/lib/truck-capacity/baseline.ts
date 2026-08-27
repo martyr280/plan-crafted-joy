@@ -6,6 +6,8 @@ import { mean as meanFn, mad as madFn, clamp } from "./linalg";
 
 export type RunPoint = { date: string; cap: number };
 
+export type BaselineSource = "weekday" | "route_mean" | "hub_mean" | "default" | "none";
+
 export type BaselineDay = {
   date: string;
   dow: number;
@@ -14,8 +16,13 @@ export type BaselineDay = {
   forecast: number | null;
   mad: number;
   n_baseline: number;
+  /** Which rung of the fallback chain produced `baseline`. */
+  baseline_source: BaselineSource;
+  /** True whenever the weekday itself contributed no 56-day samples. */
+  low_confidence: boolean;
   explain: string;
 };
+
 
 const WK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
