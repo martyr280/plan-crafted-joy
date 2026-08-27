@@ -101,7 +101,7 @@ export const DEFAULT_P21_TRANSFER_SQL = `-- Truck Capacity :: forward TRANSFER d
 -- transfers with zero server changes.  NDI to confirm exact location code
 -- values (BHM / DAL / OCA vs numeric location_ids) during Test — swap in
 -- location.location_name if the numeric IDs aren't what you configured.
-SELECT (fl.location_id + '->' + tl.location_id)      AS route_code,
+SELECT (CAST(fl.location_id AS varchar(20)) + '->' + CAST(tl.location_id AS varchar(20)))      AS route_code,
        CAST(h.required_date AS DATE)                 AS ship_date,
        CAST(NULL AS varchar(1))                      AS ship_city,
        COUNT(DISTINCT h.transfer_no)                 AS order_count,
