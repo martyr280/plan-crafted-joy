@@ -128,7 +128,7 @@ describe("serving: model saturation must not poison the blend", () => {
   });
 
   it("1c: no baseline and no active weekday must not serve a silent unflagged number", async () => {
-    const sparseRoute = { ...ROUTE, code: "SEFL", typical_dow: [] };
+    const sparseRoute: Row = { ...ROUTE, code: "SEFL", typical_dow: [] };
     const routeMeta: RouteMeta = { id: sparseRoute.id, code: "SEFL", hub: "Ocala", truck_type: null };
     const sparseRuns: Row[] = [{ run_date: "2026-07-06", capacity_frac: 0.42 }]; // single Monday run
     const names = persistedNamesFor(routeMeta, sparseRuns[0].run_date);
