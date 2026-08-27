@@ -21,6 +21,10 @@ export type ForecastDay = {
   seasonal: number;
   forecast: number | null;   // baseline forecast (legacy field)
   model: number | null;
+  model_raw: number | null;      // pre-clamp ridge output
+  model_saturated: boolean;      // raw <= 0 or raw >= 1.25 → carries no information
+  low_confidence: boolean;       // baseline fell back, or served value is not baseline-backed
+  baseline_source: string;
   blend: number | null;
   mad: number;
   p21: number | null;
@@ -30,6 +34,7 @@ export type ForecastDay = {
   explain: string;
   driverSummary?: string;
 };
+
 
 export type ForecastResponse = {
   route: any | null;
@@ -197,10 +202,13 @@ export async function computeForecastForRoute(
 
   const days: ForecastDay[] = baselineDays.map((b: BaselineDay) => {
     const p21 = p21Latest.get(b.date) ?? null;
+    let modelRaw: number | null = null;
     let modelPred: number | null = null;
+    let saturated = false;
     let blend: number | null = null;
     let method: "baseline" | "model" | "blend" = "baseline";
     let driverStr: string | undefined;
+    let satNote = "";
 
     if (useModel && promoted && ctx) {
       const lags = buildLagBlock(routeRunsData, allRouteHubRuns, today, b.date);
@@ -208,10 +216,27 @@ export async function computeForecastForRoute(
       const { vector: x } = alignToPersistedNames(liveMap, persistedNames);
       const coeffs = promoted.coefficients as any as number[];
       if (Array.isArray(coeffs) && coeffs.length === x.length) {
-        modelPred = clamp(vecPredict(x, coeffs), 0, 1.25);
-        const baseVal = b.forecast ?? modelPred;
-        blend = clamp(effectiveW * modelPred + (1 - effectiveW) * baseVal, 0, 1.25);
-        method = effectiveW >= 0.999 ? "model" : (effectiveW <= 0.001 ? "baseline" : "blend");
+        modelRaw = vecPredict(x, coeffs);
+        // A raw value at/outside the clamp bounds is a saturated model: the
+        // clamped number is an artifact, not a prediction, so it must not vote.
+        saturated = !Number.isFinite(modelRaw) || modelRaw <= 0 || modelRaw >= 1.25;
+        modelPred = clamp(Number.isFinite(modelRaw) ? modelRaw : 0, 0, 1.25);
+        if (saturated) {
+          if (b.forecast != null) {
+            // Baseline alone. No 50% vote for a clamp artifact.
+            blend = b.forecast;
+            method = "baseline";
+            satNote = ` · model saturated (raw ${modelRaw!.toFixed(2)}) — baseline served alone`;
+          } else {
+            blend = modelPred;
+            method = effectiveW >= 0.999 ? "model" : "blend";
+            satNote = ` · model saturated (raw ${modelRaw!.toFixed(2)}) and no baseline — low confidence`;
+          }
+        } else {
+          const baseVal = b.forecast ?? modelPred;
+          blend = clamp(effectiveW * modelPred + (1 - effectiveW) * baseVal, 0, 1.25);
+          method = effectiveW >= 0.999 ? "model" : (effectiveW <= 0.001 ? "baseline" : "blend");
+        }
         const groups = groupContributions(coeffs, persistedNames, x);
         driverStr = driverSummary(groups, p21 != null && p21 > (blend ?? 0));
       }
@@ -223,15 +248,20 @@ export async function computeForecastForRoute(
     const madVal = routeMadOverride ?? b.mad;
     const explainSuffix = driverStr ? ` · ${driverStr}` : "";
     const p21Suffix = p21 != null ? ` · P21 ${p21.toFixed(2)}${guardApplied ? " (guard)" : ""}` : "";
+    const lowConfidence = b.low_confidence || (saturated && b.forecast == null);
     return {
       date: b.date, dow: b.dow, baseline: b.baseline, seasonal: b.seasonal,
-      forecast: b.forecast, model: modelPred, blend, mad: madVal, p21, final,
+      forecast: b.forecast, model: modelPred, model_raw: modelRaw,
+      model_saturated: saturated, low_confidence: lowConfidence,
+      baseline_source: b.baseline_source,
+      blend, mad: madVal, p21, final,
       method: useModel && chosen === blend ? method : "baseline",
       n_baseline: b.n_baseline,
-      explain: `${b.explain}${p21Suffix}${explainSuffix}`,
+      explain: `${b.explain}${satNote}${p21Suffix}${explainSuffix}`,
       driverSummary: driverStr,
     };
   });
+
 
   // Best-effort forecast_log write. Store raw (pre-guard) prediction in
   // `predicted`; final served value in `served`; flag guarded days so future

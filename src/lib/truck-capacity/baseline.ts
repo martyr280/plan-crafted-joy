@@ -6,6 +6,8 @@ import { mean as meanFn, mad as madFn, clamp } from "./linalg";
 
 export type RunPoint = { date: string; cap: number };
 
+export type BaselineSource = "weekday" | "route_mean" | "hub_mean" | "default" | "none";
+
 export type BaselineDay = {
   date: string;
   dow: number;
@@ -14,8 +16,13 @@ export type BaselineDay = {
   forecast: number | null;
   mad: number;
   n_baseline: number;
+  /** Which rung of the fallback chain produced `baseline`. */
+  baseline_source: BaselineSource;
+  /** True whenever the weekday itself contributed no 56-day samples. */
+  low_confidence: boolean;
   explain: string;
 };
+
 
 const WK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -106,18 +113,39 @@ export function baselineFromSnapshot(
       days.push({
         date, dow: dw, baseline: null, seasonal, forecast: null,
         mad: madVal, n_baseline: 0,
+        baseline_source: "none", low_confidence: true,
         explain: `No baseline (route does not typically run this weekday).`,
       });
       continue;
     }
     const samples = byDow.get(dw) ?? [];
-    const base = trimmedMean(samples) ?? routeMean ?? hubMeanVal ?? 0.5;
+    // Fallback chain, made explicit: the weekday can be "active" on the 84-day
+    // window and still have zero samples inside the 56-day baseline window.
+    const weekdayBase = trimmedMean(samples);
+    let source: BaselineSource;
+    let base: number;
+    if (weekdayBase != null) {
+      source = "weekday"; base = weekdayBase;
+    } else if (routeMean != null) {
+      source = "route_mean"; base = routeMean;
+    } else if (hubRuns.length > 0) {
+      source = "hub_mean"; base = hubMeanVal;
+    } else {
+      source = "default"; base = 0.5;
+    }
     const forecast = clamp(base * seasonal, 0, 1.25);
+    const sourceLabel =
+      source === "weekday" ? `${WK[dw]} baseline ${base.toFixed(2)} (n=${samples.length})`
+      : source === "route_mean" ? `no ${WK[dw]} runs in 56d — route mean ${base.toFixed(2)} (low confidence)`
+      : source === "hub_mean" ? `no route history in 56d — hub mean ${base.toFixed(2)} (low confidence)`
+      : `no history — default ${base.toFixed(2)} (low confidence)`;
     days.push({
       date, dow: dw, baseline: base, seasonal, forecast,
       mad: madVal, n_baseline: samples.length,
-      explain: `${WK[dw]} baseline ${base.toFixed(2)} (n=${samples.length}) × ${MON[mo - 1]} ${seasonal.toFixed(2)} = ${forecast.toFixed(2)}`,
+      baseline_source: source, low_confidence: source !== "weekday",
+      explain: `${sourceLabel} × ${MON[mo - 1]} ${seasonal.toFixed(2)} = ${forecast.toFixed(2)}`,
     });
+
   }
   return days;
 }
