@@ -80,10 +80,8 @@ export async function query(text, params = {}) {
 // when the consumer needs to preserve column order (e.g. CSV exports), since
 // passing rows through Postgres jsonb loses object-key order.
 export async function queryWithColumns(text, params = {}) {
-  const pool = await getPool();
-  const req = pool.request();
-  for (const [k, v] of Object.entries(params)) req.input(k, v);
-  const result = await req.query(text);
+  const result = await runWithRetry(text, params);
+
 
   // For multi-statement queries, mssql returns every recordset in
   // `result.recordsets`. Treat the LAST recordset that has column metadata
