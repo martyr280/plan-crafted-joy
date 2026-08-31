@@ -37,7 +37,10 @@ export const DEFAULT_WEBSITE_EXPORT_SETTINGS: WebsiteExportSettings = {
   database: "P21_Analytics_PLAY",
   procedure: "Website.usp_ExportSuiteCommerceTest",
   filenamePattern: "NDI_%Y%m%d.csv",
-  remoteFolder: "files.ndiofficefurniture.net/Charlston_OF",
+  // Verified 2026-08-31: the SSH login lands directly in the delivery directory.
+  // "files.ndiofficefurniture.net/Charlston_OF" is the partner's display path,
+  // not a real remote path — using it fails with "No such file".
+  remoteFolder: "",
   delimiter: ",",
   header: true,
   timezone: "America/Chicago",
