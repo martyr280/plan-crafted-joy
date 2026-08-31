@@ -9,7 +9,7 @@
       `corp-ca.pem`, set `NODE_EXTRA_CA_CERTS`; long-term ask NDI network admin for
       a `*.supabase.co` inspection bypass. Document in `agent/.env.example` +
       `agent/README.md` once confirmed.
-- [ ] **Expire 52 stale pending `p21_bridge_jobs` before agent reconnects** — retain
+- [x] **Expired 52 stale pending `p21_bridge_jobs` before agent reconnects** — retained
       the fresh 2026-08-31 14:59 UTC job so the first claim tests current work only.
 - [ ] **Agent version reporting** — `p21_bridge_agents` still records `1.0.0`
       (last_seen 2026-08-28 14:19 UTC). Confirm it flips to `1.2.0` after the TLS
