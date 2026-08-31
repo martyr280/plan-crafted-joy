@@ -1,32 +1,80 @@
 import sql from "mssql";
 
+let pool;
 let poolPromise;
 
+function config() {
+  return {
+    server: process.env.P21_SQL_HOST,
+    port: Number(process.env.P21_SQL_PORT ?? 1433),
+    database: process.env.P21_SQL_DB,
+    user: process.env.P21_SQL_USER,
+    password: process.env.P21_SQL_PASS,
+    options: {
+      encrypt: process.env.P21_SQL_ENCRYPT !== "false",
+      trustServerCertificate: process.env.P21_SQL_TRUST_CERT !== "false",
+    },
+    pool: { min: 0, max: 4, idleTimeoutMillis: 30000 },
+  };
+}
+
+function reset() {
+  pool = undefined;
+  poolPromise = undefined;
+}
+
+// WHY: the pool used to be memoized forever. Once the underlying connection
+// died (idle reap, VPN/FortiGate blip, SQL Server restart) every later query
+// failed with "Connection is closed." until the agent process was restarted.
+// Now we drop the cache on close/error and on any non-connected pool.
 export function getPool() {
+  if (pool && !pool.connected && !pool.connecting) reset();
   if (!poolPromise) {
-    poolPromise = sql.connect({
-      server: process.env.P21_SQL_HOST,
-      port: Number(process.env.P21_SQL_PORT ?? 1433),
-      database: process.env.P21_SQL_DB,
-      user: process.env.P21_SQL_USER,
-      password: process.env.P21_SQL_PASS,
-      options: {
-        encrypt: process.env.P21_SQL_ENCRYPT !== "false",
-        trustServerCertificate: process.env.P21_SQL_TRUST_CERT !== "false",
-      },
-      pool: { min: 0, max: 4, idleTimeoutMillis: 30000 },
-    });
+    poolPromise = new sql.ConnectionPool(config())
+      .connect()
+      .then((p) => {
+        pool = p;
+        p.on("error", () => reset());
+        p.on("close", () => reset());
+        return p;
+      })
+      .catch((e) => {
+        reset();
+        throw e;
+      });
   }
   return poolPromise;
 }
 
-export async function query(text, params = {}) {
-  const pool = await getPool();
-  const req = pool.request();
+function isClosedError(e) {
+  return /connection is closed|connection lost|not connected|socket hang up|ECONNRESET/i.test(
+    e?.message ?? String(e)
+  );
+}
+
+async function run(text, params) {
+  const p = await getPool();
+  const req = p.request();
   for (const [k, v] of Object.entries(params)) req.input(k, v);
-  const result = await req.query(text);
+  return req.query(text);
+}
+
+/** Run a query, transparently reconnecting once if the cached pool was dead. */
+async function runWithRetry(text, params) {
+  try {
+    return await run(text, params);
+  } catch (e) {
+    if (!isClosedError(e)) throw e;
+    reset();
+    return run(text, params);
+  }
+}
+
+export async function query(text, params = {}) {
+  const result = await runWithRetry(text, params);
   return result.recordset;
 }
+
 
 // Same as query() but also returns the column names in SELECT order. Use this
 // when the consumer needs to preserve column order (e.g. CSV exports), since
