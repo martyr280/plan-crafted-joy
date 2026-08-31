@@ -67,15 +67,28 @@ async function runJob(job) {
   }
 }
 
+let ticking = false;
+let lastAliveLog = 0;
+
 async function tick() {
+  if (ticking) return; // never overlap polls
+  ticking = true;
   try {
     await call("heartbeat");
+    // Prove liveness in the log at most once a minute, so silence always means trouble.
+    if (Date.now() - lastAliveLog > 60000) {
+      lastAliveLog = Date.now();
+      console.error(`[${new Date().toISOString()}] heartbeat ok`);
+    }
     const { jobs } = await call("claim", { limit: 5 });
     for (const job of jobs ?? []) await runJob(job);
   } catch (e) {
     console.error("tick error:", e?.message ?? e);
+  } finally {
+    ticking = false;
   }
 }
+
 
 console.log(`NDI P21 Bridge Agent "${AGENT_NAME}" v${VERSION}`);
 console.log(`Polling ${BRIDGE_URL} every ${pollMs}ms`);
