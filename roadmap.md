@@ -27,3 +27,10 @@
 - The 2026-08-28 08:00 UTC agent death was **platform-side**, not credentials:
   Cloudflare 520 + `SUPABASE_EDGE_RUNTIME_SERVICE_DEGRADED` 503s. Separate root
   cause from the current TLS failure.
+
+## SFTP export test (2026-08-31)
+
+- [x] Dry-run `website.export.sftp` verified: 5,142 rows / 832 KB / 5 columns.
+- [ ] Live SFTP delivery test to `files.ndiofficefurniture.net/Charlston_OF`.
+- [ ] Let admins download the generated CSV from the Website Export page to verify contents
+      (currently only a 3-line preview is stored).
