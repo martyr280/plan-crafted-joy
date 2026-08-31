@@ -15,7 +15,7 @@ if (!BRIDGE_URL || !BRIDGE_SECRET) {
   process.exit(1);
 }
 
-const VERSION = "1.3.1";
+const VERSION = "1.3.2";
 const REQUEST_TIMEOUT_MS = Number(process.env.BRIDGE_REQUEST_TIMEOUT_MS ?? 30000);
 const pollMs = Number(POLL_INTERVAL_MS);
 
