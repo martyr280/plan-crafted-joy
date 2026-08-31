@@ -9,9 +9,8 @@
       `corp-ca.pem`, set `NODE_EXTRA_CA_CERTS`; long-term ask NDI network admin for
       a `*.supabase.co` inspection bypass. Document in `agent/.env.example` +
       `agent/README.md` once confirmed.
-- [ ] **52 stale pending `p21_bridge_jobs`** — queued since 2026-08-28. Decide
-      expire-vs-run before the agent reconnects so three days of backlog does not
-      fire at P21 at once.
+- [x] **Expired 52 stale pending `p21_bridge_jobs` before agent reconnects** — retained
+      the fresh 2026-08-31 14:59 UTC job so the first claim tests current work only.
 - [ ] **Agent version reporting** — `p21_bridge_agents` still records `1.0.0`
       (last_seen 2026-08-28 14:19 UTC). Confirm it flips to `1.2.0` after the TLS
       fix; SFTP/CSV handlers for the Charlston export depend on v1.2.0 being live.
