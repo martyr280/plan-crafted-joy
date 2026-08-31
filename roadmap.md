@@ -14,6 +14,11 @@
 - [ ] **Agent version reporting** — `p21_bridge_agents` still records `1.0.0`
       (last_seen 2026-08-28 14:19 UTC). Confirm it flips to `1.2.0` after the TLS
       fix; SFTP/CSV handlers for the Charlston export depend on v1.2.0 being live.
+- [ ] **Determine what changed on the agent host on 2026-08-28** — last successful
+      heartbeat reported version `1.0.0`; the v1.2.0 Bun-compiled exe has *never*
+      heartbeated once. Suspect the launch method changed (node-windows service
+      running `node agent.js` → bare `ndiOS-agent.exe` process), not a firewall
+      change. Test: run `node agent.js` on the host with the same `.env`.
 - [ ] `typical_dow` backfill for 33 of 35 truck-capacity routes (not yet run).
 - [ ] Truck-capacity actuals are stale (max actual date 2026-07-29).
 
