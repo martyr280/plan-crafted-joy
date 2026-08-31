@@ -26,14 +26,29 @@ function sign(bodyText) {
 
 async function call(action, extra = {}) {
   const body = JSON.stringify({ action, agent: { name: AGENT_NAME, version: VERSION }, ...extra });
-  const res = await fetch(BRIDGE_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-bridge-signature": sign(body) },
-    body,
-  });
+  // Never let a hung/blackholed connection stall the poll loop forever.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(BRIDGE_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-bridge-signature": sign(body) },
+      body,
+      signal: ctl.signal,
+    });
+  } catch (e) {
+    if (ctl.signal.aborted) {
+      throw new Error(`bridge ${action} timed out after ${REQUEST_TIMEOUT_MS}ms (no response from ${BRIDGE_URL})`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(`bridge ${action} failed: ${res.status} ${await res.text()}`);
   return res.json();
 }
+
 
 async function runJob(job) {
   const handler = handlers[job.kind];
