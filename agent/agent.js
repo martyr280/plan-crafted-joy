@@ -14,7 +14,8 @@ if (!BRIDGE_URL || !BRIDGE_SECRET) {
   process.exit(1);
 }
 
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
+const REQUEST_TIMEOUT_MS = Number(process.env.BRIDGE_REQUEST_TIMEOUT_MS ?? 30000);
 const pollMs = Number(POLL_INTERVAL_MS);
 
 function sign(bodyText) {
