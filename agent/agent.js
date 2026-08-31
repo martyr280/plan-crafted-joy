@@ -56,7 +56,9 @@ async function call(action, extra = {}) {
       headers: { "content-type": "application/json", "x-bridge-signature": sign(body) },
       body,
       signal: ctl.signal,
+      ...tlsOption,
     });
+
   } catch (e) {
     if (ctl.signal.aborted) {
       throw new Error(`bridge ${action} timed out after ${REQUEST_TIMEOUT_MS}ms (no response from ${BRIDGE_URL})`);
