@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { handlers } from "./handlers/index.js";
 
 const {
@@ -14,15 +15,34 @@ if (!BRIDGE_URL || !BRIDGE_SECRET) {
   process.exit(1);
 }
 
-const VERSION = "1.3.0";
+const VERSION = "1.3.1";
 const REQUEST_TIMEOUT_MS = Number(process.env.BRIDGE_REQUEST_TIMEOUT_MS ?? 30000);
 const pollMs = Number(POLL_INTERVAL_MS);
+
+// --- Corporate TLS interception (FortiGate SSL deep inspection) -------------
+// The compiled binary does not consult the Windows certificate store, and it
+// ignores NODE_EXTRA_CA_CERTS. Read the CA PEM ourselves and hand it to fetch
+// via the `tls` option, which the Bun runtime honours per-request. Under plain
+// Node the extra option is ignored and NODE_EXTRA_CA_CERTS does the work.
+const CA_PATH = process.env.BRIDGE_CA_PATH || process.env.NODE_EXTRA_CA_CERTS || "";
+let extraCa = null;
+if (CA_PATH) {
+  try {
+    extraCa = readFileSync(CA_PATH, "utf8");
+    const count = (extraCa.match(/BEGIN CERTIFICATE/g) ?? []).length;
+    console.log(`Loaded ${count} extra CA certificate(s) from ${CA_PATH}`);
+  } catch (e) {
+    console.error(`Could not read CA file ${CA_PATH}: ${e?.message ?? e}`);
+  }
+}
+const tlsOption = extraCa ? { tls: { ca: extraCa } } : {};
 
 function sign(bodyText) {
   const ts = Date.now();
   const sig = createHmac("sha256", BRIDGE_SECRET).update(`${ts}.${bodyText}`).digest("hex");
   return `t=${ts},v1=${sig}`;
 }
+
 
 async function call(action, extra = {}) {
   const body = JSON.stringify({ action, agent: { name: AGENT_NAME, version: VERSION }, ...extra });
