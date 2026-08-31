@@ -31,8 +31,12 @@ const svc = new Service({
   // Run from the agent folder so relative paths and dotenv resolve correctly.
   workingDirectory: __dirname,
   // Inherit env from .env (loaded by dotenv inside agent.js); add NODE_ENV.
-  env: [{ name: "NODE_ENV", value: "production" }],
+  // Also promote the corporate CA path into the real process environment so
+  // Node's TLS trust store picks it up BEFORE dotenv runs (dotenv is too late
+  // for NODE_EXTRA_CA_CERTS).
+  env: [{ name: "NODE_ENV", value: "production" }, ...caEnv()],
 });
+
 
 svc.on("install", () => {
   console.log(`✓ Installed "${SERVICE_NAME}". Starting…`);
