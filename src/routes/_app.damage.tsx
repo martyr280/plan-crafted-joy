@@ -176,9 +176,9 @@ function DamagePage() {
       else if (r.severity === "severe") counts.severe++;
     }
     return [
-      { name: "Minor", value: counts.minor, fill: "hsl(var(--chart-3))" },
-      { name: "Moderate", value: counts.moderate, fill: "hsl(var(--chart-4))" },
-      { name: "Severe", value: counts.severe, fill: "hsl(var(--chart-5))" },
+      { name: "Minor", value: counts.minor, fill: "var(--chart-3)" },
+      { name: "Moderate", value: counts.moderate, fill: "var(--chart-4)" },
+      { name: "Severe", value: counts.severe, fill: "var(--chart-5)" },
     ];
   }, [filtered]);
 

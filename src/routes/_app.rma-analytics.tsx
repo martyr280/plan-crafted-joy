@@ -42,10 +42,10 @@ export const Route = createFileRoute("/_app/rma-analytics")({
 });
 
 const BUCKET_COLORS: Record<ReasonBucket, string> = {
-  damaged: "hsl(var(--destructive))",
-  wrong_pick: "hsl(var(--warning, 38 92% 50%))",
-  customer_change: "hsl(var(--primary))",
-  other: "hsl(var(--muted-foreground))",
+  damaged: "var(--destructive)",
+  wrong_pick: "var(--warning)",
+  customer_change: "var(--primary)",
+  other: "var(--muted-foreground)",
 };
 
 const money = (n: number) =>
@@ -183,8 +183,8 @@ function OverviewTab({ range }: { range: { from: string; to: string } }) {
               <YAxis yAxisId="r" orientation="right" fontSize={12} tickFormatter={(v) => `$${Math.round(v / 1000)}k`} />
               <Tooltip />
               <Legend />
-              <Line yAxisId="l" type="monotone" dataKey="count" name="Return lines" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-              <Line yAxisId="r" type="monotone" dataKey="value" name="Credit $" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+              <Line yAxisId="l" type="monotone" dataKey="count" name="Return lines" stroke="var(--primary)" strokeWidth={2} dot={false} />
+              <Line yAxisId="r" type="monotone" dataKey="value" name="Credit $" stroke="var(--destructive)" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
