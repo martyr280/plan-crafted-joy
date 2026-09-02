@@ -187,8 +187,8 @@ function Sparkline({ series, threshold }: { series: UnderRow["series"]; threshol
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
           <YAxis hide domain={[0, 100]} />
-          <ReferenceLine y={threshold * 100} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" />
-          <Line type="monotone" dataKey="value" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} connectNulls />
+          <ReferenceLine y={threshold * 100} stroke="var(--muted-foreground)" strokeDasharray="2 2" />
+          <Line type="monotone" dataKey="value" stroke="var(--destructive)" strokeWidth={2} dot={false} connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -523,8 +523,8 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
                       <LineChart data={rr.slice(-12).map((x) => ({ d: x.run_date, cap: Number(x.capacity_frac) }))}>
                         <YAxis hide domain={[0, 1.25]} />
                         <XAxis dataKey="d" hide />
-                        <Line dataKey="cap" stroke="hsl(var(--primary))" dot={false} strokeWidth={2} />
-                        <ReferenceLine y={0.9} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                        <Line dataKey="cap" stroke="var(--primary)" dot={false} strokeWidth={2} />
+                        <ReferenceLine y={0.9} stroke="var(--destructive)" strokeDasharray="3 3" />
                         <ReferenceLine y={0.3} stroke="orange" strokeDasharray="3 3" />
                       </LineChart>
                     </ResponsiveContainer>
@@ -603,9 +603,9 @@ function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean 
                 {/* The "unused" companion area is gone: stacked on a muted card it
                     swallowed the capacity line (Joe, 2026-07-16 and 2026-08-26).
                     Capacity is now the single dominant series. */}
-                <Line type="monotone" dataKey="capacity" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} name="Capacity" />
+                <Line type="monotone" dataKey="capacity" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="Capacity" />
 
-                <ReferenceLine y={0.9} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                <ReferenceLine y={0.9} stroke="var(--destructive)" strokeDasharray="3 3" />
               </ComposedChart>
 
             </ResponsiveContainer>
@@ -788,14 +788,14 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
                 <YAxis domain={[0, 1.5]} tickFormatter={(v) => `${Math.round(v * 100)}%`} tick={{ fontSize: 10 }} />
                 <Tooltip content={<ForecastTooltip />} />
                 <Legend />
-                <Area type="monotone" dataKey="upper" stroke="none" fill="hsl(var(--primary) / 0.15)" name="±MAD upper" />
-                <Area type="monotone" dataKey="lower" stroke="none" fill="hsl(var(--background))" name="±MAD lower" />
-                <Line type="monotone" dataKey="forecastPct" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Baseline" />
-                {version && <Line type="monotone" dataKey="modelPct" stroke="hsl(var(--chart-2, 200 80% 50%))" strokeWidth={1} strokeDasharray="5 3" dot={false} name="Model" />}
-                {version && <Line type="monotone" dataKey="blendPct" stroke="hsl(var(--foreground))" strokeWidth={2} dot={false} name="Blend" />}
-                <Line type="monotone" dataKey="p21Pct" stroke="hsl(var(--destructive))" strokeWidth={1} dot={{ r: 3 }} name="P21 projection" />
-                <Line type="monotone" dataKey="finalPct" stroke="hsl(var(--foreground))" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Final (served)" />
-                <ReferenceLine y={0.9} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                <Area type="monotone" dataKey="upper" stroke="none" fill="var(--primary)" fillOpacity={0.15} name="±MAD upper" />
+                <Area type="monotone" dataKey="lower" stroke="none" fill="var(--card)" name="±MAD lower" />
+                <Line type="monotone" dataKey="forecastPct" stroke="var(--primary)" strokeWidth={2} dot={false} name="Baseline" />
+                {version && <Line type="monotone" dataKey="modelPct" stroke="var(--chart-2)" strokeWidth={1} strokeDasharray="5 3" dot={false} name="Model" />}
+                {version && <Line type="monotone" dataKey="blendPct" stroke="var(--foreground)" strokeWidth={2} dot={false} name="Blend" />}
+                <Line type="monotone" dataKey="p21Pct" stroke="var(--destructive)" strokeWidth={1} dot={{ r: 3 }} name="P21 projection" />
+                <Line type="monotone" dataKey="finalPct" stroke="var(--foreground)" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Final (served)" />
+                <ReferenceLine y={0.9} stroke="var(--destructive)" strokeDasharray="3 3" />
                 <ReferenceLine y={0.3} stroke="orange" strokeDasharray="3 3" />
               </ComposedChart>
             </ResponsiveContainer>

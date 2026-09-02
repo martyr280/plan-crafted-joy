@@ -138,9 +138,9 @@ function EmailMonitorPage() {
               <YAxis fontSize={11} allowDecimals={false} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="delivered" stackId="a" fill="hsl(var(--success))" name="Delivered" />
-              <Bar dataKey="errors" stackId="a" fill="hsl(var(--destructive))" name="Errors" />
-              <Bar dataKey="dismissed" stackId="a" fill="hsl(var(--muted-foreground))" name="Dismissed" />
+              <Bar dataKey="delivered" stackId="a" fill="var(--success)" name="Delivered" />
+              <Bar dataKey="errors" stackId="a" fill="var(--destructive)" name="Errors" />
+              <Bar dataKey="dismissed" stackId="a" fill="var(--muted-foreground)" name="Dismissed" />
             </BarChart>
           </ResponsiveContainer>
         </div>

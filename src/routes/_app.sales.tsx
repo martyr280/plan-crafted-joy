@@ -120,7 +120,7 @@ function SalesPage() {
         <p className="font-semibold text-sm mb-4">Net sales trend</p>
         <ResponsiveContainer width="100%" height={260}>
           <LineChart data={trend}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="label" /><YAxis /><Tooltip />
             <Line type="monotone" dataKey="net" stroke="oklch(0.7 0.18 47)" strokeWidth={2} />
           </LineChart>
