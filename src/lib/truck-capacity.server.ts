@@ -5,6 +5,8 @@ import { dateStrInTz } from "@/lib/tz";
 import { runJob } from "./p21.server";
 import { validateSelectSql, stripLeadingSqlComments } from "./sql-schedules.server";
 import { baselineFromSnapshot, addDaysISO } from "./truck-capacity/baseline";
+import { runDatesInWindow, rollForward } from "./truck-capacity/roll-forward";
+import type { RouteCutoff } from "./truck-capacity/cutoffs";
 import {
   validateP21SqlText,
   validateP21SqlOutput,
@@ -24,16 +26,25 @@ export { trainAndMaybePromote } from "./truck-capacity/train";
 export type { TrainSummary } from "./truck-capacity/train";
 
 
-export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
--- Verified against NDI production by K. Moore, Jul 2026.
--- NOTE: required_date must stay UNQUALIFIED — h.required_date errors
--- (the column resolves via the join, likely from oe_line). est_pallets
--- intentionally omitted; the snapshot treats a missing est_pallets column
--- as NULL and falls back to weight/cube for the capacity ratio.
+export const DEFAULT_P21_SQL = `-- Truck Capacity :: open routed demand snapshot (backlog included).
+-- Verified against NDI production Sep 2026 (310 rows / 690 open routed orders).
+--
+-- Behaviour: every OPEN routed order line with remaining quantity is counted,
+-- including PAST-DUE lines (674 of 690 open orders sit behind their
+-- required_date — that backlog is exactly what waits for the next truck).
+-- Past-due and NULL required_date collapse onto today; the server then rolls
+-- each row forward to the route's next run date (see truck-capacity/roll-forward.ts).
+--
+-- Route resolution: the route lives on oe_hdr.shipping_route_uid for ~90% of
+-- orders; oe_line.shipping_route_uid is the fallback (COALESCE).
+-- l.required_date is correct and MUST stay qualified — oe_hdr has no
+-- required_date column. est_pallets is intentionally omitted; the snapshot
+-- treats a missing est_pallets column as NULL and falls back to weight/cube
+-- for the capacity ratio.
 --
 -- Required output columns (exact names):
 --   route_code        text     -- matched against truck_capacity_routes.p21_route_code, then .code
---   ship_date         date     -- shipment / delivery date
+--   ship_date         date     -- shipment / delivery date (past-due clamped to today)
 --   order_count       int
 --   total_weight_lbs  numeric
 --   total_cube_ft     numeric
@@ -45,23 +56,30 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 --
 -- Warehouse transfers are handled by DEFAULT_P21_TRANSFER_SQL below and pulled
 -- as a second snapshot pass that feeds the same truck_capacity_p21_demand table.
-SELECT sr.route_code                    AS route_code,
-       CAST(required_date AS DATE)      AS ship_date,
-       h.ship2_city                     AS ship_city,
-       COUNT(DISTINCT h.order_no)       AS order_count,
-       SUM(l.qty_ordered * im.weight)   AS total_weight_lbs,
-       SUM(l.qty_ordered * im.cube)     AS total_cube_ft
+SELECT sr.route_code                                                        AS route_code,
+       CASE WHEN l.required_date < CAST(GETDATE() AS DATE) OR l.required_date IS NULL
+            THEN CAST(GETDATE() AS DATE) ELSE CAST(l.required_date AS DATE) END AS ship_date,
+       h.ship2_city                                                         AS ship_city,
+       h.ship2_state                                                        AS ship_state,
+       h.ship2_zip                                                          AS ship_zip,
+       COUNT(DISTINCT h.order_no)                                           AS order_count,
+       SUM((l.qty_ordered - ISNULL(l.qty_invoiced,0) - ISNULL(l.qty_canceled,0)) * ISNULL(im.weight,0)) AS total_weight_lbs,
+       SUM((l.qty_ordered - ISNULL(l.qty_invoiced,0) - ISNULL(l.qty_canceled,0)) * ISNULL(im.cube,0))   AS total_cube_ft
   FROM dbo.oe_hdr h
-  JOIN dbo.shipping_route sr ON sr.shipping_route_uid = h.shipping_route_uid
   JOIN dbo.oe_line l  ON l.order_no = h.order_no
+  JOIN dbo.shipping_route sr ON sr.shipping_route_uid = COALESCE(h.shipping_route_uid, l.shipping_route_uid)
   JOIN dbo.inv_mast im ON im.inv_mast_uid = l.inv_mast_uid
  WHERE h.completed = 'N'
    AND ISNULL(h.cancel_flag, 'N') = 'N'
    AND ISNULL(h.delete_flag, 'N') = 'N'
    AND ISNULL(h.projected_order, 'N') = 'N'
    AND l.delete_flag = 'N'
-   AND required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
- GROUP BY sr.route_code, CAST(required_date AS DATE), h.ship2_city;`;
+   AND (l.qty_ordered - ISNULL(l.qty_invoiced,0) - ISNULL(l.qty_canceled,0)) > 0
+   AND (l.required_date IS NULL OR l.required_date <= DATEADD(day, 28, CAST(GETDATE() AS DATE)))
+ GROUP BY sr.route_code,
+       CASE WHEN l.required_date < CAST(GETDATE() AS DATE) OR l.required_date IS NULL
+            THEN CAST(GETDATE() AS DATE) ELSE CAST(l.required_date AS DATE) END,
+       h.ship2_city, h.ship2_state, h.ship2_zip;`;
 
 
 // -----------------------------------------------------------------------------
@@ -407,6 +425,32 @@ export async function runP21Snapshot(
     .from("truck_capacity_routes")
     .select("id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
 
+  // Active cutoffs per route — used to roll each demand row forward to the
+  // next run date the route can actually ship on. Routes with no active
+  // cutoffs (the *-SPECIAL routes) keep their raw ship date.
+  const { data: cutoffData } = await supabaseAdmin
+    .from("route_cutoffs").select("*").eq("active", true);
+  const cutoffsByRoute = new Map<string, RouteCutoff[]>();
+  for (const c of (cutoffData ?? []) as unknown as RouteCutoff[]) {
+    const list = cutoffsByRoute.get(c.route_id) ?? [];
+    list.push({ ...c, run_dows: (c.run_dows ?? []).map(Number) });
+    cutoffsByRoute.set(c.route_id, list);
+  }
+  const now = new Date();
+  const runDateCache = new Map<string, string[]>();
+  const runDatesFor = (routeId: string): string[] => {
+    let d = runDateCache.get(routeId);
+    if (!d) {
+      d = runDatesInWindow(cutoffsByRoute.get(routeId) ?? [], now);
+      runDateCache.set(routeId, d);
+    }
+    return d;
+  };
+  let rolledForwardCount = 0;
+  let backlogRows = 0;
+  const todayLocal = dateStrInTz(now);
+
+
   // Build code → claimants[] map. p21_route_code may be a comma-separated list
   // (e.g. "ARK01,ARK02"), and a single P21 code may legitimately be claimed
   // by more than one internal route (e.g. NSC01 covers both Carolinas,
@@ -616,11 +660,16 @@ export async function runP21Snapshot(
       }
     }
 
+    // Roll the raw ship date forward to the route's next reachable run date.
+    const rolled = rollForward(ship, runDatesFor(route.id));
+    if (rolled !== ship) rolledForwardCount++;
+    if (ship === todayLocal) backlogRows++;
+
     const est = num(r.est_pallets);
     const weight = num(r.total_weight_lbs);
     const cube = num(r.total_cube_ft);
     const oc = num(r.order_count) ?? 0;
-    const key = `${route.id}|${ship}`;
+    const key = `${route.id}|${rolled}`;
     const prev = agg.get(key);
     if (prev) {
       prev.order_count += oc;
@@ -629,7 +678,7 @@ export async function runP21Snapshot(
       prev.est_pallets = addNullable(prev.est_pallets, est);
     } else {
       agg.set(key, {
-        route_id: route.id, ship_date: ship,
+        route_id: route.id, ship_date: rolled,
         order_count: oc, total_weight_lbs: weight,
         total_cube_ft: cube, est_pallets: est,
         pallets_full_truck: route.pallets_full_truck,
@@ -698,8 +747,8 @@ export async function runP21Snapshot(
   await supabaseAdmin.from("activity_events").insert({
     event_type: "truck_capacity.p21_snapshot",
     entity_type: "truck_capacity_p21_demand",
-    message: `Truck Capacity P21 ${kindLabel} snapshot: ${written} rows, ${unmatched.size} unmatched route codes`,
-    metadata: { written, unmatched: Array.from(unmatched), kind },
+    message: `Truck Capacity P21 ${kindLabel} snapshot: ${written} rows, ${unmatched.size} unmatched route codes (${rolledForwardCount} rolled to next run)`,
+    metadata: { written, unmatched: Array.from(unmatched), kind, rolled_forward: rolledForwardCount, backlog_rows: backlogRows },
   });
 
   return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, kind };
