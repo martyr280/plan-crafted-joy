@@ -68,6 +68,17 @@ export const saveWebsiteExportConfig = createServerFn({ method: "POST" })
     return { settings: await saveWebsiteExportSettings(data) };
   });
 
+export const probeWebsiteExportDeliveryFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) =>
+    z.object({ paths: z.array(z.string().min(1).max(400)).max(10).optional() }).parse(i ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    await requireViewer(context.userId);
+    const { probeWebsiteExportDelivery } = await import("./website-export.server");
+    return probeWebsiteExportDelivery(data.paths ?? []);
+  });
+
 export const runWebsiteExportNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ dryRun: z.boolean().optional() }).parse(i ?? {}))

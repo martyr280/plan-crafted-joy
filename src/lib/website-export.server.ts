@@ -83,6 +83,39 @@ export function resolveFilename(pattern: string, at: Date, timezone: string): st
     .replace(/%d/g, d);
 }
 
+/**
+ * Read-only look at the partner SFTP server: which absolute directory the
+ * login lands in, what is sitting there, and whether the folder the partner
+ * names actually exists. Used when a run reports "delivered" but the partner
+ * cannot find the file.
+ */
+export async function probeWebsiteExportDelivery(extraPaths: string[] = []) {
+  const s = await getWebsiteExportSettings();
+  const paths = Array.from(
+    new Set(
+      [s.remoteFolder, "Charlston_OF", "/Charlston_OF", ...extraPaths]
+        .map((p) => String(p ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+  const { result } = await runJob("sftp.probe", { paths }, 60000);
+  return result as {
+    host: string;
+    port: number;
+    username: string;
+    cwd: string | null;
+    listings: Record<
+      string,
+      {
+        absolutePath: string;
+        count: number;
+        entries: { name: string; type: string; size: number; modifyTime: string | null }[];
+      }
+    >;
+    errors: Record<string, string>;
+  };
+}
+
 export type WebsiteExportRunResult = {
   ok: boolean;
   runId: string;
