@@ -660,11 +660,16 @@ export async function runP21Snapshot(
       }
     }
 
+    // Roll the raw ship date forward to the route's next reachable run date.
+    const rolled = rollForward(ship, runDatesFor(route.id));
+    if (rolled !== ship) rolledForwardCount++;
+    if (ship === todayLocal) backlogRows++;
+
     const est = num(r.est_pallets);
     const weight = num(r.total_weight_lbs);
     const cube = num(r.total_cube_ft);
     const oc = num(r.order_count) ?? 0;
-    const key = `${route.id}|${ship}`;
+    const key = `${route.id}|${rolled}`;
     const prev = agg.get(key);
     if (prev) {
       prev.order_count += oc;
