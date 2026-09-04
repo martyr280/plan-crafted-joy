@@ -11,13 +11,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, FileUp, Loader2, Play, RefreshCw, Server } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileUp, Loader2, Play, RefreshCw, Search, Server } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useModuleView } from "@/lib/usage-log";
 import {
   useWebsiteExportStatus,
   useSaveWebsiteExportConfig,
   useRunWebsiteExport,
+  useProbeWebsiteExportDelivery,
 } from "@/hooks/useWebsiteExport";
 
 export const Route = createFileRoute("/_app/website-export")({
@@ -56,6 +57,7 @@ function WebsiteExportPage() {
   const status = useWebsiteExportStatus(canView);
   const saveConfig = useSaveWebsiteExportConfig();
   const runExport = useRunWebsiteExport();
+  const probe = useProbeWebsiteExportDelivery();
 
   const [form, setForm] = useState<Record<string, any> | null>(null);
   useEffect(() => {
@@ -148,8 +150,92 @@ function WebsiteExportPage() {
       <Tabs defaultValue="runs">
         <TabsList>
           <TabsTrigger value="runs">Run history</TabsTrigger>
+          <TabsTrigger value="check">Delivery check</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="check" className="mt-4 space-y-4">
+          <Card className="p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="text-sm">
+                <div className="font-medium">Where does the file actually land?</div>
+                <p className="text-muted-foreground">
+                  Logs in to the partner's server read-only and lists the directory the login lands in, newest file
+                  first. If our file is there but the partner cannot see it, they are reading a different folder.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  probe.mutate(
+                    {},
+                    { onError: (e: any) => toast.error(e?.message ?? "Delivery check failed") },
+                  )
+                }
+                disabled={probe.isPending}
+              >
+                {probe.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                Check delivery folder
+              </Button>
+            </div>
+
+            {probe.data && (
+              <div className="space-y-4 text-sm">
+                <div className="text-muted-foreground">
+                  Signed in as <span className="font-mono">{(probe.data as any).username}</span> on{" "}
+                  <span className="font-mono">
+                    {(probe.data as any).host}:{(probe.data as any).port}
+                  </span>{" "}
+                  — landing directory <span className="font-mono">{(probe.data as any).cwd ?? "unknown"}</span>
+                </div>
+
+                {Object.entries((probe.data as any).listings ?? {}).map(([path, info]: [string, any]) => (
+                  <div key={path} className="rounded-md border">
+                    <div className="px-3 py-2 border-b flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs">
+                        {path === "." ? "landing directory" : path} → {info.absolutePath}
+                      </span>
+                      <Badge variant="outline">{info.count} entries</Badge>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead className="text-right">Size</TableHead>
+                          <TableHead>Modified</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {info.entries.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-muted-foreground">
+                              Empty — nothing is sitting in this directory.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {info.entries.map((e: any) => (
+                          <TableRow key={e.name}>
+                            <TableCell className="font-mono text-xs">{e.name}</TableCell>
+                            <TableCell>{e.type === "d" ? "folder" : e.type === "l" ? "link" : "file"}</TableCell>
+                            <TableCell className="text-right">{e.type === "d" ? "—" : bytes(e.size)}</TableCell>
+                            <TableCell className="whitespace-nowrap">{when(e.modifyTime)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+
+                {Object.entries((probe.data as any).errors ?? {}).map(([path, msg]: [string, any]) => (
+                  <div key={path} className="text-xs text-destructive break-words">
+                    <span className="font-mono">{path}</span>: {String(msg)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
 
         <TabsContent value="runs" className="mt-4">
           <Card className="p-0 overflow-hidden">

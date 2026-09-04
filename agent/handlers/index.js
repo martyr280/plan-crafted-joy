@@ -7,6 +7,7 @@ import { e2gCombinedReport } from "./e2g-report.js";
 import { pricerSync } from "./pricer-sync.js";
 import { sqlSelect } from "./sql-select.js";
 import { websiteExportSftp } from "./website-export.js";
+import { sftpProbe } from "./sftp-probe.js";
 
 // Allowlist of job kinds the agent will execute. The app cannot ask for
 // anything not listed here — keeps SQL safe and predictable.
@@ -21,4 +22,5 @@ export const handlers = {
   "pricer.sync": pricerSync,
   "sql.select": sqlSelect,
   "website.export.sftp": websiteExportSftp,
+  "sftp.probe": sftpProbe,
 };

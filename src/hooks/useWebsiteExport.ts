@@ -4,7 +4,15 @@ import {
   getWebsiteExportStatus,
   saveWebsiteExportConfig,
   runWebsiteExportNow,
+  probeWebsiteExportDeliveryFn,
 } from "@/lib/website-export.functions";
+
+export function useProbeWebsiteExportDelivery() {
+  const fn = useServerFn(probeWebsiteExportDeliveryFn);
+  return useMutation({
+    mutationFn: (vars: { paths?: string[] } = {}) => fn({ data: vars } as any),
+  });
+}
 
 export function useWebsiteExportStatus(enabled = true) {
   const fn = useServerFn(getWebsiteExportStatus);
