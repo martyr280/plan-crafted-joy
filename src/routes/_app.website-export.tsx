@@ -18,6 +18,7 @@ import {
   useWebsiteExportStatus,
   useSaveWebsiteExportConfig,
   useRunWebsiteExport,
+  useProbeWebsiteExportDelivery,
 } from "@/hooks/useWebsiteExport";
 
 export const Route = createFileRoute("/_app/website-export")({
@@ -56,6 +57,7 @@ function WebsiteExportPage() {
   const status = useWebsiteExportStatus(canView);
   const saveConfig = useSaveWebsiteExportConfig();
   const runExport = useRunWebsiteExport();
+  const probe = useProbeWebsiteExportDelivery();
 
   const [form, setForm] = useState<Record<string, any> | null>(null);
   useEffect(() => {
