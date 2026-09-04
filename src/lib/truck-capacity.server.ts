@@ -5,6 +5,8 @@ import { dateStrInTz } from "@/lib/tz";
 import { runJob } from "./p21.server";
 import { validateSelectSql, stripLeadingSqlComments } from "./sql-schedules.server";
 import { baselineFromSnapshot, addDaysISO } from "./truck-capacity/baseline";
+import { runDatesInWindow, rollForward } from "./truck-capacity/roll-forward";
+import type { RouteCutoff } from "./truck-capacity/cutoffs";
 import {
   validateP21SqlText,
   validateP21SqlOutput,
