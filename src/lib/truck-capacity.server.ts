@@ -24,16 +24,25 @@ export { trainAndMaybePromote } from "./truck-capacity/train";
 export type { TrainSummary } from "./truck-capacity/train";
 
 
-export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
--- Verified against NDI production by K. Moore, Jul 2026.
--- NOTE: required_date must stay UNQUALIFIED — h.required_date errors
--- (the column resolves via the join, likely from oe_line). est_pallets
--- intentionally omitted; the snapshot treats a missing est_pallets column
--- as NULL and falls back to weight/cube for the capacity ratio.
+export const DEFAULT_P21_SQL = `-- Truck Capacity :: open routed demand snapshot (backlog included).
+-- Verified against NDI production Sep 2026 (310 rows / 690 open routed orders).
+--
+-- Behaviour: every OPEN routed order line with remaining quantity is counted,
+-- including PAST-DUE lines (674 of 690 open orders sit behind their
+-- required_date — that backlog is exactly what waits for the next truck).
+-- Past-due and NULL required_date collapse onto today; the server then rolls
+-- each row forward to the route's next run date (see truck-capacity/roll-forward.ts).
+--
+-- Route resolution: the route lives on oe_hdr.shipping_route_uid for ~90% of
+-- orders; oe_line.shipping_route_uid is the fallback (COALESCE).
+-- l.required_date is correct and MUST stay qualified — oe_hdr has no
+-- required_date column. est_pallets is intentionally omitted; the snapshot
+-- treats a missing est_pallets column as NULL and falls back to weight/cube
+-- for the capacity ratio.
 --
 -- Required output columns (exact names):
 --   route_code        text     -- matched against truck_capacity_routes.p21_route_code, then .code
---   ship_date         date     -- shipment / delivery date
+--   ship_date         date     -- shipment / delivery date (past-due clamped to today)
 --   order_count       int
 --   total_weight_lbs  numeric
 --   total_cube_ft     numeric
@@ -45,23 +54,30 @@ export const DEFAULT_P21_SQL = `-- Truck Capacity :: forward demand snapshot.
 --
 -- Warehouse transfers are handled by DEFAULT_P21_TRANSFER_SQL below and pulled
 -- as a second snapshot pass that feeds the same truck_capacity_p21_demand table.
-SELECT sr.route_code                    AS route_code,
-       CAST(required_date AS DATE)      AS ship_date,
-       h.ship2_city                     AS ship_city,
-       COUNT(DISTINCT h.order_no)       AS order_count,
-       SUM(l.qty_ordered * im.weight)   AS total_weight_lbs,
-       SUM(l.qty_ordered * im.cube)     AS total_cube_ft
+SELECT sr.route_code                                                        AS route_code,
+       CASE WHEN l.required_date < CAST(GETDATE() AS DATE) OR l.required_date IS NULL
+            THEN CAST(GETDATE() AS DATE) ELSE CAST(l.required_date AS DATE) END AS ship_date,
+       h.ship2_city                                                         AS ship_city,
+       h.ship2_state                                                        AS ship_state,
+       h.ship2_zip                                                          AS ship_zip,
+       COUNT(DISTINCT h.order_no)                                           AS order_count,
+       SUM((l.qty_ordered - ISNULL(l.qty_invoiced,0) - ISNULL(l.qty_canceled,0)) * ISNULL(im.weight,0)) AS total_weight_lbs,
+       SUM((l.qty_ordered - ISNULL(l.qty_invoiced,0) - ISNULL(l.qty_canceled,0)) * ISNULL(im.cube,0))   AS total_cube_ft
   FROM dbo.oe_hdr h
-  JOIN dbo.shipping_route sr ON sr.shipping_route_uid = h.shipping_route_uid
   JOIN dbo.oe_line l  ON l.order_no = h.order_no
+  JOIN dbo.shipping_route sr ON sr.shipping_route_uid = COALESCE(h.shipping_route_uid, l.shipping_route_uid)
   JOIN dbo.inv_mast im ON im.inv_mast_uid = l.inv_mast_uid
  WHERE h.completed = 'N'
    AND ISNULL(h.cancel_flag, 'N') = 'N'
    AND ISNULL(h.delete_flag, 'N') = 'N'
    AND ISNULL(h.projected_order, 'N') = 'N'
    AND l.delete_flag = 'N'
-   AND required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
- GROUP BY sr.route_code, CAST(required_date AS DATE), h.ship2_city;`;
+   AND (l.qty_ordered - ISNULL(l.qty_invoiced,0) - ISNULL(l.qty_canceled,0)) > 0
+   AND (l.required_date IS NULL OR l.required_date <= DATEADD(day, 28, CAST(GETDATE() AS DATE)))
+ GROUP BY sr.route_code,
+       CASE WHEN l.required_date < CAST(GETDATE() AS DATE) OR l.required_date IS NULL
+            THEN CAST(GETDATE() AS DATE) ELSE CAST(l.required_date AS DATE) END,
+       h.ship2_city, h.ship2_state, h.ship2_zip;`;
 
 
 // -----------------------------------------------------------------------------
