@@ -304,7 +304,7 @@ async function buildSnapshotReadout(startedAt: Date) {
   const { data: rows } = await supabaseAdmin
     .from("truck_capacity_p21_demand")
     .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, total_weight_lbs, est_pallets, order_count")
-    .gte("created_at", startedAt.toISOString())
+    .gte("snapshot_at", startedAt.toISOString())
     .limit(50000);
   const list = rows ?? [];
   const withFrac = list.filter((r) => r.projected_capacity_frac != null);

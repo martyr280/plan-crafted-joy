@@ -6,6 +6,7 @@ export const SHEET_TO_ROUTE_CODE: Record<string, string> = {
   "dallas special runs": "DAL-SPECIAL",
   "dallas-local": "DAL-LOCAL", "dallas local": "DAL-LOCAL",
   "moar": "MOAR", "east tx": "ETX",
+  "west tx": "WTX", "west texas": "WTX", "wtx": "WTX",
   "okl": "OKL", "hou": "HOU", "kan": "KAN", "ark": "ARK",
   "bham transfer": "BHM-XFER-DAL", "bham transfer (dallas)": "BHM-XFER-DAL", "birmingham transfer": "BHM-XFER-DAL",
   "birmingham special runs": "BHM-SPECIAL",
