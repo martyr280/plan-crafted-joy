@@ -678,7 +678,7 @@ export async function runP21Snapshot(
       prev.est_pallets = addNullable(prev.est_pallets, est);
     } else {
       agg.set(key, {
-        route_id: route.id, ship_date: ship,
+        route_id: route.id, ship_date: rolled,
         order_count: oc, total_weight_lbs: weight,
         total_cube_ft: cube, est_pallets: est,
         pallets_full_truck: route.pallets_full_truck,
