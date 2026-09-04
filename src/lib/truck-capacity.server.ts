@@ -425,6 +425,32 @@ export async function runP21Snapshot(
     .from("truck_capacity_routes")
     .select("id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
 
+  // Active cutoffs per route — used to roll each demand row forward to the
+  // next run date the route can actually ship on. Routes with no active
+  // cutoffs (the *-SPECIAL routes) keep their raw ship date.
+  const { data: cutoffData } = await supabaseAdmin
+    .from("route_cutoffs").select("*").eq("active", true);
+  const cutoffsByRoute = new Map<string, RouteCutoff[]>();
+  for (const c of (cutoffData ?? []) as unknown as RouteCutoff[]) {
+    const list = cutoffsByRoute.get(c.route_id) ?? [];
+    list.push({ ...c, run_dows: (c.run_dows ?? []).map(Number) });
+    cutoffsByRoute.set(c.route_id, list);
+  }
+  const now = new Date();
+  const runDateCache = new Map<string, string[]>();
+  const runDatesFor = (routeId: string): string[] => {
+    let d = runDateCache.get(routeId);
+    if (!d) {
+      d = runDatesInWindow(cutoffsByRoute.get(routeId) ?? [], now);
+      runDateCache.set(routeId, d);
+    }
+    return d;
+  };
+  let rolledForwardCount = 0;
+  let backlogRows = 0;
+  const todayLocal = dateStrInTz(now);
+
+
   // Build code → claimants[] map. p21_route_code may be a comma-separated list
   // (e.g. "ARK01,ARK02"), and a single P21 code may legitimately be claimed
   // by more than one internal route (e.g. NSC01 covers both Carolinas,
