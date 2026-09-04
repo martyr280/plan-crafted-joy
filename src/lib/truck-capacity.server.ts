@@ -747,8 +747,8 @@ export async function runP21Snapshot(
   await supabaseAdmin.from("activity_events").insert({
     event_type: "truck_capacity.p21_snapshot",
     entity_type: "truck_capacity_p21_demand",
-    message: `Truck Capacity P21 ${kindLabel} snapshot: ${written} rows, ${unmatched.size} unmatched route codes`,
-    metadata: { written, unmatched: Array.from(unmatched), kind },
+    message: `Truck Capacity P21 ${kindLabel} snapshot: ${written} rows, ${unmatched.size} unmatched route codes (${rolledForwardCount} rolled to next run)`,
+    metadata: { written, unmatched: Array.from(unmatched), kind, rolled_forward: rolledForwardCount, backlog_rows: backlogRows },
   });
 
   return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, kind };
