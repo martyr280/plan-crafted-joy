@@ -882,3 +882,238 @@ export const getForecastVsActual = createServerFn({ method: "POST" })
       })),
     };
   });
+
+/* ===================== FORECAST VS TRACKER (WP-2) ===================== */
+
+const fvtInput = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  madeOnFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  includeSpecial: z.boolean().optional(),
+  hub: z.string().max(64).nullable().optional(),
+});
+
+/** Routes this caller may see: everything for ops/admin roles, own routes for a rep. */
+async function scopedRouteCodesFor(userId: string): Promise<{ scoped: boolean; repCode: string | null; codes: Set<string> | null }> {
+  const full = await hasAnyRoleSrv(userId, ["admin", "ops_logistics_admin", "ops_logistics", "ops_orders", "ops_reports"]);
+  if (full) return { scoped: false, repCode: null, codes: null };
+  const { data: profile } = await supabaseAdmin
+    .from("profiles").select("sales_rep_code").eq("id", userId).maybeSingle();
+  const repCode = (profile as any)?.sales_rep_code ? String((profile as any).sales_rep_code).trim().toUpperCase() : null;
+  if (!repCode) return { scoped: true, repCode: null, codes: new Set<string>() };
+  const { data: maps } = await supabaseAdmin
+    .from("route_salespeople").select("route_code, rep_code, active").limit(10000);
+  const codes = new Set<string>(
+    (maps ?? []).filter((m: any) => m.active && String(m.rep_code).toUpperCase() === repCode)
+      .map((m: any) => String(m.route_code).toUpperCase()),
+  );
+  return { scoped: true, repCode, codes };
+}
+
+/**
+ * Reconcile the forecast Nelson HAD AT CUTOFF against the capacity the branches
+ * logged in the tracker, per route-day, then roll up to route-weeks. Read-only.
+ *
+ * Deliberately distinct from getForecastVsActual, which scores every logged
+ * prediction at every lead time. Here there is exactly one forecast per
+ * route-day: the one a dispatcher could have acted on.
+ */
+async function buildForecastVsTracker(
+  input: z.infer<typeof fvtInput>,
+  userId: string,
+) {
+  const acc = await import("./truck-capacity/accuracy");
+  const { dedupeLogRows } = await import("./truck-capacity/forecast-log");
+
+  // Default window: the Sunday 8 weeks before this week's Sunday, through today.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const thisSunday = acc.weekStartSunday(todayISO);
+  const from = input.from ?? acc.weekStartSunday(new Date(Date.parse(`${thisSunday}T00:00:00Z`) - 7 * 7 * 86_400_000).toISOString().slice(0, 10));
+  const to = input.to ?? todayISO;
+  const madeOnFrom = input.madeOnFrom ?? acc.ACCURACY_DEFAULT_MADE_FROM;
+  const includeSpecial = input.includeSpecial ?? false;
+  const hubFilter = input.hub && input.hub !== "all" ? input.hub : null;
+
+  const scope = await scopedRouteCodesFor(userId);
+
+  const [routeRes, runRes, logRes, cutRes] = await Promise.all([
+    supabaseAdmin.from("truck_capacity_routes").select("id, code, name, hub, active, sort_order").limit(2000),
+    supabaseAdmin.from("truck_capacity_runs").select("route_id, run_date, capacity_frac")
+      .gte("run_date", from).lte("run_date", to).limit(100000),
+    supabaseAdmin.from("truck_capacity_forecast_log")
+      .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied")
+      .gte("forecast_date", from).lte("forecast_date", to).gte("made_on", madeOnFrom).limit(100000),
+    supabaseAdmin.from("route_cutoffs").select("route_id, cutoff_dow, run_dows, active").eq("active", true).limit(5000),
+  ]);
+  for (const r of [routeRes, runRes, logRes, cutRes]) if (r.error) throw new Error(r.error.message);
+
+  const routes = (routeRes.data ?? []).filter((r: any) => r.active)
+    .filter((r: any) => includeSpecial || !acc.isSpecialRoute(String(r.code)))
+    .filter((r: any) => !hubFilter || r.hub === hubFilter)
+    .filter((r: any) => !scope.codes || scope.codes.has(String(r.code).toUpperCase()));
+  const routeById = new Map(routes.map((r: any) => [r.id, r]));
+
+  const cutoffsByRoute = new Map<string, any[]>();
+  for (const c of cutRes.data ?? []) {
+    cutoffsByRoute.set(c.route_id, [...(cutoffsByRoute.get(c.route_id) ?? []), {
+      cutoff_dow: Number(c.cutoff_dow),
+      run_dows: ((c.run_dows ?? []) as any[]).map(Number),
+      active: c.active !== false,
+    }]);
+  }
+
+  // Actuals: avg(capacity_frac) across run_seq for the route-day.
+  const actualAcc = new Map<string, { sum: number; n: number }>();
+  for (const r of runRes.data ?? []) {
+    if (!routeById.has(r.route_id)) continue;
+    if (r.capacity_frac == null || !Number.isFinite(Number(r.capacity_frac))) continue;
+    const k = `${r.route_id}|${r.run_date}`;
+    const cur = actualAcc.get(k) ?? { sum: 0, n: 0 };
+    cur.sum += Number(r.capacity_frac); cur.n += 1;
+    actualAcc.set(k, cur);
+  }
+
+  // Deduped log rows keyed by route|forecast_date.
+  const logs = dedupeLogRows((logRes.data ?? []) as any[]);
+  const logByKey = new Map<string, any[]>();
+  for (const l of logs as any[]) {
+    const k = `${l.route_id}|${l.forecast_date}`;
+    logByKey.set(k, [...(logByKey.get(k) ?? []), l]);
+  }
+
+  const rows: any[] = [];
+  let unscoredNoForecast = 0;
+  const lastActualByHub: Record<string, string> = {};
+
+  for (const [key, agg] of actualAcc) {
+    const [routeId, runDate] = key.split("|") as [string, string];
+    const route: any = routeById.get(routeId);
+    if (!route) continue;
+    const hub = route.hub ?? "";
+    if (!lastActualByHub[hub] || runDate > lastActualByHub[hub]!) lastActualByHub[hub] = runDate;
+
+    const actual = agg.sum / agg.n;
+    const { cutoffDate, cutoffKnown } = acc.cutoffDateForRun(runDate, cutoffsByRoute.get(routeId) ?? []);
+    const picked = acc.pickForecastAtCutoff(logByKey.get(key) ?? [], cutoffDate, runDate);
+    if (!picked) { unscoredNoForecast += 1; continue; }
+    const forecast = Number(picked.row.served);
+    rows.push({
+      hub: route.hub ?? null,
+      route_id: routeId,
+      code: route.code,
+      name: route.name,
+      run_date: runDate,
+      week_start: acc.weekStartSunday(runDate),
+      cutoff_date: cutoffDate,
+      cutoff_known: cutoffKnown,
+      made_on: picked.madeOn,
+      lead_days: picked.leadDays,
+      after_cutoff: picked.afterCutoff,
+      forecast,
+      actual,
+      variance: forecast - actual,
+      method: picked.row.method ?? null,
+      guard: !!picked.row.p21_guard_applied,
+      runs: agg.n,
+    });
+  }
+
+  rows.sort((a, b) => a.run_date.localeCompare(b.run_date) || String(a.code).localeCompare(String(b.code)));
+  const aggregates = acc.aggregate(rows as any);
+
+  const madeOns = (logs as any[]).map((l) => l.made_on).sort();
+
+  return {
+    window: { from, to, madeOnFrom, includeSpecial, hub: hubFilter },
+    rows,
+    ...aggregates,
+    coverage: {
+      routeDaysWithActuals: actualAcc.size,
+      scored: rows.length,
+      unscoredNoForecast,
+      lastActualByHub,
+      firstMadeOn: madeOns[0] ?? null,
+      lastMadeOn: madeOns[madeOns.length - 1] ?? null,
+      scoped: scope.scoped,
+      repCode: scope.repCode,
+      routesInScope: routes.length,
+    },
+  };
+}
+
+export const getForecastVsTracker = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => fvtInput.parse(i ?? {}))
+  .handler(async ({ data, context }) => buildForecastVsTracker(data, context.userId));
+
+/** Excel export of the same reconciliation, in whole percentage points. */
+export const exportForecastVsTracker = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => fvtInput.parse(i ?? {}))
+  .handler(async ({ data, context }) => {
+    const res = await buildForecastVsTracker(data, context.userId);
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const P = (v: number | null | undefined, d = 0) =>
+      v == null || !Number.isFinite(Number(v)) ? null : Number((Number(v) * 100).toFixed(d));
+
+    const s = wb.addWorksheet("Summary");
+    s.columns = [{ width: 34 }, { width: 22 }];
+    const put = (a: string, b: any = "") => s.addRow([a, b]);
+    put("Forecast vs Tracker");
+    put("Run window", `${res.window.from} to ${res.window.to}`);
+    put("Forecasts made on or after", res.window.madeOnFrom);
+    put("Special-run lanes included", res.window.includeSpecial ? "Yes" : "No");
+    put("Hub", res.window.hub ?? "All hubs");
+    put("");
+    put("Scored runs", res.overall.n);
+    put("Route-days with tracker actuals", res.coverage.routeDaysWithActuals);
+    put("Route-days with no usable forecast", res.coverage.unscoredNoForecast);
+    put("Typical miss (pts)", P(res.overall.mae, 1));
+    put("Lean (pts, + = Nelson high)", P(res.overall.bias, 1));
+    put("Within 10 pts (%)", P(res.overall.within10, 0));
+    put("Within 15 pts (%)", P(res.overall.within15, 0));
+    put("Within 20 pts (%)", P(res.overall.within20, 0));
+    put("Route-week miss (pts)", P(res.weekLevel.mae, 1));
+    put("Route-weeks with 2+ runs", res.weekLevel.n);
+    put("");
+    put("How to read");
+    put("Capacity is a percent of a full truck.");
+    put("A point is one percentage point of that scale.");
+    put("Forecast 60 / tracker 77 = 17 points low.");
+    put("Forecast at cutoff = last forecast recorded on or before the route's order cutoff.");
+    s.getRow(1).font = { bold: true };
+
+    const rw = wb.addWorksheet("Route-Weeks");
+    rw.columns = [
+      { header: "Hub", key: "hub", width: 14 }, { header: "Route", key: "code", width: 16 },
+      { header: "Week of", key: "week", width: 12 }, { header: "Days scored", key: "days", width: 12 },
+      { header: "Forecast %", key: "f", width: 12 }, { header: "Tracker %", key: "t", width: 12 },
+      { header: "Variance pts", key: "v", width: 13 }, { header: "Typical miss pts", key: "m", width: 16 },
+    ];
+    rw.getRow(1).font = { bold: true };
+    for (const w of res.routeWeeks) {
+      rw.addRow({ hub: w.hub ?? "", code: w.code, week: w.week_start, days: w.days,
+        f: P(w.forecastMean), t: P(w.actualMean), v: P(w.varianceMean), m: P(w.mae) });
+    }
+
+    const rs = wb.addWorksheet("Runs");
+    rs.columns = [
+      { header: "Hub", key: "hub", width: 14 }, { header: "Route", key: "code", width: 16 },
+      { header: "Run date", key: "run", width: 12 }, { header: "Cutoff date", key: "cut", width: 12 },
+      { header: "Forecast made on", key: "made", width: 17 }, { header: "Lead days", key: "lead", width: 11 },
+      { header: "Forecast %", key: "f", width: 12 }, { header: "Tracker %", key: "t", width: 12 },
+      { header: "Variance pts", key: "v", width: 13 }, { header: "Method", key: "method", width: 10 },
+      { header: "P21 guard", key: "guard", width: 11 }, { header: "After cutoff", key: "after", width: 13 },
+    ];
+    rs.getRow(1).font = { bold: true };
+    for (const r of res.rows as any[]) {
+      rs.addRow({ hub: r.hub ?? "", code: r.code, run: r.run_date,
+        cut: r.cutoff_known ? r.cutoff_date : `${r.cutoff_date} (est)`,
+        made: r.made_on, lead: r.lead_days, f: P(r.forecast), t: P(r.actual), v: P(r.variance),
+        method: r.method ?? "", guard: r.guard ? "Yes" : "", after: r.after_cutoff ? "Yes" : "" });
+    }
+
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+    return { base64: buf.toString("base64"), filename: `forecast-vs-tracker-${new Date().toISOString().slice(0, 10)}.xlsx` };
+  });
