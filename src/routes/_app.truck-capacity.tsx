@@ -16,7 +16,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Plus, Trash2, Upload, Download, Play, RefreshCw, ChevronDown, Truck, TrendingDown, Users, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Download, Play, RefreshCw, ChevronDown, Truck, TrendingDown, Users, AlertTriangle, Snowflake } from "lucide-react";
+
+/** "3 minutes ago" style relative time for the freeze readout. */
+function formatRelativeTime(iso: string): string {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso;
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, Legend,
 } from "recharts";
@@ -33,6 +46,7 @@ import {
   previewTruckImport, commitTruckImport, exportTruckWorkbook,
   runP21SnapshotNow, testP21Sql, runP21TransferSnapshotNow, testP21TransferSql,
   retrainTruckModel, listTruckModelVersions, getTruckAccuracy,
+  freezeForecastsNow, getLastForecastFreeze,
   listP21UnmatchedRouteCodes, assignP21RouteCode, setP21RouteCodeIgnored,
   getTruckCapacityCoverage, getForecastVsActual,
 } from "@/lib/truck-capacity.functions";
@@ -1399,10 +1413,15 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 function RetrainCard() {
   const retrainFn = useServerFn(retrainTruckModel);
   const versionsFn = useServerFn(listTruckModelVersions);
+  const freezeFn = useServerFn(freezeForecastsNow);
+  const lastFreezeFn = useServerFn(getLastForecastFreeze);
   const qc = useQueryClient();
   const vQ = useQuery({ queryKey: ["tc-model-versions"], queryFn: () => versionsFn() });
+  const freezeQ = useQuery({ queryKey: ["tc-last-freeze"], queryFn: () => lastFreezeFn() });
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<any>(null);
+  const [freezing, setFreezing] = useState(false);
+  const [freezeResult, setFreezeResult] = useState<any>(null);
   async function run() {
     setBusy(true); setLast(null);
     try {
@@ -1416,15 +1435,42 @@ function RetrainCard() {
     } catch (e: any) { toast.error(e?.message ?? "Retrain failed"); }
     finally { setBusy(false); }
   }
+  async function freeze() {
+    setFreezing(true); setFreezeResult(null);
+    try {
+      const r = await freezeFn();
+      setFreezeResult(r);
+      toast.success(`Froze ${r.routes} routes — ${r.rows_inserted} rows written`);
+      qc.invalidateQueries({ queryKey: ["tc-last-freeze"] });
+      qc.invalidateQueries({ queryKey: ["tc-forecast-vs-actual"] });
+    } catch (e: any) { toast.error(e?.message ?? "Freeze failed"); }
+    finally { setFreezing(false); }
+  }
+  const lastFreeze = freezeQ.data?.last ?? null;
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm font-medium">Forecast model</div>
-        <Button size="sm" variant="outline" onClick={run} disabled={busy}>
-          {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}Retrain now
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={freeze} disabled={freezing}>
+            {freezing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Snowflake className="w-4 h-4 mr-1" />}Freeze today's forecasts
+          </Button>
+          <Button size="sm" variant="outline" onClick={run} disabled={busy}>
+            {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}Retrain now
+          </Button>
+        </div>
       </div>
-      <div className="text-xs text-muted-foreground mb-3">Nightly retrain runs automatically at ~03:00 EDT. Manual retrain trains + backtests + promotes if the blend beats baseline.</div>
+      <div className="text-xs text-muted-foreground mb-3">Nightly retrain runs automatically at ~03:00 EDT, followed by a forecast freeze that records what the board would show for every active route. Manual retrain trains + backtests + promotes if the blend beats baseline.</div>
+      {freezeResult && (
+        <div className="text-xs mb-1">
+          Froze {freezeResult.routes} routes — {freezeResult.rows_inserted} rows written, {freezeResult.rows_existing} already present (made on {freezeResult.made_on})
+        </div>
+      )}
+      {lastFreeze && (
+        <div className="text-xs text-muted-foreground mb-3">
+          Last freeze: {formatRelativeTime(lastFreeze.created_at)} · {lastFreeze.trigger ?? "unknown"}
+        </div>
+      )}
       {last && (
         <div className="text-xs mb-3">
           Last: λ={last.chosenLambda}, w={last.chosenW}, blend MAE {Number(last.holdout_mae_blend ?? 0).toFixed(4)} vs baseline {Number(last.holdout_mae_baseline ?? 0).toFixed(4)} · {last.promoted ? "PROMOTED" : "not promoted"} · folds {last.fold_count}

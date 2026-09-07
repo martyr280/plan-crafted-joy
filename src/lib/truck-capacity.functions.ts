@@ -761,6 +761,38 @@ export const deleteRouteCutoff = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Freeze today's served forecasts for every active route into forecast_log. */
+export const freezeForecastsNow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireLogisticsAdmin(context.userId);
+    const { freezeForecasts } = await import("./truck-capacity/freeze");
+    return await freezeForecasts({ trigger: "manual", actorId: context.userId });
+  });
+
+/** Latest forecast-freeze activity event (for the Settings readout). */
+export const getLastForecastFreeze = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const { data } = await supabaseAdmin
+      .from("activity_events")
+      .select("id, created_at, message, metadata")
+      .eq("event_type", "truck_capacity.forecasts_frozen")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return {
+      last: data
+        ? {
+            created_at: data.created_at,
+            trigger: (data.metadata as any)?.trigger ?? null,
+            rows_inserted: (data.metadata as any)?.rows_inserted ?? null,
+            routes: (data.metadata as any)?.routes ?? null,
+          }
+        : null,
+    };
+  });
+
 /**
  * Forecast vs actual — scores the LOGGED predictions in truck_capacity_forecast_log
  * against the imported actuals in truck_capacity_runs. Read-only.
@@ -796,7 +828,10 @@ export const getForecastVsActual = createServerFn({ method: "POST" })
     if (logRes.error) throw new Error(logRes.error.message);
     if (runRes.error) throw new Error(runRes.error.message);
 
-    const logs = logRes.data ?? [];
+    // One row per (route, forecast_date, made_on): once more than one method is
+    // logged for a key, scoring every row would double-count the same forecast.
+    const { dedupeLogRows } = await import("./truck-capacity/forecast-log");
+    const logs = dedupeLogRows((logRes.data ?? []) as any[]);
     const runs = runRes.data ?? [];
     const actuals = actualsByRouteDay(runs as any);
 

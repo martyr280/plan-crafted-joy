@@ -11,6 +11,7 @@ import {
   type RouteMeta,
 } from "./features";
 import { groupContributions, driverSummary } from "./explain";
+import { forecastLogRowsFromDays } from "./forecast-log";
 
 export type ServingMethod = "auto" | "baseline" | "model";
 
@@ -263,28 +264,13 @@ export async function computeForecastForRoute(
   });
 
 
-  // Best-effort forecast_log write. Store raw (pre-guard) prediction in
-  // `predicted`; final served value in `served`; flag guarded days so future
-  // accuracy-vs-actuals can exclude them from MAE math.
-  if (useModel && promoted) {
+  // Best-effort forecast_log write, shared row shape with the nightly freeze.
+  // Only the "auto" serving mode writes: a "baseline"/"model" override view is a
+  // what-if, not what the business was shown. Baseline-served auto days DO get
+  // logged. ignoreDuplicates keeps the nightly freeze row as the row of record.
+  if (methodOverride === "auto") {
     try {
-      const rows = days
-        .filter((d) => (d.blend ?? d.forecast) != null)
-        .map((d) => {
-          const raw = d.blend ?? d.forecast!;
-          const p21 = d.p21;
-          const guardApplied = p21 != null && p21 > raw;
-          return {
-            route_id: routeId,
-            forecast_date: d.date,
-            made_on: today,
-            predicted: raw,
-            served: d.final,
-            p21_guard_applied: guardApplied,
-            method: d.method,
-            model_version_id: promoted.id,
-          };
-        });
+      const rows = forecastLogRowsFromDays(routeId, days, today, promoted?.id ?? null);
       if (rows.length > 0) {
         await supabaseAdmin.from("truck_capacity_forecast_log")
           .upsert(rows, { onConflict: "route_id,forecast_date,made_on,method", ignoreDuplicates: true });
