@@ -38,6 +38,7 @@ import { KpiCard } from "@/components/shared/KpiCard";
 import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
 import { ForecastBoard } from "@/components/truck-capacity/ForecastBoard";
 import { RouteCutoffsEditor } from "@/components/truck-capacity/RouteCutoffsEditor";
+import { ForecastVsTracker } from "@/components/truck-capacity/ForecastVsTracker";
 
 import { useAuth } from "@/lib/auth";
 import {
@@ -163,6 +164,7 @@ function TruckCapacityPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="route">Route</TabsTrigger>
           <TabsTrigger value="forecast">Forecast</TabsTrigger>
+          <TabsTrigger value="fvt">Forecast vs Tracker</TabsTrigger>
           <TabsTrigger value="underfilled">Underfilled</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
           {isAdmin && <TabsTrigger value="import">Import</TabsTrigger>}
@@ -171,6 +173,7 @@ function TruckCapacityPage() {
         <TabsContent value="overview"><OverviewTab routes={routes} /></TabsContent>
         <TabsContent value="route"><RouteTab routes={routes} canWrite={canWrite} /></TabsContent>
         <TabsContent value="forecast"><ForecastTab routes={routes} /></TabsContent>
+        <TabsContent value="fvt"><ForecastVsTracker /></TabsContent>
         <TabsContent value="underfilled"><UnderfilledTab viewAsRep={scoped ? null : (viewAsRep || null)} /></TabsContent>
         <TabsContent value="alerts"><AlertsTab routes={allRoutes} isManager={isAdmin} /></TabsContent>
         {isAdmin && <TabsContent value="import"><ImportTab /></TabsContent>}
