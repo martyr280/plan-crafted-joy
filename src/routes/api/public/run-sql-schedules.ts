@@ -92,6 +92,36 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
+          // Nightly forecast freeze (03:00–03:15 Central), AFTER snapshot + retrain
+          // so it freezes today's demand and today's promoted model. Dedup guard is
+          // the activity event, not the presence of forecast_log rows: a user's
+          // 3:02 AM page view writes rows but must not suppress the freeze.
+          let truckCapacityFreeze: any = null;
+          if (ct.hour === 3 && ct.minute < 15) {
+            try {
+              const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+              const { dateStrInTz } = await import("@/lib/tz");
+              const chicagoToday = dateStrInTz(now);
+              // Guard on the event's own made_on (Chicago date), not created_at:
+              // a UTC-date window would let a 7 PM Central freeze the prior day
+              // suppress tonight's run.
+              const { data: alreadyFrozen } = await supabaseAdmin
+                .from("activity_events")
+                .select("id")
+                .eq("event_type", "truck_capacity.forecasts_frozen")
+                .eq("metadata->>made_on", chicagoToday)
+                .limit(1);
+              if (alreadyFrozen && alreadyFrozen.length > 0) {
+                truckCapacityFreeze = { ok: true, skipped: true, reason: "already_frozen_today" };
+              } else {
+                const { freezeForecasts } = await import("@/lib/truck-capacity/freeze");
+                truckCapacityFreeze = await freezeForecasts({ trigger: "nightly" });
+              }
+            } catch (e: any) { truckCapacityFreeze = { ok: false, error: e?.message ?? String(e) }; }
+          }
+
+
+
           // Monthly Sales Reports run: 1st of the month, 3:00–3:15 AM Central.
           // Dedup-guarded by an existing run in the current calendar month so
           // overlapping cron ticks don't produce duplicate runs.
@@ -194,7 +224,7 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             dispatchReconciler = await runDispatchReconcilerTick(now);
           } catch (e: any) { dispatchReconciler = { ok: false, error: e?.message ?? String(e) }; }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, salesReports, capacityAlerts, driverTime, websiteExport, dispatchBuilder, dispatchReconciler, ranAt: new Date().toISOString() });
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, truckCapacityFreeze, salesReports, capacityAlerts, driverTime, websiteExport, dispatchBuilder, dispatchReconciler, ranAt: new Date().toISOString() });
 
 
 
