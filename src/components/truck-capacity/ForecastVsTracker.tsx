@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -251,7 +251,7 @@ export function ForecastVsTracker() {
                   const rs = gridRoutes.filter((r) => (r.hub ?? "") === h);
                   if (!rs.length) return null;
                   return (
-                    <>
+                    <Fragment key={`hub-group-${h}`}>
                       <tr key={`hub-${h}`}>
                         <td colSpan={weeks.length + 1} className="pt-3 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground sticky left-0 bg-card">{h}</td>
                       </tr>
@@ -275,7 +275,7 @@ export function ForecastVsTracker() {
                           })}
                         </tr>
                       ))}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
