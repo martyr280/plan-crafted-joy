@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dateStrInTz } from "@/lib/driver-time/tz";
+import { actualSchema, validateActual, buildReconciledDrivers, weekday } from "@/lib/driver-time/reconciliation";
 
 const db = () => supabaseAdmin as any;
 
@@ -56,14 +57,14 @@ function compareHubs(a: string, b: string): number {
 export const getDriverTimeWeek = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i) =>
-    z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(i ?? {}),
+    z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), includeWeekends: z.boolean().default(false) }).parse(i ?? {}),
   )
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     const isAdmin = await hasAnyRoleSrv(context.userId, ["admin"]);
     const weekStart = mondayOf(data.weekStart ?? dateStrInTz(new Date()));
     const weekEndDate = new Date(`${weekStart}T00:00:00Z`);
-    weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
+    weekEndDate.setUTCDate(weekEndDate.getUTCDate() + (data.includeWeekends ? 6 : 4));
     const weekEnd = weekEndDate.toISOString().slice(0, 10);
 
     const { data: events, error } = await db()
@@ -76,12 +77,14 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       .limit(5000);
     if (error) throw new Error(error.message);
 
-    const { data: overrides } = await db()
+    const { data: overrides, error: overrideError } = await db()
       .from("driver_time_week_overrides")
-      .select("driver_id, paycom_hours")
+      .select("*")
       .eq("week_start", weekStart)
       .limit(2000);
 
+    if (overrideError) throw new Error(overrideError.message);
+    if ((events?.length ?? 0) >= 5000 || (overrides?.length ?? 0) >= 2000) throw new Error("Report exceeds safe row limit; narrow the window.");
     let rates: any[] = [];
     if (isAdmin) {
       const { data: r } = await db()
@@ -105,49 +108,21 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
     const paycomFor = (driverId: string) =>
       (overrides ?? []).find((o: any) => String(o.driver_id) === String(driverId))?.paycom_hours ?? null;
 
-    const byDriver = new Map<string, any>();
-    for (const ev of events ?? []) {
-      const key = String(ev.driver_id);
-      const bucket = byDriver.get(key) ?? {
-        driverId: key,
-        driverName: ev.driver_name ?? key,
-        events: [] as any[],
-        flaggedMinutes: 0,
-        minutesByHub: {} as Record<string, number>,
-      };
-      bucket.events.push(ev);
-      bucket.flaggedMinutes += Number(ev.duration_min ?? 0);
-      const hubKey = ev.hub && String(ev.hub).trim() ? String(ev.hub).trim() : UNASSIGNED_HUB;
-      bucket.minutesByHub[hubKey] = (bucket.minutesByHub[hubKey] ?? 0) + Number(ev.duration_min ?? 0);
-      byDriver.set(key, bucket);
-    }
-
-    const driverRows = Array.from(byDriver.values())
-      .map((b) => {
-        const flaggedHours = b.flaggedMinutes / 60;
-        const cost = estimateCost({
-          driverId: b.driverId,
-          driverName: b.driverName,
-          samsaraWeekHours: 0,
-          paycomHours: paycomFor(b.driverId),
-          flaggedHours,
-          hourlyRate: isAdmin ? Number(rateFor(b.driverId) ?? 0) || null : null,
-        });
-        // A driver is filed under the warehouse where most of their flagged time
-        // sat that week. Cost/Paycom stay driver-week scoped so the numbers are
-        // unchanged by the grouping; individual event rows still name their own
-        // warehouse, so a split week is still readable.
-        const hubEntries = Object.entries(b.minutesByHub as Record<string, number>)
-          .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
-        return {
-          ...b,
-          flaggedHours: Math.round(flaggedHours * 100) / 100,
-          cost,
-          hub: hubEntries[0]?.[0] ?? UNASSIGNED_HUB,
-          multiHub: hubEntries.length > 1,
-        };
-      })
-      .sort((a, b) => b.flaggedMinutes - a.flaggedMinutes);
+    const { getDriverTimeSettings } = await import("@/lib/driver-time.server");
+    const settings = await getDriverTimeSettings();
+    const { isExcludedDriver } = await import("@/lib/driver-time/detect");
+    const scopedEvents = (events ?? []).filter((ev:any) => !isExcludedDriver({id:ev.driver_id,name:ev.driver_name}, settings));
+    const driverRows = buildReconciledDrivers(scopedEvents, overrides ?? [], data.includeWeekends).map(b => {
+      const flaggedHours = b.flaggedMinutes / 60;
+      const paidHours = paycomFor(b.driverId);
+      const cost = estimateCost({ driverId:b.driverId,driverName:b.driverName,
+        samsaraWeekHours:0,paycomHours:paidHours,flaggedHours,
+        hourlyRate:isAdmin ? Number(rateFor(b.driverId) ?? 0) || null : null });
+      // This module does not fetch total weekly paid hours. Never label zero
+      // as real Samsara hours or infer an overtime multiplier from it.
+      if (paidHours == null) { cost.cost = null; cost.multiplier = null; cost.note = "Enter Paycom paid hours to estimate cost"; }
+      return {...b,flaggedHours:Math.round(flaggedHours*100)/100,cost};
+    });
 
     // Hub groups in the Truck Capacity order, worst offender first inside a hub.
     const hubGroups = Array.from(new Set(driverRows.map((d) => d.hub)))
@@ -167,14 +142,19 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
     return {
       weekStart,
       weekEnd,
+      includeWeekends: data.includeWeekends,
       isAdmin,
       drivers: driverRows,
       hubGroups,
       totals: {
         drivers: driverRows.length,
-        events: (events ?? []).length,
+        events: scopedEvents.length,
+        flaggedMinutes: driverRows.reduce((s,d)=>s+d.flaggedMinutes,0),
+        officialDrivers: driverRows.filter(d=>d.official != null).length,
+        automatedMinutes: driverRows.reduce((s,d)=>s+d.automatedMinutes,0),
+        unresolvedMinutes: driverRows.reduce((s,d)=>s+d.unresolvedMinutes,0),
         flaggedHours: Math.round((driverRows.reduce((s, d) => s + d.flaggedMinutes, 0) / 60) * 100) / 100,
-        needsReview: (events ?? []).filter((e: any) => e.needs_review).length,
+        needsReview: scopedEvents.filter((e: any) => e.needs_review && !e.superseded_at && e.status !== "excused").length,
         estimatedCost: driverRows.reduce((s, d) => s + (d.cost.cost ?? 0), 0),
         driversWithoutRate: driverRows.filter((d) => d.cost.hourlyRate === null).length,
       },
@@ -243,11 +223,12 @@ export const setPaycomHours = createServerFn({ method: "POST" })
 
 export const runDriverTimeSweepNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator(i => z.object({weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()}).parse(i ?? {}))
+  .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     try {
       const { runDriverTimeSweep } = await import("@/lib/driver-time.server");
-      return await runDriverTimeSweep({ triggeredBy: context.userId });
+      return await runDriverTimeSweep({ triggeredBy: context.userId, weekStart:data.weekStart });
     } catch (e: any) {
       return {
         ok: false as const,
@@ -422,4 +403,33 @@ export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
         warnings: [`Diagnostics failed: ${e?.message ?? String(e)}`],
       };
     }
+  });
+
+/** Audited warehouse actuals are independent of Paycom paid hours. */
+export const saveWarehouseActual = createServerFn({method:"POST"})
+  .middleware([requireSupabaseAuth])
+  .inputValidator(i => z.object({driverId:z.string().min(1).max(200),weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    actual:actualSchema.nullable(), expectedUpdatedAt:z.string().nullable()}).parse(i))
+  .handler(async ({data,context}) => {
+    await requireViewer(context.userId);
+    const actual = data.actual ? validateActual(data.actual,data.weekStart) : null;
+    const payload = {warehouse_actual:actual,updated_by:context.userId,updated_at:new Date().toISOString()};
+    // Compare-and-set prevents one reviewer silently overwriting another.
+    if (data.expectedUpdatedAt) {
+      const {data:changed,error} = await db().from("driver_time_week_overrides").update(payload)
+        .eq("driver_id",data.driverId).eq("week_start",data.weekStart).eq("updated_at",data.expectedUpdatedAt).select("id");
+      if (error) throw new Error(error.message);
+      if (!changed?.length) throw new Error("This week changed. Refresh and review the latest value before saving.");
+    } else {
+      // A Paycom-only row may exist even when this driver has no events.
+      // Updating only a still-null actual preserves those paid-hours fields.
+      const {data:changed,error:updateError} = await db().from("driver_time_week_overrides").update(payload)
+        .eq("driver_id",data.driverId).eq("week_start",data.weekStart).is("warehouse_actual",null).select("id");
+      if (updateError) throw new Error(updateError.message);
+      if (!changed?.length) {
+        const {error} = await db().from("driver_time_week_overrides").insert({...payload,driver_id:data.driverId,week_start:data.weekStart});
+        if (error) throw new Error(error.code === "23505" ? "This week already has an entry. Refresh before saving." : error.message);
+      }
+    }
+    return {ok:true as const};
   });

@@ -23,6 +23,8 @@ import {
   useSamsaraDiagnostics,
 } from "@/hooks/useDriverTime";
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
+import { formatMinutes, hubTimezone, reconciliationCsv } from "@/lib/driver-time/reconciliation";
+import { WarehouseActualEditor } from "@/components/driver-time/WarehouseActualEditor";
 
 export const Route = createFileRoute("/_app/driver-time")({
   head: () => ({
@@ -60,8 +62,8 @@ function hm(minutes: number) {
   return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
 }
 
-function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: CENTRAL_TZ });
+function clock(iso: string, hub?: string | null) {
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: hubTimezone(hub) });
 }
 
 function dayLabel(date: string) {
@@ -83,7 +85,8 @@ function DriverTimePage() {
   const isAdmin = hasAnyRole(["admin"] as any);
 
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
-  const weekQ = useDriverTimeWeek(weekStart, canView);
+  const [includeWeekends, setIncludeWeekends] = useState(false);
+  const weekQ = useDriverTimeWeek(weekStart, canView, includeWeekends);
   const sweep = useRunDriverTimeSweep();
 
   const data = weekQ.data;
@@ -109,12 +112,12 @@ function DriverTimePage() {
     return rows.map((r) => r.map((c) => `"${String(c ?? "")}"`).join(",")).join("\n");
   }, [drivers]);
 
-  function downloadCsv() {
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  function downloadCsv(raw = false) {
+    const blob = new Blob([raw ? csv : reconciliationCsv(drivers)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `driver-warehouse-time-${weekStart}.csv`;
+    a.download = `driver-warehouse-${raw ? "raw-events" : "reconciled"}-${weekStart}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -134,19 +137,20 @@ function DriverTimePage() {
     <div className="p-6">
       <ModuleHeader
         title="Driver Warehouse Time"
-        description="Non-driving on-duty blocks parked inside a warehouse geofence, detected from Samsara hours-of-service logs."
+        description="Verified warehouse hours alongside automated Samsara estimates. Official reports take precedence for the weekdays they cover."
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={downloadCsv} disabled={!drivers.length}>
-              <Download className="w-4 h-4 mr-1" /> CSV
+            <Button variant="outline" size="sm" onClick={() => downloadCsv()} disabled={!drivers.length}>
+              <Download className="w-4 h-4 mr-1" /> Reconciled CSV
             </Button>
+            <Button variant="outline" size="sm" onClick={() => downloadCsv(true)} disabled={!drivers.length}>Raw events CSV</Button>
             <Button variant="outline" size="sm" onClick={() => window.print()} disabled={!drivers.length}>
               <Printer className="w-4 h-4 mr-1" /> Print / PDF
             </Button>
             <Button
               size="sm"
               onClick={() =>
-                sweep.mutate(undefined, {
+                sweep.mutate(weekStart, {
                   onSuccess: (r: any) =>
                     r?.ok
                       ? toast.success(`Sweep complete — ${r.eventsFound} event(s) across ${r.driversScanned} driver(s)`)
@@ -157,32 +161,34 @@ function DriverTimePage() {
               disabled={sweep.isPending}
             >
               {sweep.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-              Run sweep
+              Rescan selected week
             </Button>
           </>
         }
       />
 
       <div className="flex items-center gap-2 mb-4">
-        <Button variant="outline" size="icon" onClick={() => setWeekStart(shiftWeek(weekStart, -1))}>
+        <Button variant="outline" size="icon" aria-label="Previous week" onClick={() => setWeekStart(shiftWeek(weekStart, -1))}>
           <ChevronLeft className="w-4 h-4" />
         </Button>
         <div className="text-sm font-medium">
           Week of {dayLabel(weekStart)}{data ? ` – ${dayLabel(data.weekEnd)}` : ""}
         </div>
-        <Button variant="outline" size="icon" onClick={() => setWeekStart(shiftWeek(weekStart, 1))}>
+        <Button variant="outline" size="icon" aria-label="Next week" onClick={() => setWeekStart(shiftWeek(weekStart, 1))}>
           <ChevronRight className="w-4 h-4" />
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setWeekStart(mondayOf(new Date()))}>This week</Button>
       </div>
 
+      <label className="flex gap-2 items-center mb-4 text-sm"><input type="checkbox" checked={includeWeekends} onChange={e=>setIncludeWeekends(e.target.checked)} /> Include weekend automated events</label>
+      {weekQ.isError && <Card className="p-4 mb-4 text-destructive">Report unavailable: {(weekQ.error as Error).message}. Hours have not been treated as zero.</Card>}
       <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <KpiCard label="Drivers flagged" value={String(totals?.drivers ?? 0)} icon={<Users className="w-5 h-5" />} />
-        <KpiCard label="Flagged hours" value={`${totals?.flaggedHours ?? 0}`} icon={<Clock className="w-5 h-5" />} />
+        <KpiCard label="Drivers in report" value={String(totals?.drivers ?? 0)} icon={<Users className="w-5 h-5" />} />
+        <KpiCard label="Warehouse time (H:MM)" value={totals ? formatMinutes(totals.flaggedMinutes) : "—"} icon={<Clock className="w-5 h-5" />} />
         <KpiCard label="Needs review" value={String(totals?.needsReview ?? 0)} icon={<AlertTriangle className="w-5 h-5" />} />
         <KpiCard
           label="Estimated cost"
-          value={isAdmin ? money(totals?.estimatedCost ?? 0) : "—"}
+          value={isAdmin && drivers.some(d=>d.cost.cost != null) ? money(totals?.estimatedCost ?? 0) : "—"}
           icon={<CheckCircle2 className="w-5 h-5" />}
         />
 
@@ -191,7 +197,7 @@ function DriverTimePage() {
       {isAdmin && (totals?.driversWithoutRate ?? 0) > 0 && (
         <Card className="p-3 mb-4 text-xs text-muted-foreground border-warning/40">
           {totals?.driversWithoutRate} driver(s) have no hourly rate on file, so their time is excluded from the cost
-          estimate rather than valued at zero. Overtime is approximated from Samsara hours unless Paycom hours are entered.
+          estimate. Enter Paycom paid hours to calculate an estimate; warehouse time alone cannot establish overtime.
         </Card>
       )}
 
@@ -205,15 +211,16 @@ function DriverTimePage() {
 
 
         <TabsContent value="report" className="mt-4 space-y-4">
+          <Card className="p-3 text-sm">{totals?.officialDrivers ?? 0} driver(s) have official weekday totals. All other totals are automated estimates. Excused, superseded and unresolved-location events remain visible but do not count. Times are shown in each warehouse’s local timezone.</Card>
+          <WarehouseActualEditor key={weekStart} weekStart={weekStart} drivers={drivers} />
           {weekQ.isLoading && (
             <Card className="p-6 text-sm text-muted-foreground flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading week…
             </Card>
           )}
-          {!weekQ.isLoading && !drivers.length && (
+          {!weekQ.isLoading && !weekQ.isError && !drivers.length && (
             <Card className="p-6 text-sm text-muted-foreground">
-              No warehouse dwell events for this week. Run a sweep, or confirm the warehouse geofences and threshold in
-              Settings.
+              No stored events or official report for this window. This does not prove zero hours. Rescan the selected week or enter verified hours.
             </Card>
           )}
           {hubGroups.map((g: any) => (
@@ -221,7 +228,7 @@ function DriverTimePage() {
               <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2">
                 <div className="text-sm font-semibold">{g.hub}</div>
                 <div className="text-xs text-muted-foreground">
-                  {g.drivers.length} driver{g.drivers.length === 1 ? "" : "s"} · {hm(g.flaggedMinutes)} flagged
+                  {g.drivers.length} driver{g.drivers.length === 1 ? "" : "s"} · {hm(g.flaggedMinutes)} reported
                 </div>
               </div>
               <div className="space-y-4 p-3">
@@ -306,7 +313,7 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
         <div>
           <div className="font-semibold">{driver.driverName}</div>
           <div className="text-xs text-muted-foreground">
-            {driver.events.length} block(s) · {hm(driver.flaggedMinutes)} of non-driving warehouse time this week
+            {hm(driver.flaggedMinutes)} reported · {driver.official ? "Official weekday report" : "Automated estimate"} · automated weekdays {hm(driver.automatedMinutes)}
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
@@ -342,6 +349,17 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
         </div>
       </div>
 
+      {driver.official && <div className="mb-3 rounded border bg-muted/30 p-3 text-sm space-y-2">
+        <div><strong>Official {formatMinutes(driver.officialMinutes)}</strong> · automated {formatMinutes(driver.automatedMinutes)} · variance {formatMinutes(driver.varianceMinutes)} (automated minus official)</div>
+        <p className="text-xs text-muted-foreground">{driver.official.source} · {driver.official.reason}</p>
+        {!!driver.official.intervals?.length && <details><summary className="cursor-pointer">Official time blocks ({driver.official.intervals.length})</summary>
+          {driver.official.intervals.map((i:any,n:number)=><p key={n} className="text-xs mt-1">{dayLabel(i.date)} · {clock(i.start,driver.hub)} – {clock(i.end,driver.hub)} · {hm(i.minutes)} {i.note ? `· ${i.note}` : ""}</p>)}
+        </details>}
+        <details><summary className="cursor-pointer">Correction history ({driver.history.length})</summary>
+          {driver.history.map((h:any,n:number)=><p key={n} className="text-xs mt-1">{h.at} · {h.after ? formatMinutes(h.after.minutes) : "Cleared"} · {h.after?.reason ?? ""}</p>)}
+        </details>
+      </div>}
+      {!!driver.events.length && <p className="mb-2 text-xs font-medium text-muted-foreground">Automated evidence ({driver.events.length} blocks)</p>}
       <div className="space-y-3">
         {byDay.map(([date, events]) => (
           <div key={date}>
@@ -349,7 +367,7 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
             <div className="rounded-md border divide-y">
               {events.map((ev: any) => (
                 <div key={ev.id} className="p-3 flex flex-wrap items-center gap-3 text-sm">
-                  <div className="font-mono text-xs w-40">{clock(ev.start_ts)} – {clock(ev.end_ts)}</div>
+                  <div className="font-mono text-xs w-40">{clock(ev.start_ts,ev.hub)} – {clock(ev.end_ts,ev.hub)}</div>
                   <div className="font-medium w-24">{hm(ev.duration_min)}</div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-[200px]">
                     <MapPin className="w-3 h-3" />
@@ -359,6 +377,7 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
                     )}
                   </div>
                   <div className="text-[11px] text-muted-foreground">{(ev.statuses ?? []).join(" / ")}</div>
+                  {ev.superseded_at && <Badge variant="outline">superseded</Badge>}
                   {ev.needs_review && (
                     <Badge variant="outline" className="text-[10px] border-warning/50">needs review</Badge>
                   )}
@@ -430,7 +449,7 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
         )}
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Label className="text-xs">Flag blocks of at least (minutes)</Label>
+            <Label className="text-xs">Flag blocks longer than (minutes)</Label>
             <Input
               value={threshold || String(settings?.thresholdMinutes ?? 90)}
               onChange={(e) => setThreshold(e.target.value)}
@@ -588,7 +607,7 @@ function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
     const withEvents = (d.drivers ?? []).filter((r: any) => r.eventsEmitted > 0).length;
     return {
       ok: true,
-      text: `Pipeline healthy — ${f.eventsEmitted} event(s) detected across ${withEvents} driver(s).`,
+      text: `Detection completed: ${f.eventsEmitted} event(s) across ${withEvents} driver(s). Accuracy against official hours still requires reconciliation.`,
     };
   }
   if (f.segmentsFetched === 0)

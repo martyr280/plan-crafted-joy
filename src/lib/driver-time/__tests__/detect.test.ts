@@ -71,11 +71,12 @@ describe("detectWarehouseEvents — golden fixtures", () => {
     expect(run([seg({ startMs: cst(5, 9), endMs: cst(5, 9, 59), status: "onDuty" })])).toHaveLength(0);
   });
 
-  it("89 minutes is not flagged, 90 minutes is", () => {
+  it("89 or exactly 90 minutes is not flagged; 91 minutes is", () => {
     expect(run([seg({ startMs: cst(5, 9), endMs: cst(5, 10, 29), status: "onDuty" })])).toHaveLength(0);
-    const ninety = run([seg({ startMs: cst(5, 9), endMs: cst(5, 10, 30), status: "onDuty" })]);
-    expect(ninety).toHaveLength(1);
-    expect(ninety[0].durationMin).toBe(90);
+    expect(run([seg({ startMs: cst(5, 9), endMs: cst(5, 10, 30), status: "onDuty" })])).toHaveLength(0);
+    const ninetyOne = run([seg({ startMs: cst(5, 9), endMs: cst(5, 10, 31), status: "onDuty" })]);
+    expect(ninetyOne).toHaveLength(1);
+    expect(ninetyOne[0].durationMin).toBe(91);
   });
 
   it("8:04am–2:52pm becomes one 6h48m event", () => {

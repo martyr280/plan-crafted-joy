@@ -8,7 +8,7 @@
 //
 // No I/O here: everything is passed in so the rules are unit-testable.
 
-import { matchGeofence, type Geofence, type LatLon } from "./geo";
+import { matchGeofence, usableCoordinates, type Geofence, type LatLon } from "./geo";
 
 export type DutyStatus =
   | "onDuty"
@@ -38,7 +38,7 @@ export type GpsSample = {
 };
 
 export type DetectOptions = {
-  /** Flag blocks at least this long. Default 90. */
+  /** Flag blocks strictly longer than this duration. Default 90. */
   thresholdMinutes?: number;
   /** Merge two kept blocks separated by less than this much movement. Default 10. */
   mergeGapMinutes?: number;
@@ -127,7 +127,7 @@ function splitOnEldDay(seg: HosSegment, opts: Required<Pick<DetectOptions, "eldD
   const parts: HosSegment[] = [];
   let cursor = seg.startMs;
   for (const b of bounds) {
-    parts.push({ ...seg, startMs: cursor, endMs: b });
+    parts.push({ ...seg, startMs: cursor, endMs: b, ...(cursor === seg.startMs ? {} : { latitude: null, longitude: null }) });
     // only the first part keeps the recorded start location
     cursor = b;
   }
@@ -148,14 +148,15 @@ function resolveLocation(
   toleranceMs: number,
 ): { point: LatLon | null; source: "log" | "vehicle_gps" | "unknown" } {
   for (const s of block.segments) {
-    if (typeof s.latitude === "number" && typeof s.longitude === "number") {
-      return { point: { latitude: s.latitude, longitude: s.longitude }, source: "log" };
+    if (usableCoordinates(s.latitude, s.longitude)) {
+      return { point: { latitude: s.latitude!, longitude: s.longitude! }, source: "log" };
     }
   }
   const vehicleIds = new Set(block.segments.map((s) => s.vehicleId).filter(Boolean) as string[]);
+  if (vehicleIds.size !== 1) return { point: null, source: "unknown" };
   let best: { sample: GpsSample; delta: number } | null = null;
   for (const sample of gps) {
-    if (vehicleIds.size && !vehicleIds.has(sample.vehicleId)) continue;
+    if (!vehicleIds.has(sample.vehicleId) || !usableCoordinates(sample.latitude, sample.longitude)) continue;
     const delta = Math.abs(sample.timeMs - block.startMs);
     if (delta > toleranceMs) continue;
     if (!best || delta < best.delta) best = { sample, delta };
@@ -186,6 +187,7 @@ export function detectWarehouseEvents(input: {
   const eldDayStartHour = opts.eldDayStartHour ?? 0;
   const tzOffsetMinutes = opts.tzOffsetMinutes ?? -360;
   const gpsTolerance = (opts.gpsFallbackToleranceMinutes ?? 30) * MINUTE;
+  const eldKey = (ms: number) => localDateKey(ms - eldDayStartHour * 60 * MINUTE, tzOffsetMinutes);
 
   if (isExcludedDriver(input.driver, opts)) return [];
 
@@ -205,9 +207,9 @@ export function detectWarehouseEvents(input: {
     const kept = KEPT_STATUSES.has(s.status);
     if (kept) {
       const sameEldDay =
-        current && localDateKey(current.startMs, tzOffsetMinutes) === localDateKey(s.startMs, tzOffsetMinutes);
+        current && eldKey(current.startMs) === eldKey(s.startMs);
       if (current && sameEldDay && s.startMs - current.endMs <= MINUTE && pendingGapMs === 0) {
-        current.endMs = s.endMs;
+        current.endMs = Math.max(current.endMs, s.endMs);
         current.segments.push(s);
         if (!current.statuses.includes(s.status)) current.statuses.push(s.status);
       } else {
@@ -240,9 +242,11 @@ export function detectWarehouseEvents(input: {
     const sameFence = prev && prev.fence && item.fence && prev.fence.id === item.fence.id;
     const sameEldDay =
       prev &&
-      localDateKey(prev.block.startMs, tzOffsetMinutes) === localDateKey(item.block.startMs, tzOffsetMinutes);
-    if (prev && sameFence && sameEldDay && gap < mergeGapMinutes * MINUTE) {
-      prev.block.endMs = item.block.endMs;
+      eldKey(prev.block.startMs) === eldKey(item.block.startMs);
+    const gapSegments = prev ? segs.filter(s => s.startMs < item.block.startMs && s.endMs > prev.block.endMs) : [];
+    const movementOnly = gap === 0 || (gapSegments.length > 0 && gapSegments.every(s => s.status === "driving" || s.status === "yardMove"));
+    if (prev && sameFence && sameEldDay && gap >= 0 && gap < mergeGapMinutes * MINUTE && movementOnly) {
+      prev.block.endMs = Math.max(prev.block.endMs, item.block.endMs);
       prev.block.segments.push(...item.block.segments);
       for (const st of item.block.statuses) if (!prev.block.statuses.includes(st)) prev.block.statuses.push(st);
       continue;
@@ -254,7 +258,7 @@ export function detectWarehouseEvents(input: {
   const events: WarehouseEvent[] = [];
   for (const item of merged) {
     const durationMin = Math.round((item.block.endMs - item.block.startMs) / MINUTE);
-    if (durationMin < thresholdMinutes) continue;
+    if ((item.block.endMs - item.block.startMs) <= thresholdMinutes * MINUTE) continue;
     const unknown = item.source === "unknown";
     if (!unknown && !item.fence) continue; // located, but not at a warehouse
     events.push({

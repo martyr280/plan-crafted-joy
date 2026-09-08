@@ -2,6 +2,13 @@
 
 export type LatLon = { latitude: number; longitude: number };
 
+/** Missing Samsara GPS can be encoded as (0,0), not just null. */
+export function usableCoordinates(latitude: unknown, longitude: unknown): boolean {
+  return typeof latitude === "number" && Number.isFinite(latitude) && Math.abs(latitude) <= 90 &&
+    typeof longitude === "number" && Number.isFinite(longitude) && Math.abs(longitude) <= 180 &&
+    !(latitude === 0 && longitude === 0);
+}
+
 const EARTH_RADIUS_M = 6371008.8;
 
 function toRad(deg: number) {

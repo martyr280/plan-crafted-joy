@@ -5,6 +5,7 @@
 // we hold a token bucket at 4 req/s and back off on 429 so a weekly sweep of
 // the whole roster can't get the org throttled.
 
+import { usableCoordinates } from "@/lib/driver-time/geo";
 const BASE = "https://api.samsara.com";
 
 function token() {
@@ -95,6 +96,7 @@ async function paged<T = any>(path: string, pick: (d: any) => any[]): Promise<T[
     out.push(...(pick(data) as T[]));
     after = data?.pagination?.hasNextPage ? data.pagination.endCursor ?? null : null;
   } while (after && ++guard < 200);
+  if (after) throw new Error("Samsara pagination limit reached; results are incomplete");
   return out;
 }
 
@@ -130,7 +132,7 @@ export async function fetchDrivers(): Promise<SamsaraDriver[]> {
       name: d.name ?? String(d.id),
       driverActivationStatus: d.driverActivationStatus ?? null,
       eldDayStartHour: typeof d.eldDayStartHour === "number" ? d.eldDayStartHour : null,
-      timezone: d.timezone ?? d.tachographCardNumber ?? null,
+      timezone: d.timezone ?? null,
       tags: (d.tags ?? []).map((t: any) => t?.name).filter(Boolean),
     }))
     .filter((d) => (seen.has(d.id) ? false : (seen.add(d.id), true)));
@@ -188,6 +190,7 @@ function coordOf(entry: any): { latitude: number | null; longitude: number | nul
   const loc = entry?.logRecordedLocation ?? entry?.location ?? entry?.startLocation ?? null;
   const lat = loc?.latitude ?? entry?.latitude ?? null;
   const lon = loc?.longitude ?? entry?.longitude ?? null;
+  if (!usableCoordinates(lat, lon)) return { latitude: null, longitude: null };
   return {
     latitude: typeof lat === "number" ? lat : null,
     longitude: typeof lon === "number" ? lon : null,
@@ -217,11 +220,22 @@ export async function fetchHosLogs(opts: {
     const batch = opts.driverIds.slice(i, i + batchSize);
     const params = new URLSearchParams({ startTime, endTime, driverIds: batch.join(",") });
     const rows = await paged<any>(`/fleet/hos/logs?${params.toString()}`, (d) => d.data ?? []);
+    // A driver's logs can span response pages. Normalize after joining them,
+    // otherwise the last open log on every page extends to the query end.
+    const grouped = new Map<string, any>();
     for (const row of rows) {
+      const id = String(row.driver?.id ?? row.driverId ?? "");
+      if (!id || !batch.includes(id)) continue;
+      const prior = grouped.get(id) ?? { ...row, hosLogs: [] };
+      prior.hosLogs.push(...(row.hosLogs ?? row.logs ?? []));
+      grouped.set(id, prior);
+    }
+    for (const row of grouped.values()) {
       const driverId = String(row.driver?.id ?? row.driverId ?? "");
       const driverName = row.driver?.name ?? null;
       // Samsara's response field is `hosLogs`; `logs` is kept only as a fallback.
-      const logs = [...(row.hosLogs ?? row.logs ?? [])].sort(
+      const logs = Array.from(new Map((row.hosLogs as any[]).map((log: any) =>
+        [log.id ?? `${log.logStartTime}|${log.hosStatusType ?? log.status}`, log])).values()).sort(
         (a: any, b: any) => Date.parse(a.logStartTime ?? 0) - Date.parse(b.logStartTime ?? 0),
       );
       for (let k = 0; k < logs.length; k++) {
@@ -235,18 +249,20 @@ export async function fetchHosLogs(opts: {
           : Number.isFinite(nextStart)
             ? nextStart
             : Math.min(opts.endMs, Date.now());
-        if (!(e > s)) continue;
+        const start = Math.max(s, opts.startMs);
+        const end = Math.min(e, Number.isFinite(nextStart) ? nextStart : clampedEnd, clampedEnd);
+        if (!(end > start)) continue;
 
         const { latitude, longitude } = coordOf(entry);
         out.push({
           driverId,
           driverName,
           status: String(entry.hosStatusType ?? entry.status ?? "unknown"),
-          startMs: s,
-          endMs: e,
+          startMs: start,
+          endMs: end,
           latitude,
           longitude,
-          vehicleId: entry.vehicle?.id ? String(entry.vehicle.id) : null,
+          vehicleId: entry.vehicle?.id ? String(entry.vehicle.id) : entry.vehicleId ? String(entry.vehicleId) : null,
         });
       }
     }
@@ -278,7 +294,7 @@ export async function fetchVehicleGpsHistory(opts: {
       for (const g of v.gps ?? []) {
         const t = Date.parse(g.time ?? "");
         if (!Number.isFinite(t)) continue;
-        if (typeof g.latitude !== "number" || typeof g.longitude !== "number") continue;
+        if (!usableCoordinates(g.latitude, g.longitude)) continue;
         out.push({ vehicleId: String(v.id), timeMs: t, latitude: g.latitude, longitude: g.longitude });
       }
     }

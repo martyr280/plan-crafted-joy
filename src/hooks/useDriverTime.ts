@@ -10,13 +10,15 @@ import {
   listDriverPayRates,
   importDriverPayRates,
   getSamsaraDiagnostics,
+  saveWarehouseActual,
 } from "@/lib/driver-time.functions";
+import type { WarehouseActual } from "@/lib/driver-time/reconciliation";
 
-export function useDriverTimeWeek(weekStart?: string, enabled = true) {
+export function useDriverTimeWeek(weekStart?: string, enabled = true, includeWeekends = false) {
   const fn = useServerFn(getDriverTimeWeek);
   return useQuery({
-    queryKey: ["driver-time-week", weekStart ?? "current"],
-    queryFn: () => fn({ data: weekStart ? { weekStart } : {} }),
+    queryKey: ["driver-time-week", weekStart ?? "current", includeWeekends],
+    queryFn: () => fn({ data: {weekStart, includeWeekends} }),
     enabled,
   });
 }
@@ -44,8 +46,17 @@ export function useRunDriverTimeSweep() {
   const fn = useServerFn(runDriverTimeSweepNow);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => fn(),
+    mutationFn: (weekStart?: string) => fn({data:{weekStart}}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-time-week"] }),
+  });
+}
+
+export function useSaveWarehouseActual() {
+  const fn = useServerFn(saveWarehouseActual);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {driverId:string;weekStart:string;actual:WarehouseActual|null;expectedUpdatedAt:string|null}) => fn({data}),
+    onSuccess: () => qc.invalidateQueries({queryKey:["driver-time-week"]}),
   });
 }
 
