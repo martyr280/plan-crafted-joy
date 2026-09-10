@@ -474,6 +474,36 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
             Non-human Samsara accounts (shared LTL / warehouse logins) belong here; they otherwise dominate the report.
           </p>
         </div>
+        <div className="space-y-2">
+          <label className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={settings?.requireLicense ?? true}
+              onChange={(e) =>
+                save.mutate({ requireLicense: e.target.checked }, {
+                  onSuccess: () => toast.success("Settings saved"),
+                  onError: (err: any) => toast.error(err?.message),
+                })
+              }
+            />
+            <span>Require a driver&apos;s-license number (excludes shared logins)</span>
+          </label>
+          <label className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={settings?.includeDeactivated ?? false}
+              onChange={(e) =>
+                save.mutate({ includeDeactivated: e.target.checked }, {
+                  onSuccess: () => toast.success("Settings saved"),
+                  onError: (err: any) => toast.error(err?.message),
+                })
+              }
+            />
+            <span>Include deactivated drivers</span>
+          </label>
+        </div>
         <Button
           size="sm"
           disabled={save.isPending}
@@ -491,6 +521,7 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
         >
           Save detection settings
         </Button>
+
       </Card>
 
       <Card className="p-4">
