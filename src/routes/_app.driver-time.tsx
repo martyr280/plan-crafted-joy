@@ -946,6 +946,7 @@ function DiagnosticsTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Driver</TableHead>
+                    <TableHead>License</TableHead>
                     <TableHead className="text-right">Segs</TableHead>
                     <TableHead className="text-right">w/ GPS</TableHead>
                     <TableHead className="text-right">Driving</TableHead>
