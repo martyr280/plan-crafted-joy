@@ -52,6 +52,14 @@ export type DetectOptions = {
   excludedDriverNamePatterns?: string[];
   /** Max age of a GPS sample used as a location fallback. Default 30 minutes. */
   gpsFallbackToleranceMinutes?: number;
+  /**
+   * "presence" (default): any HOS status inside the warehouse fence is
+   * warehouse time, bounded by the driver's working day.
+   * "onduty": the legacy on-duty/yard-move-only rule.
+   */
+  basis?: "presence" | "onduty";
+  /** The driver's Samsara tags, used to attribute vehicle-less on-duty time to a home hub. */
+  hubTags?: string[];
 };
 
 export type WarehouseEvent = {
@@ -65,12 +73,16 @@ export type WarehouseEvent = {
   addressName: string | null;
   hub: string | null;
   statuses: string[];
-  locationSource: "log" | "vehicle_gps" | "unknown";
+  locationSource: "log" | "vehicle_gps" | "assumed_hub" | "unknown";
   needsReview: boolean;
 };
 
-/** Duty statuses that count as "sitting at the warehouse". */
+/** Duty statuses that count as "sitting at the warehouse" under the legacy basis. */
 export const KEPT_STATUSES = new Set<DutyStatus>(["onDuty", "yardMove"]);
+
+/** Statuses that do not open the driver's working day. */
+const REST_STATUSES = new Set<DutyStatus>(["offDuty", "sleeperBerth"]);
+
 
 const MINUTE = 60_000;
 
@@ -170,17 +182,27 @@ function resolveLocation(
   return { point: null, source: "unknown" };
 }
 
-/**
- * Build flagged warehouse events for one driver.
- * `segments` may be unsorted and may span more than the reported week.
- */
-export function detectWarehouseEvents(input: {
+export type DetectInput = {
   driver: { id: string; name?: string | null };
   segments: HosSegment[];
   warehouses: Geofence[];
   gpsSamples?: GpsSample[];
   options?: DetectOptions;
-}): WarehouseEvent[] {
+};
+
+/**
+ * Build flagged warehouse events for one driver.
+ * `segments` may be unsorted and may span more than the reported week.
+ */
+export function detectWarehouseEvents(input: DetectInput): WarehouseEvent[] {
+  return (input.options?.basis ?? "presence") === "onduty"
+    ? detectOnDutyEvents(input)
+    : detectPresenceEvents(input);
+}
+
+/** Legacy basis: only on-duty / yard-move segments can form a block. */
+export function detectOnDutyEvents(input: DetectInput): WarehouseEvent[] {
+
   const opts = input.options ?? {};
   const thresholdMinutes = opts.thresholdMinutes ?? 90;
   const mergeGapMinutes = opts.mergeGapMinutes ?? 10;
@@ -276,5 +298,212 @@ export function detectWarehouseEvents(input: {
       needsReview: unknown,
     });
   }
+  return events.sort((a, b) => a.startMs - b.startMs);
+}
+
+/* ------------------------------------------------------------- presence basis */
+
+type LocatedSeg = {
+  seg: HosSegment;
+  point: LatLon | null;
+  source: "log" | "vehicle_gps" | "unknown";
+};
+
+function hasVehicle(seg: HosSegment): boolean {
+  const v = String(seg.vehicleId ?? "").trim();
+  return v !== "" && v !== "0";
+}
+
+/** Locate a single segment: log coordinates, then the nearest vehicle GPS sample. */
+function locateSegment(seg: HosSegment, gps: GpsSample[], toleranceMs: number): LocatedSeg {
+  if (usableCoordinates(seg.latitude, seg.longitude)) {
+    return { seg, point: { latitude: seg.latitude!, longitude: seg.longitude! }, source: "log" };
+  }
+  if (hasVehicle(seg)) {
+    const vehicleId = String(seg.vehicleId);
+    let best: { sample: GpsSample; delta: number } | null = null;
+    for (const sample of gps) {
+      if (String(sample.vehicleId) !== vehicleId) continue;
+      if (!usableCoordinates(sample.latitude, sample.longitude)) continue;
+      const delta = Math.abs(sample.timeMs - seg.startMs);
+      if (delta > toleranceMs) continue;
+      if (!best || delta < best.delta) best = { sample, delta };
+    }
+    if (best) {
+      return {
+        seg,
+        point: { latitude: best.sample.latitude, longitude: best.sample.longitude },
+        source: "vehicle_gps",
+      };
+    }
+  }
+  return { seg, point: null, source: "unknown" };
+}
+
+/** The single selected fence named by one of the driver's tags, if unambiguous. */
+export function hubFenceFromTags(tags: string[] | undefined, fences: Geofence[]): Geofence | null {
+  const t = (tags ?? []).map((x) => String(x ?? "").trim().toLowerCase()).filter(Boolean);
+  if (!t.length) return null;
+  const hits = fences.filter((f) => {
+    const name = f.name.trim().toLowerCase();
+    return name.length > 0 && t.some((tag) => tag === name || tag.includes(name));
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Presence basis: "if they're in the geofence, that's warehouse time."
+ *
+ * Any status inside the fence counts, but only between the start of the day's
+ * first working segment and the end of its last — so the truck parked at the
+ * yard overnight is not warehouse time. Movement statuses only count where the
+ * driver stayed at the fence (next located segment is in the same fence, or it
+ * is the last segment of the day), which drops drive-aways.
+ */
+export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
+  const opts = input.options ?? {};
+  const thresholdMinutes = opts.thresholdMinutes ?? 90;
+  const mergeGapMinutes = opts.mergeGapMinutes ?? 10;
+  const eldDayStartHour = opts.eldDayStartHour ?? 0;
+  const tzOffsetMinutes = opts.tzOffsetMinutes ?? -360;
+  const gpsTolerance = (opts.gpsFallbackToleranceMinutes ?? 30) * MINUTE;
+  const eldKey = (ms: number) => localDateKey(ms - eldDayStartHour * 60 * MINUTE, tzOffsetMinutes);
+
+  if (isExcludedDriver(input.driver, opts)) return [];
+
+  const gps = input.gpsSamples ?? [];
+  const hubFence = hubFenceFromTags(opts.hubTags, input.warehouses);
+
+  const segs = input.segments
+    .filter((s) => String(s.driverId) === String(input.driver.id))
+    .filter((s) => s.endMs > s.startMs)
+    .sort((a, b) => a.startMs - b.startMs)
+    .flatMap((s) => splitOnEldDay(s, { eldDayStartHour, tzOffsetMinutes }));
+
+  const days = new Map<string, HosSegment[]>();
+  for (const s of segs) {
+    const key = eldKey(s.startMs);
+    const arr = days.get(key) ?? [];
+    arr.push(s);
+    days.set(key, arr);
+  }
+
+  const events: WarehouseEvent[] = [];
+
+  for (const [dayKey, daySegs] of days) {
+    // 1. day window: first through last working segment
+    const working = daySegs.filter((s) => !REST_STATUSES.has(s.status));
+    if (!working.length) continue;
+    const windowStart = working[0].startMs;
+    const windowEnd = working[working.length - 1].endMs;
+
+    // 2. clip to the window
+    const clipped: HosSegment[] = [];
+    for (const s of daySegs) {
+      if (s.endMs <= windowStart || s.startMs >= windowEnd) continue;
+      clipped.push({ ...s, startMs: Math.max(s.startMs, windowStart), endMs: Math.min(s.endMs, windowEnd) });
+    }
+    if (!clipped.length) continue;
+
+    // 3. locate + attribute each segment
+    const located = clipped.map((s) => locateSegment(s, gps, gpsTolerance));
+    const atts = located.map((l, i) => {
+      const own = matchGeofence(l.point, input.warehouses);
+      const isWork = !REST_STATUSES.has(l.seg.status) && l.seg.status !== "driving" && l.seg.status !== "personalConveyance";
+      if (isWork) {
+        if (own) return { ...l, fence: own, source: l.source as LocatedSeg["source"] | "assumed_hub" };
+        if (!l.point && !hasVehicle(l.seg) && hubFence) {
+          return { ...l, fence: hubFence, source: "assumed_hub" as const };
+        }
+        return { ...l, fence: null as Geofence | null, source: l.source };
+      }
+      // movement / rest: only counts where the driver stayed at the fence
+      if (!own) return { ...l, fence: null as Geofence | null, source: l.source };
+      const isLast = i === located.length - 1;
+      const next = located[i + 1];
+      const nextFence = next ? matchGeofence(next.point, input.warehouses) : null;
+      if (isLast || (nextFence && nextFence.id === own.id)) {
+        return { ...l, fence: own, source: l.source as LocatedSeg["source"] | "assumed_hub" };
+      }
+      return { ...l, fence: null as Geofence | null, source: l.source };
+    });
+
+    // 4. merge consecutive at-fence segments, bridging short movement runs
+    type Blk = {
+      fence: Geofence;
+      startMs: number;
+      endMs: number;
+      statuses: string[];
+      sources: Set<string>;
+    };
+    const blocks: Blk[] = [];
+    let cur: Blk | null = null;
+    let gapSegs: HosSegment[] = [];
+    const pushCur = () => {
+      if (cur) blocks.push(cur);
+      cur = null;
+      gapSegs = [];
+    };
+
+    for (const a of atts) {
+      if (a.fence) {
+        if (cur && cur.fence.id === a.fence.id) {
+          const gapMs = gapSegs.reduce((n, s) => n + (s.endMs - s.startMs), 0);
+          const bridgeable =
+            gapSegs.length === 0 ||
+            (gapMs < mergeGapMinutes * MINUTE &&
+              gapSegs.every((s) => s.status === "driving" || s.status === "yardMove"));
+          if (bridgeable) {
+            cur.endMs = Math.max(cur.endMs, a.seg.endMs);
+            if (!cur.statuses.includes(a.seg.status)) cur.statuses.push(a.seg.status);
+            cur.sources.add(a.source);
+            gapSegs = [];
+            continue;
+          }
+          pushCur();
+        } else if (cur) {
+          pushCur();
+        }
+        cur = {
+          fence: a.fence,
+          startMs: a.seg.startMs,
+          endMs: a.seg.endMs,
+          statuses: [a.seg.status],
+          sources: new Set([a.source]),
+        };
+        gapSegs = [];
+      } else if (cur) {
+        gapSegs.push(a.seg);
+      }
+    }
+    pushCur();
+
+    // 5. threshold
+    for (const b of blocks) {
+      if (b.endMs - b.startMs <= thresholdMinutes * MINUTE) continue;
+      const locationSource: WarehouseEvent["locationSource"] = b.sources.has("log")
+        ? "log"
+        : b.sources.has("vehicle_gps")
+          ? "vehicle_gps"
+          : b.sources.has("assumed_hub")
+            ? "assumed_hub"
+            : "unknown";
+      events.push({
+        driverId: String(input.driver.id),
+        driverName: input.driver.name ?? input.segments[0]?.driverName ?? null,
+        eventDate: dayKey,
+        startMs: b.startMs,
+        endMs: b.endMs,
+        durationMin: Math.round((b.endMs - b.startMs) / MINUTE),
+        addressId: b.fence.id,
+        addressName: b.fence.name,
+        hub: b.fence.hub ?? b.fence.name,
+        statuses: b.statuses,
+        locationSource,
+        needsReview: false,
+      });
+    }
+  }
+
   return events.sort((a, b) => a.startMs - b.startMs);
 }

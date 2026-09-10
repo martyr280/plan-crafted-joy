@@ -7,7 +7,7 @@ import { fetchHosLogs } from "../../samsara/hos.server";
 const start = Date.parse("2026-08-17T12:00:00Z");
 const wh = {id:"w",name:"Dallas",hub:"Dallas",circle:{latitude:32.8,longitude:-96.8,radiusMeters:100}};
 const seg = (a:number,b:number,extra:any={}) => ({driverId:"d",vehicleId:"v",status:"onDuty",startMs:start+a*60000,endMs:start+b*60000,latitude:32.8,longitude:-96.8,...extra});
-const detect = (segments:any[],options:any={},gpsSamples:any[]=[])=>detectWarehouseEvents({driver:{id:"d",name:"Test Driver"},segments,warehouses:[wh],options:{tzOffsetMinutes:-300,...options},gpsSamples});
+const detect = (segments:any[],options:any={},gpsSamples:any[]=[])=>detectWarehouseEvents({driver:{id:"d",name:"Test Driver"},segments,warehouses:[wh],options:{basis:"onduty" as const,tzOffsetMinutes:-300,...options},gpsSamples});
 const event = (extra:any={})=>({driver_id:"d",driver_name:"Test Driver",event_date:"2026-08-17",duration_min:120,hub:"Dallas",location_source:"log",status:"new",needs_review:false,...extra});
 const actual = (minutes=330)=>({driverName:"Test Driver",hub:"Dallas" as const,minutes,scope:"weekdays" as const,source:"Official report",reason:"Verified against supplied report"});
 

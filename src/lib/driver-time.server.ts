@@ -29,6 +29,8 @@ export type DriverTimeSettings = {
   requireLicense: boolean;
   /** Deactivated drivers keep stale logs that produce phantom 24h blocks. */
   includeDeactivated: boolean;
+  /** "presence": any status inside the fence is warehouse time. "onduty": legacy. */
+  basis: "presence" | "onduty";
 };
 
 export const DEFAULT_DRIVER_TIME_SETTINGS: DriverTimeSettings = {
@@ -40,6 +42,7 @@ export const DEFAULT_DRIVER_TIME_SETTINGS: DriverTimeSettings = {
   hubTzByAddress: {},
   requireLicense: true,
   includeDeactivated: false,
+  basis: "presence",
 };
 
 export type RosterCounts = {
@@ -157,6 +160,7 @@ export async function getDriverTimeSettings(): Promise<DriverTimeSettings> {
     ...saved,
     requireLicense: saved.requireLicense ?? DEFAULT_DRIVER_TIME_SETTINGS.requireLicense,
     includeDeactivated: saved.includeDeactivated ?? DEFAULT_DRIVER_TIME_SETTINGS.includeDeactivated,
+    basis: saved.basis === "onduty" ? "onduty" : DEFAULT_DRIVER_TIME_SETTINGS.basis,
     // Shared warehouse/LTL identities are never individual driver records.
     // Older saved settings must not erase the built-in roster exclusions.
     excludedDriverNamePatterns: [...new Set([
@@ -334,6 +338,8 @@ export async function runDriverTimeSweep(opts?: {
             tzOffsetMinutes,
             excludedDriverIds: settings.excludedDriverIds,
             excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
+            basis: settings.basis,
+            hubTags: (d as any).tags ?? [],
           },
         }),
       );
@@ -407,8 +413,12 @@ export async function runDriverTimeSweep(opts?: {
       throw new Error(`Event reconciliation incomplete: ${warnings.join(" | ")}`);
     // Retire only fully enclosed events for scanned drivers after a complete
     // fetch/write pass. Preserve the old rows for review and source comparison.
+    // Retire stale rows for scanned drivers AND for every roster driver now
+    // excluded from the scan — those events can never be regenerated.
     const scanned = new Set(roster.map(d=>d.id));
-    const stale = (existing ?? []).filter((e:any)=>scanned.has(String(e.driver_id)) && !e.superseded_at &&
+    const known = new Set(drivers.map(d=>String(d.id)));
+    const retirable = (id:string)=>scanned.has(id) || known.has(id);
+    const stale = (existing ?? []).filter((e:any)=>retirable(String(e.driver_id)) && !e.superseded_at &&
       Date.parse(e.start_ts) > startMs && Date.parse(e.end_ts) < endMs &&
       !seen.has(`${e.driver_id}|${new Date(e.start_ts).toISOString()}`));
     for (let i=0;i<stale.length;i+=200) {

@@ -353,7 +353,10 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
         <div><strong>Official {formatMinutes(driver.officialMinutes)}</strong> · automated {formatMinutes(driver.automatedMinutes)} · variance {formatMinutes(driver.varianceMinutes)} (automated minus official)</div>
         <p className="text-xs text-muted-foreground">{driver.official.source} · {driver.official.reason}</p>
         {!!driver.official.intervals?.length && <details><summary className="cursor-pointer">Official time blocks ({driver.official.intervals.length})</summary>
-          {driver.official.intervals.map((i:any,n:number)=><p key={n} className="text-xs mt-1">{dayLabel(i.date)} · {clock(i.start,driver.hub)} – {clock(i.end,driver.hub)} · {hm(i.minutes)} {i.note ? `· ${i.note}` : ""}</p>)}
+          {driver.official.intervals.map((i:any,n:number)=><p key={n} className="text-xs mt-1 flex items-center gap-1">
+            <span>{dayLabel(i.date)} · {clock(i.start,driver.hub)} – {clock(i.end,driver.hub)} · {hm(i.minutes)} {i.note ? `· ${i.note}` : ""}</span>
+            {i.verified === false && <Badge variant="outline" className="text-[10px]">No Samsara evidence</Badge>}
+          </p>)}
         </details>}
         <details><summary className="cursor-pointer">Correction history ({driver.history.length})</summary>
           {driver.history.map((h:any,n:number)=><p key={n} className="text-xs mt-1">{h.at} · {h.after ? formatMinutes(h.after.minutes) : "Cleared"} · {h.after?.reason ?? ""}</p>)}
@@ -375,8 +378,12 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
                     {ev.location_source !== "log" && (
                       <Badge variant="outline" className="ml-1 text-[10px]">{ev.location_source}</Badge>
                     )}
+                    {ev.location_source === "assumed_hub" && (
+                      <Badge variant="outline" className="ml-1 text-[10px]">Home warehouse (no vehicle)</Badge>
+                    )}
                   </div>
                   <div className="text-[11px] text-muted-foreground">{(ev.statuses ?? []).join(" / ")}</div>
+                  {ev.nelsonOnly && <Badge variant="outline" className="text-[10px]">Not in official report</Badge>}
                   {ev.superseded_at && <Badge variant="outline">superseded</Badge>}
                   {ev.needs_review && (
                     <Badge variant="outline" className="text-[10px] border-warning/50">needs review</Badge>
@@ -473,6 +480,22 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
           <p className="text-[11px] text-muted-foreground mt-1">
             Non-human Samsara accounts (shared LTL / warehouse logins) belong here; they otherwise dominate the report.
           </p>
+        </div>
+        <div>
+          <Label className="text-xs">Detection basis</Label>
+          <select
+            className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+            value={settings?.basis ?? "presence"}
+            onChange={(e) =>
+              save.mutate({ basis: e.target.value as "presence" | "onduty" }, {
+                onSuccess: () => toast.success("Settings saved"),
+                onError: (err: any) => toast.error(err?.message),
+              })
+            }
+          >
+            <option value="presence">Inside geofence, any status (recommended)</option>
+            <option value="onduty">On-duty status only (legacy)</option>
+          </select>
         </div>
         <div className="space-y-2">
           <label className="flex items-start gap-2 text-xs">
