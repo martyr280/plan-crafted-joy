@@ -691,13 +691,14 @@ function DiagnosticsTab() {
   function downloadDiagCsv() {
     if (!d) return;
     const header = [
-      "Driver", "Activation", "Excluded", "Segs", "w/ GPS", "Driving (min)",
+      "Driver", "Activation", "License", "Excluded", "Segs", "w/ GPS", "Driving (min)",
       "On-duty non-driving (min)", "Longest block (min)", "RAG",
       "Location source", "Matched fence", "Nearest fence", "Nearest fence (m)", "Events",
     ];
     const rows = [header, ...d.drivers.map((r: any) => [
-      r.driverName, r.activationStatus ?? "", r.excluded ? "yes" : "no",
+      r.driverName, r.activationStatus ?? "", r.hasLicense ? "yes" : "no", r.excluded ? "yes" : "no",
       String(r.segments), String(r.segmentsWithCoords), String(r.drivingMin),
+
       String(r.onDutyNonDrivingMin), String(r.longestNonDrivingMin),
       r.excluded ? "" : ragOf(r.longestNonDrivingMin, greenUnder, redAtOrOver),
       r.longestBlockLocationSource, r.matchedFenceName ?? "", r.nearestFenceName ?? "",
