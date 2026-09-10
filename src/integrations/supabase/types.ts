@@ -956,6 +956,8 @@ export type Database = {
           paycom_hours: number | null
           updated_at: string
           updated_by: string | null
+          warehouse_actual: Json | null
+          warehouse_actual_history: Json
           week_start: string
         }
         Insert: {
@@ -966,6 +968,8 @@ export type Database = {
           paycom_hours?: number | null
           updated_at?: string
           updated_by?: string | null
+          warehouse_actual?: Json | null
+          warehouse_actual_history?: Json
           week_start: string
         }
         Update: {
@@ -976,6 +980,8 @@ export type Database = {
           paycom_hours?: number | null
           updated_at?: string
           updated_by?: string | null
+          warehouse_actual?: Json | null
+          warehouse_actual_history?: Json
           week_start?: string
         }
         Relationships: []
@@ -1001,6 +1007,7 @@ export type Database = {
           start_ts: string
           status: string
           statuses: string[]
+          superseded_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1023,6 +1030,7 @@ export type Database = {
           start_ts: string
           status?: string
           statuses?: string[]
+          superseded_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1045,6 +1053,7 @@ export type Database = {
           start_ts?: string
           status?: string
           statuses?: string[]
+          superseded_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1071,6 +1080,8 @@ export type Database = {
           updated_at: string
           week_end: string
           week_start: string
+          window_end: string | null
+          window_start: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -1085,6 +1096,8 @@ export type Database = {
           updated_at?: string
           week_end: string
           week_start: string
+          window_end?: string | null
+          window_start?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -1099,6 +1112,8 @@ export type Database = {
           updated_at?: string
           week_end?: string
           week_start?: string
+          window_end?: string | null
+          window_start?: string | null
         }
         Relationships: []
       }
