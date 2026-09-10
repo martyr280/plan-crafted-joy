@@ -1,0 +1,121 @@
+=== FULL ROSTER ===
+{"id":"53243512","name":"Thomas Blanks","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243878","name":"Robert Young","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243879","name":"Alberto Fiscal","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243880","name":"Karriem Farahkhan","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243881","name":"Ronald Fugate","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243882","name":"Joseph Outler","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243883","name":"Kennedy Loyd","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243884","name":"Michael Iannone","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243885","name":"Barry Richardson","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243886","name":"Joshua Herbinger","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243887","name":"Dreher Sanders","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243888","name":"Melvin Gilbert","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243889","name":"DJ Johnson","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243890","name":"Jawan McGinnis","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243891","name":"Nelson Roldan","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53244586","name":"Birmingham Warehouse","activationStatus":"active","licenseNumberPresent":false}
+{"id":"53244597","name":"Dallas Warehouse","activationStatus":"active","licenseNumberPresent":false}
+{"id":"53244696","name":"Ocala Warehouse","activationStatus":"active","licenseNumberPresent":false}
+{"id":"53244732","name":"Birmingham LTL","activationStatus":"active","licenseNumberPresent":false}
+{"id":"53244760","name":"Dallas LTL","activationStatus":"active","licenseNumberPresent":false}
+{"id":"53244763","name":"Ocala LTL","activationStatus":"active","licenseNumberPresent":false}
+{"id":"53245428","name":"Joe Green","activationStatus":"active","licenseNumberPresent":false}
+{"id":"53332924","name":"Scott Smith","activationStatus":"active","licenseNumberPresent":true}
+{"id":"58143755","name":"Gilbert Hinton","activationStatus":"active","licenseNumberPresent":true}
+{"id":"58530560","name":"David Miranda","activationStatus":"active","licenseNumberPresent":true}
+{"id":"53243892","name":"Cory King","activationStatus":"deactivated","licenseNumberPresent":true}
+{"id":"53243893","name":"Terence Harris","activationStatus":"deactivated","licenseNumberPresent":true}
+{"id":"53792924","name":"Kelvontrey Jones","activationStatus":"deactivated","licenseNumberPresent":false}
+{"id":"55836799","name":"Enyi Ukairo","activationStatus":"deactivated","licenseNumberPresent":true}
+{"id":"57001678","name":"Robert Butkus","activationStatus":"deactivated","licenseNumberPresent":true}
+=== SELECTED WAREHOUSE GEOFENCES ===
+{"id":"290688247","name":"Birmingham","circle":null,"polygon":[{"latitude":33.633526402940035,"longitude":-86.73610350963594},{"latitude":33.63185595318702,"longitude":-86.73750898715974},{"latitude":33.63135570524618,"longitude":-86.73697254535676},{"latitude":33.63098945044724,"longitude":-86.73625371334077},{"latitude":33.630240774286065,"longitude":-86.73490766975682},{"latitude":33.62993757290922,"longitude":-86.73434977028172},{"latitude":33.63001021500298,"longitude":-86.7342907616834},{"latitude":33.63058187455931,"longitude":-86.73534486982625},{"latitude":33.6311475606462,"longitude":-86.73631576579425},{"latitude":33.63265999517118,"longitude":-86.73516778033587},{"latitude":33.63306425065908,"longitude":-86.73560766261431},{"latitude":33.633695896060416,"longitude":-86.73589197676989}]}
+{"id":"290688509","name":"Dallas","circle":null,"polygon":[{"latitude":32.81225307505468,"longitude":-96.87850158110435},{"latitude":32.812157434658545,"longitude":-96.87851767435843},{"latitude":32.812106426405215,"longitude":-96.87804024115378},{"latitude":32.81219569082935,"longitude":-96.87888781920249},{"latitude":32.8096053973877,"longitude":-96.87896165618137},{"latitude":32.80948366339232,"longitude":-96.87825355300144},{"latitude":32.8088276495465,"longitude":-96.87825891741947},{"latitude":32.808792707092415,"longitude":-96.87806848057942},{"latitude":32.80815359591205,"longitude":-96.87803897628025},{"latitude":32.80820770074032,"longitude":-96.87784585723118},{"latitude":32.81046040644024,"longitude":-96.87778646224133},{"latitude":32.811477838602386,"longitude":-96.87780255549542},{"latitude":32.81207256815782,"longitude":-96.87778378003232},{"latitude":32.812076529718546,"longitude":-96.87742436402432},{"latitude":32.812184922258396,"longitude":-96.87744045727841}]}
+{"id":"290688696","name":"Ocala","circle":null,"polygon":[{"latitude":29.183594807665507,"longitude":-82.21210730286309},{"latitude":29.18218975762191,"longitude":-82.21208048077294},{"latitude":29.182227225872783,"longitude":-82.21384000988671},{"latitude":29.180826840694035,"longitude":-82.21385073872277},{"latitude":29.180826840694035,"longitude":-82.21404922218987},{"latitude":29.183177978160163,"longitude":-82.21400630684563},{"latitude":29.18501596848531,"longitude":-82.21401703568169},{"latitude":29.18500660167852,"longitude":-82.21382391663262},{"latitude":29.18365777256874,"longitude":-82.2138024589605},{"latitude":29.183590124197316,"longitude":-82.21210730286309}]}
+=== CASE: Joseph Outler | Ocala | 2026-08-17 | official 8:28am–4:35pm ET ===
+DRIVER REGISTRY RECORD:
+{"id":"53243882","name":"Joseph Outler","activationStatus":"active","timezone":"America/New_York","eldDayStartHour":null,"licenseNumber":"O346-491-83-083-0","licenseState":"FL","username":"JOutler"}
+WINDOW: 2026-08-17T04:00:00.000Z -> 2026-08-18T04:00:00.000Z (America/New_York)
+HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-08-17, 00:00:00","endLocal":"2026-08-17, 16:18:01","durationMin":978.0194666666666,"coordinates":{"latitude":29.182442,"longitude":-82.212332},"vehicleId":"0","nearestSelectedFence":"Ocala","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-08-17, 16:18:01","endLocal":"2026-08-17, 16:18:25","durationMin":0.3972,"coordinates":{"latitude":29.182274,"longitude":-82.212689},"vehicleId":"281474996579837","nearestSelectedFence":"Ocala","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-08-17, 16:18:25","endLocal":"2026-08-17, 16:27:18","durationMin":8.88345,"coordinates":{"latitude":29.182269,"longitude":-82.212673},"vehicleId":"281474996579837","nearestSelectedFence":"Ocala","distanceMeters":0}
+{"status":"driving","startLocal":"2026-08-17, 16:27:18","endLocal":"2026-08-17, 16:57:18","durationMin":29.999966666666666,"coordinates":{"latitude":29.182513,"longitude":-82.213958},"vehicleId":"281474996579837","nearestSelectedFence":"Ocala","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-08-17, 16:57:18","endLocal":"2026-08-17, 17:06:18","durationMin":9.0003,"coordinates":{"latitude":29.091175,"longitude":-82.243926},"vehicleId":"281474996579837","nearestSelectedFence":"Ocala","distanceMeters":10383}
+{"status":"driving","startLocal":"2026-08-17, 17:06:18","endLocal":"2026-08-17, 17:54:22","durationMin":48.06628333333333,"coordinates":{"latitude":29.091074,"longitude":-82.243638},"vehicleId":"281474996579837","nearestSelectedFence":"Ocala","distanceMeters":10386}
+{"status":"onDuty","startLocal":"2026-08-17, 17:54:22","endLocal":"2026-08-17, 17:55:09","durationMin":0.7833333333333333,"coordinates":{"latitude":28.872628,"longitude":-82.546654},"vehicleId":"281474996579837","nearestSelectedFence":"Ocala","distanceMeters":47119}
+{"status":"offDuty","startLocal":"2026-08-17, 17:55:09","endLocal":"2026-08-17, 17:55:11","durationMin":0.03333333333333333,"coordinates":{"latitude":28.872634,"longitude":-82.546679},"vehicleId":"281474996579837","nearestSelectedFence":"Ocala","distanceMeters":47120}
+{"status":"offDuty","startLocal":"2026-08-17, 17:55:11","endLocal":"2026-08-18, 00:00:00","durationMin":364.81666666666666,"coordinates":{"latitude":28.872634,"longitude":-82.546679},"vehicleId":"0","nearestSelectedFence":"Ocala","distanceMeters":47120}
+GPS EVIDENCE:
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null,"fractionInsideEachSelectedFence":{"Birmingham":null,"Dallas":null,"Ocala":null}}
+{"vehicleId":"281474996579837","sampleCount":1003,"firstSampleLocal":"2026-08-17, 00:23:14","lastSampleLocal":"2026-08-17, 23:09:23","fractionInsideEachSelectedFence":{"Birmingham":0,"Dallas":0,"Ocala":0.13260219341974078}}
+PER-DAY TOTALS:
+{"minutesByStatus":{"offDuty":1343.2666666666667,"onDuty":18.667083333333334,"driving":78.06625},"minutesLocatedInsideFenceAnyStatus":1017.3000833333333,"minutesLocatedInsideFenceOnDutyOrYardMoveOnly":8.88345}
+=== CASE: Kennedy Loyd | Birmingham | 2026-08-26 | official 3:00am–4:29pm CT ===
+DRIVER REGISTRY RECORD:
+{"id":"53243883","name":"Kennedy Loyd","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumber":"7649523","licenseState":"AL","username":"KLoyd"}
+WINDOW: 2026-08-26T05:00:00.000Z -> 2026-08-27T05:00:00.000Z (America/Chicago)
+HOS SEGMENTS:
+{"status":"onDuty","startLocal":"2026-08-26, 00:00:00","endLocal":"2026-08-26, 02:00:04","durationMin":120.06666666666666,"coordinates":{"latitude":33.522136,"longitude":-86.797285},"vehicleId":"281474996579835","nearestSelectedFence":"Birmingham","distanceMeters":13330}
+{"status":"offDuty","startLocal":"2026-08-26, 02:00:04","endLocal":"2026-08-26, 02:03:26","durationMin":3.3666666666666667,"coordinates":{"latitude":33.522136,"longitude":-86.797285},"vehicleId":"281474996579835","nearestSelectedFence":"Birmingham","distanceMeters":13330}
+{"status":"offDuty","startLocal":"2026-08-26, 02:03:26","endLocal":"2026-08-27, 00:00:00","durationMin":1316.5666666666666,"coordinates":"none","vehicleId":"0","nearestSelectedFence":null,"distanceMeters":null}
+GPS EVIDENCE:
+{"vehicleId":"281474996579835","sampleCount":7810,"firstSampleLocal":"2026-08-26, 00:02:49","lastSampleLocal":"2026-08-26, 23:47:26","fractionInsideEachSelectedFence":{"Birmingham":0.010115236875800257,"Dallas":0,"Ocala":0}}
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null,"fractionInsideEachSelectedFence":{"Birmingham":null,"Dallas":null,"Ocala":null}}
+PER-DAY TOTALS:
+{"minutesByStatus":{"onDuty":120.06666666666666,"offDuty":1319.9333333333332},"minutesLocatedInsideFenceAnyStatus":0,"minutesLocatedInsideFenceOnDutyOrYardMoveOnly":0}
+=== CASE: Karriem Farahkhan | Birmingham | 2026-08-28 | official 6:15am–2:52pm CT ===
+DRIVER REGISTRY RECORD:
+{"id":"53243880","name":"Karriem Farahkhan","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumber":"6899527","licenseState":"AL","username":"KFarahkhan"}
+WINDOW: 2026-08-28T05:00:00.000Z -> 2026-08-29T05:00:00.000Z (America/Chicago)
+HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-08-28, 00:00:00","endLocal":"2026-08-28, 07:18:30","durationMin":438.5148,"coordinates":{"latitude":33.631867,"longitude":-86.736006},"vehicleId":"0","nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-08-28, 07:18:30","endLocal":"2026-08-28, 07:18:51","durationMin":0.3352,"coordinates":{"latitude":33.631853,"longitude":-86.735988},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-08-28, 07:18:51","endLocal":"2026-08-28, 07:22:12","durationMin":3.35,"coordinates":{"latitude":33.631853,"longitude":-86.735988},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"driving","startLocal":"2026-08-28, 07:22:12","endLocal":"2026-08-28, 07:22:54","durationMin":0.7001166666666667,"coordinates":{"latitude":33.631797,"longitude":-86.735906},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"driving","startLocal":"2026-08-28, 07:22:54","endLocal":"2026-08-28, 07:38:17","durationMin":15.383216666666666,"coordinates":{"latitude":33.631178,"longitude":-86.736468},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-08-28, 07:38:17","endLocal":"2026-08-28, 07:41:29","durationMin":3.2002166666666665,"coordinates":{"latitude":33.564141,"longitude":-86.784076},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":8645}
+{"status":"driving","startLocal":"2026-08-28, 07:41:29","endLocal":"2026-08-28, 07:48:03","durationMin":6.566516666666667,"coordinates":{"latitude":33.564095,"longitude":-86.784517},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":8671}
+{"status":"onDuty","startLocal":"2026-08-28, 07:48:03","endLocal":"2026-08-28, 07:49:27","durationMin":1.4074,"coordinates":{"latitude":33.564345,"longitude":-86.784015},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":8623}
+{"status":"onDuty","startLocal":"2026-08-28, 07:49:27","endLocal":"2026-08-28, 07:50:49","durationMin":1.3592,"coordinates":{"latitude":33.564345,"longitude":-86.784015},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":8623}
+{"status":"onDuty","startLocal":"2026-08-28, 07:50:49","endLocal":"2026-08-28, 07:50:54","durationMin":0.09506666666666666,"coordinates":"none","vehicleId":"0","nearestSelectedFence":null,"distanceMeters":null}
+{"status":"onDuty","startLocal":"2026-08-28, 07:50:54","endLocal":"2026-08-28, 07:51:55","durationMin":1.0049333333333332,"coordinates":{"latitude":33.564345,"longitude":-86.784015},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":8623}
+{"status":"onDuty","startLocal":"2026-08-28, 07:51:55","endLocal":"2026-08-28, 07:52:11","durationMin":0.26726666666666665,"coordinates":"none","vehicleId":"0","nearestSelectedFence":null,"distanceMeters":null}
+{"status":"onDuty","startLocal":"2026-08-28, 07:52:11","endLocal":"2026-08-28, 07:52:26","durationMin":0.2494,"coordinates":{"latitude":33.564345,"longitude":-86.784015},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":8623}
+{"status":"offDuty","startLocal":"2026-08-28, 07:52:26","endLocal":"2026-08-28, 07:52:31","durationMin":0.08333333333333333,"coordinates":{"latitude":33.564345,"longitude":-86.784015},"vehicleId":"281474996579838","nearestSelectedFence":"Birmingham","distanceMeters":8623}
+{"status":"offDuty","startLocal":"2026-08-28, 07:52:31","endLocal":"2026-08-29, 00:00:00","durationMin":967.4833333333333,"coordinates":"none","vehicleId":"0","nearestSelectedFence":null,"distanceMeters":null}
+GPS EVIDENCE:
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null,"fractionInsideEachSelectedFence":{"Birmingham":null,"Dallas":null,"Ocala":null}}
+{"vehicleId":"281474996579838","sampleCount":338,"firstSampleLocal":"2026-08-28, 00:24:47","lastSampleLocal":"2026-08-28, 23:12:09","fractionInsideEachSelectedFence":{"Birmingham":0.12130177514792899,"Dallas":0,"Ocala":0}}
+PER-DAY TOTALS:
+{"minutesByStatus":{"offDuty":1406.4166666666665,"onDuty":10.933483333333331,"driving":22.64985},"minutesLocatedInsideFenceAnyStatus":458.2833333333333,"minutesLocatedInsideFenceOnDutyOrYardMoveOnly":3.35}
+=== CASE: DJ Johnson | Dallas | 2026-08-21 | official 9:52am–9:00pm CT ===
+JOHNSON ROSTER ROWS:
+{"id":"53243889","name":"DJ Johnson","driverActivationStatus":"active","eldDayStartHour":null,"timezone":"America/Chicago","tags":["Dallas"]}
+DRIVER REGISTRY RECORD:
+{"id":"53243889","name":"DJ Johnson","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumber":"28716821","licenseState":"TX","username":"DJohnson"}
+WINDOW: 2026-08-21T05:00:00.000Z -> 2026-08-22T05:00:00.000Z (America/Chicago)
+HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-08-21, 00:00:00","endLocal":"2026-08-21, 09:52:59","durationMin":592.9836333333334,"coordinates":{"latitude":32.811392,"longitude":-96.878043},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-08-21, 09:52:59","endLocal":"2026-08-21, 10:05:33","durationMin":12.56655,"coordinates":{"latitude":32.811604,"longitude":-96.877881},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-08-21, 10:05:33","endLocal":"2026-08-21, 11:22:47","durationMin":77.23315,"coordinates":{"latitude":32.810792,"longitude":-96.877975},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-08-21, 11:22:47","endLocal":"2026-08-21, 13:32:20","durationMin":129.55023333333332,"coordinates":{"latitude":32.810792,"longitude":-96.877975},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-08-21, 13:32:20","endLocal":"2026-08-21, 13:48:23","durationMin":16.0664,"coordinates":{"latitude":32.81147,"longitude":-96.877954},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-08-21, 13:48:23","endLocal":"2026-08-21, 14:49:16","durationMin":60.8667,"coordinates":{"latitude":32.809267,"longitude":-96.892608},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1276}
+{"status":"offDuty","startLocal":"2026-08-21, 14:49:16","endLocal":"2026-08-21, 15:00:02","durationMin":10.766983333333334,"coordinates":{"latitude":32.809267,"longitude":-96.892608},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1276}
+{"status":"driving","startLocal":"2026-08-21, 15:00:02","endLocal":"2026-08-21, 15:06:16","durationMin":6.233366666666667,"coordinates":{"latitude":32.809134,"longitude":-96.892713},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1286}
+{"status":"onDuty","startLocal":"2026-08-21, 15:06:16","endLocal":"2026-08-21, 15:18:22","durationMin":12.100466666666666,"coordinates":{"latitude":32.808749,"longitude":-96.892483},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1267}
+{"status":"driving","startLocal":"2026-08-21, 15:18:22","endLocal":"2026-08-21, 15:27:58","durationMin":9.5992,"coordinates":{"latitude":32.809028,"longitude":-96.89268},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1284}
+{"status":"onDuty","startLocal":"2026-08-21, 15:27:58","endLocal":"2026-08-21, 15:44:33","durationMin":16.5837,"coordinates":{"latitude":32.809323,"longitude":-96.892554},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1271}
+{"status":"driving","startLocal":"2026-08-21, 15:44:33","endLocal":"2026-08-21, 15:51:28","durationMin":6.9163,"coordinates":{"latitude":32.809609,"longitude":-96.892485},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1264}
+{"status":"onDuty","startLocal":"2026-08-21, 15:51:28","endLocal":"2026-08-21, 16:04:03","durationMin":12.583666666666666,"coordinates":{"latitude":32.808712,"longitude":-96.892947},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1311}
+{"status":"driving","startLocal":"2026-08-21, 16:04:03","endLocal":"2026-08-21, 16:11:01","durationMin":6.9664166666666665,"coordinates":{"latitude":32.808401,"longitude":-96.892954},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1315}
+{"status":"onDuty","startLocal":"2026-08-21, 16:11:01","endLocal":"2026-08-21, 20:39:40","durationMin":268.65006666666665,"coordinates":{"latitude":32.808819,"longitude":-96.892867},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1302}
+{"status":"driving","startLocal":"2026-08-21, 20:39:40","endLocal":"2026-08-21, 20:47:26","durationMin":7.766966666666667,"coordinates":{"latitude":32.80906,"longitude":-96.89274},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1289}
+{"status":"onDuty","startLocal":"2026-08-21, 20:47:26","endLocal":"2026-08-21, 21:00:00","durationMin":12.5662,"coordinates":{"latitude":32.809898,"longitude":-96.892407},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1257}
+{"status":"offDuty","startLocal":"2026-08-21, 21:00:00","endLocal":"2026-08-22, 00:00:00","durationMin":180,"coordinates":{"latitude":32.809898,"longitude":-96.892407},"vehicleId":"281474996579824","nearestSelectedFence":"Dallas","distanceMeters":1257}
+GPS EVIDENCE:
+{"vehicleId":"281474996579824","sampleCount":621,"firstSampleLocal":"2026-08-21, 00:54:09","lastSampleLocal":"2026-08-21, 23:53:33","fractionInsideEachSelectedFence":{"Birmingham":0,"Dallas":0.4573268921095008,"Ocala":0}}
+PER-DAY TOTALS:
+{"minutesByStatus":{"offDuty":913.30085,"driving":66.1152,"onDuty":460.58394999999996},"minutesLocatedInsideFenceAnyStatus":828.3999666666667,"minutesLocatedInsideFenceOnDutyOrYardMoveOnly":77.23315}
