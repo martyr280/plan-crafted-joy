@@ -38,6 +38,7 @@ import { KpiCard } from "@/components/shared/KpiCard";
 import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
 import { ForecastBoard } from "@/components/truck-capacity/ForecastBoard";
 import { RouteCutoffsEditor } from "@/components/truck-capacity/RouteCutoffsEditor";
+import { SharePointSyncCard } from "@/components/truck-capacity/SharePointSyncCard";
 import { ForecastVsTracker } from "@/components/truck-capacity/ForecastVsTracker";
 
 import { useAuth } from "@/lib/auth";
@@ -73,7 +74,9 @@ type RouteRow = {
   ship_to_zip_prefixes: string[] | null;
 };
 type RunRow = {
-  id: string; route_id: string; run_date: string; run_seq: number; capacity_frac: number;
+  // capacity_frac is null on a no-run marker row (a dated tracker row with a
+  // blank Capacity cell, e.g. "Labor Day"). Never coerce it to 0.
+  id: string; route_id: string; run_date: string; run_seq: number; capacity_frac: number | null;
   vendor_pickup_frac: number | null; driver: string | null; pallet_count: number | null;
   returned_pallets: number | null; notes: string | null; source: string;
 };
@@ -402,6 +405,7 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
     // routeId → weekStart → { sum, n }
     const acc = new Map<string, Map<string, { sum: number; n: number }>>();
     for (const r of runs) {
+      if (r.capacity_frac == null) continue; // no-run marker
       const wk = weekOf(r.run_date);
       if (!weekStarts.includes(wk)) continue;
       const perRoute = acc.get(r.route_id) ?? new Map();
@@ -518,7 +522,10 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
           <div className="font-semibold text-sm mb-3">{hub}</div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {routes.filter((r) => r.hub === hub && r.active).map((r) => {
-              const rr = (byRoute.get(r.id) ?? []).slice().sort((a, b) => a.run_date.localeCompare(b.run_date));
+              // No-run markers (null capacity) are dropped here: they are not runs,
+              // and averaging them as 0 would fake a collapse in load.
+              const rr = (byRoute.get(r.id) ?? []).filter((x) => x.capacity_frac != null)
+                .slice().sort((a, b) => a.run_date.localeCompare(b.run_date));
               const last = rr.at(-1);
               const avg8 = rr.length ? rr.slice(-8).reduce((s, x) => s + Number(x.capacity_frac), 0) / Math.min(8, rr.length) : null;
               const flag = flagFor(last ? Number(last.capacity_frac) : null);
@@ -587,7 +594,8 @@ function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean 
     onError: (e: any) => toast.error(e?.message ?? "Delete failed"),
   });
 
-  const chartData = rows.slice().sort((a, b) => a.run_date.localeCompare(b.run_date))
+  const chartData = rows.filter((r) => r.capacity_frac != null)
+    .slice().sort((a, b) => a.run_date.localeCompare(b.run_date))
     .map((r) => ({ d: r.run_date, capacity: Number(r.capacity_frac), unused: Math.max(0, 1 - Number(r.capacity_frac)) }));
 
   return (
@@ -642,7 +650,7 @@ function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean 
               <TableRow key={r.id}>
                 <TableCell>{r.run_date}</TableCell>
                 <TableCell>{r.run_seq}</TableCell>
-                <TableCell>{pct(Number(r.capacity_frac))}</TableCell>
+                <TableCell>{r.capacity_frac == null ? <span className="text-muted-foreground">No run</span> : pct(Number(r.capacity_frac))}</TableCell>
                 <TableCell>{pct(r.vendor_pickup_frac == null ? null : Number(r.vendor_pickup_frac))}</TableCell>
                 <TableCell className="text-xs">{r.driver}</TableCell>
                 <TableCell>{r.pallet_count}</TableCell>
@@ -1253,6 +1261,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 
   return (
     <div className="space-y-4 pt-4">
+      <SharePointSyncCard />
       <RouteCutoffsEditor
         routes={routes.map((r) => ({ id: r.id, code: r.code, name: r.name, hub: r.hub }))}
         canEdit

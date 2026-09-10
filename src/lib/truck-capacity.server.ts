@@ -205,12 +205,15 @@ export async function computeBaselineForecastForRoute(routeId: string, horizonDa
   const from = addDaysISO(today, -84);
   const { data: runsRaw } = await supabaseAdmin
     .from("truck_capacity_runs").select("run_date, capacity_frac")
+    // NULL capacity = no-run marker; excluded from the baseline.
+    .not("capacity_frac", "is", null)
     .eq("route_id", routeId).gte("run_date", from)
     .order("run_date", { ascending: true }).limit(3000);
   const routeRuns = (runsRaw ?? []).map((r) => ({ date: r.run_date, cap: Number(r.capacity_frac) }));
   const { data: hubRuns } = await supabaseAdmin
     .from("truck_capacity_runs")
     .select("capacity_frac, truck_capacity_routes!inner(hub)")
+    .not("capacity_frac", "is", null)
     .gte("run_date", from).eq("truck_capacity_routes.hub", route.hub).limit(20000);
   const days = baselineFromSnapshot(
     routeRuns, (hubRuns ?? []).map((r: any) => Number(r.capacity_frac)),

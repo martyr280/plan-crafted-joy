@@ -120,6 +120,28 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             } catch (e: any) { truckCapacityFreeze = { ok: false, error: e?.message ?? String(e) }; }
           }
 
+          // Truck Capacity SharePoint workbook sync — every 30 minutes.
+          // Same guard style as the Monday driver-time sweep: a wall-clock window
+          // plus a dedup guard (a sync log row started in the last 20 minutes) so
+          // overlapping cron ticks can't double-pull. Change detection inside
+          // skips the download entirely when the eTag is unchanged, so the
+          // steady-state cost is one Graph metadata call. Fully try/caught.
+          let truckCapacitySharePoint: any = null;
+          if (ct.minute < 15 || (ct.minute >= 30 && ct.minute < 45)) {
+            try {
+              const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+              const cutoff = new Date(now.getTime() - 20 * 60_000).toISOString();
+              const { data: recent } = await supabaseAdmin
+                .from("truck_capacity_sync_log")
+                .select("id").eq("source", "sharepoint").gte("started_at", cutoff).limit(1);
+              if (recent && recent.length > 0) {
+                truckCapacitySharePoint = { ok: true, skipped: true, reason: "synced_within_20_minutes" };
+              } else {
+                const { runWorkbookSync } = await import("@/lib/truck-capacity/workbook-sync.server");
+                truckCapacitySharePoint = await runWorkbookSync({ source: "cron", triggeredBy: null });
+              }
+            } catch (e: any) { truckCapacitySharePoint = { ok: false, error: e?.message ?? String(e) }; }
+          }
 
 
           // Monthly Sales Reports run: 1st of the month, 3:00–3:15 AM Central.
@@ -224,7 +246,7 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             dispatchReconciler = await runDispatchReconcilerTick(now);
           } catch (e: any) { dispatchReconciler = { ok: false, error: e?.message ?? String(e) }; }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, truckCapacityFreeze, salesReports, capacityAlerts, driverTime, websiteExport, dispatchBuilder, dispatchReconciler, ranAt: new Date().toISOString() });
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, truckCapacityFreeze, truckCapacitySharePoint, salesReports, capacityAlerts, driverTime, websiteExport, dispatchBuilder, dispatchReconciler, ranAt: new Date().toISOString() });
 
 
 

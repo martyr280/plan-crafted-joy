@@ -56,6 +56,8 @@ function makeAdmin(opts: { routeRuns: Row[]; version: Row | null; route: Row }) 
       select: (s = "") => { state.select = s; return builder; },
       eq: (k: string, v: any) => { state.eq[k] = v; return builder; },
       gte: () => builder,
+      // serve.ts filters no-run markers with .not("capacity_frac","is",null)
+      not: () => builder,
       lte: () => builder,
       order: () => builder,
       limit: () => builder,

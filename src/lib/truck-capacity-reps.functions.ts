@@ -273,6 +273,8 @@ export const getUnderfilledRoutes = createServerFn({ method: "POST" })
     const { data: runs, error: runErr } = await db()
       .from("truck_capacity_runs")
       .select("route_id, run_date, capacity_frac")
+      // Exclude no-run markers (NULL capacity) from the underfilled math.
+      .not("capacity_frac", "is", null)
       .gte("run_date", from)
       .limit(100000);
     if (runErr) throw new Error(runErr.message);
