@@ -77,6 +77,7 @@ export function useSaveDriverTimeConfig() {
       mergeGapMinutes?: number;
       requireLicense?: boolean;
       includeDeactivated?: boolean;
+      basis?: "presence" | "onduty";
 
     }) => fn({ data: patch }),
     onSuccess: () => {

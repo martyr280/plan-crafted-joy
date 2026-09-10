@@ -30,7 +30,7 @@ function seg(partial: Partial<HosSegment> & { startMs: number; endMs: number; st
 }
 
 const driver = { id: "d1", name: "Ray Driver" };
-const OPTS = { tzOffsetMinutes: CST, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10 };
+const OPTS = { tzOffsetMinutes: CST, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "onduty" as const };
 
 function run(segments: HosSegment[], extra: Record<string, unknown> = {}, gpsSamples: any[] = []) {
   return detectWarehouseEvents({

@@ -283,6 +283,7 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
         mergeGapMinutes: z.number().int().min(0).max(120).optional(),
         requireLicense: z.boolean().optional(),
         includeDeactivated: z.boolean().optional(),
+        basis: z.enum(["presence", "onduty"]).optional(),
 
       })
       .parse(i ?? {}),
@@ -387,6 +388,7 @@ export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
           excludedDriverNamePatterns: [] as string[],
           requireLicense: true,
           includeDeactivated: false,
+          basis: "presence" as const,
         },
         probes: [] as Array<{ endpoint: string; ok: boolean; detail: string }>,
         fences: [] as any[],

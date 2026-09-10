@@ -79,6 +79,7 @@ export type SamsaraDiagnostics = {
     excludedDriverNamePatterns: string[];
     requireLicense: boolean;
     includeDeactivated: boolean;
+    basis: "presence" | "onduty";
   };
 
   probes: Array<{ endpoint: string; ok: boolean; detail: string }>;
@@ -496,6 +497,7 @@ export async function runSamsaraDiagnostics(opts?: {
       excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
       requireLicense: settings.requireLicense,
       includeDeactivated: settings.includeDeactivated,
+      basis: settings.basis,
     },
     probes,
     fences,

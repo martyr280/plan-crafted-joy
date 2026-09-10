@@ -105,6 +105,7 @@ export function buildReconciledDrivers(events: any[], overrides: any[], includeW
     buckets.set(key,b);
   }
   return Array.from(buckets.values()).map(b => {
+    annotateVerification(b);
     b.revision ??= overrides.find(o=>String(o.driver_id)===b.driverId)?.updated_at ?? null;
     b.flaggedMinutes = (b.officialMinutes ?? b.automatedMinutes) + b.weekendMinutes;
     b.varianceMinutes = b.official ? b.automatedMinutes - b.officialMinutes : null;
@@ -112,6 +113,42 @@ export function buildReconciledDrivers(events: any[], overrides: any[], includeW
     b.multiHub = Object.keys(b.minutesByHub).length > 1;
     return b;
   }).sort((a,b)=>b.flaggedMinutes-a.flaggedMinutes || a.driverName.localeCompare(b.driverName));
+}
+
+/** Overlap in minutes between two [start,end) instants. */
+export function overlapMinutes(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
+  return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart)) / 60000;
+}
+
+/**
+ * Cross-check the official report against Nelson's own evidence:
+ * an official interval is `verified` when live automated evidence overlaps it,
+ * and an automated event is `nelsonOnly` when the official report has no
+ * matching interval. Purely additive — no minute totals change.
+ */
+export function annotateVerification(b: any): void {
+  const live = (b.events ?? []).filter((e: any) => !e.superseded_at && e.status !== "excused");
+  const intervals = b.official?.intervals ?? null;
+  if (intervals) {
+    let unverified = 0;
+    for (const i of intervals) {
+      const s = Date.parse(i.start), e = Date.parse(i.end);
+      i.verified = live.some((ev: any) =>
+        overlapMinutes(s, e, Date.parse(ev.start_ts), Date.parse(ev.end_ts)) >= 1);
+      if (!i.verified) unverified += Number(i.minutes ?? 0);
+    }
+    b.unverifiedOfficialMinutes = unverified;
+  } else {
+    b.unverifiedOfficialMinutes = null;
+  }
+  if (b.official) {
+    const list = intervals ?? [];
+    b.events = (b.events ?? []).map((ev: any) => ({
+      ...ev,
+      nelsonOnly: !ev.superseded_at && ev.status !== "excused" && !list.some((i: any) =>
+        overlapMinutes(Date.parse(i.start), Date.parse(i.end), Date.parse(ev.start_ts), Date.parse(ev.end_ts)) >= 1),
+    }));
+  }
 }
 
 export function reconciliationCsv(drivers: any[]): string {
