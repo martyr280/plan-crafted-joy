@@ -412,11 +412,31 @@ export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
 export const saveWarehouseActual = createServerFn({method:"POST"})
   .middleware([requireSupabaseAuth])
   .inputValidator(i => z.object({driverId:z.string().min(1).max(200),weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    reportName:z.string().max(200).optional(), hub:z.string().max(80).optional(),
     actual:actualSchema.nullable(), expectedUpdatedAt:z.string().nullable()}).parse(i))
   .handler(async ({data,context}) => {
     await requireViewer(context.userId);
+    // Official-report rows arrive keyed `report:<hub>:<slug>`. Resolve that to a
+    // real Samsara driver when exactly one licence-holding roster name matches,
+    // so audited hours land on the same identity the sweep writes events under.
+    let driverId = data.driverId;
+    let identityReason = "Used the driver id as supplied.";
+    if (driverId.startsWith("report:")) {
+      const { resolveReportDriverIdentity } = await import("@/lib/driver-time.server");
+      const { fetchDrivers } = await import("@/lib/samsara/hos.server");
+      try {
+        const roster = await fetchDrivers();
+        const hub = data.hub ?? driverId.split(":")[1] ?? "";
+        const resolved = resolveReportDriverIdentity({ name: data.reportName ?? driverId.split(":")[2] ?? "", hub, roster });
+        driverId = resolved.driverId;
+        identityReason = resolved.reason;
+      } catch (e: any) {
+        identityReason = `Kept report identity: Samsara roster unavailable (${e?.message ?? String(e)}).`;
+      }
+    }
     const actual = data.actual ? validateActual(data.actual,data.weekStart) : null;
     const payload = {warehouse_actual:actual,updated_by:context.userId,updated_at:new Date().toISOString()};
+
     // Compare-and-set prevents one reviewer silently overwriting another.
     if (data.expectedUpdatedAt) {
       const {data:changed,error} = await db().from("driver_time_week_overrides").update(payload)
