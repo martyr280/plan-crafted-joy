@@ -440,19 +440,19 @@ export const saveWarehouseActual = createServerFn({method:"POST"})
     // Compare-and-set prevents one reviewer silently overwriting another.
     if (data.expectedUpdatedAt) {
       const {data:changed,error} = await db().from("driver_time_week_overrides").update(payload)
-        .eq("driver_id",data.driverId).eq("week_start",data.weekStart).eq("updated_at",data.expectedUpdatedAt).select("id");
+        .eq("driver_id",driverId).eq("week_start",data.weekStart).eq("updated_at",data.expectedUpdatedAt).select("id");
       if (error) throw new Error(error.message);
       if (!changed?.length) throw new Error("This week changed. Refresh and review the latest value before saving.");
     } else {
       // A Paycom-only row may exist even when this driver has no events.
       // Updating only a still-null actual preserves those paid-hours fields.
       const {data:changed,error:updateError} = await db().from("driver_time_week_overrides").update(payload)
-        .eq("driver_id",data.driverId).eq("week_start",data.weekStart).is("warehouse_actual",null).select("id");
+        .eq("driver_id",driverId).eq("week_start",data.weekStart).is("warehouse_actual",null).select("id");
       if (updateError) throw new Error(updateError.message);
       if (!changed?.length) {
-        const {error} = await db().from("driver_time_week_overrides").insert({...payload,driver_id:data.driverId,week_start:data.weekStart});
+        const {error} = await db().from("driver_time_week_overrides").insert({...payload,driver_id:driverId,week_start:data.weekStart});
         if (error) throw new Error(error.code === "23505" ? "This week already has an entry. Refresh before saving." : error.message);
       }
     }
-    return {ok:true as const};
+    return {ok:true as const, resolvedDriverId:driverId, identityReason};
   });
