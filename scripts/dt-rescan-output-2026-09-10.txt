@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "runId": "679c0ea9-2fb0-4499-b16a-085b506ba244",
+  "weekStart": "2026-08-17",
+  "weekEnd": "2026-08-23",
+  "driversScanned": 24,
+  "eventsFound": 31,
+  "inserted": 17,
+  "updated": 14,
+  "reopened": 0,
+  "warnings": []
+}
+{
+  "ok": true,
+  "runId": "641c69ce-9b9e-418c-99a2-2f4138be2c7a",
+  "weekStart": "2026-08-24",
+  "weekEnd": "2026-08-30",
+  "driversScanned": 24,
+  "eventsFound": 28,
+  "inserted": 19,
+  "updated": 9,
+  "reopened": 0,
+  "warnings": []
+}
+{
+  "ok": true,
+  "runId": "8ecc963d-979c-47dd-b2f7-7af932e85021",
+  "weekStart": "2026-08-31",
+  "weekEnd": "2026-09-06",
+  "driversScanned": 24,
+  "eventsFound": 32,
+  "inserted": 14,
+  "updated": 18,
+  "reopened": 0,
+  "warnings": []
+}
