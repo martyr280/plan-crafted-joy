@@ -114,6 +114,10 @@ export type SamsaraDriver = {
   eldDayStartHour: number | null;
   timezone: string | null;
   tags: string[];
+  /** Real NDI drivers hold a licence; shared warehouse/LTL logins do not. */
+  licenseNumber: string | null;
+  licenseState: string | null;
+  username: string | null;
 };
 
 /** Full roster, including deactivated drivers (they still have logs in history). */
@@ -134,9 +138,14 @@ export async function fetchDrivers(): Promise<SamsaraDriver[]> {
       eldDayStartHour: typeof d.eldDayStartHour === "number" ? d.eldDayStartHour : null,
       timezone: d.timezone ?? null,
       tags: (d.tags ?? []).map((t: any) => t?.name).filter(Boolean),
+      // Present on the list objects; no extra per-driver call is made.
+      licenseNumber: d.licenseNumber ? String(d.licenseNumber) : null,
+      licenseState: d.licenseState ? String(d.licenseState) : null,
+      username: d.username ? String(d.username) : null,
     }))
     .filter((d) => (seen.has(d.id) ? false : (seen.add(d.id), true)));
 }
+
 
 /* --------------------------------------------------------------- addresses */
 

@@ -13,6 +13,8 @@ import { fetchDrivers, fetchAddresses, fetchHosLogs, fetchVehicleGpsHistory } fr
 import { detectWarehouseEvents, isExcludedDriver, type HosSegment, type WarehouseEvent } from "@/lib/driver-time/detect";
 import type { Geofence } from "@/lib/driver-time/geo";
 import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
+import { driverNameKey } from "@/lib/driver-time/reconciliation";
+
 
 const db = () => supabaseAdmin as any;
 
@@ -23,6 +25,10 @@ export type DriverTimeSettings = {
   excludedDriverNamePatterns: string[];
   mergeGapMinutes: number;
   hubTzByAddress: Record<string, string>;
+  /** Shared logins have no licence number; requiring one keeps them out. */
+  requireLicense: boolean;
+  /** Deactivated drivers keep stale logs that produce phantom 24h blocks. */
+  includeDeactivated: boolean;
 };
 
 export const DEFAULT_DRIVER_TIME_SETTINGS: DriverTimeSettings = {
@@ -32,7 +38,115 @@ export const DEFAULT_DRIVER_TIME_SETTINGS: DriverTimeSettings = {
   excludedDriverNamePatterns: ["Birmingham LTL", "Birmingham Warehouse", "Dallas LTL", "Dallas Warehouse", "Ocala LTL", "Ocala Warehouse"],
   mergeGapMinutes: 10,
   hubTzByAddress: {},
+  requireLicense: true,
+  includeDeactivated: false,
 };
+
+export type RosterCounts = {
+  total: number;
+  excludedByPattern: number;
+  excludedNoLicense: number;
+  excludedDeactivated: number;
+  scanned: number;
+};
+
+export type RosterCandidate = {
+  id: string;
+  name: string;
+  licenseNumber?: string | null;
+  driverActivationStatus?: string | null;
+};
+
+/**
+ * Pure roster filter shared by the sweep and diagnostics: name/ID exclusions
+ * first, then the licence requirement, then activation status.
+ */
+export function filterRoster<T extends RosterCandidate>(
+  drivers: T[],
+  settings: Pick<
+    DriverTimeSettings,
+    "excludedDriverIds" | "excludedDriverNamePatterns" | "requireLicense" | "includeDeactivated"
+  >,
+): { roster: T[]; counts: RosterCounts } {
+  const counts: RosterCounts = {
+    total: drivers.length,
+    excludedByPattern: 0,
+    excludedNoLicense: 0,
+    excludedDeactivated: 0,
+    scanned: 0,
+  };
+  const roster: T[] = [];
+  for (const d of drivers) {
+    if (
+      isExcludedDriver(
+        { id: d.id, name: d.name },
+        {
+          excludedDriverIds: settings.excludedDriverIds,
+          excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
+        },
+      )
+    ) {
+      counts.excludedByPattern++;
+      continue;
+    }
+    if (settings.requireLicense && !String(d.licenseNumber ?? "").trim()) {
+      counts.excludedNoLicense++;
+      continue;
+    }
+    if (!settings.includeDeactivated && (d.driverActivationStatus ?? "active") !== "active") {
+      counts.excludedDeactivated++;
+      continue;
+    }
+    roster.push(d);
+  }
+  counts.scanned = roster.length;
+  return { roster, counts };
+}
+
+/** Report spellings that differ from the Samsara roster spelling. */
+export const REPORT_NAME_ALIASES: Record<string, string> = {
+  "ron fugate": "ronald fugate",
+  "nelson rolden": "nelson roldan",
+};
+
+export type ReportIdentity = {
+  driverId: string;
+  matched: boolean;
+  reason: string;
+};
+
+/**
+ * Resolve an official-report driver name to a Samsara driver ID. Only
+ * licence-holding roster records are candidates, so a shared warehouse login
+ * can never absorb a real driver's audited hours. A non-unique or absent match
+ * keeps the `report:<hub>:<slug>` fallback and says why.
+ */
+export function resolveReportDriverIdentity(input: {
+  name: string;
+  hub: string;
+  roster: RosterCandidate[];
+}): ReportIdentity {
+  const slug = driverNameKey(input.name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const fallback = `report:${input.hub.toLowerCase()}:${slug}`;
+  const key = driverNameKey(input.name);
+  const target = REPORT_NAME_ALIASES[key] ?? key;
+  const licensed = input.roster.filter((d) => String(d.licenseNumber ?? "").trim());
+  const matches = licensed.filter((d) => driverNameKey(d.name) === target);
+  if (matches.length === 1) {
+    return {
+      driverId: matches[0].id,
+      matched: true,
+      reason: `Matched Samsara driver ${matches[0].name} (${matches[0].id}) by name.`,
+    };
+  }
+  return {
+    driverId: fallback,
+    matched: false,
+    reason: matches.length
+      ? `Kept report identity: ${matches.length} licensed Samsara drivers share the name "${input.name}".`
+      : `Kept report identity: no licensed Samsara driver matches "${input.name}".`,
+  };
+}
 
 export async function getDriverTimeSettings(): Promise<DriverTimeSettings> {
   const { data, error } = await db().from("app_settings").select("value").eq("key", "driver_time").maybeSingle();
@@ -41,6 +155,8 @@ export async function getDriverTimeSettings(): Promise<DriverTimeSettings> {
   return {
     ...DEFAULT_DRIVER_TIME_SETTINGS,
     ...saved,
+    requireLicense: saved.requireLicense ?? DEFAULT_DRIVER_TIME_SETTINGS.requireLicense,
+    includeDeactivated: saved.includeDeactivated ?? DEFAULT_DRIVER_TIME_SETTINGS.includeDeactivated,
     // Shared warehouse/LTL identities are never individual driver records.
     // Older saved settings must not erase the built-in roster exclusions.
     excludedDriverNamePatterns: [...new Set([
@@ -58,6 +174,7 @@ export async function saveDriverTimeSettings(patch: Partial<DriverTimeSettings>)
   if (error) throw new Error(error.message);
   return next;
 }
+
 
 /** Monday-start week containing `d`, anchored to the Central calendar date. */
 export function weekBounds(d: Date): { weekStart: string; weekEnd: string } {
@@ -105,8 +222,11 @@ export type SweepResult = {
   updated: number;
   reopened: number;
   warnings: string[];
+  /** Roster accounting: why drivers were left out of this scan. */
+  roster?: RosterCounts;
   error?: string;
 };
+
 
 export async function runDriverTimeSweep(opts?: {
   now?: Date;
@@ -167,17 +287,12 @@ export async function runDriverTimeSweep(opts?: {
       polygon: a.polygon,
     }));
 
-    const roster = drivers.filter(
-      (d) =>
-        !isExcludedDriver(
-          { id: d.id, name: d.name },
-          {
-            excludedDriverIds: settings.excludedDriverIds,
-            excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
-          },
-        ),
-    );
-    if (!roster.length) return await fail("No drivers to scan after exclusions.");
+    const { roster, counts: rosterCounts } = filterRoster(drivers, settings);
+    if (!roster.length)
+      return await fail(
+        `No drivers to scan after exclusions (roster ${rosterCounts.total}, pattern ${rosterCounts.excludedByPattern}, no licence ${rosterCounts.excludedNoLicense}, deactivated ${rosterCounts.excludedDeactivated}).`,
+      );
+
 
 
     const segments = await fetchHosLogs({ startMs, endMs, driverIds: roster.map((d) => d.id) });
@@ -314,8 +429,9 @@ export async function runDriverTimeSweep(opts?: {
     return {
       ok: true, runId, weekStart, weekEnd,
       driversScanned: roster.length, eventsFound: events.length,
-      inserted, updated, reopened, warnings,
+      inserted, updated, reopened, warnings, roster: rosterCounts,
     };
+
   } catch (e: any) {
     return await fail(e?.message ?? String(e));
   }

@@ -14,13 +14,13 @@ import {
 import {
   KEPT_STATUSES,
   detectWarehouseEvents,
-  isExcludedDriver,
   localDateKey,
+
   type HosSegment,
 } from "@/lib/driver-time/detect";
 import { haversineMeters, matchGeofence, type Geofence, type LatLon } from "@/lib/driver-time/geo";
 import { CENTRAL_TZ, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
-import { getDriverTimeSettings, weekBounds } from "@/lib/driver-time.server";
+import { filterRoster, getDriverTimeSettings, weekBounds } from "@/lib/driver-time.server";
 
 const MINUTE = 60_000;
 
@@ -43,7 +43,10 @@ export type DriverRow = {
   driverId: string;
   driverName: string;
   activationStatus: string | null;
+  /** Shared warehouse/LTL logins carry no licence number. */
+  hasLicense: boolean;
   excluded: boolean;
+
   segments: number;
   segmentsWithCoords: number;
   drivingMin: number;
@@ -74,13 +77,20 @@ export type SamsaraDiagnostics = {
     mergeGapMinutes: number;
     warehouseAddressIds: string[];
     excludedDriverNamePatterns: string[];
+    requireLicense: boolean;
+    includeDeactivated: boolean;
   };
+
   probes: Array<{ endpoint: string; ok: boolean; detail: string }>;
   fences: FenceInfo[];
   statusVocabulary: StatusRow[];
   funnel: {
     driversOnRoster: number;
+    excludedByPattern: number;
+    excludedNoLicense: number;
+    excludedDeactivated: number;
     driversAfterExclusions: number;
+
     segmentsFetched: number;
     segmentsWithCoords: number;
     gpsSamples: number;
@@ -339,11 +349,11 @@ export async function runSamsaraDiagnostics(opts?: {
     polygon: a.polygon,
   }));
 
-  const exclusionOpts = {
-    excludedDriverIds: settings.excludedDriverIds,
-    excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
-  };
-  const roster = drivers.filter((d) => !isExcludedDriver({ id: d.id, name: d.name }, exclusionOpts));
+  // Same filter the sweep uses, so the funnel matches what a run would scan.
+
+  const { roster, counts: rosterCounts } = filterRoster(drivers, settings);
+  const rosterIds = new Set(roster.map((d) => d.id));
+
 
   const driverIds = roster.map((d) => d.id);
   const segments = driverIds.length ? await fetchHosLogs({ startMs, endMs, driverIds }) : [];
@@ -374,7 +384,7 @@ export async function runSamsaraDiagnostics(opts?: {
 
   const rows: DriverRow[] = [];
   for (const d of drivers) {
-    const excluded = isExcludedDriver({ id: d.id, name: d.name }, exclusionOpts);
+    const excluded = !rosterIds.has(d.id);
     const segs = byDriver.get(d.id) ?? [];
     const tzOffsetMinutes = tzOffsetMinutesAt(now, ianaZoneFor(d.timezone));
 
@@ -438,7 +448,9 @@ export async function runSamsaraDiagnostics(opts?: {
       driverId: d.id,
       driverName: d.name,
       activationStatus: d.driverActivationStatus,
+      hasLicense: Boolean(String(d.licenseNumber ?? "").trim()),
       excluded,
+
       segments: segs.length,
       segmentsWithCoords,
       drivingMin: Math.round(drivingMin),
@@ -482,14 +494,20 @@ export async function runSamsaraDiagnostics(opts?: {
       mergeGapMinutes: settings.mergeGapMinutes,
       warehouseAddressIds: settings.warehouseAddressIds,
       excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
+      requireLicense: settings.requireLicense,
+      includeDeactivated: settings.includeDeactivated,
     },
     probes,
     fences,
     statusVocabulary: buildStatusVocabulary(segments),
     funnel: {
-      driversOnRoster: drivers.length,
+      driversOnRoster: rosterCounts.total,
+      excludedByPattern: rosterCounts.excludedByPattern,
+      excludedNoLicense: rosterCounts.excludedNoLicense,
+      excludedDeactivated: rosterCounts.excludedDeactivated,
       driversAfterExclusions: roster.length,
       segmentsFetched: segments.length,
+
       segmentsWithCoords: segments.filter((s) => s.latitude !== null && s.longitude !== null).length,
       gpsSamples: gpsSamples.length,
       blocksBuilt,

@@ -281,6 +281,9 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
         excludedDriverIds: z.array(z.string()).max(500).optional(),
         excludedDriverNamePatterns: z.array(z.string().max(120)).max(100).optional(),
         mergeGapMinutes: z.number().int().min(0).max(120).optional(),
+        requireLicense: z.boolean().optional(),
+        includeDeactivated: z.boolean().optional(),
+
       })
       .parse(i ?? {}),
   )
