@@ -969,6 +969,7 @@ function DiagnosticsTab() {
                         </div>
                         <div className="text-xs text-muted-foreground">{r.activationStatus ?? ""}</div>
                       </TableCell>
+                      <TableCell className="text-xs">{r.hasLicense ? "yes" : "no"}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.segments}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.segmentsWithCoords}</TableCell>
                       <TableCell className="text-right tabular-nums">{hm(r.drivingMin)}</TableCell>
