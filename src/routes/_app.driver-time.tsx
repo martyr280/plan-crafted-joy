@@ -474,6 +474,36 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
             Non-human Samsara accounts (shared LTL / warehouse logins) belong here; they otherwise dominate the report.
           </p>
         </div>
+        <div className="space-y-2">
+          <label className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={settings?.requireLicense ?? true}
+              onChange={(e) =>
+                save.mutate({ requireLicense: e.target.checked }, {
+                  onSuccess: () => toast.success("Settings saved"),
+                  onError: (err: any) => toast.error(err?.message),
+                })
+              }
+            />
+            <span>Require a driver&apos;s-license number (excludes shared logins)</span>
+          </label>
+          <label className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={settings?.includeDeactivated ?? false}
+              onChange={(e) =>
+                save.mutate({ includeDeactivated: e.target.checked }, {
+                  onSuccess: () => toast.success("Settings saved"),
+                  onError: (err: any) => toast.error(err?.message),
+                })
+              }
+            />
+            <span>Include deactivated drivers</span>
+          </label>
+        </div>
         <Button
           size="sm"
           disabled={save.isPending}
@@ -491,6 +521,7 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
         >
           Save detection settings
         </Button>
+
       </Card>
 
       <Card className="p-4">
@@ -660,13 +691,14 @@ function DiagnosticsTab() {
   function downloadDiagCsv() {
     if (!d) return;
     const header = [
-      "Driver", "Activation", "Excluded", "Segs", "w/ GPS", "Driving (min)",
+      "Driver", "Activation", "License", "Excluded", "Segs", "w/ GPS", "Driving (min)",
       "On-duty non-driving (min)", "Longest block (min)", "RAG",
       "Location source", "Matched fence", "Nearest fence", "Nearest fence (m)", "Events",
     ];
     const rows = [header, ...d.drivers.map((r: any) => [
-      r.driverName, r.activationStatus ?? "", r.excluded ? "yes" : "no",
+      r.driverName, r.activationStatus ?? "", r.hasLicense ? "yes" : "no", r.excluded ? "yes" : "no",
       String(r.segments), String(r.segmentsWithCoords), String(r.drivingMin),
+
       String(r.onDutyNonDrivingMin), String(r.longestNonDrivingMin),
       r.excluded ? "" : ragOf(r.longestNonDrivingMin, greenUnder, redAtOrOver),
       r.longestBlockLocationSource, r.matchedFenceName ?? "", r.nearestFenceName ?? "",
@@ -767,6 +799,8 @@ function DiagnosticsTab() {
             <Card className="p-4">
               <h3 className="mb-2 text-sm font-semibold">Pipeline funnel</h3>
               <FunnelRow label="Drivers in Samsara (incl. deactivated)" value={d.funnel.driversOnRoster} />
+              <FunnelRow label="Excluded: no license" value={d.funnel.excludedNoLicense ?? 0} />
+              <FunnelRow label="Excluded: deactivated" value={d.funnel.excludedDeactivated ?? 0} />
               <FunnelRow label="After exclusions" value={d.funnel.driversAfterExclusions} />
               <FunnelRow label="HOS segments fetched" value={d.funnel.segmentsFetched} />
               <FunnelRow label="Segments with coordinates" value={d.funnel.segmentsWithCoords} />
@@ -913,6 +947,7 @@ function DiagnosticsTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Driver</TableHead>
+                    <TableHead>License</TableHead>
                     <TableHead className="text-right">Segs</TableHead>
                     <TableHead className="text-right">w/ GPS</TableHead>
                     <TableHead className="text-right">Driving</TableHead>
@@ -935,6 +970,7 @@ function DiagnosticsTab() {
                         </div>
                         <div className="text-xs text-muted-foreground">{r.activationStatus ?? ""}</div>
                       </TableCell>
+                      <TableCell className="text-xs">{r.hasLicense ? "yes" : "no"}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.segments}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.segmentsWithCoords}</TableCell>
                       <TableCell className="text-right tabular-nums">{hm(r.drivingMin)}</TableCell>

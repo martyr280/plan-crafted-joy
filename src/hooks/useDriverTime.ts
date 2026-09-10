@@ -75,6 +75,9 @@ export function useSaveDriverTimeConfig() {
       excludedDriverIds?: string[];
       excludedDriverNamePatterns?: string[];
       mergeGapMinutes?: number;
+      requireLicense?: boolean;
+      includeDeactivated?: boolean;
+
     }) => fn({ data: patch }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["driver-time-config"] });
