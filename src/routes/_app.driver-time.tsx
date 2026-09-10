@@ -798,6 +798,8 @@ function DiagnosticsTab() {
             <Card className="p-4">
               <h3 className="mb-2 text-sm font-semibold">Pipeline funnel</h3>
               <FunnelRow label="Drivers in Samsara (incl. deactivated)" value={d.funnel.driversOnRoster} />
+              <FunnelRow label="Excluded: no license" value={d.funnel.excludedNoLicense ?? 0} />
+              <FunnelRow label="Excluded: deactivated" value={d.funnel.excludedDeactivated ?? 0} />
               <FunnelRow label="After exclusions" value={d.funnel.driversAfterExclusions} />
               <FunnelRow label="HOS segments fetched" value={d.funnel.segmentsFetched} />
               <FunnelRow label="Segments with coordinates" value={d.funnel.segmentsWithCoords} />
