@@ -3232,13 +3232,15 @@ export type Database = {
       }
       truck_capacity_runs: {
         Row: {
-          capacity_frac: number
+          capacity_frac: number | null
           created_at: string
           driver: string | null
           entered_by: string | null
           id: string
+          missing_from_sheet: boolean
           notes: string | null
           pallet_count: number | null
+          prior_values: Json | null
           returned_pallets: number | null
           route_id: string
           run_date: string
@@ -3248,13 +3250,15 @@ export type Database = {
           vendor_pickup_frac: number | null
         }
         Insert: {
-          capacity_frac: number
+          capacity_frac?: number | null
           created_at?: string
           driver?: string | null
           entered_by?: string | null
           id?: string
+          missing_from_sheet?: boolean
           notes?: string | null
           pallet_count?: number | null
+          prior_values?: Json | null
           returned_pallets?: number | null
           route_id: string
           run_date: string
@@ -3264,13 +3268,15 @@ export type Database = {
           vendor_pickup_frac?: number | null
         }
         Update: {
-          capacity_frac?: number
+          capacity_frac?: number | null
           created_at?: string
           driver?: string | null
           entered_by?: string | null
           id?: string
+          missing_from_sheet?: boolean
           notes?: string | null
           pallet_count?: number | null
+          prior_values?: Json | null
           returned_pallets?: number | null
           route_id?: string
           run_date?: string
@@ -3328,6 +3334,128 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           vendor_pickup_counts?: boolean
+        }
+        Relationships: []
+      }
+      truck_capacity_sheet_map: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          note: string | null
+          route_id: string | null
+          sheet_name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          note?: string | null
+          route_id?: string | null
+          sheet_name: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          note?: string | null
+          route_id?: string | null
+          sheet_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_capacity_sheet_map_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      truck_capacity_sync_log: {
+        Row: {
+          created_at: string
+          errors: Json
+          file_etag: string | null
+          file_modified_at: string | null
+          finished_at: string | null
+          id: string
+          rows_inserted: number
+          rows_missing: number
+          rows_skipped: number
+          rows_updated: number
+          sheets_seen: number
+          source: string
+          started_at: string
+          status: string
+          triggered_by: string | null
+          unmatched_sheets: Json
+        }
+        Insert: {
+          created_at?: string
+          errors?: Json
+          file_etag?: string | null
+          file_modified_at?: string | null
+          finished_at?: string | null
+          id?: string
+          rows_inserted?: number
+          rows_missing?: number
+          rows_skipped?: number
+          rows_updated?: number
+          sheets_seen?: number
+          source?: string
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+          unmatched_sheets?: Json
+        }
+        Update: {
+          created_at?: string
+          errors?: Json
+          file_etag?: string | null
+          file_modified_at?: string | null
+          finished_at?: string | null
+          id?: string
+          rows_inserted?: number
+          rows_missing?: number
+          rows_skipped?: number
+          rows_updated?: number
+          sheets_seen?: number
+          source?: string
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+          unmatched_sheets?: Json
+        }
+        Relationships: []
+      }
+      truck_capacity_sync_state: {
+        Row: {
+          etag: string | null
+          file_modified_at: string | null
+          id: boolean
+          last_status: string | null
+          last_synced_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          etag?: string | null
+          file_modified_at?: string | null
+          id?: boolean
+          last_status?: string | null
+          last_synced_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          etag?: string | null
+          file_modified_at?: string | null
+          id?: boolean
+          last_status?: string | null
+          last_synced_at?: string | null
+          updated_at?: string
         }
         Relationships: []
       }

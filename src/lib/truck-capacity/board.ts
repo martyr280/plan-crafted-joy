@@ -157,6 +157,8 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
   const { data: runs } = await supabaseAdmin
     .from("truck_capacity_runs")
     .select("route_id, run_date, capacity_frac, driver")
+    // Skip no-run markers so "last run" never shows a blank day as 0%.
+    .not("capacity_frac", "is", null)
     .gte("run_date", addDaysISO(todayUtc, -120))
     .order("run_date", { ascending: false })
     .limit(20000);

@@ -822,6 +822,8 @@ export const getForecastVsActual = createServerFn({ method: "POST" })
       supabaseAdmin
         .from("truck_capacity_runs")
         .select("route_id, run_date, capacity_frac")
+        // No-run markers (NULL capacity) are not actuals — exclude from scoring.
+        .not("capacity_frac", "is", null)
         .gte("run_date", since)
         .limit(50000),
     ]);
@@ -939,6 +941,8 @@ async function buildForecastVsTracker(
   const [routeRes, runRes, logRes, cutRes] = await Promise.all([
     supabaseAdmin.from("truck_capacity_routes").select("id, code, name, hub, active, sort_order").limit(2000),
     supabaseAdmin.from("truck_capacity_runs").select("route_id, run_date, capacity_frac")
+      // No-run markers (NULL capacity) are not tracker actuals — exclude them.
+      .not("capacity_frac", "is", null)
       .gte("run_date", from).lte("run_date", to).limit(100000),
     supabaseAdmin.from("truck_capacity_forecast_log")
       .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied")

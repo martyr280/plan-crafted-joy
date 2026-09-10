@@ -169,6 +169,9 @@ export async function evaluateCapacityAlerts(opts: {
   const yearAgo = dayKey(addDays(today, -370));
   const { data: runs, error: runErr } = await db()
     .from("truck_capacity_runs").select("route_id, run_date, capacity_frac")
+    // No-run markers have NULL capacity; excluded so they can't drag a rep's
+    // average down or manufacture a low-utilization streak.
+    .not("capacity_frac", "is", null)
     .gte("run_date", yearAgo).limit(200000);
   if (runErr) throw new Error(runErr.message);
 

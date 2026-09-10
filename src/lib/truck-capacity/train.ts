@@ -35,6 +35,9 @@ async function fetchAllRuns(): Promise<Array<{ route_id: string; run_date: strin
     const { data, error } = await supabaseAdmin
       .from("truck_capacity_runs")
       .select("route_id, run_date, capacity_frac")
+      // No-run markers (blank Capacity in the tracker, e.g. "Labor Day") carry a
+      // NULL capacity_frac and must never train as a 0% load.
+      .not("capacity_frac", "is", null)
       .order("run_date", { ascending: true })
       .range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);

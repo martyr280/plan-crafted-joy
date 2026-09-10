@@ -79,6 +79,8 @@ async function loadRouteRunsSince(routeId: string, sinceISO: string): Promise<Ru
   const { data } = await supabaseAdmin
     .from("truck_capacity_runs")
     .select("run_date, capacity_frac")
+    // NULL capacity = no-run marker; excluded so it can't read as 0% load.
+    .not("capacity_frac", "is", null)
     .eq("route_id", routeId)
     .gte("run_date", sinceISO)
     .order("run_date", { ascending: true })
@@ -90,6 +92,7 @@ async function loadHubRunsSince(hub: string, sinceISO: string): Promise<RunPoint
   const { data } = await supabaseAdmin
     .from("truck_capacity_runs")
     .select("run_date, capacity_frac, truck_capacity_routes!inner(hub)")
+    .not("capacity_frac", "is", null)
     .eq("truck_capacity_routes.hub", hub)
     .gte("run_date", sinceISO)
     .limit(20000);
