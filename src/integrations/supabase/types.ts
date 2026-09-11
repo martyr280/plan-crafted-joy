@@ -2466,6 +2466,7 @@ export type Database = {
       samsara_cache_days: {
         Row: {
           complete: boolean
+          coverage: Json
           created_at: string
           dataset: string
           day_date: string
@@ -2479,6 +2480,7 @@ export type Database = {
         }
         Insert: {
           complete?: boolean
+          coverage?: Json
           created_at?: string
           dataset: string
           day_date: string
@@ -2492,6 +2494,7 @@ export type Database = {
         }
         Update: {
           complete?: boolean
+          coverage?: Json
           created_at?: string
           dataset?: string
           day_date?: string
