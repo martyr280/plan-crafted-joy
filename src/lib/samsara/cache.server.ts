@@ -23,6 +23,7 @@ import {
 import {
   backfillSegmentVehicles,
   centralDaysCovering,
+  coversEntities,
   isCacheDayFresh,
   type AssignmentRow,
   type CacheDay,
@@ -91,6 +92,7 @@ async function writeCacheDay(
   entries: Array<{ entityKind: string; entityId: string; startMs: number | null; endMs: number | null; payload: unknown }>,
   complete: boolean,
   error: string | null,
+  coverage: string[],
 ) {
   const { data: dayRow, error: upsertError } = await db()
     .from("samsara_cache_days")
@@ -104,6 +106,7 @@ async function writeCacheDay(
         complete,
         row_count: entries.length,
         error,
+        coverage,
       },
       { onConflict: "dataset,day_date" },
     )
@@ -143,6 +146,8 @@ async function loadDataset<T>(args: {
   describe: (row: T) => { entityKind: string; entityId: string; startMs: number | null; endMs: number | null };
   /** Keep only the rows that actually fall inside the caller's window. */
   inWindow: (row: T, startMs: number, endMs: number) => boolean;
+  /** Drivers or vehicles this call asks about; a cached day must cover them all. */
+  entityIds: string[];
 }): Promise<{ rows: T[]; stat: CacheStat }> {
   const nowMs = Date.now();
   const endMs = Math.min(args.window.endMs, nowMs);
@@ -151,7 +156,13 @@ async function loadDataset<T>(args: {
     return { rows: [], stat: { dataset: args.dataset, days: 0, cachedDays: 0, fetchedDays: 0, rows: 0 } };
   }
   const days = centralDaysCovering(startMs, endMs);
-  const { staleDays, rows: cached } = await readCache(args.dataset, days, args.window.refresh === true, nowMs);
+  const { staleDays, rows: cached } = await readCache(
+    args.dataset,
+    days,
+    args.window.refresh === true,
+    nowMs,
+    args.entityIds,
+  );
 
   const fetched: T[] = [];
   for (const day of staleDays) {
@@ -166,6 +177,7 @@ async function loadDataset<T>(args: {
       // A day is only "complete" once it is over; today's rows will grow.
       day.endMs <= nowMs,
       null,
+      args.entityIds,
     );
   }
 
@@ -191,6 +203,7 @@ export async function getHosSegments(
   const { rows, stat } = await loadDataset<NormalizedHosSegment>({
     dataset: "hos_logs",
     window: opts,
+    entityIds: opts.driverIds,
     fetchDay: (day) => fetchHosLogs({ startMs: day.startMs, endMs: day.endMs, driverIds: opts.driverIds }),
     describe: (s) => ({ entityKind: "driver", entityId: s.driverId, startMs: s.startMs, endMs: s.endMs }),
     inWindow: (s, startMs, endMs) => s.endMs > startMs && s.startMs < endMs,
@@ -206,6 +219,7 @@ export async function getDailyLogs(
   const { rows, stat } = await loadDataset<SamsaraDailyLog>({
     dataset: "daily_logs",
     window: opts,
+    entityIds: opts.driverIds,
     fetchDay: (day) => fetchDailyLogs({ startMs: day.startMs, endMs: day.endMs, driverIds: opts.driverIds }),
     describe: (d) => ({ entityKind: "driver", entityId: d.driverId, startMs: d.startMs, endMs: d.endMs }),
     inWindow: () => true,
@@ -220,6 +234,7 @@ export async function getAssignments(
   const { rows, stat } = await loadDataset<SamsaraAssignment>({
     dataset: "assignments",
     window: opts,
+    entityIds: opts.driverIds,
     fetchDay: (day) =>
       fetchDriverVehicleAssignments({ startMs: day.startMs, endMs: day.endMs, driverIds: opts.driverIds }),
     describe: (a) => ({ entityKind: "driver", entityId: a.driverId, startMs: a.startMs, endMs: a.endMs }),
@@ -238,8 +253,7 @@ export async function getVehicleGps(
   const { rows, stat } = await loadDataset<GpsSample>({
     dataset: "gps",
     window: opts,
-    // GPS is cached per whole day for every vehicle the caller has asked about
-    // so far; filtering happens on read.
+    entityIds: opts.vehicleIds,
     fetchDay: (day) => fetchVehicleGpsHistory({ startMs: day.startMs, endMs: day.endMs, vehicleIds: opts.vehicleIds }),
     describe: (g) => ({ entityKind: "vehicle", entityId: g.vehicleId, startMs: g.timeMs, endMs: g.timeMs }),
     inWindow: (g, startMs, endMs) => g.timeMs >= startMs && g.timeMs < endMs,
