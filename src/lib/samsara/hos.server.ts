@@ -414,3 +414,108 @@ export async function probeSamsaraScopes(): Promise<ScopeProbe[]> {
   }
   return out;
 }
+
+/* ------------------------------------------------- daily logs & assignments */
+
+export type SamsaraDailyLog = {
+  driverId: string;
+  driverName: string | null;
+  /** Driver-local ELD day, YYYY-MM-DD when Samsara supplies it. */
+  logDate: string | null;
+  startMs: number | null;
+  endMs: number | null;
+  raw: any;
+};
+
+/**
+ * HOS daily logs (per driver, per ELD day): the certified duty totals Samsara
+ * itself reports. Used as corroborating evidence, not as segment geometry.
+ */
+export async function fetchDailyLogs(opts: {
+  startMs: number;
+  endMs: number;
+  driverIds: string[];
+  batchSize?: number;
+}): Promise<SamsaraDailyLog[]> {
+  const clampedEnd = Math.min(opts.endMs, Date.now());
+  if (opts.startMs >= clampedEnd || !opts.driverIds.length) return [];
+  const startDate = new Date(opts.startMs).toISOString().slice(0, 10);
+  const endDate = new Date(clampedEnd).toISOString().slice(0, 10);
+  const batchSize = opts.batchSize ?? 25;
+  const out: SamsaraDailyLog[] = [];
+
+  for (let i = 0; i < opts.driverIds.length; i += batchSize) {
+    const batch = opts.driverIds.slice(i, i + batchSize);
+    const params = new URLSearchParams({ startDate, endDate, driverIds: batch.join(",") });
+    const rows = await paged<any>(`/fleet/hos/daily-logs?${params.toString()}`, (d) => d.data ?? []);
+    for (const row of rows) {
+      const driverId = String(row.driver?.id ?? row.driverId ?? "");
+      if (!driverId) continue;
+      const days = Array.isArray(row.dailyLogs) ? row.dailyLogs : Array.isArray(row.days) ? row.days : [row];
+      for (const day of days) {
+        const start = Date.parse(day.startTime ?? day.logStartTime ?? "");
+        const end = Date.parse(day.endTime ?? day.logEndTime ?? "");
+        out.push({
+          driverId,
+          driverName: row.driver?.name ?? null,
+          logDate: day.logDate ?? day.date ?? (Number.isFinite(start) ? new Date(start).toISOString().slice(0, 10) : null),
+          startMs: Number.isFinite(start) ? start : null,
+          endMs: Number.isFinite(end) ? end : null,
+          raw: day,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+export type SamsaraAssignment = {
+  driverId: string;
+  driverName: string | null;
+  vehicleId: string;
+  vehicleName: string | null;
+  startMs: number;
+  endMs: number | null;
+  assignmentType: string | null;
+};
+
+/** Driver-to-vehicle assignments, so a segment with no vehicle can still be located. */
+export async function fetchDriverVehicleAssignments(opts: {
+  startMs: number;
+  endMs: number;
+  driverIds: string[];
+  batchSize?: number;
+}): Promise<SamsaraAssignment[]> {
+  const clampedEnd = Math.min(opts.endMs, Date.now());
+  if (opts.startMs >= clampedEnd || !opts.driverIds.length) return [];
+  const startTime = new Date(opts.startMs).toISOString();
+  const endTime = new Date(clampedEnd).toISOString();
+  const batchSize = opts.batchSize ?? 25;
+  const out: SamsaraAssignment[] = [];
+
+  for (let i = 0; i < opts.driverIds.length; i += batchSize) {
+    const batch = opts.driverIds.slice(i, i + batchSize);
+    const params = new URLSearchParams({ startTime, endTime, driverIds: batch.join(",") });
+    const rows = await paged<any>(`/fleet/driver-vehicle-assignments?${params.toString()}`, (d) => d.data ?? []);
+    for (const row of rows) {
+      const driverId = String(row.driver?.id ?? row.driverId ?? row.id ?? "");
+      const list = Array.isArray(row.assignments) ? row.assignments : [row];
+      for (const a of list) {
+        const vehicleId = String(a.vehicle?.id ?? a.vehicleId ?? "");
+        const start = Date.parse(a.startTime ?? a.assignedAtTime ?? "");
+        if (!driverId || !vehicleId || !Number.isFinite(start)) continue;
+        const end = Date.parse(a.endTime ?? "");
+        out.push({
+          driverId,
+          driverName: row.driver?.name ?? a.driver?.name ?? null,
+          vehicleId,
+          vehicleName: a.vehicle?.name ?? null,
+          startMs: start,
+          endMs: Number.isFinite(end) ? end : null,
+          assignmentType: a.assignmentType ?? null,
+        });
+      }
+    }
+  }
+  return out;
+}

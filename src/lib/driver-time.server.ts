@@ -9,7 +9,8 @@
 // No emails, no notifications — this is a report surface.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { fetchDrivers, fetchAddresses, fetchHosLogs, fetchVehicleGpsHistory } from "@/lib/samsara/hos.server";
+import { fetchDrivers, fetchAddresses } from "@/lib/samsara/hos.server";
+import { getDriverTimeInputs } from "@/lib/samsara/cache.server";
 import { detectWarehouseEvents, isExcludedDriver, type HosSegment, type WarehouseEvent } from "@/lib/driver-time/detect";
 import type { Geofence } from "@/lib/driver-time/geo";
 import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
@@ -299,19 +300,14 @@ export async function runDriverTimeSweep(opts?: {
 
 
 
-    const segments = await fetchHosLogs({ startMs, endMs, driverIds: roster.map((d) => d.id) });
+    // All Samsara reads go through the cached data layer, so a rescan of the
+    // same days reuses what a prior sweep or probe already pulled. Assignments
+    // fill in the vehicle on segments Samsara reported without one, which is
+    // what makes GPS evidence available for those blocks.
+    const inputs = await getDriverTimeInputs({ startMs, endMs, driverIds: roster.map((d) => d.id) });
+    const segments = inputs.segments;
+    const gpsSamples = inputs.gpsSamples;
 
-    // GPS fallback for blocks whose log carried no coordinates. Best-effort.
-    let gpsSamples: Array<{ vehicleId: string; timeMs: number; latitude: number; longitude: number }> = [];
-    const needGps = segments.some((s) => s.latitude === null || s.longitude === null);
-    if (needGps) {
-      const vehicleIds = Array.from(new Set(segments.filter(s => s.latitude === null || s.longitude === null).map((s) => s.vehicleId).filter(Boolean) as string[]));
-      try {
-        gpsSamples = await fetchVehicleGpsHistory({ startMs, endMs, vehicleIds });
-      } catch (e: any) {
-        throw new Error(`GPS fallback unavailable; existing results preserved: ${e?.message ?? String(e)}`);
-      }
-    }
 
     const byDriver = new Map<string, HosSegment[]>();
     for (const s of segments) {

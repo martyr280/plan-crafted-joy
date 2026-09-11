@@ -6,11 +6,10 @@
 import {
   fetchAddresses,
   fetchDrivers,
-  fetchHosLogs,
-  fetchVehicleGpsHistory,
   probeSamsaraScopes,
   type SamsaraAddress,
 } from "@/lib/samsara/hos.server";
+import { getDailyLogs, getDriverTimeInputs } from "@/lib/samsara/cache.server";
 import {
   KEPT_STATUSES,
   detectWarehouseEvents,
@@ -85,6 +84,8 @@ export type SamsaraDiagnostics = {
   probes: Array<{ endpoint: string; ok: boolean; detail: string }>;
   fences: FenceInfo[];
   statusVocabulary: StatusRow[];
+  /** Per-dataset cache accounting: how much of this run came from the cache. */
+  cache: Array<{ dataset: string; days: number; cachedDays: number; fetchedDays: number; rows: number }>;
   funnel: {
     driversOnRoster: number;
     excludedByPattern: number;
@@ -95,6 +96,10 @@ export type SamsaraDiagnostics = {
     segmentsFetched: number;
     segmentsWithCoords: number;
     gpsSamples: number;
+    /** Segments whose vehicle came from a driver-vehicle assignment, not the log. */
+    vehiclesFilledFromAssignments: number;
+    /** Samsara's own certified daily logs for the same window. */
+    dailyLogs: number;
     blocksBuilt: number;
     blocksOverThreshold: number;
     blocksInsideFence: number;
@@ -357,18 +362,25 @@ export async function runSamsaraDiagnostics(opts?: {
 
 
   const driverIds = roster.map((d) => d.id);
-  const segments = driverIds.length ? await fetchHosLogs({ startMs, endMs, driverIds }) : [];
-
-  let gpsSamples: Array<{ vehicleId: string; timeMs: number; latitude: number; longitude: number }> = [];
-  const needGps = segments.some((s) => s.latitude === null || s.longitude === null);
-  if (needGps) {
-    const vehicleIds = Array.from(new Set(segments.map((s) => s.vehicleId).filter(Boolean) as string[]));
-    try {
-      gpsSamples = await fetchVehicleGpsHistory({ startMs, endMs, vehicleIds });
-    } catch (e: any) {
-      warnings.push(`GPS fallback unavailable: ${e?.message ?? String(e)}`);
-    }
+  // Reads the cached Samsara layer, the same source the sweep uses, so running
+  // diagnostics no longer re-pulls the whole window from Samsara.
+  const inputs = driverIds.length
+    ? await getDriverTimeInputs({ startMs, endMs, driverIds })
+    : { segments: [], assignments: [], gpsSamples: [], vehiclesFilled: 0, stats: [] };
+  const segments = inputs.segments;
+  const gpsSamples = inputs.gpsSamples;
+  if (inputs.vehiclesFilled) {
+    warnings.push(
+      `${inputs.vehiclesFilled} log segment(s) had no vehicle in Samsara; the vehicle was taken from driver-vehicle assignments.`,
+    );
   }
+  let dailyLogCount = 0;
+  try {
+    dailyLogCount = (await getDailyLogs({ startMs, endMs, driverIds })).dailyLogs.length;
+  } catch (e: any) {
+    warnings.push(`HOS daily logs unavailable: ${e?.message ?? String(e)}`);
+  }
+  const cacheStats = inputs.stats;
 
   const byDriver = new Map<string, HosSegment[]>();
   for (const s of segments) {
@@ -502,6 +514,7 @@ export async function runSamsaraDiagnostics(opts?: {
     probes,
     fences,
     statusVocabulary: buildStatusVocabulary(segments),
+    cache: cacheStats,
     funnel: {
       driversOnRoster: rosterCounts.total,
       excludedByPattern: rosterCounts.excludedByPattern,
@@ -512,6 +525,8 @@ export async function runSamsaraDiagnostics(opts?: {
 
       segmentsWithCoords: segments.filter((s) => s.latitude !== null && s.longitude !== null).length,
       gpsSamples: gpsSamples.length,
+      vehiclesFilledFromAssignments: inputs.vehiclesFilled,
+      dailyLogs: dailyLogCount,
       blocksBuilt,
       blocksOverThreshold,
       blocksInsideFence,

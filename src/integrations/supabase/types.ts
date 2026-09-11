@@ -2463,6 +2463,98 @@ export type Database = {
         }
         Relationships: []
       }
+      samsara_cache_days: {
+        Row: {
+          complete: boolean
+          coverage: Json
+          created_at: string
+          dataset: string
+          day_date: string
+          error: string | null
+          fetched_at: string
+          id: string
+          row_count: number
+          updated_at: string
+          window_end: string
+          window_start: string
+        }
+        Insert: {
+          complete?: boolean
+          coverage?: Json
+          created_at?: string
+          dataset: string
+          day_date: string
+          error?: string | null
+          fetched_at?: string
+          id?: string
+          row_count?: number
+          updated_at?: string
+          window_end: string
+          window_start: string
+        }
+        Update: {
+          complete?: boolean
+          coverage?: Json
+          created_at?: string
+          dataset?: string
+          day_date?: string
+          error?: string | null
+          fetched_at?: string
+          id?: string
+          row_count?: number
+          updated_at?: string
+          window_end?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      samsara_cache_rows: {
+        Row: {
+          created_at: string
+          dataset: string
+          day_date: string
+          day_id: string
+          end_ts: string | null
+          entity_id: string
+          entity_kind: string
+          id: string
+          payload: Json
+          start_ts: string | null
+        }
+        Insert: {
+          created_at?: string
+          dataset: string
+          day_date: string
+          day_id: string
+          end_ts?: string | null
+          entity_id: string
+          entity_kind: string
+          id?: string
+          payload: Json
+          start_ts?: string | null
+        }
+        Update: {
+          created_at?: string
+          dataset?: string
+          day_date?: string
+          day_id?: string
+          end_ts?: string | null
+          entity_id?: string
+          entity_kind?: string
+          id?: string
+          payload?: Json
+          start_ts?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "samsara_cache_rows_day_id_fkey"
+            columns: ["day_id"]
+            isOneToOne: false
+            referencedRelation: "samsara_cache_days"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sku_crossref: {
         Row: {
           competitor_sku: string
