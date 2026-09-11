@@ -60,6 +60,13 @@ export type DetectOptions = {
   basis?: "presence" | "onduty";
   /** The driver's Samsara tags, used to attribute vehicle-less on-duty time to a home hub. */
   hubTags?: string[];
+  /**
+   * Segments shorter than this are boundary artefacts (Samsara auto-closes an
+   * open log with a one-second entry at midnight). They never define the day
+   * window end and are skipped when looking for a segment's "next". Default 60.
+   */
+  minSegmentSeconds?: number;
+
 };
 
 export type WarehouseEvent = {
@@ -356,9 +363,11 @@ export function hubFenceFromTags(tags: string[] | undefined, fences: Geofence[])
  *
  * Any status inside the fence counts, but only between the start of the day's
  * first working segment and the end of its last — so the truck parked at the
- * yard overnight is not warehouse time. Movement statuses only count where the
- * driver stayed at the fence (next located segment is in the same fence, or it
- * is the last segment of the day), which drops drive-aways.
+ * yard overnight is not warehouse time. Movement and rest statuses only count
+ * where the driver's own point and the next non-trivial segment's point are both
+ * at the fence, and rest never closes the day at the fence — so drive-aways and
+ * trailing idle time at the yard are dropped.
+
  */
 export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
   const opts = input.options ?? {};
@@ -390,12 +399,20 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
 
   const events: WarehouseEvent[] = [];
 
+  const minSegmentMs = (opts.minSegmentSeconds ?? 60) * 1000;
+  const nonTrivial = (s: HosSegment) => s.endMs - s.startMs >= minSegmentMs;
+
   for (const [dayKey, daySegs] of days) {
-    // 1. day window: first through last working segment
+    // 1. day window: first working segment through the end of the last
+    // non-trivial working segment. Rest never defines the end, and a
+    // sub-minute boundary log cannot stretch the day to midnight.
     const working = daySegs.filter((s) => !REST_STATUSES.has(s.status));
     if (!working.length) continue;
+    const closing = working.filter(nonTrivial);
+    if (!closing.length) continue;
     const windowStart = working[0].startMs;
-    const windowEnd = working[working.length - 1].endMs;
+    const windowEnd = closing[closing.length - 1].endMs;
+    if (!(windowEnd > windowStart)) continue;
 
     // 2. clip to the window
     const clipped: HosSegment[] = [];
@@ -407,9 +424,19 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
 
     // 3. locate + attribute each segment
     const located = clipped.map((s) => locateSegment(s, gps, gpsTolerance));
+    // "Next" for the counted-next test skips sub-minute boundary artefacts.
+    const nextNonTrivial = (i: number) => {
+      for (let j = i + 1; j < located.length; j++) if (nonTrivial(located[j].seg)) return located[j];
+      return null;
+    };
+    let lastNonTrivialIdx = -1;
+    for (let i = 0; i < located.length; i++) if (nonTrivial(located[i].seg)) lastNonTrivialIdx = i;
+
     const atts = located.map((l, i) => {
       const own = matchGeofence(l.point, input.warehouses);
-      const isWork = !REST_STATUSES.has(l.seg.status) && l.seg.status !== "driving" && l.seg.status !== "personalConveyance";
+      const isRest = REST_STATUSES.has(l.seg.status);
+      const isMovement = l.seg.status === "driving" || l.seg.status === "personalConveyance";
+      const isWork = !isRest && !isMovement;
       if (isWork) {
         if (own) return { ...l, fence: own, source: l.source as LocatedSeg["source"] | "assumed_hub" };
         if (!l.point && !hasVehicle(l.seg) && hubFence) {
@@ -417,16 +444,22 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
         }
         return { ...l, fence: null as Geofence | null, source: l.source };
       }
-      // movement / rest: only counts where the driver stayed at the fence
+      // movement / rest: counts only where the driver's own point is at the
+      // fence AND the next non-trivial segment's own point is at the same
+      // fence. Rest additionally never closes the day at the fence: a trailing
+      // idle after the last work segment is not warehouse time.
       if (!own) return { ...l, fence: null as Geofence | null, source: l.source };
-      const isLast = i === located.length - 1;
-      const next = located[i + 1];
+      if (isRest && i === lastNonTrivialIdx) {
+        return { ...l, fence: null as Geofence | null, source: l.source };
+      }
+      const next = nextNonTrivial(i);
       const nextFence = next ? matchGeofence(next.point, input.warehouses) : null;
-      if (isLast || (nextFence && nextFence.id === own.id)) {
+      if (nextFence && nextFence.id === own.id) {
         return { ...l, fence: own, source: l.source as LocatedSeg["source"] | "assumed_hub" };
       }
       return { ...l, fence: null as Geofence | null, source: l.source };
     });
+
 
     // 4. merge consecutive at-fence segments, bridging short movement runs
     type Blk = {
