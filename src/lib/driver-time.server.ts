@@ -9,7 +9,8 @@
 // No emails, no notifications — this is a report surface.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { fetchDrivers, fetchAddresses, fetchHosLogs, fetchVehicleGpsHistory } from "@/lib/samsara/hos.server";
+import { fetchDrivers, fetchAddresses } from "@/lib/samsara/hos.server";
+import { getDriverTimeInputs } from "@/lib/samsara/cache.server";
 import { detectWarehouseEvents, isExcludedDriver, type HosSegment, type WarehouseEvent } from "@/lib/driver-time/detect";
 import type { Geofence } from "@/lib/driver-time/geo";
 import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
@@ -306,9 +307,6 @@ export async function runDriverTimeSweep(opts?: {
     const inputs = await getDriverTimeInputs({ startMs, endMs, driverIds: roster.map((d) => d.id) });
     const segments = inputs.segments;
     const gpsSamples = inputs.gpsSamples;
-    if (inputs.vehiclesFilled) {
-      warnings.push(`Filled the vehicle on ${inputs.vehiclesFilled} log segment(s) from driver-vehicle assignments.`);
-    }
 
 
     const byDriver = new Map<string, HosSegment[]>();
