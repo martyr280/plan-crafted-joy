@@ -43,20 +43,27 @@ function iso(ms: number | null | undefined): string | null {
 }
 
 /** Days in the window that still need a fetch, plus the rows already cached. */
-async function readCache(dataset: Dataset, days: CacheDay[], refresh: boolean, nowMs: number) {
+async function readCache(
+  dataset: Dataset,
+  days: CacheDay[],
+  refresh: boolean,
+  nowMs: number,
+  entityIds: string[],
+) {
   if (refresh) return { staleDays: days, rows: [] as any[] };
   const dates = days.map((d) => d.date);
   const { data: dayRows, error } = await db()
     .from("samsara_cache_days")
-    .select("id, day_date, fetched_at, complete")
+    .select("id, day_date, fetched_at, complete, coverage")
     .eq("dataset", dataset)
     .in("day_date", dates);
   if (error) throw new Error(`Samsara cache read failed (${dataset} days): ${error.message}`);
 
   const fresh = new Map<string, string>(); // day_date -> day_id
   for (const row of dayRows ?? []) {
-    if (isCacheDayFresh(row, nowMs)) fresh.set(row.day_date, row.id);
+    if (isCacheDayFresh(row, nowMs) && coversEntities(row.coverage, entityIds)) fresh.set(row.day_date, row.id);
   }
+
   const staleDays = days.filter((d) => !fresh.has(d.date));
   if (!fresh.size) return { staleDays, rows: [] as any[] };
 
