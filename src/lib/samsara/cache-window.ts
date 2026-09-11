@@ -110,3 +110,15 @@ export function backfillSegmentVehicles<
   });
   return { segments: out, filled };
 }
+
+/**
+ * A cached day is only usable for entities it actually covered when fetched.
+ * Without this, a diagnostics run over three drivers would let a full sweep
+ * believe the whole roster's day was already cached.
+ */
+export function coversEntities(coverage: unknown, requested: string[]): boolean {
+  const list = Array.isArray(coverage) ? coverage.map((v) => String(v)) : [];
+  if (list.includes("*")) return true;
+  const have = new Set(list);
+  return requested.every((id) => have.has(id));
+}
