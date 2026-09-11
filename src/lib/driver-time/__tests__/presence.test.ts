@@ -136,6 +136,172 @@ describe("presence basis — probe fixtures 2026-09-10", () => {
   });
 });
 
+/** Fixtures transcribed from the WP5 probe (segment-for-segment, real coordinates). */
+describe("presence basis — trailing rest and boundary artefacts (WP5 probe fixtures)", () => {
+  const min = (a: number, b: number) => Math.round((b - a) / 60_000);
+
+  it("Fiscal 2026-08-19 Dallas: block ends at the last work segment, not at the 23:59:59 boundary log", () => {
+    const V = "281474996579839";
+    const segs = build("53243879", "Alberto Fiscal", [
+      { status: "offDuty", startMs: at(CT, 19, 0, 0), endMs: at(CT, 19, 6, 39, 8), latitude: 32.811727, longitude: -96.878172, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 19, 6, 39, 8), endMs: at(CT, 19, 7, 47, 40), latitude: 32.811727, longitude: -96.878172, vehicleId: V },
+      { status: "driving", startMs: at(CT, 19, 7, 47, 40), endMs: at(CT, 19, 7, 54, 13), latitude: 32.811668, longitude: -96.877881, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 19, 7, 54, 13), endMs: at(CT, 19, 7, 54, 33), latitude: 32.8112, longitude: -96.87802, vehicleId: V },
+      { status: "driving", startMs: at(CT, 19, 7, 54, 33), endMs: at(CT, 19, 8, 0, 48), latitude: 32.811084, longitude: -96.877958, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 19, 8, 0, 48), endMs: at(CT, 19, 8, 20, 45), latitude: 32.811771, longitude: -96.878137, vehicleId: V },
+      { status: "driving", startMs: at(CT, 19, 8, 20, 45), endMs: at(CT, 19, 8, 27, 11), latitude: 32.811756, longitude: -96.878043, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 19, 8, 27, 11), endMs: at(CT, 19, 12, 26, 19), latitude: 32.810717, longitude: -96.878192, vehicleId: V },
+      { status: "offDuty", startMs: at(CT, 19, 12, 26, 19), endMs: at(CT, 19, 12, 57, 54), latitude: 32.810717, longitude: -96.878192, vehicleId: V },
+      { status: "yardMove", startMs: at(CT, 19, 12, 57, 54), endMs: at(CT, 19, 15, 56, 0), latitude: 32.810717, longitude: -96.878192, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 19, 15, 56, 0), endMs: at(CT, 19, 16, 6, 5), latitude: 32.810717, longitude: -96.878192, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 19, 16, 6, 5), endMs: at(CT, 19, 16, 9, 48), latitude: 32.810717, longitude: -96.878192, vehicleId: V },
+      { status: "driving", startMs: at(CT, 19, 16, 9, 48), endMs: at(CT, 19, 16, 12, 0), latitude: 32.811038, longitude: -96.877983, vehicleId: V },
+      { status: "driving", startMs: at(CT, 19, 16, 12, 0), endMs: at(CT, 19, 16, 16, 2), latitude: 32.811401, longitude: -96.878093, vehicleId: V },
+      { status: "offDuty", startMs: at(CT, 19, 16, 16, 2), endMs: at(CT, 19, 23, 59, 59), latitude: 32.811401, longitude: -96.878093, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 19, 23, 59, 59), endMs: at(CT, 20, 0, 0), latitude: 32.811401, longitude: -96.878093, vehicleId: V },
+    ]);
+    const events = run({ id: "53243879", name: "Alberto Fiscal" }, segs, { hubTags: ["Dallas"] });
+    expect(events).toHaveLength(1);
+    expect(events[0].startMs).toBe(at(CT, 19, 6, 39, 8));
+    // Acceptance asked for 16:16:02 / 577 min. Clause (c) as specified gives
+    // 16:12:00 / 573 min: the closing driving segment 16:12:00–16:16:02 is in
+    // the fence but has no next non-trivial segment inside the window, so it is
+    // not counted. The 7.7-hour trailing off-duty is gone either way; the
+    // 4-minute shortfall is reported, not forced.
+    expect(events[0].endMs).toBe(at(CT, 19, 16, 12, 0));
+    expect(events[0].durationMin).toBe(573);
+    expect(events[0].hub).toBe("Dallas");
+
+  });
+
+  it("Farahkhan 2026-08-21 Birmingham: the morning 87-minute block is not merged with the afternoon one", () => {
+    const V = "281475004109646";
+    const segs = build("53243880", "Karriem Farahkhan", [
+      { status: "offDuty", startMs: at(CT, 21, 0, 0), endMs: at(CT, 21, 7, 27, 31), latitude: 33.631582, longitude: -86.736299 },
+      { status: "offDuty", startMs: at(CT, 21, 7, 27, 31), endMs: at(CT, 21, 7, 28, 12), latitude: 33.631789, longitude: -86.736205, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 21, 7, 28, 12), endMs: at(CT, 21, 8, 55, 20), latitude: 33.63175, longitude: -86.73619, vehicleId: V },
+      { status: "driving", startMs: at(CT, 21, 8, 55, 20), endMs: at(CT, 21, 8, 56, 30), latitude: 33.631741, longitude: -86.7362, vehicleId: V },
+      { status: "driving", startMs: at(CT, 21, 8, 56, 30), endMs: at(CT, 21, 9, 35, 58), latitude: 33.63149, longitude: -86.736104, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 21, 9, 35, 58), endMs: at(CT, 21, 9, 44, 54), latitude: 33.541289, longitude: -86.535297, vehicleId: V },
+      { status: "driving", startMs: at(CT, 21, 9, 44, 54), endMs: at(CT, 21, 10, 28, 2), latitude: 33.541142, longitude: -86.535789, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 21, 10, 28, 2), endMs: at(CT, 21, 10, 32, 59), latitude: 33.444616, longitude: -86.84294, vehicleId: V },
+      { status: "driving", startMs: at(CT, 21, 10, 32, 59), endMs: at(CT, 21, 10, 54, 33), latitude: 33.444642, longitude: -86.842815, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 21, 10, 54, 33), endMs: at(CT, 21, 11, 10, 3), latitude: 33.516793, longitude: -86.799191, vehicleId: V },
+      { status: "driving", startMs: at(CT, 21, 11, 10, 3), endMs: at(CT, 21, 11, 36, 7), latitude: 33.516603, longitude: -86.799462, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 21, 11, 36, 7), endMs: at(CT, 21, 11, 39, 49), latitude: 33.631711, longitude: -86.736223, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 21, 11, 39, 49), endMs: at(CT, 21, 13, 22, 57), latitude: 33.631711, longitude: -86.736223, vehicleId: V },
+      { status: "driving", startMs: at(CT, 21, 13, 22, 57), endMs: at(CT, 21, 13, 30, 8), latitude: 33.631737, longitude: -86.73603, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 21, 13, 30, 8), endMs: at(CT, 21, 14, 52, 2), latitude: 33.63181, longitude: -86.73615, vehicleId: V },
+      { status: "offDuty", startMs: at(CT, 21, 14, 52, 2), endMs: at(CT, 21, 15, 57, 13), latitude: 33.63181, longitude: -86.73615, vehicleId: V },
+      { status: "driving", startMs: at(CT, 21, 15, 57, 13), endMs: at(CT, 21, 16, 10, 58), latitude: 33.631591, longitude: -86.736131, vehicleId: V },
+      { status: "sleeperBed", startMs: at(CT, 21, 16, 10, 58), endMs: at(CT, 22, 0, 0), latitude: 33.646936, longitude: -86.706381, vehicleId: V },
+    ]);
+    const events = run({ id: "53243880", name: "Karriem Farahkhan" }, segs, { hubTags: ["Birmingham"] });
+    // The morning block (07:28:12–08:56:30, 88 min) is below the 90-minute
+    // threshold and must not be glued to the afternoon block.
+    expect(events).toHaveLength(1);
+    expect(events[0].startMs).toBe(at(CT, 21, 11, 36, 7));
+    // The trailing off-duty is followed by a driving segment whose own point is
+    // still in the fence, so under clause (b) it counts: the block ends 15:57:13,
+    // 65 minutes past the audited 14:52 end. Documented, not forced.
+    expect(events[0].endMs).toBe(at(CT, 21, 15, 57, 13));
+    expect(events[0].durationMin).toBe(min(at(CT, 21, 11, 36, 7), at(CT, 21, 15, 57, 13)));
+  });
+
+  it("Blanks 2026-08-28 Birmingham: mid-block rest counts, the closing drive-away does not", () => {
+    const V = "281475004109646";
+    const segs = build("53243512", "Thomas Blanks", [
+      { status: "offDuty", startMs: at(CT, 28, 0, 0), endMs: at(CT, 28, 10, 14, 56), latitude: 33.522187, longitude: -86.796891 },
+      { status: "offDuty", startMs: at(CT, 28, 10, 14, 56), endMs: at(CT, 28, 10, 15, 17), latitude: 33.522119, longitude: -86.797105, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 28, 10, 15, 17), endMs: at(CT, 28, 10, 19, 57), latitude: 33.522108, longitude: -86.797112, vehicleId: V },
+      { status: "driving", startMs: at(CT, 28, 10, 19, 57), endMs: at(CT, 28, 10, 49, 46), latitude: 33.522043, longitude: -86.79734, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 28, 10, 49, 46), endMs: at(CT, 28, 15, 17, 47), latitude: 33.631862, longitude: -86.736117, vehicleId: V },
+      { status: "offDuty", startMs: at(CT, 28, 15, 17, 47), endMs: at(CT, 28, 15, 24, 15), latitude: 33.631862, longitude: -86.736117, vehicleId: V },
+      { status: "driving", startMs: at(CT, 28, 15, 24, 15), endMs: at(CT, 28, 15, 30, 29), latitude: 33.631807, longitude: -86.736128, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 28, 15, 30, 29), endMs: at(CT, 28, 17, 45, 22), latitude: 33.631771, longitude: -86.736225, vehicleId: V },
+      { status: "driving", startMs: at(CT, 28, 17, 45, 22), endMs: at(CT, 28, 18, 1, 40), latitude: 33.631484, longitude: -86.736226, vehicleId: V },
+      { status: "offDuty", startMs: at(CT, 28, 18, 1, 40), endMs: at(CT, 29, 0, 0), latitude: 33.647098, longitude: -86.706777, vehicleId: V },
+    ]);
+    const events = run({ id: "53243512", name: "Thomas Blanks" }, segs, { hubTags: ["Birmingham"] });
+    expect(events).toHaveLength(1);
+    expect(events[0].startMs).toBe(at(CT, 28, 10, 49, 46));
+    expect(events[0].endMs).toBe(at(CT, 28, 17, 45, 22));
+    expect(events[0].durationMin).toBe(min(at(CT, 28, 10, 49, 46), at(CT, 28, 17, 45, 22)));
+  });
+
+  it("Young 2026-08-24 Dallas: unchanged 06:30–11:43 block across two vehicles", () => {
+    const V1 = "281474996579823";
+    const V2 = "281474996579836";
+    const segs = build("53243878", "Robert Young", [
+      { status: "offDuty", startMs: at(CT, 24, 0, 0), endMs: at(CT, 24, 6, 30, 0), latitude: 32.811658, longitude: -96.878016 },
+      { status: "onDuty", startMs: at(CT, 24, 6, 30, 0), endMs: at(CT, 24, 6, 50, 5) },
+      { status: "onDuty", startMs: at(CT, 24, 6, 50, 5), endMs: at(CT, 24, 6, 51, 1), latitude: 32.811613, longitude: -96.877985, vehicleId: V1 },
+      { status: "onDuty", startMs: at(CT, 24, 6, 51, 1), endMs: at(CT, 24, 6, 53, 0), latitude: 32.811613, longitude: -96.877985, vehicleId: V1 },
+      { status: "onDuty", startMs: at(CT, 24, 6, 53, 0), endMs: at(CT, 24, 6, 53, 27), latitude: 32.811613, longitude: -96.877985, vehicleId: V1 },
+      { status: "onDuty", startMs: at(CT, 24, 6, 53, 27), endMs: at(CT, 24, 10, 11, 8), latitude: 32.811613, longitude: -96.877985, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 10, 11, 8), endMs: at(CT, 24, 10, 18, 0), latitude: 32.81045, longitude: -96.877974, vehicleId: V2 },
+      { status: "onDuty", startMs: at(CT, 24, 10, 18, 0), endMs: at(CT, 24, 11, 2, 18), latitude: 32.811655, longitude: -96.878025, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 11, 2, 18), endMs: at(CT, 24, 11, 25, 7), latitude: 32.811791, longitude: -96.877875, vehicleId: V2 },
+      { status: "onDuty", startMs: at(CT, 24, 11, 25, 7), endMs: at(CT, 24, 11, 43, 46), latitude: 32.811574, longitude: -96.878107, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 11, 43, 46), endMs: at(CT, 24, 12, 13, 39), latitude: 32.7738, longitude: -96.858542, vehicleId: V2 },
+      { status: "onDuty", startMs: at(CT, 24, 12, 13, 39), endMs: at(CT, 24, 12, 19, 25), latitude: 32.811574, longitude: -96.878107, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 12, 19, 25), endMs: at(CT, 24, 12, 54, 40), latitude: 32.768043, longitude: -96.897495, vehicleId: V2 },
+      { status: "onDuty", startMs: at(CT, 24, 12, 54, 40), endMs: at(CT, 24, 13, 2, 12), latitude: 32.811574, longitude: -96.878107, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 13, 2, 12), endMs: at(CT, 24, 13, 20, 16), latitude: 32.740789, longitude: -97.286837, vehicleId: V2 },
+      { status: "onDuty", startMs: at(CT, 24, 13, 20, 16), endMs: at(CT, 24, 13, 21, 18), latitude: 32.811574, longitude: -96.878107, vehicleId: V1 },
+      { status: "offDuty", startMs: at(CT, 24, 13, 21, 18), endMs: at(CT, 24, 13, 38, 33) },
+      { status: "onDuty", startMs: at(CT, 24, 13, 38, 33), endMs: at(CT, 24, 13, 54, 8), latitude: 32.811574, longitude: -96.878107, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 13, 54, 8), endMs: at(CT, 24, 14, 24, 53), latitude: 32.773605, longitude: -97.288511, vehicleId: V2 },
+      { status: "onDuty", startMs: at(CT, 24, 14, 24, 53), endMs: at(CT, 24, 14, 25, 41), latitude: 32.810988, longitude: -96.877938, vehicleId: V2 },
+      { status: "onDuty", startMs: at(CT, 24, 14, 25, 41), endMs: at(CT, 24, 14, 25, 56) },
+      { status: "onDuty", startMs: at(CT, 24, 14, 25, 56), endMs: at(CT, 24, 14, 26, 56), latitude: 32.811156, longitude: -96.878116, vehicleId: V2 },
+      { status: "onDuty", startMs: at(CT, 24, 14, 26, 56), endMs: at(CT, 24, 14, 32, 13) },
+      { status: "onDuty", startMs: at(CT, 24, 14, 32, 13), endMs: at(CT, 24, 15, 31, 6), latitude: 32.811574, longitude: -96.878107, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 15, 31, 6), endMs: at(CT, 24, 17, 13, 0), latitude: 32.811804, longitude: -96.877905, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 17, 13, 0), endMs: at(CT, 24, 18, 2, 15), latitude: 33.824267, longitude: -96.531681, vehicleId: V1 },
+      { status: "onDuty", startMs: at(CT, 24, 18, 2, 15), endMs: at(CT, 24, 18, 10, 38), latitude: 34.36427, longitude: -96.140332, vehicleId: V1 },
+      { status: "driving", startMs: at(CT, 24, 18, 10, 38), endMs: at(CT, 24, 19, 0, 8), latitude: 34.364822, longitude: -96.139998, vehicleId: V1 },
+      { status: "onDuty", startMs: at(CT, 24, 19, 0, 8), endMs: at(CT, 24, 19, 17, 28), latitude: 34.896745, longitude: -95.765101, vehicleId: V1 },
+      { status: "offDuty", startMs: at(CT, 24, 19, 17, 28), endMs: at(CT, 25, 0, 0), latitude: 34.896745, longitude: -95.765101 },
+    ]);
+    const events = run({ id: "53243878", name: "Robert Young" }, segs, { hubTags: ["Dallas"] });
+    expect(events).toHaveLength(1);
+    expect(events[0].startMs).toBe(at(CT, 24, 6, 30, 0));
+    expect(events[0].endMs).toBe(at(CT, 24, 11, 43, 46));
+    expect(events[0].durationMin).toBe(min(at(CT, 24, 6, 30, 0), at(CT, 24, 11, 43, 46)));
+  });
+
+  it("a sub-minute on-duty boundary log at 23:59:59 does not stretch the day window", () => {
+    const V = "v1";
+    const IN = { latitude: 32.811, longitude: -96.87795 };
+    const segs = build("d1", "Ray Driver", [
+      { status: "onDuty", startMs: at(CT, 5, 8), endMs: at(CT, 5, 12), ...IN, vehicleId: V },
+      { status: "offDuty", startMs: at(CT, 5, 12), endMs: at(CT, 5, 23, 59, 59), ...IN, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 5, 23, 59, 59), endMs: at(CT, 6, 0), ...IN, vehicleId: V },
+    ]);
+    const events = run({ id: "d1", name: "Ray Driver" }, segs);
+    expect(events).toHaveLength(1);
+    expect(events[0].endMs).toBe(at(CT, 5, 12));
+    expect(events[0].durationMin).toBe(240);
+  });
+
+  it("a 30-second driving blip is skipped when looking up a segment's next", () => {
+    const V = "v1";
+    const IN = { latitude: 32.811, longitude: -96.87795 };
+    const OUT = { latitude: 32.7, longitude: -96.7 };
+    const segs = build("d1", "Ray Driver", [
+      { status: "onDuty", startMs: at(CT, 5, 8), endMs: at(CT, 5, 10), ...IN, vehicleId: V },
+      { status: "offDuty", startMs: at(CT, 5, 10), endMs: at(CT, 5, 11), ...IN, vehicleId: V },
+      { status: "driving", startMs: at(CT, 5, 11, 0, 0), endMs: at(CT, 5, 11, 0, 30), ...OUT, vehicleId: V },
+      { status: "onDuty", startMs: at(CT, 5, 11, 0, 30), endMs: at(CT, 5, 13), ...IN, vehicleId: V },
+    ]);
+    const events = run({ id: "d1", name: "Ray Driver" }, segs);
+    expect(events).toHaveLength(1);
+    expect(events[0].durationMin).toBe(300); // the off-duty hour is kept
+  });
+});
+
+
 describe("presence basis — rules", () => {
   const V = "v1";
   const IN = { latitude: 32.8110, longitude: -96.87795 };
