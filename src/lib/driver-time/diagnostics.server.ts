@@ -84,6 +84,8 @@ export type SamsaraDiagnostics = {
   probes: Array<{ endpoint: string; ok: boolean; detail: string }>;
   fences: FenceInfo[];
   statusVocabulary: StatusRow[];
+  /** Per-dataset cache accounting: how much of this run came from the cache. */
+  cache: Array<{ dataset: string; days: number; cachedDays: number; fetchedDays: number; rows: number }>;
   funnel: {
     driversOnRoster: number;
     excludedByPattern: number;
@@ -94,6 +96,10 @@ export type SamsaraDiagnostics = {
     segmentsFetched: number;
     segmentsWithCoords: number;
     gpsSamples: number;
+    /** Segments whose vehicle came from a driver-vehicle assignment, not the log. */
+    vehiclesFilledFromAssignments: number;
+    /** Samsara's own certified daily logs for the same window. */
+    dailyLogs: number;
     blocksBuilt: number;
     blocksOverThreshold: number;
     blocksInsideFence: number;
@@ -508,6 +514,7 @@ export async function runSamsaraDiagnostics(opts?: {
     probes,
     fences,
     statusVocabulary: buildStatusVocabulary(segments),
+    cache: cacheStats,
     funnel: {
       driversOnRoster: rosterCounts.total,
       excludedByPattern: rosterCounts.excludedByPattern,
@@ -518,6 +525,8 @@ export async function runSamsaraDiagnostics(opts?: {
 
       segmentsWithCoords: segments.filter((s) => s.latitude !== null && s.longitude !== null).length,
       gpsSamples: gpsSamples.length,
+      vehiclesFilledFromAssignments: inputs.vehiclesFilled,
+      dailyLogs: dailyLogCount,
       blocksBuilt,
       blocksOverThreshold,
       blocksInsideFence,
