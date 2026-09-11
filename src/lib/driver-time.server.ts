@@ -299,19 +299,17 @@ export async function runDriverTimeSweep(opts?: {
 
 
 
-    const segments = await fetchHosLogs({ startMs, endMs, driverIds: roster.map((d) => d.id) });
-
-    // GPS fallback for blocks whose log carried no coordinates. Best-effort.
-    let gpsSamples: Array<{ vehicleId: string; timeMs: number; latitude: number; longitude: number }> = [];
-    const needGps = segments.some((s) => s.latitude === null || s.longitude === null);
-    if (needGps) {
-      const vehicleIds = Array.from(new Set(segments.filter(s => s.latitude === null || s.longitude === null).map((s) => s.vehicleId).filter(Boolean) as string[]));
-      try {
-        gpsSamples = await fetchVehicleGpsHistory({ startMs, endMs, vehicleIds });
-      } catch (e: any) {
-        throw new Error(`GPS fallback unavailable; existing results preserved: ${e?.message ?? String(e)}`);
-      }
+    // All Samsara reads go through the cached data layer, so a rescan of the
+    // same days reuses what a prior sweep or probe already pulled. Assignments
+    // fill in the vehicle on segments Samsara reported without one, which is
+    // what makes GPS evidence available for those blocks.
+    const inputs = await getDriverTimeInputs({ startMs, endMs, driverIds: roster.map((d) => d.id) });
+    const segments = inputs.segments;
+    const gpsSamples = inputs.gpsSamples;
+    if (inputs.vehiclesFilled) {
+      warnings.push(`Filled the vehicle on ${inputs.vehiclesFilled} log segment(s) from driver-vehicle assignments.`);
     }
+
 
     const byDriver = new Map<string, HosSegment[]>();
     for (const s of segments) {
