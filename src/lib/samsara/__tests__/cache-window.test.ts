@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   backfillSegmentVehicles,
+  dominantVehiclePerDriverDay,
   centralDaysCovering,
   centralMidnight,
   coversEntities,
@@ -106,16 +107,35 @@ describe("backfillSegmentVehicles", () => {
     expect(filled).toBe(2);
   });
 
-  it("ignores another driver's assignment and non-overlapping windows", () => {
+  it("ignores another driver's assignment", () => {
     const { segments, filled } = backfillSegmentVehicles(
       [seg()],
-      [
-        { driverId: "d2", vehicleId: "v-other-driver", startMs: 0, endMs: 9_000 },
-        { driverId: "d1", vehicleId: "v-later", startMs: 6_000, endMs: 8_000 },
-      ],
+      [{ driverId: "d2", vehicleId: "v-other-driver", startMs: 0, endMs: 9_000 }],
     );
     expect(filled).toBe(0);
     expect(segments[0].vehicleId).toBeNull();
+  });
+
+  it("falls back to the driver's vehicle for the whole day when nothing overlaps", () => {
+    const { segments, filled, filledFromDay } = backfillSegmentVehicles(
+      [seg()],
+      [{ driverId: "d1", vehicleId: "v-later", startMs: 6_000, endMs: 8_000 }],
+    );
+    expect(filled).toBe(1);
+    expect(filledFromDay).toBe(1);
+    expect(segments[0].vehicleId).toBe("v-later");
+  });
+
+  it("prefers an overlapping assignment over the day vehicle", () => {
+    const { segments, filledFromDay } = backfillSegmentVehicles(
+      [seg()],
+      [
+        { driverId: "d1", vehicleId: "v-now", startMs: 0, endMs: 9_000 },
+        { driverId: "d1", vehicleId: "v-mostly", startMs: 9_000, endMs: 80_000 },
+      ],
+    );
+    expect(segments[0].vehicleId).toBe("v-now");
+    expect(filledFromDay).toBe(0);
   });
 
   it("uses an open-ended assignment", () => {
@@ -123,5 +143,33 @@ describe("backfillSegmentVehicles", () => {
       { driverId: "d1", vehicleId: "v-open", startMs: 0, endMs: null },
     ]);
     expect(segments[0].vehicleId).toBe("v-open");
+  });
+});
+
+describe("dominantVehiclePerDriverDay", () => {
+  const day = (h: number, m = 0) => Date.UTC(2026, 7, 17, h + 5, m); // Central -> UTC
+  it("picks the vehicle with the most assigned minutes that day", () => {
+    const map = dominantVehiclePerDriverDay([
+      { driverId: "d1", vehicleId: "v-a", startMs: day(8), endMs: day(9) },
+      { driverId: "d1", vehicleId: "v-b", startMs: day(9), endMs: day(15) },
+      { driverId: "d1", vehicleId: "v-a", startMs: day(15), endMs: day(16) },
+    ]);
+    expect(map.get("d1|2026-08-17")).toBe("v-b");
+  });
+
+  it("counts a shift that crosses local midnight on both days", () => {
+    const map = dominantVehiclePerDriverDay([
+      { driverId: "d1", vehicleId: "v-night", startMs: day(22), endMs: day(26) },
+    ]);
+    expect(map.get("d1|2026-08-17")).toBe("v-night");
+    expect(map.get("d1|2026-08-18")).toBe("v-night");
+  });
+
+  it("ignores zero-length and open-ended assignments", () => {
+    const map = dominantVehiclePerDriverDay([
+      { driverId: "d1", vehicleId: "v-a", startMs: day(8), endMs: day(8) },
+      { driverId: "d1", vehicleId: "v-b", startMs: day(8), endMs: null },
+    ]);
+    expect(map.size).toBe(0);
   });
 });
