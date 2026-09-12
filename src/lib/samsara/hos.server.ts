@@ -495,7 +495,14 @@ export async function fetchDriverVehicleAssignments(opts: {
 
   for (let i = 0; i < opts.driverIds.length; i += batchSize) {
     const batch = opts.driverIds.slice(i, i + batchSize);
-    const params = new URLSearchParams({ startTime, endTime, driverIds: batch.join(",") });
+    // filterBy is mandatory on this endpoint; without it Samsara answers 400
+    // and the whole dataset silently comes back empty.
+    const params = new URLSearchParams({
+      startTime,
+      endTime,
+      filterBy: "drivers",
+      driverIds: batch.join(","),
+    });
     const rows = await paged<any>(`/fleet/driver-vehicle-assignments?${params.toString()}`, (d) => d.data ?? []);
     for (const row of rows) {
       const driverId = String(row.driver?.id ?? row.driverId ?? row.id ?? "");

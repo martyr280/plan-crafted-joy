@@ -22,6 +22,7 @@ import {
 } from "@/lib/samsara/hos.server";
 import {
   backfillSegmentVehicles,
+  dominantVehiclePerDriverDay,
   centralDaysCovering,
   coversEntities,
   isCacheDayFresh,
@@ -270,6 +271,8 @@ export async function getDriverTimeInputs(opts: Window & { driverIds: string[] }
   assignments: SamsaraAssignment[];
   gpsSamples: GpsSample[];
   vehiclesFilled: number;
+  vehiclesFilledFromDay: number;
+  driverDayVehicles: number;
   stats: CacheStat[];
 }> {
   const { segments, stat: hosStat } = await getHosSegments(opts);
@@ -284,10 +287,25 @@ export async function getDriverTimeInputs(opts: Window & { driverIds: string[] }
     startMs: a.startMs,
     endMs: a.endMs,
   }));
-  const { segments: filledSegments, filled } = backfillSegmentVehicles(segments, assignmentRows);
+  // One vehicle per driver-day first, so a block Samsara left blank still gets
+  // the truck the driver actually worked out of that day — that is the GPS the
+  // fence-exit trim rule reads.
+  const dayVehicles = dominantVehiclePerDriverDay(assignmentRows);
+  const { segments: filledSegments, filled, filledFromDay } = backfillSegmentVehicles(
+    segments,
+    assignmentRows,
+    dayVehicles,
+  );
 
+  // GPS for every vehicle the day mapping names, not just the ones that ended
+  // up stamped on a segment: trimming a block needs the vehicle's track across
+  // the whole day, including after the log stopped mentioning it.
   const vehicleIds = Array.from(
-    new Set(filledSegments.map((s) => s.vehicleId).filter((v): v is string => Boolean(v) && v !== "0")),
+    new Set(
+      [...filledSegments.map((s) => s.vehicleId), ...dayVehicles.values()].filter(
+        (v): v is string => Boolean(v) && v !== "0",
+      ),
+    ),
   );
   const { samples, stat: gpsStat } = await getVehicleGps({ ...opts, vehicleIds });
 
@@ -296,6 +314,8 @@ export async function getDriverTimeInputs(opts: Window & { driverIds: string[] }
     assignments,
     gpsSamples: samples,
     vehiclesFilled: filled,
+    vehiclesFilledFromDay: filledFromDay,
+    driverDayVehicles: dayVehicles.size,
     stats: [hosStat, assignStat, gpsStat],
   };
 }

@@ -78,15 +78,69 @@ function overlapMs(aStart: number, aEnd: number, bStart: number, bEnd: number): 
   return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
 }
 
+/** driverId + local calendar date -> the vehicle that driver spent most of the day in. */
+export type DriverDayVehicles = Map<string, string>;
+
+export function driverDayKey(driverId: string, timeMs: number, zone: string = CENTRAL_TZ): string {
+  return `${driverId}|${dateStrInTz(new Date(timeMs), zone)}`;
+}
+
+/**
+ * One vehicle per driver-day: the vehicle the driver was assigned to for the
+ * most minutes of that local calendar day. Samsara hands back many short HOS
+ * assignment slices per shift, so a single day's driving is normally split
+ * across a dozen rows for the same truck; whole-day attribution is what makes
+ * a vehicle available to blocks the log itself left blank.
+ */
+export function dominantVehiclePerDriverDay(
+  assignments: AssignmentRow[],
+  zone: string = CENTRAL_TZ,
+): DriverDayVehicles {
+  const totals = new Map<string, Map<string, number>>();
+  for (const a of assignments) {
+    const end = a.endMs ?? a.startMs;
+    if (!(end > a.startMs)) continue;
+    // Split across local days so a shift crossing midnight counts on both.
+    let cursor = a.startMs;
+    let guard = 0;
+    while (cursor < end && guard++ < 10) {
+      const date = dateStrInTz(new Date(cursor), zone);
+      const dayEnd = centralMidnight(addDays(date, 1), zone);
+      const sliceEnd = Math.min(end, dayEnd);
+      const key = `${a.driverId}|${date}`;
+      const perVehicle = totals.get(key) ?? new Map<string, number>();
+      perVehicle.set(a.vehicleId, (perVehicle.get(a.vehicleId) ?? 0) + (sliceEnd - cursor));
+      totals.set(key, perVehicle);
+      cursor = sliceEnd;
+    }
+  }
+  const out: DriverDayVehicles = new Map();
+  for (const [key, perVehicle] of totals) {
+    let best: { vehicleId: string; ms: number } | null = null;
+    for (const [vehicleId, ms] of perVehicle) {
+      if (!best || ms > best.ms || (ms === best.ms && vehicleId < best.vehicleId)) best = { vehicleId, ms };
+    }
+    if (best) out.set(key, best.vehicleId);
+  }
+  return out;
+}
+
 /**
  * Fill in a missing vehicle on an HOS segment from the driver-vehicle
- * assignment that overlaps it most. Segments that already name a vehicle are
- * left exactly as Samsara reported them.
+ * assignment that overlaps it most, falling back to the driver's vehicle for
+ * that whole day. Segments that already name a vehicle are left exactly as
+ * Samsara reported them.
  */
 export function backfillSegmentVehicles<
   T extends { driverId: string; startMs: number; endMs: number; vehicleId: string | null },
->(segments: T[], assignments: AssignmentRow[]): { segments: T[]; filled: number } {
-  if (!assignments.length) return { segments, filled: 0 };
+>(
+  segments: T[],
+  assignments: AssignmentRow[],
+  dayVehicles?: DriverDayVehicles,
+  zone: string = CENTRAL_TZ,
+): { segments: T[]; filled: number; filledFromDay: number } {
+  const days = dayVehicles ?? dominantVehiclePerDriverDay(assignments, zone);
+  if (!assignments.length && !days.size) return { segments, filled: 0, filledFromDay: 0 };
   const byDriver = new Map<string, AssignmentRow[]>();
   for (const a of assignments) {
     const list = byDriver.get(a.driverId) ?? [];
@@ -94,6 +148,7 @@ export function backfillSegmentVehicles<
     byDriver.set(a.driverId, list);
   }
   let filled = 0;
+  let filledFromDay = 0;
   const out = segments.map((seg) => {
     const current = (seg.vehicleId ?? "").trim();
     if (current && current !== "0") return seg;
@@ -104,11 +159,17 @@ export function backfillSegmentVehicles<
       if (overlap <= 0) continue;
       if (!best || overlap > best.overlap) best = { vehicleId: a.vehicleId, overlap };
     }
-    if (!best) return seg;
+    if (!best) {
+      const dayVehicle = days.get(driverDayKey(seg.driverId, seg.startMs, zone));
+      if (!dayVehicle) return seg;
+      filled++;
+      filledFromDay++;
+      return { ...seg, vehicleId: dayVehicle };
+    }
     filled++;
     return { ...seg, vehicleId: best.vehicleId };
   });
-  return { segments: out, filled };
+  return { segments: out, filled, filledFromDay };
 }
 
 /**

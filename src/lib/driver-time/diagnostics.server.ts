@@ -366,12 +366,20 @@ export async function runSamsaraDiagnostics(opts?: {
   // diagnostics no longer re-pulls the whole window from Samsara.
   const inputs = driverIds.length
     ? await getDriverTimeInputs({ startMs, endMs, driverIds })
-    : { segments: [], assignments: [], gpsSamples: [], vehiclesFilled: 0, stats: [] };
+    : {
+        segments: [],
+        assignments: [],
+        gpsSamples: [],
+        vehiclesFilled: 0,
+        vehiclesFilledFromDay: 0,
+        driverDayVehicles: 0,
+        stats: [],
+      };
   const segments = inputs.segments;
   const gpsSamples = inputs.gpsSamples;
   if (inputs.vehiclesFilled) {
     warnings.push(
-      `${inputs.vehiclesFilled} log segment(s) had no vehicle in Samsara; the vehicle was taken from driver-vehicle assignments.`,
+      `${inputs.vehiclesFilled} log segment(s) had no vehicle in Samsara; the vehicle was taken from driver-vehicle assignments (${inputs.vehiclesFilledFromDay} from the driver's vehicle for the whole day, across ${inputs.driverDayVehicles} driver-day assignment(s)).`,
     );
   }
   let dailyLogCount = 0;
