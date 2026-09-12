@@ -270,6 +270,8 @@ export async function getDriverTimeInputs(opts: Window & { driverIds: string[] }
   assignments: SamsaraAssignment[];
   gpsSamples: GpsSample[];
   vehiclesFilled: number;
+  vehiclesFilledFromDay: number;
+  driverDayVehicles: number;
   stats: CacheStat[];
 }> {
   const { segments, stat: hosStat } = await getHosSegments(opts);
