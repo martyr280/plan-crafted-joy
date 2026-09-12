@@ -22,6 +22,7 @@ import {
 } from "@/lib/samsara/hos.server";
 import {
   backfillSegmentVehicles,
+  dominantVehiclePerDriverDay,
   centralDaysCovering,
   coversEntities,
   isCacheDayFresh,
