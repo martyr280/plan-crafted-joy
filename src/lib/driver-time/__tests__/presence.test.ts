@@ -80,9 +80,23 @@ describe("presence basis — probe fixtures 2026-09-10", () => {
     expect(events[0].durationMin).toBe(526);
     expect(events[0].hub).toBe("Ocala");
     expect(events[0].locationSource).toBe("assumed_hub");
-    expect(events[0].needsReview).toBe(false);
+    expect(events[0].needsReview).toBe(true);
     expect(events[0].eventDate).toBe("2026-08-19");
   });
+
+  it("an event located from real coordinates is not flagged for review", () => {
+    const segs = build("53243882", "Joseph Outler", [
+      { status: "onDuty", startMs: at(ET, 19, 8, 3), endMs: at(ET, 19, 16, 49), latitude: 29.1793, longitude: -82.1912 },
+    ]);
+    const events = run({ id: "53243882", name: "Joseph Outler" }, segs, {
+      tzOffsetMinutes: ET,
+      hubTags: ["Ocala"],
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].locationSource).toBe("log");
+    expect(events[0].needsReview).toBe(false);
+  });
+
 
   it("Loyd 2026-08-26 Birmingham: two on-duty hours 13 km from the yard is not warehouse time", () => {
     const V = "281474996579835";
