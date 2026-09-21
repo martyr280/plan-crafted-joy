@@ -1,0 +1,226 @@
+=== FENCES ===
+{"selected":[{"id":"290688247","name":"Birmingham"},{"id":"290688509","name":"Dallas"},{"id":"290688696","name":"Ocala"}],"dallas":["Dallas"]}
+
+
+########## VEHICLE 281474996579824 (unit 443627) | 2026-09-11 | CT window 2026-09-11T05:00:00.000Z -> 2026-09-12T05:00:00.000Z ##########
+{"statsRowsReturned":1,"statsRowsMatchingVehicle":1,"engineStateCount":18,"gpsSampleCount":326}
+(a) ENGINE STATE TRANSITIONS:
+ 07:09:17  Off
+ 07:09:18  On
+ 07:11:18  Idle
+ 07:11:37  On
+ 07:13:43  Idle
+ 07:13:58  On
+ 07:14:43  Off
+ 11:10:15  On
+ 11:12:15  Idle
+ 11:13:17  On
+ 11:20:25  Idle
+ 11:21:19  Off
+ 11:26:52  On
+ 11:33:18  Off
+ 11:37:07  On
+ 11:38:53  Off
+ 14:08:44  On
+ 14:10:23  Off
+(b) GPS:
+{"gpsSampleCount":326,"firstSampleLocal":"2026-09-11, 00:48:53","lastSampleLocal":"2026-09-11, 23:19:43"}
+INSIDE DALLAS FENCE RANGES (raw, consecutive samples):
+{"fence":"Dallas","startLocal":"2026-09-11, 00:48:53","endLocal":"2026-09-11, 11:14:17","durationMin":625.4,"samples":114}
+{"fence":"Dallas","startLocal":"2026-09-11, 11:31:09","endLocal":"2026-09-11, 23:19:43","durationMin":708.6,"samples":127}
+INSIDE DALLAS FENCE RANGES (merged, gaps < 3 min):
+{"fence":"Dallas","startLocal":"2026-09-11, 00:48:53","endLocal":"2026-09-11, 11:14:17","durationMin":625.4,"samples":114}
+{"fence":"Dallas","startLocal":"2026-09-11, 11:31:09","endLocal":"2026-09-11, 23:19:43","durationMin":708.6,"samples":127}
+INSIDE ANY SELECTED FENCE RANGES (merged, gaps < 3 min):
+{"fence":"Dallas","startLocal":"2026-09-11, 00:48:53","endLocal":"2026-09-11, 11:14:17","durationMin":625.4,"samples":114}
+{"fence":"Dallas","startLocal":"2026-09-11, 11:31:09","endLocal":"2026-09-11, 23:19:43","durationMin":708.6,"samples":127}
+(c) DRIVER-VEHICLE ASSIGNMENTS (filterBy=vehicles):
+{"driverId":"53243889","driverName":"DJ Johnson","vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-09-11, 07:13:59","endLocal":"2026-09-11, 07:14:55","assignmentType":"HOS"}
+(d) LEGACY TRIPS:
+{"path":"/v1/fleet/trips?vehicleId=281474996579824&startMs=1789102800000&endMs=1789189200000","status":200}
+tripCount: 4
+{"startLocal":"2026-09-11, 07:13:59","endLocal":"2026-09-11, 07:14:55","startAddress":"Pulaski Street, Dallas, TX","endAddress":"Pulaski Street, Dallas, TX","distanceMeters":96,"driverId":53243889,"driverName":null}
+{"startLocal":"2026-09-11, 11:13:38","endLocal":"2026-09-11, 11:17:42","startAddress":"Pulaski Street, Dallas, TX","endAddress":"Irving Boulevard, Dallas, TX","distanceMeters":1784,"driverId":0,"driverName":null}
+{"startLocal":"2026-09-11, 11:28:36","endLocal":"2026-09-11, 11:32:36","startAddress":"Irving Boulevard, Dallas, TX","endAddress":"Pulaski Street, Dallas, TX","distanceMeters":1838,"driverId":0,"driverName":null}
+{"startLocal":"2026-09-11, 11:37:32","endLocal":"2026-09-11, 11:38:41","startAddress":"Pulaski Street, Dallas, TX","endAddress":"Pulaski Street, Dallas, TX","distanceMeters":89,"driverId":0,"driverName":null}
+
+
+########## VEHICLE 281474996579825 (unit 589566) | 2026-09-11 | CT window 2026-09-11T05:00:00.000Z -> 2026-09-12T05:00:00.000Z ##########
+{"statsRowsReturned":1,"statsRowsMatchingVehicle":1,"engineStateCount":0,"gpsSampleCount":24}
+(a) ENGINE STATE TRANSITIONS:
+none
+(b) GPS:
+{"gpsSampleCount":24,"firstSampleLocal":"2026-09-11, 00:50:18","lastSampleLocal":"2026-09-11, 23:51:04"}
+INSIDE DALLAS FENCE RANGES (raw, consecutive samples):
+{"fence":"Dallas","startLocal":"2026-09-11, 00:50:18","endLocal":"2026-09-11, 23:51:04","durationMin":1380.8,"samples":24}
+INSIDE DALLAS FENCE RANGES (merged, gaps < 3 min):
+{"fence":"Dallas","startLocal":"2026-09-11, 00:50:18","endLocal":"2026-09-11, 23:51:04","durationMin":1380.8,"samples":24}
+INSIDE ANY SELECTED FENCE RANGES (merged, gaps < 3 min):
+{"fence":"Dallas","startLocal":"2026-09-11, 00:50:18","endLocal":"2026-09-11, 23:51:04","durationMin":1380.8,"samples":24}
+(c) DRIVER-VEHICLE ASSIGNMENTS (filterBy=vehicles):
+none
+(d) LEGACY TRIPS:
+{"path":"/v1/fleet/trips?vehicleId=281474996579825&startMs=1789102800000&endMs=1789189200000","status":200}
+tripCount: 0
+
+
+########## VEHICLE 281474996579824 (unit 443627) | 2026-08-21 | CT window 2026-08-21T05:00:00.000Z -> 2026-08-22T05:00:00.000Z ##########
+{"statsRowsReturned":1,"statsRowsMatchingVehicle":1,"engineStateCount":39,"gpsSampleCount":621}
+(a) ENGINE STATE TRANSITIONS:
+ 09:05:23  Off
+ 09:48:57  On
+ 09:50:57  Idle
+ 09:52:43  On
+ 09:57:50  Idle
+ 09:58:48  On
+ 10:02:13  Off
+ 13:21:52  On
+ 13:25:18  Idle
+ 13:30:13  On
+ 13:39:11  Idle
+ 13:39:31  On
+ 13:44:45  Idle
+ 13:45:57  Off
+ 14:59:18  On
+ 15:00:37  Off
+ 15:17:00  On
+ 15:22:28  Off
+ 15:43:31  On
+ 15:45:44  Off
+ 15:59:14  On
+ 16:01:23  Idle
+ 16:03:51  On
+ 16:07:11  Idle
+ 16:10:21  Off
+ 16:11:03  On
+ 16:11:29  Off
+ 16:11:50  On
+ 16:12:04  Off
+ 18:19:41  On
+ 18:21:41  Idle
+ 18:22:29  Off
+ 18:47:57  On
+ 18:48:46  Off
+ 19:56:59  On
+ 19:58:59  Idle
+ 20:00:01  Off
+ 20:38:51  On
+ 20:42:55  Off
+(b) GPS:
+{"gpsSampleCount":621,"firstSampleLocal":"2026-08-21, 00:54:09","lastSampleLocal":"2026-08-21, 23:53:33"}
+INSIDE DALLAS FENCE RANGES (raw, consecutive samples):
+{"fence":"Dallas","startLocal":"2026-08-21, 00:54:09","endLocal":"2026-08-21, 09:55:05","durationMin":540.9,"samples":64}
+{"fence":"Dallas","startLocal":"2026-08-21, 09:55:19","endLocal":"2026-08-21, 13:40:06","durationMin":224.8,"samples":220}
+INSIDE DALLAS FENCE RANGES (merged, gaps < 3 min):
+{"fence":"Dallas","startLocal":"2026-08-21, 00:54:09","endLocal":"2026-08-21, 13:40:06","durationMin":765.9,"samples":284}
+INSIDE ANY SELECTED FENCE RANGES (merged, gaps < 3 min):
+{"fence":"Dallas","startLocal":"2026-08-21, 00:54:09","endLocal":"2026-08-21, 13:40:06","durationMin":765.9,"samples":284}
+(c) DRIVER-VEHICLE ASSIGNMENTS (filterBy=vehicles):
+{"driverId":"53243889","driverName":"DJ Johnson","vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-08-21, 09:52:42","endLocal":"2026-08-21, 10:00:22","assignmentType":"HOS"}
+{"driverId":"53243889","driverName":"DJ Johnson","vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-08-21, 13:33:26","endLocal":"2026-08-21, 13:43:05","assignmentType":"HOS"}
+{"driverId":"53243889","driverName":"DJ Johnson","vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-08-21, 14:59:50","endLocal":"2026-08-21, 15:00:49","assignmentType":"HOS"}
+{"driverId":"53243889","driverName":"DJ Johnson","vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-08-21, 15:18:22","endLocal":"2026-08-21, 15:22:39","assignmentType":"HOS"}
+{"driverId":"53243889","driverName":"DJ Johnson","vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-08-21, 15:44:19","endLocal":"2026-08-21, 15:45:55","assignmentType":"HOS"}
+{"driverId":"53243889","driverName":"DJ Johnson","vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-08-21, 16:03:57","endLocal":"2026-08-21, 16:05:47","assignmentType":"HOS"}
+{"driverId":"53243889","driverName":"DJ Johnson","vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-08-21, 20:39:40","endLocal":"2026-08-21, 20:42:15","assignmentType":"HOS"}
+(d) LEGACY TRIPS:
+{"path":"/v1/fleet/trips?vehicleId=281474996579824&startMs=1787288400000&endMs=1787374800000","status":200}
+tripCount: 7
+{"startLocal":"2026-08-21, 09:52:42","endLocal":"2026-08-21, 10:00:22","startAddress":"Pulaski Street, Dallas, TX","endAddress":"Pulaski Street, Dallas, TX","distanceMeters":752,"driverId":53243889,"driverName":null}
+{"startLocal":"2026-08-21, 13:33:26","endLocal":"2026-08-21, 13:43:05","startAddress":"Pulaski Street, Dallas, TX","endAddress":"Irving Boulevard, Dallas, TX","distanceMeters":2219,"driverId":53243889,"driverName":null}
+{"startLocal":"2026-08-21, 14:59:50","endLocal":"2026-08-21, 15:00:49","startAddress":"Irving Boulevard, Dallas, TX","endAddress":"Irving Boulevard, Dallas, TX","distanceMeters":89,"driverId":53243889,"driverName":null}
+{"startLocal":"2026-08-21, 15:18:22","endLocal":"2026-08-21, 15:22:39","startAddress":"Irving Boulevard, Dallas, TX","endAddress":"Irving Boulevard, Dallas, TX","distanceMeters":742,"driverId":53243889,"driverName":null}
+{"startLocal":"2026-08-21, 15:44:19","endLocal":"2026-08-21, 15:45:55","startAddress":"Irving Boulevard, Dallas, TX","endAddress":"Irving Boulevard, Dallas, TX","distanceMeters":204,"driverId":53243889,"driverName":null}
+{"startLocal":"2026-08-21, 16:03:57","endLocal":"2026-08-21, 16:05:47","startAddress":"Irving Boulevard, Dallas, TX","endAddress":"Irving Boulevard, Dallas, TX","distanceMeters":233,"driverId":53243889,"driverName":null}
+{"startLocal":"2026-08-21, 20:39:40","endLocal":"2026-08-21, 20:42:15","startAddress":"Irving Boulevard, Dallas, TX","endAddress":"Leston Street, Dallas, TX","distanceMeters":280,"driverId":53243889,"driverName":null}
+
+
+########## VEHICLE 281474996579825 (unit 589566) | 2026-08-21 | CT window 2026-08-21T05:00:00.000Z -> 2026-08-22T05:00:00.000Z ##########
+{"statsRowsReturned":1,"statsRowsMatchingVehicle":1,"engineStateCount":33,"gpsSampleCount":4697}
+(a) ENGINE STATE TRANSITIONS:
+ 06:37:59  Off
+ 06:37:59  On
+ 07:10:22  Idle
+ 07:22:14  On
+ 09:23:12  Idle
+ 09:26:21  Off
+ 09:32:01  On
+ 09:34:01  Idle
+ 09:45:30  On
+ 09:48:26  Idle
+ 10:13:50  On
+ 10:25:43  Idle
+ 10:30:09  On
+ 10:42:43  Idle
+ 10:45:48  Off
+ 10:51:58  On
+ 11:01:51  Off
+ 11:07:32  On
+ 11:09:32  Idle
+ 11:22:20  On
+ 11:42:18  Idle
+ 11:45:35  Off
+ 11:49:04  On
+ 12:25:51  Idle
+ 12:29:09  Off
+ 12:30:16  On
+ 15:25:47  Idle
+ 15:27:25  On
+ 15:33:02  Off
+ 17:12:02  On
+ 17:16:51  Off
+ 17:57:24  On
+ 17:58:03  Off
+(b) GPS:
+{"gpsSampleCount":4697,"firstSampleLocal":"2026-08-21, 00:37:55","lastSampleLocal":"2026-08-21, 23:07:13"}
+INSIDE DALLAS FENCE RANGES (raw, consecutive samples):
+{"fence":"Dallas","startLocal":"2026-08-21, 15:23:17","endLocal":"2026-08-21, 23:07:13","durationMin":463.9,"samples":171}
+INSIDE DALLAS FENCE RANGES (merged, gaps < 3 min):
+{"fence":"Dallas","startLocal":"2026-08-21, 15:23:17","endLocal":"2026-08-21, 23:07:13","durationMin":463.9,"samples":171}
+INSIDE ANY SELECTED FENCE RANGES (merged, gaps < 3 min):
+{"fence":"Dallas","startLocal":"2026-08-21, 15:23:17","endLocal":"2026-08-21, 23:07:13","durationMin":463.9,"samples":171}
+(c) DRIVER-VEHICLE ASSIGNMENTS (filterBy=vehicles):
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 06:39:01","endLocal":"2026-08-21, 07:07:58","assignmentType":"HOS"}
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 07:22:15","endLocal":"2026-08-21, 09:22:02","assignmentType":"HOS"}
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 09:45:32","endLocal":"2026-08-21, 09:46:48","assignmentType":"HOS"}
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 10:13:51","endLocal":"2026-08-21, 10:23:27","assignmentType":"HOS"}
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 10:30:37","endLocal":"2026-08-21, 10:41:30","assignmentType":"HOS"}
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 10:52:48","endLocal":"2026-08-21, 11:01:45","assignmentType":"HOS"}
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 11:22:21","endLocal":"2026-08-21, 11:41:12","assignmentType":"HOS"}
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 11:50:40","endLocal":"2026-08-21, 12:24:38","assignmentType":"HOS"}
+{"driverId":"53243887","driverName":"Dreher Sanders","vehicleId":"281474996579825","vehicleName":"589566","startLocal":"2026-08-21, 12:30:48","endLocal":"2026-08-21, 15:28:46","assignmentType":"HOS"}
+(d) LEGACY TRIPS:
+{"path":"/v1/fleet/trips?vehicleId=281474996579825&startMs=1787288400000&endMs=1787374800000","status":200}
+tripCount: 9
+{"startLocal":"2026-08-21, 06:39:01","endLocal":"2026-08-21, 07:07:58","startAddress":"Goliad Road, San Antonio, TX","endAddress":"Grandstand Drive, San Antonio, TX","distanceMeters":26865,"driverId":53243887,"driverName":null}
+{"startLocal":"2026-08-21, 07:22:15","endLocal":"2026-08-21, 09:22:02","startAddress":"Grandstand Drive, San Antonio, TX","endAddress":"Fireside Drive, Austin, TX","distanceMeters":182319,"driverId":53243887,"driverName":null}
+{"startLocal":"2026-08-21, 09:45:32","endLocal":"2026-08-21, 09:46:48","startAddress":"Fireside Drive, Austin, TX","endAddress":"Research Boulevard, Austin, TX","distanceMeters":140,"driverId":53243887,"driverName":null}
+{"startLocal":"2026-08-21, 10:13:51","endLocal":"2026-08-21, 10:23:27","startAddress":"Research Boulevard, Austin, TX","endAddress":"Research Boulevard, Austin, TX","distanceMeters":4653,"driverId":53243887,"driverName":null}
+{"startLocal":"2026-08-21, 10:30:37","endLocal":"2026-08-21, 10:41:30","startAddress":"Research Boulevard, Austin, TX","endAddress":"Barrington Way, Austin, TX","distanceMeters":12855,"driverId":53243887,"driverName":null}
+{"startLocal":"2026-08-21, 10:52:48","endLocal":"2026-08-21, 11:01:45","startAddress":"Barrington Way, Austin, TX","endAddress":"North Ranch Road 620, Austin, TX","distanceMeters":7637,"driverId":53243887,"driverName":null}
+{"startLocal":"2026-08-21, 11:22:21","endLocal":"2026-08-21, 11:41:12","startAddress":"North Ranch Road 620, Austin, TX","endAddress":"Holmes Road, Liberty Hill, TX","distanceMeters":23939,"driverId":53243887,"driverName":null}
+{"startLocal":"2026-08-21, 11:50:40","endLocal":"2026-08-21, 12:24:38","startAddress":"Holmes Road, Liberty Hill, TX","endAddress":"North Interstate 35, Jarrell, TX","distanceMeters":39314,"driverId":53243887,"driverName":null}
+{"startLocal":"2026-08-21, 12:30:48","endLocal":"2026-08-21, 15:28:46","startAddress":"North Interstate 35, Jarrell, TX","endAddress":"Pulaski Street, Dallas, TX","distanceMeters":258875,"driverId":53243887,"driverName":null}
+
+
+=== (e) DJ JOHNSON 53243889 RAW HOS ENTRIES — 2026-08-21 (compact) ===
+entryCount: 19
+{"startLocal":"2026-08-21, 00:00:00","endLocal":"2026-08-21, 09:52:59","hosStatusType":"offDuty","vehicleId":"281474996579824","latitude":32.811392,"longitude":-96.878043,"remark":null}
+{"startLocal":"2026-08-21, 09:52:59","endLocal":"2026-08-21, 10:05:33","hosStatusType":"driving","vehicleId":"281474996579824","latitude":32.811604,"longitude":-96.877881,"remark":null}
+{"startLocal":"2026-08-21, 10:05:33","endLocal":"2026-08-21, 11:22:47","hosStatusType":"onDuty","vehicleId":"281474996579824","latitude":32.810792,"longitude":-96.877975,"remark":null}
+{"startLocal":"2026-08-21, 11:22:47","endLocal":"2026-08-21, 13:32:20","hosStatusType":"offDuty","vehicleId":"281474996579824","latitude":32.810792,"longitude":-96.877975,"remark":"Off duty"}
+{"startLocal":"2026-08-21, 13:32:20","endLocal":"2026-08-21, 13:48:23","hosStatusType":"driving","vehicleId":"281474996579824","latitude":32.81147,"longitude":-96.877954,"remark":null}
+{"startLocal":"2026-08-21, 13:48:23","endLocal":"2026-08-21, 14:49:16","hosStatusType":"onDuty","vehicleId":"281474996579824","latitude":32.809267,"longitude":-96.892608,"remark":null}
+{"startLocal":"2026-08-21, 14:49:16","endLocal":"2026-08-21, 15:00:02","hosStatusType":"offDuty","vehicleId":"281474996579824","latitude":32.809267,"longitude":-96.892608,"remark":"Off duty"}
+{"startLocal":"2026-08-21, 15:00:02","endLocal":"2026-08-21, 15:06:16","hosStatusType":"driving","vehicleId":"281474996579824","latitude":32.809134,"longitude":-96.892713,"remark":null}
+{"startLocal":"2026-08-21, 15:06:16","endLocal":"2026-08-21, 15:18:22","hosStatusType":"onDuty","vehicleId":"281474996579824","latitude":32.808749,"longitude":-96.892483,"remark":null}
+{"startLocal":"2026-08-21, 15:18:22","endLocal":"2026-08-21, 15:27:58","hosStatusType":"driving","vehicleId":"281474996579824","latitude":32.809028,"longitude":-96.89268,"remark":null}
+{"startLocal":"2026-08-21, 15:27:58","endLocal":"2026-08-21, 15:44:33","hosStatusType":"onDuty","vehicleId":"281474996579824","latitude":32.809323,"longitude":-96.892554,"remark":null}
+{"startLocal":"2026-08-21, 15:44:33","endLocal":"2026-08-21, 15:51:28","hosStatusType":"driving","vehicleId":"281474996579824","latitude":32.809609,"longitude":-96.892485,"remark":null}
+{"startLocal":"2026-08-21, 15:51:28","endLocal":"2026-08-21, 16:04:03","hosStatusType":"onDuty","vehicleId":"281474996579824","latitude":32.808712,"longitude":-96.892947,"remark":null}
+{"startLocal":"2026-08-21, 16:04:03","endLocal":"2026-08-21, 16:11:01","hosStatusType":"driving","vehicleId":"281474996579824","latitude":32.808401,"longitude":-96.892954,"remark":null}
+{"startLocal":"2026-08-21, 16:11:01","endLocal":"2026-08-21, 20:39:40","hosStatusType":"onDuty","vehicleId":"281474996579824","latitude":32.808819,"longitude":-96.892867,"remark":null}
+{"startLocal":"2026-08-21, 20:39:40","endLocal":"2026-08-21, 20:47:26","hosStatusType":"driving","vehicleId":"281474996579824","latitude":32.80906,"longitude":-96.89274,"remark":null}
+{"startLocal":"2026-08-21, 20:47:26","endLocal":"2026-08-21, 21:00:00","hosStatusType":"onDuty","vehicleId":"281474996579824","latitude":32.809898,"longitude":-96.892407,"remark":null}
+{"startLocal":"2026-08-21, 21:00:00","endLocal":"2026-08-22, 00:00:00","hosStatusType":"offDuty","vehicleId":"281474996579824","latitude":32.809898,"longitude":-96.892407,"remark":"Off duty"}
+{"startLocal":"2026-08-22, 00:00:00","endLocal":"2026-08-22, 00:00:00","hosStatusType":"offDuty","vehicleId":"281474996579824","latitude":32.809898,"longitude":-96.892407,"remark":"Off duty"}
