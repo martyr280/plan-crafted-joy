@@ -1,0 +1,40 @@
+=== Sweep 1: weekStart 2026-09-07 ===
+{
+  "ok": true,
+  "runId": "97827865-ccd9-4ff8-a9de-bd2ba530b21e",
+  "weekStart": "2026-09-07",
+  "weekEnd": "2026-09-13",
+  "driversScanned": 18,
+  "eventsFound": 21,
+  "inserted": 0,
+  "updated": 21,
+  "reopened": 0,
+  "warnings": [],
+  "roster": {
+    "total": 30,
+    "excludedByPattern": 6,
+    "excludedNoLicense": 2,
+    "excludedDeactivated": 4,
+    "scanned": 18
+  }
+}
+=== Sweep 2: default trailing 8-day window ===
+{
+  "ok": true,
+  "runId": "4b4192f4-ca3d-4a03-b3c5-293373d6cf16",
+  "weekStart": "2026-09-21",
+  "weekEnd": "2026-09-27",
+  "driversScanned": 18,
+  "eventsFound": 26,
+  "inserted": 25,
+  "updated": 1,
+  "reopened": 0,
+  "warnings": [],
+  "roster": {
+    "total": 30,
+    "excludedByPattern": 6,
+    "excludedNoLicense": 2,
+    "excludedDeactivated": 4,
+    "scanned": 18
+  }
+}
