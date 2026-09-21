@@ -86,7 +86,7 @@ describe("presence basis — probe fixtures 2026-09-10", () => {
 
   it("an event located from real coordinates is not flagged for review", () => {
     const segs = build("53243882", "Joseph Outler", [
-      { status: "onDuty", startMs: at(ET, 19, 8, 3), endMs: at(ET, 19, 16, 49), latitude: 29.1793, longitude: -82.1912 },
+      { status: "onDuty", startMs: at(ET, 19, 8, 3), endMs: at(ET, 19, 16, 49), latitude: 29.18244, longitude: -82.21233 },
     ]);
     const events = run({ id: "53243882", name: "Joseph Outler" }, segs, {
       tzOffsetMinutes: ET,
