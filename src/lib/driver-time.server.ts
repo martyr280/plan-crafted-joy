@@ -251,9 +251,30 @@ export async function runDriverTimeSweep(opts?: {
   if (startMs >= endMs) throw new Error("Cannot scan a future week.");
   const warnings: string[] = [];
 
+  // A run row left `running` means the process died without recording an
+  // outcome. Retire stragglers so the runs list never shows a phantom sweep.
+  {
+    const cutoff = new Date(now.getTime() - 15 * 60_000).toISOString();
+    const { error } = await db()
+      .from("driver_warehouse_runs")
+      .update({
+        status: "failed",
+        error: "Timed out: no completion recorded within 15 minutes",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("status", "running")
+      .lt("started_at", cutoff);
+    if (error) warnings.push(`stale run cleanup failed: ${error.message}`);
+  }
+
+  // The cron sweep scans the trailing 8 days, so label the row with the week
+  // that actually contains the window start rather than today's week.
+  const labelWeek = opts?.weekStart ? { weekStart, weekEnd } : weekBounds(new Date(startMs));
+
   const { data: runRow, error: runErr } = await db()
     .from("driver_warehouse_runs")
-    .insert({ week_start: weekStart, week_end: weekEnd, window_start:new Date(startMs).toISOString(),window_end:new Date(endMs).toISOString(),status: "running", triggered_by: opts?.triggeredBy ?? null })
+    .insert({ week_start: labelWeek.weekStart, week_end: labelWeek.weekEnd, window_start:new Date(startMs).toISOString(),window_end:new Date(endMs).toISOString(),status: "running", triggered_by: opts?.triggeredBy ?? null })
+
     .select("id")
     .single();
   if (runErr) throw new Error(runErr.message);

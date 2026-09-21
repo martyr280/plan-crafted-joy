@@ -533,7 +533,10 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
         hub: b.fence.hub ?? b.fence.name,
         statuses: b.statuses,
         locationSource,
-        needsReview: false,
+        // No coordinates and no vehicle: the hub came from the driver's tag,
+        // not from evidence. Flag it so a reviewer confirms the placement.
+        needsReview: locationSource === "assumed_hub",
+
       });
     }
   }

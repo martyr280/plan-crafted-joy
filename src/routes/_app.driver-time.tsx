@@ -375,12 +375,13 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
                   <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-[200px]">
                     <MapPin className="w-3 h-3" />
                     {ev.address_name ?? "location unresolved"}
-                    {ev.location_source !== "log" && (
+                    {ev.location_source !== "log" && ev.location_source !== "assumed_hub" && (
                       <Badge variant="outline" className="ml-1 text-[10px]">{ev.location_source}</Badge>
                     )}
                     {ev.location_source === "assumed_hub" && (
-                      <Badge variant="outline" className="ml-1 text-[10px]">Home warehouse (no vehicle)</Badge>
+                      <Badge variant="outline" className="ml-1 text-[10px]">No truck / GPS — assumed at home hub</Badge>
                     )}
+
                   </div>
                   <div className="text-[11px] text-muted-foreground">{(ev.statuses ?? []).join(" / ")}</div>
                   {ev.nelsonOnly && <Badge variant="outline" className="text-[10px]">Not in official report</Badge>}
