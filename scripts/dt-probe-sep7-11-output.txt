@@ -1,0 +1,402 @@
+=== SELECTED WAREHOUSE GEOFENCES ===
+{"id":"290688247","name":"Birmingham","shape":"polygon","vertexCount":12,"radiusMeters":null,"center":{"latitude":33.63158880425958,"longitude":-86.73572625104629}}
+{"id":"290688509","name":"Dallas","shape":"polygon","vertexCount":15,"radiusMeters":null,"center":{"latitude":32.81067037374643,"longitude":-96.87810749170559}}
+{"id":"290688696","name":"Ocala","shape":"polygon","vertexCount":10,"radiusMeters":null,"center":{"latitude":29.18301139176383,"longitude":-82.21336847754188}}
+=== FULL ROSTER ===
+{"id":"53243512","name":"Thomas Blanks","activationStatus":"active","licensePresent":true,"tags":["Birmingham"]}
+{"id":"53243878","name":"Robert Young","activationStatus":"active","licensePresent":true,"tags":["Dallas"]}
+{"id":"53243879","name":"Alberto Fiscal","activationStatus":"active","licensePresent":true,"tags":["Dallas"]}
+{"id":"53243880","name":"Karriem Farahkhan","activationStatus":"active","licensePresent":true,"tags":["Birmingham"]}
+{"id":"53243881","name":"Ronald Fugate","activationStatus":"active","licensePresent":true,"tags":["Birmingham"]}
+{"id":"53243882","name":"Joseph Outler","activationStatus":"active","licensePresent":true,"tags":["Ocala"]}
+{"id":"53243883","name":"Kennedy Loyd","activationStatus":"active","licensePresent":true,"tags":["Birmingham"]}
+{"id":"53243884","name":"Michael Iannone","activationStatus":"active","licensePresent":true,"tags":["Ocala"]}
+{"id":"53243885","name":"Barry Richardson","activationStatus":"active","licensePresent":true,"tags":["Birmingham"]}
+{"id":"53243886","name":"Joshua Herbinger","activationStatus":"active","licensePresent":true,"tags":["Birmingham"]}
+{"id":"53243887","name":"Dreher Sanders","activationStatus":"active","licensePresent":true,"tags":["Dallas"]}
+{"id":"53243888","name":"Melvin Gilbert","activationStatus":"active","licensePresent":true,"tags":["Dallas"]}
+{"id":"53243889","name":"DJ Johnson","activationStatus":"active","licensePresent":true,"tags":["Dallas"]}
+{"id":"53243890","name":"Jawan McGinnis","activationStatus":"active","licensePresent":true,"tags":["Birmingham"]}
+{"id":"53243891","name":"Nelson Roldan","activationStatus":"active","licensePresent":true,"tags":["Dallas"]}
+{"id":"53244586","name":"Birmingham Warehouse","activationStatus":"active","licensePresent":false,"tags":["Birmingham"]}
+{"id":"53244597","name":"Dallas Warehouse","activationStatus":"active","licensePresent":false,"tags":["Dallas"]}
+{"id":"53244696","name":"Ocala Warehouse","activationStatus":"active","licensePresent":false,"tags":["Ocala"]}
+{"id":"53244732","name":"Birmingham LTL","activationStatus":"active","licensePresent":false,"tags":["Birmingham"]}
+{"id":"53244760","name":"Dallas LTL","activationStatus":"active","licensePresent":false,"tags":["Dallas"]}
+{"id":"53244763","name":"Ocala LTL","activationStatus":"active","licensePresent":false,"tags":["Ocala"]}
+{"id":"53245428","name":"Joe Green","activationStatus":"active","licensePresent":false,"tags":["Birmingham","Dallas","Ocala","Transfer"]}
+{"id":"53332924","name":"Scott Smith","activationStatus":"active","licensePresent":true,"tags":["Dallas"]}
+{"id":"58143755","name":"Gilbert Hinton","activationStatus":"active","licensePresent":true,"tags":["Birmingham"]}
+{"id":"58530560","name":"David Miranda","activationStatus":"active","licensePresent":true,"tags":["Ocala"]}
+{"id":"53243892","name":"Cory King","activationStatus":"deactivated","licensePresent":true,"tags":["Ocala"]}
+{"id":"53243893","name":"Terence Harris","activationStatus":"deactivated","licensePresent":true,"tags":["Birmingham"]}
+{"id":"53792924","name":"Kelvontrey Jones","activationStatus":"deactivated","licensePresent":false,"tags":["Ocala"]}
+{"id":"55836799","name":"Enyi Ukairo","activationStatus":"deactivated","licensePresent":true,"tags":["Birmingham"]}
+{"id":"57001678","name":"Robert Butkus","activationStatus":"deactivated","licensePresent":true,"tags":["Ocala"]}
+=== CASE: Gilbert Hinton | Birmingham | 2026-09-08 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"58143755","name":"Gilbert Hinton","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"AL","username":"GHinton","tags":["Birmingham"]}
+WINDOW: 2026-09-08T05:00:00.000Z -> 2026-09-09T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-08, 00:00:00","endLocal":"2026-09-08, 03:56:00","durationMin":236,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"onDuty","startLocal":"2026-09-08, 03:56:00","endLocal":"2026-09-08, 17:26:23","durationMin":810.4,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"offDuty","startLocal":"2026-09-08, 17:26:23","endLocal":"2026-09-09, 00:00:00","durationMin":393.6,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+none
+(d) VEHICLE GPS:
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null}
+INSIDE-FENCE RANGES for 0:
+none
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-08","startLocal":"2026-09-08, 00:00:00","endLocal":"2026-09-09, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Gilbert Hinton | Birmingham | 2026-09-09 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"58143755","name":"Gilbert Hinton","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"AL","username":"GHinton","tags":["Birmingham"]}
+WINDOW: 2026-09-09T05:00:00.000Z -> 2026-09-10T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-09, 00:00:00","endLocal":"2026-09-09, 06:42:29","durationMin":402.5,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"onDuty","startLocal":"2026-09-09, 06:42:29","endLocal":"2026-09-09, 20:12:51","durationMin":810.4,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"offDuty","startLocal":"2026-09-09, 20:12:51","endLocal":"2026-09-10, 00:00:00","durationMin":227.2,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+none
+(d) VEHICLE GPS:
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null}
+INSIDE-FENCE RANGES for 0:
+none
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-09","startLocal":"2026-09-09, 00:00:00","endLocal":"2026-09-10, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Gilbert Hinton | Birmingham | 2026-09-10 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"58143755","name":"Gilbert Hinton","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"AL","username":"GHinton","tags":["Birmingham"]}
+WINDOW: 2026-09-10T05:00:00.000Z -> 2026-09-11T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-10, 00:00:00","endLocal":"2026-09-10, 06:34:49","durationMin":394.8,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"onDuty","startLocal":"2026-09-10, 06:34:49","endLocal":"2026-09-10, 20:05:22","durationMin":810.6,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"offDuty","startLocal":"2026-09-10, 20:05:22","endLocal":"2026-09-11, 00:00:00","durationMin":234.6,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+none
+(d) VEHICLE GPS:
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null}
+INSIDE-FENCE RANGES for 0:
+none
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-10","startLocal":"2026-09-10, 00:00:00","endLocal":"2026-09-11, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Gilbert Hinton | Birmingham | 2026-09-11 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"58143755","name":"Gilbert Hinton","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"AL","username":"GHinton","tags":["Birmingham"]}
+WINDOW: 2026-09-11T05:00:00.000Z -> 2026-09-12T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-11, 07:56:12","durationMin":476.2,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"onDuty","startLocal":"2026-09-11, 07:56:12","endLocal":"2026-09-11, 19:15:44","durationMin":679.5,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"offDuty","startLocal":"2026-09-11, 19:15:44","endLocal":"2026-09-12, 00:00:00","durationMin":284.3,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+none
+(d) VEHICLE GPS:
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null}
+INSIDE-FENCE RANGES for 0:
+none
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-11","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-12, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Jawan McGinnis | Birmingham | 2026-09-08 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"53243890","name":"Jawan McGinnis","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"AL","username":"JMcGinnis","tags":["Birmingham"]}
+WINDOW: 2026-09-08T05:00:00.000Z -> 2026-09-09T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-08, 00:00:00","endLocal":"2026-09-08, 05:01:47","durationMin":301.8,"coordinates":{"latitude":33.631622,"longitude":-86.736204},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":33.631622,"longitude":-86.736204},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-08, 05:01:47","endLocal":"2026-09-08, 06:08:24","durationMin":66.6,"coordinates":{"latitude":33.631622,"longitude":-86.736204},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":33.631622,"longitude":-86.736204},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-08, 06:08:24","endLocal":"2026-09-08, 08:00:43","durationMin":112.3,"coordinates":{"latitude":33.631617,"longitude":-86.736046},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":33.631617,"longitude":-86.736046},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-08, 08:00:43","endLocal":"2026-09-08, 08:22:06","durationMin":21.4,"coordinates":{"latitude":34.713977,"longitude":-85.553491},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":34.713977,"longitude":-85.553491},"nearestSelectedFence":"Birmingham","distanceMeters":162051}
+{"status":"driving","startLocal":"2026-09-08, 08:22:06","endLocal":"2026-09-08, 08:41:20","durationMin":19.2,"coordinates":{"latitude":34.983709,"longitude":-85.408512},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":34.983709,"longitude":-85.408512},"nearestSelectedFence":"Birmingham","distanceMeters":193382}
+{"status":"onDuty","startLocal":"2026-09-08, 08:41:20","endLocal":"2026-09-08, 08:41:58","durationMin":0.6,"coordinates":{"latitude":35.034058,"longitude":-85.303531},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.034058,"longitude":-85.303531},"nearestSelectedFence":"Birmingham","distanceMeters":203819}
+{"status":"onDuty","startLocal":"2026-09-08, 08:41:58","endLocal":"2026-09-08, 08:46:27","durationMin":4.5,"coordinates":{"latitude":35.034058,"longitude":-85.303531},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.034058,"longitude":-85.303531},"nearestSelectedFence":"Birmingham","distanceMeters":203819}
+{"status":"driving","startLocal":"2026-09-08, 08:46:27","endLocal":"2026-09-08, 09:51:22","durationMin":64.9,"coordinates":{"latitude":35.034185,"longitude":-85.303418},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.034185,"longitude":-85.303418},"nearestSelectedFence":"Birmingham","distanceMeters":203836}
+{"status":"onDuty","startLocal":"2026-09-08, 09:51:22","endLocal":"2026-09-08, 10:20:51","durationMin":29.5,"coordinates":{"latitude":35.544774,"longitude":-84.565614},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.544774,"longitude":-84.565614},"nearestSelectedFence":"Birmingham","distanceMeters":290888}
+{"status":"driving","startLocal":"2026-09-08, 10:20:51","endLocal":"2026-09-08, 11:03:45","durationMin":42.9,"coordinates":{"latitude":35.54499,"longitude":-84.565816},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.54499,"longitude":-84.565816},"nearestSelectedFence":"Birmingham","distanceMeters":290893}
+{"status":"onDuty","startLocal":"2026-09-08, 11:03:45","endLocal":"2026-09-08, 11:04:06","durationMin":0.4,"coordinates":{"latitude":35.912568,"longitude":-84.145944},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.912568,"longitude":-84.145944},"nearestSelectedFence":"Birmingham","distanceMeters":346627}
+{"status":"onDuty","startLocal":"2026-09-08, 11:04:06","endLocal":"2026-09-08, 11:19:56","durationMin":15.8,"coordinates":{"latitude":35.912568,"longitude":-84.145944},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.912568,"longitude":-84.145944},"nearestSelectedFence":"Birmingham","distanceMeters":346627}
+{"status":"driving","startLocal":"2026-09-08, 11:19:56","endLocal":"2026-09-08, 11:42:07","durationMin":22.2,"coordinates":{"latitude":35.912507,"longitude":-84.146051},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.912507,"longitude":-84.146051},"nearestSelectedFence":"Birmingham","distanceMeters":346616}
+{"status":"personalConveyance","startLocal":"2026-09-08, 11:42:07","endLocal":"2026-09-08, 12:21:26","durationMin":39.3,"coordinates":{"latitude":35.9572,"longitude":-84.013192},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.9572,"longitude":-84.013192},"nearestSelectedFence":"Birmingham","distanceMeters":358521}
+{"status":"onDuty","startLocal":"2026-09-08, 12:21:26","endLocal":"2026-09-08, 12:42:55","durationMin":21.5,"coordinates":{"latitude":35.960298,"longitude":-84.004198},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.960298,"longitude":-84.004198},"nearestSelectedFence":"Birmingham","distanceMeters":359335}
+{"status":"driving","startLocal":"2026-09-08, 12:42:55","endLocal":"2026-09-08, 14:43:33","durationMin":120.6,"coordinates":{"latitude":35.960065,"longitude":-84.004304},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.960065,"longitude":-84.004304},"nearestSelectedFence":"Birmingham","distanceMeters":359310}
+{"status":"driving","startLocal":"2026-09-08, 14:43:33","endLocal":"2026-09-08, 14:57:11","durationMin":13.6,"coordinates":{"latitude":36.596081,"longitude":-82.242387},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.596081,"longitude":-82.242387},"nearestSelectedFence":"Birmingham","distanceMeters":524820}
+{"status":"onDuty","startLocal":"2026-09-08, 14:57:11","endLocal":"2026-09-08, 15:07:51","durationMin":10.7,"coordinates":{"latitude":36.596185,"longitude":-82.189569},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.596185,"longitude":-82.189569},"nearestSelectedFence":"Birmingham","distanceMeters":528574}
+{"status":"driving","startLocal":"2026-09-08, 15:07:51","endLocal":"2026-09-08, 15:45:53","durationMin":38,"coordinates":{"latitude":36.59635,"longitude":-82.18988},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.59635,"longitude":-82.18988},"nearestSelectedFence":"Birmingham","distanceMeters":528563}
+{"status":"onDuty","startLocal":"2026-09-08, 15:45:53","endLocal":"2026-09-08, 15:53:53","durationMin":8,"coordinates":{"latitude":36.370296,"longitude":-82.370609},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.370296,"longitude":-82.370609},"nearestSelectedFence":"Birmingham","distanceMeters":500586}
+{"status":"driving","startLocal":"2026-09-08, 15:53:53","endLocal":"2026-09-08, 16:13:17","durationMin":19.4,"coordinates":{"latitude":36.370035,"longitude":-82.370936},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.370035,"longitude":-82.370936},"nearestSelectedFence":"Birmingham","distanceMeters":500546}
+{"status":"onDuty","startLocal":"2026-09-08, 16:13:17","endLocal":"2026-09-08, 16:15:35","durationMin":2.3,"coordinates":{"latitude":36.316961,"longitude":-82.362469},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.316961,"longitude":-82.362469},"nearestSelectedFence":"Birmingham","distanceMeters":497703}
+{"status":"onDuty","startLocal":"2026-09-08, 16:15:35","endLocal":"2026-09-08, 16:51:29","durationMin":35.9,"coordinates":{"latitude":36.316961,"longitude":-82.362469},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.316961,"longitude":-82.362469},"nearestSelectedFence":"Birmingham","distanceMeters":497703}
+{"status":"driving","startLocal":"2026-09-08, 16:51:29","endLocal":"2026-09-08, 17:12:27","durationMin":21,"coordinates":{"latitude":36.316921,"longitude":-82.362647},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.316921,"longitude":-82.362647},"nearestSelectedFence":"Birmingham","distanceMeters":497688}
+{"status":"onDuty","startLocal":"2026-09-08, 17:12:27","endLocal":"2026-09-08, 17:12:52","durationMin":0.4,"coordinates":{"latitude":36.297272,"longitude":-82.472004},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.297272,"longitude":-82.472004},"nearestSelectedFence":"Birmingham","distanceMeters":488463}
+{"status":"driving","startLocal":"2026-09-08, 17:12:52","endLocal":"2026-09-08, 17:22:57","durationMin":10.1,"coordinates":{"latitude":36.29745,"longitude":-82.471958},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.29745,"longitude":-82.471958},"nearestSelectedFence":"Birmingham","distanceMeters":488478}
+{"status":"onDuty","startLocal":"2026-09-08, 17:22:57","endLocal":"2026-09-08, 18:03:42","durationMin":40.7,"coordinates":{"latitude":36.309864,"longitude":-82.405211},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.309864,"longitude":-82.405211},"nearestSelectedFence":"Birmingham","distanceMeters":494132}
+{"status":"driving","startLocal":"2026-09-08, 18:03:42","endLocal":"2026-09-08, 18:20:21","durationMin":16.6,"coordinates":{"latitude":36.309952,"longitude":-82.405232},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.309952,"longitude":-82.405232},"nearestSelectedFence":"Birmingham","distanceMeters":494136}
+{"status":"onDuty","startLocal":"2026-09-08, 18:20:21","endLocal":"2026-09-08, 18:34:09","durationMin":13.8,"coordinates":{"latitude":36.297303,"longitude":-82.472027},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.297303,"longitude":-82.472027},"nearestSelectedFence":"Birmingham","distanceMeters":488463}
+{"status":"onDuty","startLocal":"2026-09-08, 18:34:09","endLocal":"2026-09-08, 18:47:01","durationMin":12.9,"coordinates":{"latitude":36.297303,"longitude":-82.472027},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.297303,"longitude":-82.472027},"nearestSelectedFence":"Birmingham","distanceMeters":488463}
+{"status":"offDuty","startLocal":"2026-09-08, 18:47:01","endLocal":"2026-09-09, 00:00:00","durationMin":313,"coordinates":{"latitude":36.297303,"longitude":-82.472027},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.297303,"longitude":-82.472027},"nearestSelectedFence":"Birmingham","distanceMeters":488463}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 06:08:19","endLocal":"2026-09-08, 08:00:37","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 08:00:43","endLocal":"2026-09-08, 08:22:01","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 08:22:06","endLocal":"2026-09-08, 08:36:08","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 08:46:21","endLocal":"2026-09-08, 09:46:06","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 10:20:38","endLocal":"2026-09-08, 10:58:32","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 11:19:50","endLocal":"2026-09-08, 11:40:11","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 11:51:57","endLocal":"2026-09-08, 11:56:47","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 12:14:29","endLocal":"2026-09-08, 12:18:27","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 12:42:44","endLocal":"2026-09-08, 14:43:28","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 14:43:33","endLocal":"2026-09-08, 14:54:22","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 15:07:38","endLocal":"2026-09-08, 15:09:44","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 15:09:50","endLocal":"2026-09-08, 15:40:32","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 15:53:38","endLocal":"2026-09-08, 16:07:58","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 16:51:23","endLocal":"2026-09-08, 17:07:10","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 17:12:41","endLocal":"2026-09-08, 17:21:54","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-08, 18:03:37","endLocal":"2026-09-08, 18:15:07","assignmentType":"HOS"}
+(d) VEHICLE GPS:
+{"vehicleId":"281474996579834","sampleCount":5397,"firstSampleLocal":"2026-09-08, 00:32:16","lastSampleLocal":"2026-09-08, 23:28:21"}
+INSIDE-FENCE RANGES for 281474996579834:
+{"fence":"Birmingham","startLocal":"2026-09-08, 00:32:16","endLocal":"2026-09-08, 06:12:39","durationMin":340.4,"samples":45}
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-08","startLocal":"2026-09-08, 00:00:00","endLocal":"2026-09-09, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Jawan McGinnis | Birmingham | 2026-09-11 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"53243890","name":"Jawan McGinnis","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"AL","username":"JMcGinnis","tags":["Birmingham"]}
+WINDOW: 2026-09-11T05:00:00.000Z -> 2026-09-12T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-11, 03:35:49","durationMin":215.8,"coordinates":{"latitude":36.053426,"longitude":-83.993151},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.053426,"longitude":-83.993151},"nearestSelectedFence":"Birmingham","distanceMeters":367448}
+{"status":"onDuty","startLocal":"2026-09-11, 03:35:49","endLocal":"2026-09-11, 07:08:27","durationMin":212.6,"coordinates":{"latitude":36.053426,"longitude":-83.993151},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.053426,"longitude":-83.993151},"nearestSelectedFence":"Birmingham","distanceMeters":367448}
+{"status":"driving","startLocal":"2026-09-11, 07:08:27","endLocal":"2026-09-11, 07:37:41","durationMin":29.2,"coordinates":{"latitude":36.053178,"longitude":-83.993035},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.053178,"longitude":-83.993035},"nearestSelectedFence":"Birmingham","distanceMeters":367436}
+{"status":"onDuty","startLocal":"2026-09-11, 07:37:41","endLocal":"2026-09-11, 08:51:15","durationMin":73.6,"coordinates":{"latitude":36.082041,"longitude":-83.87841},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.082041,"longitude":-83.87841},"nearestSelectedFence":"Birmingham","distanceMeters":376916}
+{"status":"driving","startLocal":"2026-09-11, 08:51:15","endLocal":"2026-09-11, 09:15:04","durationMin":23.8,"coordinates":{"latitude":36.08187,"longitude":-83.878363},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.08187,"longitude":-83.878363},"nearestSelectedFence":"Birmingham","distanceMeters":376905}
+{"status":"onDuty","startLocal":"2026-09-11, 09:15:04","endLocal":"2026-09-11, 09:32:31","durationMin":17.5,"coordinates":{"latitude":35.957574,"longitude":-84.013491},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.957574,"longitude":-84.013491},"nearestSelectedFence":"Birmingham","distanceMeters":358531}
+{"status":"driving","startLocal":"2026-09-11, 09:32:31","endLocal":"2026-09-11, 09:50:06","durationMin":17.6,"coordinates":{"latitude":35.957176,"longitude":-84.013857},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.957176,"longitude":-84.013857},"nearestSelectedFence":"Birmingham","distanceMeters":358477}
+{"status":"onDuty","startLocal":"2026-09-11, 09:50:06","endLocal":"2026-09-11, 10:18:13","durationMin":28.1,"coordinates":{"latitude":35.912578,"longitude":-84.145957},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.912578,"longitude":-84.145957},"nearestSelectedFence":"Birmingham","distanceMeters":346627}
+{"status":"driving","startLocal":"2026-09-11, 10:18:13","endLocal":"2026-09-11, 11:59:13","durationMin":101,"coordinates":{"latitude":35.912427,"longitude":-84.145975},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":35.912427,"longitude":-84.145975},"nearestSelectedFence":"Birmingham","distanceMeters":346614}
+{"status":"onDuty","startLocal":"2026-09-11, 11:59:13","endLocal":"2026-09-11, 11:59:46","durationMin":0.6,"coordinates":{"latitude":36.195502,"longitude":-85.443647},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.195502,"longitude":-85.443647},"nearestSelectedFence":"Birmingham","distanceMeters":308258}
+{"status":"onDuty","startLocal":"2026-09-11, 11:59:46","endLocal":"2026-09-11, 11:59:52","durationMin":0.1,"coordinates":{"latitude":36.195639,"longitude":-85.443654},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.195639,"longitude":-85.443654},"nearestSelectedFence":"Birmingham","distanceMeters":308272}
+{"status":"driving","startLocal":"2026-09-11, 11:59:52","endLocal":"2026-09-11, 13:59:29","durationMin":119.6,"coordinates":{"latitude":36.195747,"longitude":-85.443787},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":36.195747,"longitude":-85.443787},"nearestSelectedFence":"Birmingham","distanceMeters":308278}
+{"status":"driving","startLocal":"2026-09-11, 13:59:29","endLocal":"2026-09-11, 14:18:03","durationMin":18.6,"coordinates":{"latitude":34.982833,"longitude":-85.466338},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":34.982833,"longitude":-85.466338},"nearestSelectedFence":"Birmingham","distanceMeters":190002}
+{"status":"driving","startLocal":"2026-09-11, 14:18:03","endLocal":"2026-09-11, 16:28:41","durationMin":130.6,"coordinates":{"latitude":34.7139,"longitude":-85.553928},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":34.7139,"longitude":-85.553928},"nearestSelectedFence":"Birmingham","distanceMeters":162018}
+{"status":"onDuty","startLocal":"2026-09-11, 16:28:41","endLocal":"2026-09-11, 17:22:15","durationMin":53.6,"coordinates":{"latitude":33.631866,"longitude":-86.735825},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":33.631866,"longitude":-86.735825},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-11, 17:22:15","endLocal":"2026-09-11, 17:26:53","durationMin":4.6,"coordinates":{"latitude":33.631807,"longitude":-86.735943},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":33.631807,"longitude":-86.735943},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-11, 17:26:53","endLocal":"2026-09-11, 18:01:56","durationMin":35.1,"coordinates":{"latitude":33.631841,"longitude":-86.735998},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":33.631841,"longitude":-86.735998},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-09-11, 18:01:56","endLocal":"2026-09-12, 00:00:00","durationMin":358.1,"coordinates":{"latitude":33.631841,"longitude":-86.735998},"vehicleId":"281474996579834","logRecordedLocation":{"latitude":33.631841,"longitude":-86.735998},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-11, 07:08:10","endLocal":"2026-09-11, 07:34:51","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-11, 08:51:10","endLocal":"2026-09-11, 09:13:57","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-11, 09:32:26","endLocal":"2026-09-11, 09:48:34","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-11, 10:18:08","endLocal":"2026-09-11, 11:54:01","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-11, 11:59:38","endLocal":"2026-09-11, 13:59:23","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-11, 13:59:29","endLocal":"2026-09-11, 14:17:57","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-11, 14:18:03","endLocal":"2026-09-11, 16:24:05","assignmentType":"HOS"}
+{"vehicleId":"281474996579834","vehicleName":"588976","startLocal":"2026-09-11, 17:22:10","endLocal":"2026-09-11, 17:23:16","assignmentType":"HOS"}
+(d) VEHICLE GPS:
+{"vehicleId":"281474996579834","sampleCount":4739,"firstSampleLocal":"2026-09-11, 00:09:24","lastSampleLocal":"2026-09-11, 23:37:06"}
+INSIDE-FENCE RANGES for 281474996579834:
+{"fence":"Birmingham","startLocal":"2026-09-11, 16:21:29","endLocal":"2026-09-11, 16:30:01","durationMin":8.5,"samples":22}
+{"fence":"Birmingham","startLocal":"2026-09-11, 16:31:51","endLocal":"2026-09-11, 23:37:06","durationMin":425.3,"samples":113}
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-11","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-12, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Alberto Fiscal | Dallas | 2026-09-09 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"53243879","name":"Alberto Fiscal","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"TX","username":"AFiscal","tags":["Dallas"]}
+WINDOW: 2026-09-09T05:00:00.000Z -> 2026-09-10T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-09, 00:00:00","endLocal":"2026-09-09, 06:37:53","durationMin":397.9,"coordinates":{"latitude":32.811119,"longitude":-96.878152},"vehicleId":"281474996579839","logRecordedLocation":{"latitude":32.811119,"longitude":-96.878152},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-09, 06:37:53","endLocal":"2026-09-09, 08:01:17","durationMin":83.4,"coordinates":{"latitude":32.811119,"longitude":-96.878152},"vehicleId":"281474996579839","logRecordedLocation":{"latitude":32.811119,"longitude":-96.878152},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-09, 08:01:17","endLocal":"2026-09-09, 08:01:37","durationMin":0.3,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"onDuty","startLocal":"2026-09-09, 08:01:37","endLocal":"2026-09-09, 08:14:07","durationMin":12.5,"coordinates":{"latitude":32.811025,"longitude":-96.878219},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.811025,"longitude":-96.878219},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-09, 08:14:07","endLocal":"2026-09-09, 08:20:21","durationMin":6.2,"coordinates":{"latitude":32.811377,"longitude":-96.87797},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.811377,"longitude":-96.87797},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-09, 08:20:21","endLocal":"2026-09-09, 08:59:33","durationMin":39.2,"coordinates":{"latitude":32.811744,"longitude":-96.878164},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.811744,"longitude":-96.878164},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-09, 08:59:33","endLocal":"2026-09-09, 09:05:57","durationMin":6.4,"coordinates":{"latitude":32.811714,"longitude":-96.877985},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.811714,"longitude":-96.877985},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-09, 09:05:57","endLocal":"2026-09-09, 09:09:45","durationMin":3.8,"coordinates":{"latitude":32.811112,"longitude":-96.878031},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.811112,"longitude":-96.878031},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-09, 09:09:45","endLocal":"2026-09-09, 09:10:21","durationMin":0.6,"coordinates":{"latitude":32.811147,"longitude":-96.878027},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.811147,"longitude":-96.878027},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-09, 09:10:21","endLocal":"2026-09-09, 09:30:22","durationMin":20,"coordinates":{"latitude":32.81115,"longitude":-96.877892},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.81115,"longitude":-96.877892},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-09, 09:30:22","endLocal":"2026-09-09, 09:52:04","durationMin":21.7,"coordinates":{"latitude":32.964751,"longitude":-96.913623},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.964751,"longitude":-96.913623},"nearestSelectedFence":"Dallas","distanceMeters":17271}
+{"status":"driving","startLocal":"2026-09-09, 09:52:04","endLocal":"2026-09-09, 09:52:42","durationMin":0.6,"coordinates":{"latitude":32.96515,"longitude":-96.913609},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.96515,"longitude":-96.913609},"nearestSelectedFence":"Dallas","distanceMeters":17314}
+{"status":"driving","startLocal":"2026-09-09, 09:52:42","endLocal":"2026-09-09, 10:22:49","durationMin":30.1,"coordinates":{"latitude":32.965213,"longitude":-96.913646},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.965213,"longitude":-96.913646},"nearestSelectedFence":"Dallas","distanceMeters":17322}
+{"status":"onDuty","startLocal":"2026-09-09, 10:22:49","endLocal":"2026-09-09, 10:36:32","durationMin":13.7,"coordinates":{"latitude":32.976131,"longitude":-96.739239},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.976131,"longitude":-96.739239},"nearestSelectedFence":"Dallas","distanceMeters":22335}
+{"status":"driving","startLocal":"2026-09-09, 10:36:32","endLocal":"2026-09-09, 10:37:27","durationMin":0.9,"coordinates":{"latitude":32.976131,"longitude":-96.739239},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.976131,"longitude":-96.739239},"nearestSelectedFence":"Dallas","distanceMeters":22335}
+{"status":"driving","startLocal":"2026-09-09, 10:37:27","endLocal":"2026-09-09, 10:56:05","durationMin":18.6,"coordinates":{"latitude":32.976012,"longitude":-96.738942},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.976012,"longitude":-96.738942},"nearestSelectedFence":"Dallas","distanceMeters":22340}
+{"status":"offDuty","startLocal":"2026-09-09, 10:56:05","endLocal":"2026-09-09, 11:27:02","durationMin":31,"coordinates":{"latitude":32.95827,"longitude":-96.837802},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.95827,"longitude":-96.837802},"nearestSelectedFence":"Dallas","distanceMeters":16660}
+{"status":"driving","startLocal":"2026-09-09, 11:27:02","endLocal":"2026-09-09, 11:27:58","durationMin":0.9,"coordinates":{"latitude":32.958191,"longitude":-96.837806},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.958191,"longitude":-96.837806},"nearestSelectedFence":"Dallas","distanceMeters":16652}
+{"status":"driving","startLocal":"2026-09-09, 11:27:58","endLocal":"2026-09-09, 12:48:07","durationMin":80.1,"coordinates":{"latitude":32.958062,"longitude":-96.838},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.958062,"longitude":-96.838},"nearestSelectedFence":"Dallas","distanceMeters":16634}
+{"status":"onDuty","startLocal":"2026-09-09, 12:48:07","endLocal":"2026-09-09, 12:55:11","durationMin":7.1,"coordinates":{"latitude":33.232212,"longitude":-97.598546},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":33.232212,"longitude":-97.598546},"nearestSelectedFence":"Dallas","distanceMeters":81750}
+{"status":"driving","startLocal":"2026-09-09, 12:55:11","endLocal":"2026-09-09, 12:55:32","durationMin":0.4,"coordinates":{"latitude":33.232243,"longitude":-97.598548},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":33.232243,"longitude":-97.598548},"nearestSelectedFence":"Dallas","distanceMeters":81752}
+{"status":"driving","startLocal":"2026-09-09, 12:55:32","endLocal":"2026-09-09, 13:38:00","durationMin":42.5,"coordinates":{"latitude":33.232346,"longitude":-97.598739},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":33.232346,"longitude":-97.598739},"nearestSelectedFence":"Dallas","distanceMeters":81773}
+{"status":"onDuty","startLocal":"2026-09-09, 13:38:00","endLocal":"2026-09-09, 13:38:35","durationMin":0.6,"coordinates":{"latitude":32.841777,"longitude":-97.341802},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.841777,"longitude":-97.341802},"nearestSelectedFence":"Dallas","distanceMeters":43379}
+{"status":"onDuty","startLocal":"2026-09-09, 13:38:35","endLocal":"2026-09-09, 13:57:56","durationMin":19.4,"coordinates":{"latitude":32.841777,"longitude":-97.341802},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.841777,"longitude":-97.341802},"nearestSelectedFence":"Dallas","distanceMeters":43379}
+{"status":"driving","startLocal":"2026-09-09, 13:57:56","endLocal":"2026-09-09, 14:01:22","durationMin":3.4,"coordinates":{"latitude":32.841683,"longitude":-97.34182},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.841683,"longitude":-97.34182},"nearestSelectedFence":"Dallas","distanceMeters":43380}
+{"status":"onDuty","startLocal":"2026-09-09, 14:01:22","endLocal":"2026-09-09, 14:02:22","durationMin":1,"coordinates":{"latitude":32.841856,"longitude":-97.341882},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.841856,"longitude":-97.341882},"nearestSelectedFence":"Dallas","distanceMeters":43387}
+{"status":"driving","startLocal":"2026-09-09, 14:02:22","endLocal":"2026-09-09, 14:02:36","durationMin":0.2,"coordinates":{"latitude":32.841883,"longitude":-97.341861},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.841883,"longitude":-97.341861},"nearestSelectedFence":"Dallas","distanceMeters":43385}
+{"status":"driving","startLocal":"2026-09-09, 14:02:36","endLocal":"2026-09-09, 14:13:53","durationMin":11.3,"coordinates":{"latitude":32.842001,"longitude":-97.341886},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.842001,"longitude":-97.341886},"nearestSelectedFence":"Dallas","distanceMeters":43389}
+{"status":"onDuty","startLocal":"2026-09-09, 14:13:53","endLocal":"2026-09-09, 14:52:47","durationMin":38.9,"coordinates":{"latitude":32.776718,"longitude":-97.338086},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.776718,"longitude":-97.338086},"nearestSelectedFence":"Dallas","distanceMeters":43072}
+{"status":"driving","startLocal":"2026-09-09, 14:52:47","endLocal":"2026-09-09, 14:53:00","durationMin":0.2,"coordinates":{"latitude":32.776695,"longitude":-97.338199},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.776695,"longitude":-97.338199},"nearestSelectedFence":"Dallas","distanceMeters":43082}
+{"status":"driving","startLocal":"2026-09-09, 14:53:00","endLocal":"2026-09-09, 15:08:43","durationMin":15.7,"coordinates":{"latitude":32.77669,"longitude":-97.338004},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.77669,"longitude":-97.338004},"nearestSelectedFence":"Dallas","distanceMeters":43064}
+{"status":"onDuty","startLocal":"2026-09-09, 15:08:43","endLocal":"2026-09-09, 15:26:09","durationMin":17.4,"coordinates":{"latitude":32.740858,"longitude":-97.286835},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.740858,"longitude":-97.286835},"nearestSelectedFence":"Dallas","distanceMeters":38892}
+{"status":"driving","startLocal":"2026-09-09, 15:26:09","endLocal":"2026-09-09, 15:27:06","durationMin":1,"coordinates":{"latitude":32.740857,"longitude":-97.286852},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.740857,"longitude":-97.286852},"nearestSelectedFence":"Dallas","distanceMeters":38893}
+{"status":"driving","startLocal":"2026-09-09, 15:27:06","endLocal":"2026-09-09, 16:13:45","durationMin":46.6,"coordinates":{"latitude":32.740786,"longitude":-97.286927},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.740786,"longitude":-97.286927},"nearestSelectedFence":"Dallas","distanceMeters":38902}
+{"status":"onDuty","startLocal":"2026-09-09, 16:13:45","endLocal":"2026-09-09, 16:31:50","durationMin":18.1,"coordinates":{"latitude":32.811741,"longitude":-96.878153},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.811741,"longitude":-96.878153},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-09-09, 16:31:50","endLocal":"2026-09-10, 00:00:00","durationMin":448.2,"coordinates":{"latitude":32.811741,"longitude":-96.878153},"vehicleId":"281474996579836","logRecordedLocation":{"latitude":32.811741,"longitude":-96.878153},"nearestSelectedFence":"Dallas","distanceMeters":0}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 08:14:01","endLocal":"2026-09-09, 08:15:10","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 08:59:27","endLocal":"2026-09-09, 09:00:50","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 09:10:15","endLocal":"2026-09-09, 09:29:57","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 09:52:42","endLocal":"2026-09-09, 10:22:20","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 10:36:49","endLocal":"2026-09-09, 10:55:45","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 11:27:58","endLocal":"2026-09-09, 12:47:44","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 12:55:26","endLocal":"2026-09-09, 13:37:36","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 13:49:04","endLocal":"2026-09-09, 13:50:02","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 14:02:30","endLocal":"2026-09-09, 14:13:15","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 14:52:54","endLocal":"2026-09-09, 15:08:57","assignmentType":"HOS"}
+{"vehicleId":"281474996579836","vehicleName":"525944","startLocal":"2026-09-09, 15:27:01","endLocal":"2026-09-09, 16:10:26","assignmentType":"HOS"}
+(d) VEHICLE GPS:
+{"vehicleId":"281474996579839","sampleCount":24,"firstSampleLocal":"2026-09-09, 00:24:17","lastSampleLocal":"2026-09-09, 23:24:58"}
+INSIDE-FENCE RANGES for 281474996579839:
+{"fence":"Dallas","startLocal":"2026-09-09, 00:24:17","endLocal":"2026-09-09, 23:24:58","durationMin":1380.7,"samples":24}
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null}
+INSIDE-FENCE RANGES for 0:
+none
+{"vehicleId":"281474996579836","sampleCount":3167,"firstSampleLocal":"2026-09-09, 00:48:40","lastSampleLocal":"2026-09-09, 23:26:04"}
+INSIDE-FENCE RANGES for 281474996579836:
+{"fence":"Dallas","startLocal":"2026-09-09, 00:48:40","endLocal":"2026-09-09, 09:10:51","durationMin":502.2,"samples":235}
+{"fence":"Dallas","startLocal":"2026-09-09, 16:09:00","endLocal":"2026-09-09, 23:26:04","durationMin":437.1,"samples":69}
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-09","startLocal":"2026-09-09, 00:00:00","endLocal":"2026-09-10, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: DJ Johnson | Dallas | 2026-09-11 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"53243889","name":"DJ Johnson","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"TX","username":"DJohnson","tags":["Dallas"]}
+WINDOW: 2026-09-11T05:00:00.000Z -> 2026-09-12T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-11, 06:44:00","durationMin":404,"coordinates":{"latitude":32.811347,"longitude":-96.878073},"vehicleId":"281474996579824","logRecordedLocation":{"latitude":32.811444,"longitude":-96.87806},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-11, 06:44:00","endLocal":"2026-09-11, 07:14:16","durationMin":30.3,"coordinates":{"latitude":32.811347,"longitude":-96.878073},"vehicleId":"281474996579824","logRecordedLocation":{"latitude":32.811347,"longitude":-96.878073},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-11, 07:14:16","endLocal":"2026-09-11, 07:20:31","durationMin":6.3,"coordinates":{"latitude":32.81122,"longitude":-96.877958},"vehicleId":"281474996579824","logRecordedLocation":{"latitude":32.81122,"longitude":-96.877958},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-11, 07:20:31","endLocal":"2026-09-11, 09:43:27","durationMin":142.9,"coordinates":{"latitude":32.810815,"longitude":-96.878115},"vehicleId":"281474996579824","logRecordedLocation":{"latitude":32.810815,"longitude":-96.878115},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-09-11, 09:43:27","endLocal":"2026-09-11, 09:45:43","durationMin":2.3,"coordinates":{"latitude":32.810815,"longitude":-96.878115},"vehicleId":"281474996579824","logRecordedLocation":{"latitude":32.810815,"longitude":-96.878115},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-09-11, 09:45:43","endLocal":"2026-09-12, 00:00:00","durationMin":854.3,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+{"vehicleId":"281474996579824","vehicleName":"443627","startLocal":"2026-09-11, 07:13:59","endLocal":"2026-09-11, 07:14:55","assignmentType":"HOS"}
+(d) VEHICLE GPS:
+{"vehicleId":"281474996579824","sampleCount":326,"firstSampleLocal":"2026-09-11, 00:48:53","lastSampleLocal":"2026-09-11, 23:19:43"}
+INSIDE-FENCE RANGES for 281474996579824:
+{"fence":"Dallas","startLocal":"2026-09-11, 00:48:53","endLocal":"2026-09-11, 11:14:17","durationMin":625.4,"samples":114}
+{"fence":"Dallas","startLocal":"2026-09-11, 11:31:09","endLocal":"2026-09-11, 23:19:43","durationMin":708.6,"samples":127}
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null}
+INSIDE-FENCE RANGES for 0:
+none
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-11","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-12, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Melvin Gilbert | Dallas | 2026-09-11 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"53243888","name":"Melvin Gilbert","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"AL","username":"MGilbert","tags":["Dallas"]}
+WINDOW: 2026-09-11T05:00:00.000Z -> 2026-09-12T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-11, 05:18:36","durationMin":318.6,"coordinates":{"latitude":35.377727,"longitude":-97.492125},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":35.377727,"longitude":-97.492125},"nearestSelectedFence":"Dallas","distanceMeters":290807}
+{"status":"onDuty","startLocal":"2026-09-11, 05:18:36","endLocal":"2026-09-11, 05:28:51","durationMin":10.3,"coordinates":{"latitude":35.377727,"longitude":-97.492125},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":35.377727,"longitude":-97.492125},"nearestSelectedFence":"Dallas","distanceMeters":290807}
+{"status":"driving","startLocal":"2026-09-11, 05:28:51","endLocal":"2026-09-11, 06:52:25","durationMin":83.6,"coordinates":{"latitude":35.377643,"longitude":-97.492085},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":35.377643,"longitude":-97.492085},"nearestSelectedFence":"Dallas","distanceMeters":290797}
+{"status":"onDuty","startLocal":"2026-09-11, 06:52:25","endLocal":"2026-09-11, 07:08:11","durationMin":15.8,"coordinates":{"latitude":34.200325,"longitude":-97.168088},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":34.200325,"longitude":-97.168088},"nearestSelectedFence":"Dallas","distanceMeters":156664}
+{"status":"driving","startLocal":"2026-09-11, 07:08:11","endLocal":"2026-09-11, 07:39:43","durationMin":31.5,"coordinates":{"latitude":34.200457,"longitude":-97.167471},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":34.200457,"longitude":-97.167471},"nearestSelectedFence":"Dallas","distanceMeters":156669}
+{"status":"driving","startLocal":"2026-09-11, 07:39:43","endLocal":"2026-09-11, 08:49:11","durationMin":69.5,"coordinates":{"latitude":33.727179,"longitude":-97.159673},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":33.727179,"longitude":-97.159673},"nearestSelectedFence":"Dallas","distanceMeters":105037}
+{"status":"offDuty","startLocal":"2026-09-11, 08:49:11","endLocal":"2026-09-11, 09:09:56","durationMin":20.8,"coordinates":{"latitude":32.811715,"longitude":-96.878109},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.811715,"longitude":-96.878109},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-11, 09:09:56","endLocal":"2026-09-11, 09:15:59","durationMin":6,"coordinates":{"latitude":32.811683,"longitude":-96.877944},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.811683,"longitude":-96.877944},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-09-11, 09:15:59","endLocal":"2026-09-11, 09:37:41","durationMin":21.7,"coordinates":{"latitude":32.809314,"longitude":-96.892631},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.809314,"longitude":-96.892631},"nearestSelectedFence":"Dallas","distanceMeters":1278}
+{"status":"driving","startLocal":"2026-09-11, 09:37:41","endLocal":"2026-09-11, 09:44:53","durationMin":7.2,"coordinates":{"latitude":32.809583,"longitude":-96.892519},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.809583,"longitude":-96.892519},"nearestSelectedFence":"Dallas","distanceMeters":1267}
+{"status":"onDuty","startLocal":"2026-09-11, 09:44:53","endLocal":"2026-09-11, 11:02:34","durationMin":77.7,"coordinates":{"latitude":32.808552,"longitude":-96.892552},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.808552,"longitude":-96.892552},"nearestSelectedFence":"Dallas","distanceMeters":1276}
+{"status":"driving","startLocal":"2026-09-11, 11:02:34","endLocal":"2026-09-11, 11:09:03","durationMin":6.5,"coordinates":{"latitude":32.808583,"longitude":-96.892388},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.808583,"longitude":-96.892388},"nearestSelectedFence":"Dallas","distanceMeters":1260}
+{"status":"offDuty","startLocal":"2026-09-11, 11:09:03","endLocal":"2026-09-11, 11:28:20","durationMin":19.3,"coordinates":{"latitude":32.811728,"longitude":-96.878029},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.811728,"longitude":-96.878029},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-11, 11:28:20","endLocal":"2026-09-11, 12:06:58","durationMin":38.6,"coordinates":{"latitude":32.811524,"longitude":-96.87794},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.811524,"longitude":-96.87794},"nearestSelectedFence":"Dallas","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-11, 12:06:58","endLocal":"2026-09-11, 12:18:29","durationMin":11.5,"coordinates":{"latitude":32.922178,"longitude":-96.979538},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.922178,"longitude":-96.979538},"nearestSelectedFence":"Dallas","distanceMeters":15425}
+{"status":"driving","startLocal":"2026-09-11, 12:18:29","endLocal":"2026-09-11, 13:18:40","durationMin":60.2,"coordinates":{"latitude":32.92207,"longitude":-96.979722},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":32.92207,"longitude":-96.979722},"nearestSelectedFence":"Dallas","distanceMeters":15426}
+{"status":"onDuty","startLocal":"2026-09-11, 13:18:40","endLocal":"2026-09-11, 13:26:10","durationMin":7.5,"coordinates":{"latitude":33.392391,"longitude":-97.175071},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":33.392391,"longitude":-97.175071},"nearestSelectedFence":"Dallas","distanceMeters":70166}
+{"status":"driving","startLocal":"2026-09-11, 13:26:10","endLocal":"2026-09-11, 13:49:03","durationMin":22.9,"coordinates":{"latitude":33.392549,"longitude":-97.17517},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":33.392549,"longitude":-97.17517},"nearestSelectedFence":"Dallas","distanceMeters":70186}
+{"status":"driving","startLocal":"2026-09-11, 13:49:03","endLocal":"2026-09-11, 15:47:55","durationMin":118.9,"coordinates":{"latitude":33.728383,"longitude":-97.15826},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":33.728383,"longitude":-97.15826},"nearestSelectedFence":"Dallas","distanceMeters":105134}
+{"status":"onDuty","startLocal":"2026-09-11, 15:47:55","endLocal":"2026-09-11, 15:56:45","durationMin":8.8,"coordinates":{"latitude":35.377783,"longitude":-97.492099},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":35.377783,"longitude":-97.492099},"nearestSelectedFence":"Dallas","distanceMeters":290813}
+{"status":"offDuty","startLocal":"2026-09-11, 15:56:45","endLocal":"2026-09-11, 15:56:49","durationMin":0.1,"coordinates":{"latitude":35.377757,"longitude":-97.492138},"vehicleId":"281474996579826","logRecordedLocation":{"latitude":35.377757,"longitude":-97.492138},"nearestSelectedFence":"Dallas","distanceMeters":290811}
+{"status":"offDuty","startLocal":"2026-09-11, 15:56:49","endLocal":"2026-09-12, 00:00:00","durationMin":483.2,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 05:28:46","endLocal":"2026-09-11, 06:51:46","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 07:08:05","endLocal":"2026-09-11, 07:39:37","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 07:39:43","endLocal":"2026-09-11, 08:47:10","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 09:09:49","endLocal":"2026-09-11, 09:16:27","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 09:37:29","endLocal":"2026-09-11, 09:39:42","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 11:02:29","endLocal":"2026-09-11, 11:09:26","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 11:27:58","endLocal":"2026-09-11, 12:01:19","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 12:18:23","endLocal":"2026-09-11, 13:13:23","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 13:26:04","endLocal":"2026-09-11, 13:48:57","assignmentType":"HOS"}
+{"vehicleId":"281474996579826","vehicleName":"231077","startLocal":"2026-09-11, 13:49:03","endLocal":"2026-09-11, 15:46:47","assignmentType":"HOS"}
+(d) VEHICLE GPS:
+{"vehicleId":"281474996579826","sampleCount":4872,"firstSampleLocal":"2026-09-11, 00:46:49","lastSampleLocal":"2026-09-11, 23:59:05"}
+INSIDE-FENCE RANGES for 281474996579826:
+{"fence":"Dallas","startLocal":"2026-09-11, 08:45:57","endLocal":"2026-09-11, 09:10:37","durationMin":24.7,"samples":55}
+{"fence":"Dallas","startLocal":"2026-09-11, 09:10:49","endLocal":"2026-09-11, 09:11:39","durationMin":0.8,"samples":8}
+{"fence":"Dallas","startLocal":"2026-09-11, 11:07:42","endLocal":"2026-09-11, 11:29:41","durationMin":22,"samples":67}
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null}
+INSIDE-FENCE RANGES for 0:
+none
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-11","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-12, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Nelson Roldan | Dallas | 2026-09-11 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"53243891","name":"Nelson Roldan","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"TX","username":"NRoldan","tags":["Dallas"]}
+WINDOW: 2026-09-11T05:00:00.000Z -> 2026-09-12T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-11, 06:55:46","durationMin":415.8,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"onDuty","startLocal":"2026-09-11, 06:55:46","endLocal":"2026-09-11, 09:57:25","durationMin":181.7,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+{"status":"offDuty","startLocal":"2026-09-11, 09:57:25","endLocal":"2026-09-12, 00:00:00","durationMin":842.6,"coordinates":"none","vehicleId":"0","logRecordedLocation":{"latitude":0,"longitude":0},"nearestSelectedFence":null,"distanceMeters":null}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+none
+(d) VEHICLE GPS:
+{"vehicleId":"0","sampleCount":0,"firstSampleLocal":null,"lastSampleLocal":null}
+INSIDE-FENCE RANGES for 0:
+none
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-11","startLocal":"2026-09-11, 00:00:00","endLocal":"2026-09-12, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
+=== CASE: Kennedy Loyd | Birmingham | 2026-09-08 | tz America/Chicago ===
+(a) DRIVER REGISTRY RECORD:
+{"id":"53243883","name":"Kennedy Loyd","activationStatus":"active","timezone":"America/Chicago","eldDayStartHour":null,"licenseNumberPresent":true,"licenseState":"AL","username":"KLoyd","tags":["Birmingham"]}
+WINDOW: 2026-09-08T05:00:00.000Z -> 2026-09-09T05:00:00.000Z
+(b) HOS SEGMENTS:
+{"status":"offDuty","startLocal":"2026-09-08, 00:00:00","endLocal":"2026-09-08, 04:21:29","durationMin":261.5,"coordinates":{"latitude":33.632684,"longitude":-86.73555},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.632684,"longitude":-86.73555},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-08, 04:21:29","endLocal":"2026-09-08, 06:07:38","durationMin":106.2,"coordinates":{"latitude":33.632684,"longitude":-86.73555},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.632684,"longitude":-86.73555},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"yardMove","startLocal":"2026-09-08, 06:07:38","endLocal":"2026-09-08, 06:11:54","durationMin":4.3,"coordinates":{"latitude":33.632701,"longitude":-86.735565},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.632701,"longitude":-86.735565},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-08, 06:11:54","endLocal":"2026-09-08, 06:18:53","durationMin":7,"coordinates":{"latitude":33.632592,"longitude":-86.735511},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.632592,"longitude":-86.735511},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-08, 06:18:53","endLocal":"2026-09-08, 06:45:29","durationMin":26.6,"coordinates":{"latitude":33.632417,"longitude":-86.735562},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.632417,"longitude":-86.735562},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-08, 06:45:29","endLocal":"2026-09-08, 06:53:16","durationMin":7.8,"coordinates":{"latitude":33.536366,"longitude":-86.841502},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.536366,"longitude":-86.841502},"nearestSelectedFence":"Birmingham","distanceMeters":14329}
+{"status":"driving","startLocal":"2026-09-08, 06:53:16","endLocal":"2026-09-08, 07:04:11","durationMin":10.9,"coordinates":{"latitude":33.536335,"longitude":-86.841264},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.536335,"longitude":-86.841264},"nearestSelectedFence":"Birmingham","distanceMeters":14317}
+{"status":"onDuty","startLocal":"2026-09-08, 07:04:11","endLocal":"2026-09-08, 07:20:30","durationMin":16.3,"coordinates":{"latitude":33.528732,"longitude":-86.871179},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.528732,"longitude":-86.871179},"nearestSelectedFence":"Birmingham","distanceMeters":16876}
+{"status":"driving","startLocal":"2026-09-08, 07:20:30","endLocal":"2026-09-08, 08:02:04","durationMin":41.6,"coordinates":{"latitude":33.528901,"longitude":-86.871497},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.528901,"longitude":-86.871497},"nearestSelectedFence":"Birmingham","distanceMeters":16885}
+{"status":"onDuty","startLocal":"2026-09-08, 08:02:04","endLocal":"2026-09-08, 08:41:17","durationMin":39.2,"coordinates":{"latitude":33.525999,"longitude":-86.768813},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.525999,"longitude":-86.768813},"nearestSelectedFence":"Birmingham","distanceMeters":11990}
+{"status":"driving","startLocal":"2026-09-08, 08:41:17","endLocal":"2026-09-08, 08:59:53","durationMin":18.6,"coordinates":{"latitude":33.525994,"longitude":-86.768737},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.525994,"longitude":-86.768737},"nearestSelectedFence":"Birmingham","distanceMeters":11989}
+{"status":"onDuty","startLocal":"2026-09-08, 08:59:53","endLocal":"2026-09-08, 09:05:23","durationMin":5.5,"coordinates":{"latitude":33.512595,"longitude":-86.789182},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.512595,"longitude":-86.789182},"nearestSelectedFence":"Birmingham","distanceMeters":14002}
+{"status":"driving","startLocal":"2026-09-08, 09:05:23","endLocal":"2026-09-08, 09:22:31","durationMin":17.1,"coordinates":{"latitude":33.51242,"longitude":-86.789309},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.51242,"longitude":-86.789309},"nearestSelectedFence":"Birmingham","distanceMeters":14024}
+{"status":"onDuty","startLocal":"2026-09-08, 09:22:31","endLocal":"2026-09-08, 09:24:28","durationMin":2,"coordinates":{"latitude":33.529783,"longitude":-86.800625},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.529783,"longitude":-86.800625},"nearestSelectedFence":"Birmingham","distanceMeters":12717}
+{"status":"onDuty","startLocal":"2026-09-08, 09:24:28","endLocal":"2026-09-08, 09:29:36","durationMin":5.1,"coordinates":{"latitude":33.52977,"longitude":-86.800649},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.52977,"longitude":-86.800649},"nearestSelectedFence":"Birmingham","distanceMeters":12719}
+{"status":"driving","startLocal":"2026-09-08, 09:29:36","endLocal":"2026-09-08, 09:47:00","durationMin":17.4,"coordinates":{"latitude":33.529878,"longitude":-86.80057},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.529878,"longitude":-86.80057},"nearestSelectedFence":"Birmingham","distanceMeters":12705}
+{"status":"onDuty","startLocal":"2026-09-08, 09:47:00","endLocal":"2026-09-08, 10:39:53","durationMin":52.9,"coordinates":{"latitude":33.588952,"longitude":-86.767603},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.588952,"longitude":-86.767603},"nearestSelectedFence":"Birmingham","distanceMeters":5500}
+{"status":"driving","startLocal":"2026-09-08, 10:39:53","endLocal":"2026-09-08, 10:55:02","durationMin":15.2,"coordinates":{"latitude":33.58898,"longitude":-86.76789},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.58898,"longitude":-86.76789},"nearestSelectedFence":"Birmingham","distanceMeters":5512}
+{"status":"onDuty","startLocal":"2026-09-08, 10:55:02","endLocal":"2026-09-08, 11:27:46","durationMin":32.7,"coordinates":{"latitude":33.631921,"longitude":-86.736014},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.631921,"longitude":-86.736014},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-09-08, 11:27:46","endLocal":"2026-09-08, 12:04:32","durationMin":36.8,"coordinates":{"latitude":33.631921,"longitude":-86.736014},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.631921,"longitude":-86.736014},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-08, 12:04:32","endLocal":"2026-09-08, 13:41:43","durationMin":97.2,"coordinates":{"latitude":33.631921,"longitude":-86.736014},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.631921,"longitude":-86.736014},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"driving","startLocal":"2026-09-08, 13:41:43","endLocal":"2026-09-08, 14:08:51","durationMin":27.1,"coordinates":{"latitude":33.631757,"longitude":-86.735947},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.631757,"longitude":-86.735947},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"onDuty","startLocal":"2026-09-08, 14:08:51","endLocal":"2026-09-08, 14:10:55","durationMin":2.1,"coordinates":{"latitude":33.523756,"longitude":-86.793451},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.523756,"longitude":-86.793451},"nearestSelectedFence":"Birmingham","distanceMeters":13015}
+{"status":"driving","startLocal":"2026-09-08, 14:10:55","endLocal":"2026-09-08, 14:37:37","durationMin":26.7,"coordinates":{"latitude":33.523458,"longitude":-86.793234},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.523458,"longitude":-86.793234},"nearestSelectedFence":"Birmingham","distanceMeters":13036}
+{"status":"onDuty","startLocal":"2026-09-08, 14:37:37","endLocal":"2026-09-08, 16:53:14","durationMin":135.6,"coordinates":{"latitude":33.631821,"longitude":-86.735962},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.631821,"longitude":-86.735962},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+{"status":"offDuty","startLocal":"2026-09-08, 16:53:14","endLocal":"2026-09-09, 00:00:00","durationMin":426.8,"coordinates":{"latitude":33.631945,"longitude":-86.735977},"vehicleId":"281474996579835","logRecordedLocation":{"latitude":33.631945,"longitude":-86.735977},"nearestSelectedFence":"Birmingham","distanceMeters":0}
+(c) DRIVER-VEHICLE ASSIGNMENTS:
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 06:07:58","endLocal":"2026-09-08, 06:08:59","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 06:18:39","endLocal":"2026-09-08, 06:44:10","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 06:53:03","endLocal":"2026-09-08, 07:01:59","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 07:20:10","endLocal":"2026-09-08, 08:01:31","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 08:41:12","endLocal":"2026-09-08, 08:56:53","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 09:05:09","endLocal":"2026-09-08, 09:17:22","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 09:29:25","endLocal":"2026-09-08, 09:42:49","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 10:39:34","endLocal":"2026-09-08, 10:49:51","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 13:41:25","endLocal":"2026-09-08, 14:03:40","assignmentType":"HOS"}
+{"vehicleId":"281474996579835","vehicleName":"589692","startLocal":"2026-09-08, 14:10:36","endLocal":"2026-09-08, 14:32:26","assignmentType":"HOS"}
+(d) VEHICLE GPS:
+{"vehicleId":"281474996579835","sampleCount":2464,"firstSampleLocal":"2026-09-08, 00:32:53","lastSampleLocal":"2026-09-08, 23:11:01"}
+INSIDE-FENCE RANGES for 281474996579835:
+{"fence":"Birmingham","startLocal":"2026-09-08, 00:32:53","endLocal":"2026-09-08, 06:21:17","durationMin":348.4,"samples":107}
+{"fence":"Birmingham","startLocal":"2026-09-08, 10:47:15","endLocal":"2026-09-08, 13:42:09","durationMin":174.9,"samples":98}
+{"fence":"Birmingham","startLocal":"2026-09-08, 13:42:35","endLocal":"2026-09-08, 13:43:39","durationMin":1.1,"samples":9}
+{"fence":"Birmingham","startLocal":"2026-09-08, 14:30:26","endLocal":"2026-09-08, 23:11:01","durationMin":520.6,"samples":119}
+(e) SAMSARA DAILY LOG:
+{"logDate":"2026-09-08","startLocal":"2026-09-08, 00:00:00","endLocal":"2026-09-09, 00:00:00","onDutyMin":null,"drivingMin":null,"offDutyMin":null}
