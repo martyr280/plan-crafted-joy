@@ -17,6 +17,15 @@ describe("official warehouse reporting",()=>{
   it("keeps an official zero and drivers absent from events",()=>{const rows=buildReconciledDrivers([event()],[{driver_id:"d",warehouse_actual:actual(0),updated_at:"revision"}]);expect(rows[0].flaggedMinutes).toBe(0);expect(rows[0].automatedMinutes).toBe(120);expect(buildReconciledDrivers([],[{driver_id:"d",warehouse_actual:actual(0)}])).toHaveLength(1);});
   it("never adds official and automated weekday time together",()=>{const rows=buildReconciledDrivers([event()],[{driver_id:"d",warehouse_actual:actual()}]);expect(rows[0].flaggedMinutes).toBe(330);expect(rows[0].varianceMinutes).toBe(-210);expect(reconciliationCsv(rows)).toContain('"330","120","-210","330","5:30"');});
   it("excludes excused, superseded and unresolved rows while preserving evidence",()=>{const rows=buildReconciledDrivers([event({status:"excused"}),event({superseded_at:"2026-09-08"}),event({needs_review:true})],[]);expect(rows[0].events).toHaveLength(3);expect(rows[0].flaggedMinutes).toBe(0);expect(rows[0].unresolvedMinutes).toBe(120);});
+  it("counts a reviewed needs_review event as automated time and an unreviewed one as unresolved",()=>{
+    const unreviewed=buildReconciledDrivers([event({needs_review:true,status:"new"})],[]);
+    expect(unreviewed[0].unresolvedMinutes).toBe(120);
+    expect(unreviewed[0].automatedMinutes).toBe(0);
+    const reviewed=buildReconciledDrivers([event({needs_review:true,status:"reviewed"})],[]);
+    expect(reviewed[0].unresolvedMinutes).toBe(0);
+    expect(reviewed[0].automatedMinutes).toBe(120);
+    expect(reviewed[0].flaggedMinutes).toBe(120);
+  });
   it("keeps weekend scope separate from weekday actuals",()=>{const es=[event(),event({event_date:"2026-08-22"})],os=[{driver_id:"d",warehouse_actual:actual()}];expect(buildReconciledDrivers(es,os)[0].flaggedMinutes).toBe(330);expect(buildReconciledDrivers(es,os,true)[0].flaggedMinutes).toBe(450);});
   it("rejects totals that disagree with source intervals",()=>{expect(()=>validateActual({...actual(),intervals:[{date:"2026-08-17",start:"2026-08-17T07:00:00-05:00",end:"2026-08-17T09:00:00-05:00",minutes:120}]},"2026-08-17")).toThrow(/add up/);});
   it("retains existing Paycom revision for optimistic concurrency",()=>{expect(buildReconciledDrivers([event()],[{driver_id:"d",updated_at:"rev",paycom_hours:40}])[0].revision).toBe("rev");});
