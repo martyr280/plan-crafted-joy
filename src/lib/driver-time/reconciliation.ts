@@ -94,7 +94,7 @@ export function buildReconciledDrivers(events: any[], overrides: any[], includeW
     b.events.push(ev);
     const min = Number(ev.duration_min ?? 0);
     if (ev.superseded_at || ev.status === "excused") { b.excludedMinutes += min; }
-    else if (ev.needs_review || ev.location_source === "unknown" || !ev.hub) { b.unresolvedMinutes += min; }
+    else if ((ev.needs_review && ev.status === "new") || ev.location_source === "unknown" || !ev.hub) { b.unresolvedMinutes += min; }
     else {
       if (weekday(ev.event_date)) b.automatedMinutes += min;
       else b.weekendMinutes += min;
