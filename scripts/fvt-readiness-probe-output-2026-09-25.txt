@@ -1,1 +1,85 @@
-error: Module not found "scripts/fvt-readiness-probe.ts"
+admin user id: 0ad32eb4-d164-4305-927c-9d084aaacd49
+input: {"from":"2026-08-02","to":"2026-09-25","madeOnFrom":"2026-07-31","includeSpecial":false,"hub":null}
+rows: 54
+readiness.overall: {
+  "hub": "All hubs",
+  "n": 54,
+  "within5N": 12,
+  "within5": 0.2222222222222222,
+  "within10N": 18,
+  "within10": 0.3333333333333333,
+  "at10": {
+    "status": "below",
+    "hits": 18,
+    "n": 54,
+    "rate": 0.3333333333333333
+  },
+  "at5": {
+    "status": "below",
+    "hits": 12,
+    "n": 54,
+    "rate": 0.2222222222222222
+  }
+}
+readiness.byHub: [
+  {
+    "hub": "Dallas",
+    "n": 31,
+    "within5N": 6,
+    "within5": 0.1935483870967742,
+    "within10N": 11,
+    "within10": 0.3548387096774194,
+    "at10": {
+      "status": "below",
+      "hits": 11,
+      "n": 31,
+      "rate": 0.3548387096774194
+    },
+    "at5": {
+      "status": "below",
+      "hits": 6,
+      "n": 31,
+      "rate": 0.1935483870967742
+    }
+  },
+  {
+    "hub": "Birmingham",
+    "n": 1,
+    "within5N": 0,
+    "within5": 0,
+    "within10N": 1,
+    "within10": 1,
+    "at10": {
+      "status": "insufficient",
+      "hits": 1,
+      "n": 1,
+      "rate": 1
+    },
+    "at5": {
+      "status": "insufficient",
+      "hits": 0,
+      "n": 1,
+      "rate": 0
+    }
+  },
+  {
+    "hub": "Ocala",
+    "n": 22,
+    "within5N": 6,
+    "within5": 0.2727272727272727,
+    "within10N": 6,
+    "within10": 0.2727272727272727,
+    "at10": {
+      "status": "below",
+      "hits": 6,
+      "n": 22,
+      "rate": 0.2727272727272727
+    },
+    "at5": {
+      "status": "below",
+      "hits": 6,
+      "n": 22,
+      "rate": 0.2727272727272727
+    }
+  }
+]
