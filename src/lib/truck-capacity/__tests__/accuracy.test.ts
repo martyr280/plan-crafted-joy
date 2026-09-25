@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   cutoffDateForRun, pickForecastAtCutoff, weekStartSunday, metricsOf, aggregate,
-  byRouteWeek, daysBetween, isSpecialRoute, type CutoffLite, type LogRowLite, type ScoredRun,
+  byRouteWeek, daysBetween, isSpecialRoute, readinessOf, READINESS_GATE,
+  type CutoffLite, type LogRowLite, type ScoredRun,
 } from "../accuracy";
 
 // MTN: Tue 16:00 feeds Wed/Thu; Thu 17:00 feeds Mon/Tue.
@@ -134,7 +135,45 @@ describe("metrics sign convention", () => {
   });
 
   it("n=0 yields nulls, not zeros", () => {
-    expect(metricsOf([])).toEqual({ n: 0, mae: null, bias: null, within10: null, within15: null, within20: null });
+    expect(metricsOf([])).toEqual({
+      n: 0, mae: null, bias: null, within5: null, within10: null, within15: null, within20: null,
+      within5N: 0, within10N: 0,
+    });
+  });
+
+  it("within5 share and within5N/within10N counts", () => {
+    const m = metricsOf([0.03, -0.05, 0.07, -0.10, 0.12]);
+    expect(m.within5N).toBe(2);
+    expect(m.within10N).toBe(4);
+    expect(m.within5).toBeCloseTo(0.4, 10);
+    expect(m.within10).toBeCloseTo(0.8, 10);
+  });
+
+  it("float boundary: 0.65-0.55 is within 10, 0.62-0.57 is within 5, 0.101 is not within 10", () => {
+    expect(metricsOf([0.65 - 0.55]).within10N).toBe(1);
+    expect(metricsOf([0.62 - 0.57]).within5N).toBe(1);
+    expect(metricsOf([0.101]).within10N).toBe(0);
+  });
+});
+
+describe("readinessOf", () => {
+  const withHits = (hits: number, n: number) =>
+    metricsOf([...Array(hits).fill(0.02), ...Array(n - hits).fill(0.3)]);
+
+  it("met at exactly 8 of 10", () => {
+    expect(readinessOf(withHits(8, 10), 10)).toEqual({ status: "met", hits: 8, n: 10, rate: 0.8 });
+  });
+  it("below at 7 of 10", () => {
+    expect(readinessOf(withHits(7, 10), 10).status).toBe("below");
+  });
+  it("insufficient at n=9 even with 9 hits", () => {
+    expect(readinessOf(withHits(9, 9), 10)).toEqual({ status: "insufficient", hits: 9, n: 9, rate: 1 });
+  });
+  it("n=0 is insufficient with a null rate", () => {
+    expect(readinessOf(metricsOf([]), 5)).toEqual({ status: "insufficient", hits: 0, n: 0, rate: null });
+  });
+  it("gate constant", () => {
+    expect(READINESS_GATE).toEqual({ tolerancePts: 10, share: 0.8, label: "8 of every 10 runs within 10 points" });
   });
 });
 

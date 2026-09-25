@@ -128,25 +128,92 @@ export type AccuracyMetrics = {
   n: number;
   mae: number | null;
   bias: number | null;
+  within5: number | null;
   within10: number | null;
   within15: number | null;
   within20: number | null;
+  /** Scored runs behind within5 / within10 (0 when n=0). */
+  within5N: number;
+  within10N: number;
 };
 
-/** n=0 yields nulls, never NaN and never a fabricated zero. Tolerances in fractions. */
+/** Float-safe tolerance test in whole points: |0.65-0.55| counts as within 10. */
+export function withinPts(variance: number, tolPts: number): boolean {
+  return Math.abs(variance) * 100 <= tolPts + 1e-9;
+}
+
+/** n=0 yields nulls for rates and 0 for counts, never NaN and never a fabricated zero. */
 export function metricsOf(variances: number[]): AccuracyMetrics {
-  if (!variances.length) return { n: 0, mae: null, bias: null, within10: null, within15: null, within20: null };
+  if (!variances.length) {
+    return { n: 0, mae: null, bias: null, within5: null, within10: null, within15: null, within20: null, within5N: 0, within10N: 0 };
+  }
   const n = variances.length;
-  const abs = variances.map((v) => Math.abs(v));
-  const share = (tol: number) => abs.filter((a) => a <= tol).length / n;
+  const hits = (tol: number) => variances.filter((v) => withinPts(v, tol)).length;
+  const within5N = hits(5);
+  const within10N = hits(10);
   return {
     n,
-    mae: abs.reduce((s, a) => s + a, 0) / n,
+    mae: variances.reduce((s, v) => s + Math.abs(v), 0) / n,
     bias: variances.reduce((s, v) => s + v, 0) / n,
-    within10: share(0.10),
-    within15: share(0.15),
-    within20: share(0.20),
+    within5: within5N / n,
+    within10: within10N / n,
+    within15: hits(15) / n,
+    within20: hits(20) / n,
+    within5N,
+    within10N,
   };
+}
+
+export const READINESS_GATE = { tolerancePts: 10, share: 0.8, label: "8 of every 10 runs within 10 points" } as const;
+
+// UNCONFIRMED — minimum sample for a verdict is Marty's call, not the customer's.
+export const READINESS_MIN_RUNS = 10;
+
+export type ReadinessStatus = "met" | "below" | "insufficient";
+export type Readiness = { status: ReadinessStatus; hits: number; n: number; rate: number | null };
+
+export function readinessOf(m: AccuracyMetrics, tolerancePts: 5 | 10): Readiness {
+  const n = m.n;
+  const hits = tolerancePts === 5 ? m.within5N : m.within10N;
+  const rate = n > 0 ? hits / n : null;
+  if (n < READINESS_MIN_RUNS) return { status: "insufficient", hits, n, rate };
+  // Integer comparison: hits >= share*n, float-safe so 8 of 10 is met.
+  const met = hits + 1e-9 >= READINESS_GATE.share * n;
+  return { status: met ? "met" : "below", hits, n, rate };
+}
+
+export const READINESS_LABEL: Record<ReadinessStatus, string> = {
+  met: "Met",
+  below: "Below gate",
+  insufficient: "Too few runs (n<10)",
+};
+
+export type ReadinessRow = {
+  hub: string;
+  n: number;
+  within5N: number;
+  within5: number | null;
+  within10N: number;
+  within10: number | null;
+  at10: Readiness;
+  at5: Readiness;
+};
+
+export function readinessRow(hub: string, m: AccuracyMetrics): ReadinessRow {
+  return {
+    hub, n: m.n, within5N: m.within5N, within5: m.within5, within10N: m.within10N, within10: m.within10,
+    at10: readinessOf(m, 10), at5: readinessOf(m, 5),
+  };
+}
+
+/** Hubs in HUB_ORDER first, then alphabetically. */
+export const HUB_ORDER = ["Dallas", "Birmingham", "Ocala"];
+export function sortHubs(hubs: string[]): string[] {
+  return [...hubs].sort((a, b) => {
+    const ia = HUB_ORDER.indexOf(a), ib = HUB_ORDER.indexOf(b);
+    if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    return a.localeCompare(b);
+  });
 }
 
 export type RouteWeek = {
