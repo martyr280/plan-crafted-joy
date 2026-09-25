@@ -83,8 +83,8 @@ readiness.byHub: [
     }
   }
 ]
-coverage.logRowsFetched: undefined
-coverage.runRowsFetched: undefined
+coverage.logRowsFetched: 9495
+coverage.runRowsFetched: 102
 coverage.routeDaysWithActuals: 100
 coverage.unscoredNoForecast: 46
 distinct made_on among rows used: 4
