@@ -14,7 +14,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { KpiCard } from "@/components/shared/KpiCard";
 import { ChevronDown, Download, Loader2, Target, TrendingUp, Gauge, CalendarRange } from "lucide-react";
 import { getForecastVsTracker, exportForecastVsTracker } from "@/lib/truck-capacity.functions";
-import { ACCURACY_DEFAULT_MADE_FROM, weekStartSunday } from "@/lib/truck-capacity/accuracy";
+import {
+  ACCURACY_DEFAULT_MADE_FROM, weekStartSunday, READINESS_LABEL, type ReadinessStatus,
+} from "@/lib/truck-capacity/accuracy";
 
 const HUB_ORDER = ["Dallas", "Birmingham", "Ocala"];
 
@@ -23,6 +25,13 @@ const pts = (v: number | null | undefined, d = 0) =>
   v == null || !Number.isFinite(Number(v)) ? "—" : (Number(v) * 100).toFixed(d);
 const pctOf = (v: number | null | undefined) =>
   v == null || !Number.isFinite(Number(v)) ? "—" : `${Math.round(Number(v) * 100)}%`;
+const hitsCell = (hits: number, n: number, rate: number | null) =>
+  `${hits} of ${n} (${rate == null ? "—" : `${Math.round(rate * 100)}%`})`;
+
+function GateBadge({ status }: { status: ReadinessStatus }) {
+  const variant = status === "met" ? "default" : status === "below" ? "destructive" : "secondary";
+  return <Badge variant={variant}>{READINESS_LABEL[status]}</Badge>;
+}
 
 function addDays(iso: string, n: number): string {
   return new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -217,14 +226,48 @@ export function ForecastVsTracker() {
               sub="+ means Nelson forecast above the tracker" icon={<TrendingUp className="w-5 h-5" />}
             />
             <KpiCard
-              label="Within 15 pts" value={pctOf(data.overall.within15)}
-              sub="share of runs close enough to act on" icon={<Target className="w-5 h-5" />}
+              label="Within 10 pts" value={pctOf(data.overall.within10)}
+              sub={`${data.overall.within10N} of ${data.overall.n} runs · gate 8 of 10`} icon={<Target className="w-5 h-5" />}
             />
             <KpiCard
               label="Route-week miss" value={`${pts(data.weekLevel.mae, 1)} pts`}
               sub={`route-weeks with 2+ runs: ${data.weekLevel.n}`} icon={<CalendarRange className="w-5 h-5" />}
             />
           </div>
+
+          <Card className="p-4">
+            <h3 className="font-semibold mb-1">Readiness by hub</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Readiness gate: 8 of every 10 scored runs within 10 points of the tracker. The 5-point rate is shown alongside so a tighter gate can be chosen.
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Hub</TableHead>
+                  <TableHead className="text-right">Scored runs</TableHead>
+                  <TableHead className="text-right">Within 5 pts</TableHead>
+                  <TableHead className="text-right">Within 10 pts</TableHead>
+                  <TableHead>Gate at 10 pts</TableHead>
+                  <TableHead>Gate at 5 pts</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...data.readiness.byHub, data.readiness.overall].map((h) => {
+                  const total = h === data.readiness.overall;
+                  return (
+                    <TableRow key={total ? "__all" : h.hub} className={total ? "font-bold" : undefined}>
+                      <TableCell>{h.hub}</TableCell>
+                      <TableCell className="text-right">{h.n}</TableCell>
+                      <TableCell className="text-right">{hitsCell(h.within5N, h.n, h.within5)}</TableCell>
+                      <TableCell className="text-right">{hitsCell(h.within10N, h.n, h.within10)}</TableCell>
+                      <TableCell><GateBadge status={h.at10.status} /></TableCell>
+                      <TableCell><GateBadge status={h.at5.status} /></TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Card>
 
           <p className="text-xs text-muted-foreground">
             {HUB_ORDER.filter((h) => data.coverage.lastActualByHub?.[h])
