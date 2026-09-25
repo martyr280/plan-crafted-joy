@@ -267,6 +267,9 @@ export function ForecastVsTracker() {
                 })}
               </TableBody>
             </Table>
+            <p className="text-xs text-muted-foreground mt-2">
+              Built from {data.coverage.runRowsFetched} tracker rows and {data.coverage.logRowsFetched} logged forecasts.
+            </p>
           </Card>
 
           <p className="text-xs text-muted-foreground">
