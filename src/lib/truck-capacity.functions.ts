@@ -1063,6 +1063,8 @@ export async function buildForecastVsTracker(
       scoped: scope.scoped,
       repCode: scope.repCode,
       routesInScope: routes.length,
+      runRowsFetched: runRows.length,
+      logRowsFetched: logRows.length,
     },
   };
 }
@@ -1096,6 +1098,8 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
     put("Scored runs", res.overall.n);
     put("Route-days with tracker actuals", res.coverage.routeDaysWithActuals);
     put("Route-days with no usable forecast", res.coverage.unscoredNoForecast);
+    put("Tracker rows fetched", res.coverage.runRowsFetched);
+    put("Logged forecasts fetched", res.coverage.logRowsFetched);
     put("Typical miss (pts)", P(res.overall.mae, 1));
     put("Lean (pts, + = Nelson high)", P(res.overall.bias, 1));
     put("Within 10 pts (%)", P(res.overall.within10, 0));

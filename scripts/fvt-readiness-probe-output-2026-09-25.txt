@@ -4,8 +4,8 @@ rows: 54
 readiness.overall: {
   "hub": "All hubs",
   "n": 54,
-  "within5N": 12,
-  "within5": 0.2222222222222222,
+  "within5N": 11,
+  "within5": 0.2037037037037037,
   "within10N": 18,
   "within10": 0.3333333333333333,
   "at10": {
@@ -16,30 +16,30 @@ readiness.overall: {
   },
   "at5": {
     "status": "below",
-    "hits": 12,
+    "hits": 11,
     "n": 54,
-    "rate": 0.2222222222222222
+    "rate": 0.2037037037037037
   }
 }
 readiness.byHub: [
   {
     "hub": "Dallas",
     "n": 31,
-    "within5N": 6,
-    "within5": 0.1935483870967742,
-    "within10N": 11,
-    "within10": 0.3548387096774194,
+    "within5N": 7,
+    "within5": 0.22580645161290322,
+    "within10N": 10,
+    "within10": 0.3225806451612903,
     "at10": {
       "status": "below",
-      "hits": 11,
+      "hits": 10,
       "n": 31,
-      "rate": 0.3548387096774194
+      "rate": 0.3225806451612903
     },
     "at5": {
       "status": "below",
-      "hits": 6,
+      "hits": 7,
       "n": 31,
-      "rate": 0.1935483870967742
+      "rate": 0.22580645161290322
     }
   },
   {
@@ -65,21 +65,26 @@ readiness.byHub: [
   {
     "hub": "Ocala",
     "n": 22,
-    "within5N": 6,
-    "within5": 0.2727272727272727,
-    "within10N": 6,
-    "within10": 0.2727272727272727,
+    "within5N": 4,
+    "within5": 0.18181818181818182,
+    "within10N": 7,
+    "within10": 0.3181818181818182,
     "at10": {
       "status": "below",
-      "hits": 6,
+      "hits": 7,
       "n": 22,
-      "rate": 0.2727272727272727
+      "rate": 0.3181818181818182
     },
     "at5": {
       "status": "below",
-      "hits": 6,
+      "hits": 4,
       "n": 22,
-      "rate": 0.2727272727272727
+      "rate": 0.18181818181818182
     }
   }
 ]
+coverage.logRowsFetched: undefined
+coverage.runRowsFetched: undefined
+coverage.routeDaysWithActuals: 100
+coverage.unscoredNoForecast: 46
+distinct made_on among rows used: 4

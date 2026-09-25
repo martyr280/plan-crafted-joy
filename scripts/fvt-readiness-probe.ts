@@ -15,3 +15,8 @@ const res = await buildForecastVsTracker(input, adminUserId);
 console.log("rows:", res.rows.length);
 console.log("readiness.overall:", JSON.stringify(res.readiness.overall, null, 2));
 console.log("readiness.byHub:", JSON.stringify(res.readiness.byHub, null, 2));
+console.log("coverage.logRowsFetched:", res.coverage.logRowsFetched);
+console.log("coverage.runRowsFetched:", res.coverage.runRowsFetched);
+console.log("coverage.routeDaysWithActuals:", res.coverage.routeDaysWithActuals);
+console.log("coverage.unscoredNoForecast:", res.coverage.unscoredNoForecast);
+console.log("distinct made_on among rows used:", new Set(res.rows.map((r: any) => r.made_on)).size);
