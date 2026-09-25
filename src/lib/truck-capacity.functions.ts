@@ -938,18 +938,27 @@ export async function buildForecastVsTracker(
 
   const scope = await scopedRouteCodesFor(userId);
 
-  const [routeRes, runRes, logRes, cutRes] = await Promise.all([
+  const { fetchAllRows } = await import("./supabase-fetch-all");
+  // runs and forecast_log exceed PostgREST's 1,000-row cap; page them with a
+  // stable order so .range() windows neither skip nor repeat rows.
+  const [routeRes, runRows, logRows, cutRes] = await Promise.all([
     supabaseAdmin.from("truck_capacity_routes").select("id, code, name, hub, active, sort_order").limit(2000),
-    supabaseAdmin.from("truck_capacity_runs").select("route_id, run_date, capacity_frac")
+    fetchAllRows<any>((f, t) => supabaseAdmin.from("truck_capacity_runs").select("route_id, run_date, capacity_frac")
       // No-run markers (NULL capacity) are not tracker actuals — exclude them.
       .not("capacity_frac", "is", null)
-      .gte("run_date", from).lte("run_date", to).limit(100000),
-    supabaseAdmin.from("truck_capacity_forecast_log")
+      .gte("run_date", from).lte("run_date", to)
+      .order("route_id").order("run_date").order("run_seq")
+      .range(f, t)),
+    fetchAllRows<any>((f, t) => supabaseAdmin.from("truck_capacity_forecast_log")
       .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied")
-      .gte("forecast_date", from).lte("forecast_date", to).gte("made_on", madeOnFrom).limit(100000),
+      .gte("forecast_date", from).lte("forecast_date", to).gte("made_on", madeOnFrom)
+      .order("route_id").order("forecast_date").order("made_on")
+      .range(f, t)),
     supabaseAdmin.from("route_cutoffs").select("route_id, cutoff_dow, run_dows, active").eq("active", true).limit(5000),
   ]);
-  for (const r of [routeRes, runRes, logRes, cutRes]) if (r.error) throw new Error(r.error.message);
+  for (const r of [routeRes, cutRes]) if (r.error) throw new Error(r.error.message);
+  const runRes = { data: runRows };
+  const logRes = { data: logRows };
 
   const routes = (routeRes.data ?? []).filter((r: any) => r.active)
     .filter((r: any) => includeSpecial || !acc.isSpecialRoute(String(r.code)))
