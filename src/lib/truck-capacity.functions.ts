@@ -920,7 +920,7 @@ async function scopedRouteCodesFor(userId: string): Promise<{ scoped: boolean; r
  * prediction at every lead time. Here there is exactly one forecast per
  * route-day: the one a dispatcher could have acted on.
  */
-async function buildForecastVsTracker(
+export async function buildForecastVsTracker(
   input: z.infer<typeof fvtInput>,
   userId: string,
 ) {
@@ -1025,12 +1025,25 @@ async function buildForecastVsTracker(
   rows.sort((a, b) => a.run_date.localeCompare(b.run_date) || String(a.code).localeCompare(String(b.code)));
   const aggregates = acc.aggregate(rows as any);
 
+  // Every hub with an active in-scope route gets a row, even with 0 scored runs.
+  const hubNames = acc.sortHubs(Array.from(new Set<string>([
+    ...routes.map((r: any) => String(r.hub ?? "")),
+    ...rows.map((r) => String(r.hub ?? "")),
+  ])).filter(Boolean));
+  const readiness = {
+    gate: acc.READINESS_GATE,
+    overall: acc.readinessRow("All hubs", aggregates.overall),
+    byHub: hubNames.map((h) =>
+      acc.readinessRow(h, acc.metricsOf(rows.filter((r) => (r.hub ?? "") === h).map((r) => r.variance)))),
+  };
+
   const madeOns = (logs as any[]).map((l) => l.made_on).sort();
 
   return {
     window: { from, to, madeOnFrom, includeSpecial, hub: hubFilter },
     rows,
     ...aggregates,
+    readiness,
     coverage: {
       routeDaysWithActuals: actualAcc.size,
       scored: rows.length,
@@ -1056,6 +1069,7 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
   .inputValidator((i) => fvtInput.parse(i ?? {}))
   .handler(async ({ data, context }) => {
     const res = await buildForecastVsTracker(data, context.userId);
+    const accMod = await import("./truck-capacity/accuracy");
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
     const P = (v: number | null | undefined, d = 0) =>
@@ -1078,6 +1092,11 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
     put("Within 10 pts (%)", P(res.overall.within10, 0));
     put("Within 15 pts (%)", P(res.overall.within15, 0));
     put("Within 20 pts (%)", P(res.overall.within20, 0));
+    put("Within 5 pts (%)", P(res.overall.within5, 0));
+    put("Within 5 pts (runs)", res.overall.within5N);
+    put("Within 10 pts (runs)", res.overall.within10N);
+    put("Readiness gate", res.readiness.gate.label);
+    put("Gate status (all hubs)", accMod.READINESS_LABEL[res.readiness.overall.at10.status]);
     put("Route-week miss (pts)", P(res.weekLevel.mae, 1));
     put("Route-weeks with 2+ runs", res.weekLevel.n);
     put("");
@@ -1087,6 +1106,24 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
     put("Forecast 60 / tracker 77 = 17 points low.");
     put("Forecast at cutoff = last forecast recorded on or before the route's order cutoff.");
     s.getRow(1).font = { bold: true };
+
+    const rd = wb.addWorksheet("Readiness by hub");
+    rd.columns = [
+      { header: "Hub", key: "hub", width: 14 },
+      { header: "Scored runs", key: "n", width: 12 },
+      { header: "Within 5 pts (runs)", key: "w5n", width: 18 },
+      { header: "Within 5 pts (%)", key: "w5", width: 16 },
+      { header: "Within 10 pts (runs)", key: "w10n", width: 19 },
+      { header: "Within 10 pts (%)", key: "w10", width: 17 },
+      { header: "Gate at 10 pts", key: "g10", width: 20 },
+      { header: "Gate at 5 pts", key: "g5", width: 20 },
+    ];
+    rd.getRow(1).font = { bold: true };
+    for (const h of [...res.readiness.byHub, res.readiness.overall]) {
+      const row = rd.addRow({ hub: h.hub, n: h.n, w5n: h.within5N, w5: P(h.within5, 0), w10n: h.within10N,
+        w10: P(h.within10, 0), g10: accMod.READINESS_LABEL[h.at10.status], g5: accMod.READINESS_LABEL[h.at5.status] });
+      if (h === res.readiness.overall) row.font = { bold: true };
+    }
 
     const rw = wb.addWorksheet("Route-Weeks");
     rw.columns = [
