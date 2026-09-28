@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/shared/KpiCard";
+import { DrilldownSheet } from "@/components/sales-reports/DrilldownSheet";
+import type { DrilldownKind } from "@/lib/sales-reports.drilldown";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, ArrowUp, ArrowDown, RefreshCw, FileDown, AlertTriangle, TrendingDown, Undo2, BarChart3 } from "lucide-react";
@@ -60,6 +62,8 @@ function SalesReportsPage() {
 
   const [runId, setRunId] = useState<string | null>(null);
   const [selectedRep, setSelectedRep] = useState<string | null>(null);
+  const [repInsight, setRepInsight] = useState<Insight>("none");
+  const [drill, setDrill] = useState<DrilldownKind | null>(null);
 
   const runs = useSalesReportRuns();
   const overview = useSalesReportOverview(runId);
@@ -138,12 +142,29 @@ function SalesReportsPage() {
           reps={overview.data?.reps ?? []}
           monthLabel={monthLabel}
           loading={overview.isLoading}
-          onSelect={setSelectedRep}
+          onSelect={(rep) => { setRepInsight("none"); setSelectedRep(rep); }}
+          onDrill={setDrill}
+        />
+      )}
+
+      {canManage && (
+        <DrilldownSheet
+          kind={drill}
+          runId={runId}
+          monthLabel={monthLabel}
+          onClose={() => setDrill(null)}
+          onRep={(rep, k) => {
+            setDrill(null);
+            setRepInsight(k === "at_risk" ? "risk" : k === "win_back" ? "winback" : "none");
+            setSelectedRep(rep);
+          }}
         />
       )}
 
       {detailRep && (
         <RepDetail
+          key={`${detailRep}:${repInsight}`}
+          initialInsight={repInsight}
           rows={(detail.data?.rows ?? []) as SalesReportRow[]}
           monthLabel={monthLabel}
           year={activeRun?.period_year ?? new Date().getFullYear()}
@@ -164,10 +185,11 @@ function SalesReportsPage() {
 }
 
 type OverviewSort = keyof RepSummary;
+type Insight = "none" | "risk" | "declining" | "winback";
 
 function ManagerOverview({
-  reps, monthLabel, loading, onSelect,
-}: { reps: RepSummary[]; monthLabel: string; loading: boolean; onSelect: (rep: string) => void }) {
+  reps, monthLabel, loading, onSelect, onDrill,
+}: { reps: RepSummary[]; monthLabel: string; loading: boolean; onSelect: (rep: string) => void; onDrill: (k: DrilldownKind) => void }) {
   const [sort, setSort] = useState<OverviewSort>("ytd");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const click = (k: OverviewSort) => {
@@ -218,15 +240,16 @@ function ManagerOverview({
         </Card>
       )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="YTD sales (all reps)" value={money(totals.ytd)} icon={<BarChart3 className="w-5 h-5" />} />
-        <KpiCard label={`${monthLabel} sales`} value={money(totals.month)} icon={<BarChart3 className="w-5 h-5" />} />
+        <KpiCard label="YTD sales (all reps)" value={money(totals.ytd)} onClick={() => onDrill("ytd")} icon={<BarChart3 className="w-5 h-5" />} />
+        <KpiCard label={`${monthLabel} sales`} value={money(totals.month)} onClick={() => onDrill("month")} icon={<BarChart3 className="w-5 h-5" />} />
         <KpiCard
           label="Keep-level at risk"
           value={priceLevelMapped ? String(totals.risk) : "—"}
           sub={priceLevelMapped ? undefined : "Awaiting price-level mapping"}
+          onClick={priceLevelMapped ? () => onDrill("at_risk") : undefined}
           icon={<AlertTriangle className="w-5 h-5" />}
         />
-        <KpiCard label="Win-back candidates" value={String(totals.win)} icon={<Undo2 className="w-5 h-5" />} />
+        <KpiCard label="Win-back candidates" value={String(totals.win)} onClick={() => onDrill("win_back")} icon={<Undo2 className="w-5 h-5" />} />
       </div>
 
       <Card className="p-0 overflow-hidden">
@@ -292,8 +315,9 @@ type DetailSort =
   | "y_current" | "ann_current" | "pct" | "month_sales" | "month_profit";
 
 function RepDetail({
-  rows, monthLabel, year, loading, repCode, runId, onBack,
+  rows, monthLabel, year, loading, repCode, runId, onBack, initialInsight = "none",
 }: {
+  initialInsight?: Insight;
   rows: SalesReportRow[]; monthLabel: string; year: number; loading: boolean;
   repCode: string; runId: string | null; onBack?: () => void;
 }) {
@@ -302,7 +326,7 @@ function RepDetail({
   const [price, setPrice] = useState("all");
   const [bg, setBg] = useState("all");
   const [search, setSearch] = useState("");
-  const [insight, setInsight] = useState<"none" | "risk" | "declining" | "winback">("none");
+  const [insight, setInsight] = useState<Insight>(initialInsight);
   const exportWb = useExportRepWorkbook();
 
   const priceLevels = useMemo(() => [...new Set(rows.map((r) => r.price_level).filter(Boolean))] as string[], [rows]);
