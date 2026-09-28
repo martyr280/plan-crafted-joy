@@ -106,7 +106,7 @@ describe("buildDispatchPlanFromRows", () => {
     expect(wed.stops).toHaveLength(0);
     expect(wed.holds).toHaveLength(1);
     expect(wed.holds[0]!.holdReason).toBe("partial_allocation");
-    expect(wed.holds[0]!.stopNotes).toMatch(/2 of 5/);
+    expect(wed.holds[0]!.stopNotes).toMatch(/Short 3 units \(partial allocation\)/);
     expect(wed.totals.stopsHeld).toBe(1);
     expect(wed.totals.ordersTotal).toBe(1);
   });
