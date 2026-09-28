@@ -51,3 +51,23 @@ describe("sales report drilldown", () => {
     expect(toCsv(["A", "B"], [["a,b", 1]])).toBe('A,B\r\n"a,b",1\r\n');
   });
 });
+
+import { isAtRisk, isBelowTargetActive } from "../sales-reports.shared";
+describe("keep-level at risk rule (2026-09-28)", () => {
+  const t = (o: Partial<SalesReportRow>) => base({ keep_lvl_threshold: 10000, price_level: "L4", ...o });
+  it("met 2025 and below now → true", () => expect(isAtRisk(t({ y2025: 12000, ann_current: 8000 }))).toBe(true));
+  it("never met → false", () => expect(isAtRisk(t({ y2025: 9000, ann_current: 8000 }))).toBe(false));
+  it("met and still above → false", () => expect(isAtRisk(t({ y2025: 12000, ann_current: 11000 }))).toBe(false));
+  it("exempt → false", () => expect(isAtRisk(t({ keep_lvl_code: "ISG", y2025: 12000, ann_current: 1 }))).toBe(false));
+  it("no target → false", () => expect(isAtRisk(base({ y2025: 12000, ann_current: 1 }))).toBe(false));
+  it("below-target-active excludes zero-YTD and at-risk rows", () => {
+    expect(isBelowTargetActive(t({ y_current: 0, ann_current: 0, y2025: 0 }))).toBe(false);
+    expect(isBelowTargetActive(t({ y_current: 500, ann_current: 8000, y2025: 12000 }))).toBe(false);
+    expect(isBelowTargetActive(t({ y_current: 500, ann_current: 8000, y2025: 3000 }))).toBe(true);
+  });
+  it("drawer belowTarget never overlaps at-risk rows", () => {
+    const d = buildDrilldown(rows, "at_risk");
+    const risk = new Set(d.rows.map((r) => r.cust_code));
+    expect(d.belowTarget.some((r) => risk.has(r.cust_code))).toBe(false);
+  });
+});
