@@ -1,206 +1,198 @@
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/tz";
-// Template SQL + helpers for the per-rep "Sales Annualized" scheduled report.
-// Reproduces the layout of the Olivia/Mark/Hector/Michelle/Nikki workbooks.
+// Template SQL + helpers for the per-rep "Sales Annualized" report.
+// Reproduces the layout of the Upshaw (Olivia/Mark/Hector/Michelle/Nikki) workbooks.
 //
-// Tokens replaced at run time (in both preview and execute paths):
-//   {cy}        -> 4-digit current year, e.g. 2026
-//   {Mon}       -> short month name of the PREVIOUS completed calendar month,
-//                  e.g. "May" when run in June.
+// ─── SOURCE (verified through the bridge 2026-09-28) ────────────────────────
+// NDI (Kevin) owns the P21 joins in the P21_Analytics_PLAY database, schema
+// Sales. The bridge login's default database is P21, so ALWAYS use three-part
+// names. Building-block views:
+//  * P21_Analytics_PLAY.Sales.vwFactShipToSales — CompanyNo, CustomerID,
+//    ShipToID, InvoiceNo, InvoiceDate, SalesYear, SalesMonth, SalesAmount,
+//    ProfitAmount, ProductGroup, ProductClass. Already filtered to REGPROD.
+//    Sales = extended_price, Profit = extended_price - cogs_amount.
+//  * P21_Analytics_PLAY.Sales.vwShipToMaster — CompanyNo, CustomerID, ShipToID,
+//    ShipToName, City, State, BuyingGroup, SalesRepID, SalesRepName.
+//    The CURRENT rep on the ship-to owns its full sales history.
+//  * P21_Analytics_PLAY.Sales.vwCustomerPricing — CompanyNo, CustomerID,
+//    PriceLevel, TargetSales.
 //
-// The literal token __REPCODE__ is left in the template body; the schedule
-// author replaces it with the rep's salesrep id (= contacts.id) when creating
-// the row.
+// We do NOT query Kevin's Sales.vwShipToPerformance: it hardcodes May
+// (SalesMonth = 5, BETWEEN 1 AND 5, 12.0/5.0, "May Sales"). buildSalesReportSql
+// rebuilds its exact logic with period year Y and month M as integer literals.
+// Rules kept from Kevin's view:
+//  * TotalValue = Sales2022 + Sales2023 + Sales2024 + Sales2025 + SalesYTD
+//  * Annualized = SalesYTD * 12.0 / M
+//  * Pct = Annualized / Sales2025 - 1 (NULL when Sales2025 = 0)
+//    !! FLAG: Pct compares against the FIXED Sales2025 column. Correct for
+//    !! Y = 2026 only. For Y = 2027 onward this must become prior-year (Y-1) sales.
+//  * Keep Lvl = ISG/OP buying group code, else the SHORTFALL
+//    max(0, TargetSales - SalesYTD), else NULL. It is NOT a threshold.
+//  * Output column names are FIXED (no month/year in any name); the workbook
+//    export regenerates the Upshaw headers from the run's period.
 //
-// Keep this as a single WITH/SELECT statement. Some deployed P21 bridge agents
-// still enforce an older "SELECT or WITH only" guard and reject DECLARE batches.
+// Sales.SalesReportingExclusion exists but is deliberately NOT applied, matching
+// Kevin's view. Whether it should be is an open question for NDI.
 //
-// ─── VERIFIED SCHEMA (Kevin, NDI P21 admin — 2026-08-03) ────────────────────
-//  * dbo.customer HAS salesrep_id, customer_name.
-//    It does NOT have price1, class_id1, mail_city, mail_state.
-//  * dbo.invoice_line has NO extended_cost. Cost columns are cogs_amount
-//    (decimal 19,4), sales_cost, commission_cost, other_cost. It has
-//    invoice_no, order_no (varchar 8), item_id, item_desc, extended_price,
-//    inv_mast_uid, qty_shipped, line_no, product_group_id.
-//  * There is no usable dbo.salesrep. Reps are contacts. The primary rep for an
-//    order resolves via oe_hdr_salesrep (order_number = oe_hdr.order_no,
-//    primary_salesrep = 'Y') -> contacts.id.
-//  * oe_hdr has ship2_city / ship2_state / ship2_zip, shipping_route_uid,
-//    carrier_id, freight_code_uid.
+// Keep the SQL single-statement and comment-free: the installed agent (v1.0.0)
+// rejects semicolons and `--`, and sanitizeBridgeSql strips them anyway.
 // ────────────────────────────────────────────────────────────────────────────
 
-export const SALES_ANNUALIZED_SQL = `WITH ctx AS (
+const DB = "P21_Analytics_PLAY.Sales";
+
+/** Render the SQL with already-validated literal fragments. */
+function renderSalesSql(repLiteral: string, y: string, m: string): string {
+  return `WITH SalesByShipTo AS (
   SELECT
-    CAST('__REPCODE__' AS varchar(20)) AS rep_code,
-    CAST(GETDATE() AS date) AS today,
-    DATEADD(month, DATEDIFF(month, 0, GETDATE()) - 1, 0) AS prev_month_start,
-    DATEADD(month, DATEDIFF(month, 0, GETDATE()),     0) AS prev_month_end,
-    YEAR(GETDATE()) AS cy,
-    DATEFROMPARTS(YEAR(GETDATE()), 1, 1) AS yr_start,
-    DATEDIFF(day, DATEFROMPARTS(YEAR(GETDATE()), 1, 1), CAST(GETDATE() AS date)) + 1 AS days_elapsed
+    f.CompanyNo,
+    f.CustomerID,
+    f.ShipToID,
+    SUM(CASE WHEN f.SalesYear = 2022 THEN f.SalesAmount ELSE 0 END) AS Sales2022,
+    SUM(CASE WHEN f.SalesYear = 2023 THEN f.SalesAmount ELSE 0 END) AS Sales2023,
+    SUM(CASE WHEN f.SalesYear = 2024 THEN f.SalesAmount ELSE 0 END) AS Sales2024,
+    SUM(CASE WHEN f.SalesYear = 2025 THEN f.SalesAmount ELSE 0 END) AS Sales2025,
+    SUM(CASE WHEN f.SalesYear = ${y} AND f.SalesMonth BETWEEN 1 AND ${m} THEN f.SalesAmount ELSE 0 END) AS SalesYTD,
+    SUM(CASE WHEN f.SalesYear = ${y} AND f.SalesMonth = ${m} THEN f.SalesAmount ELSE 0 END) AS MonthSales,
+    SUM(CASE WHEN f.SalesYear = ${y} AND f.SalesMonth = ${m} THEN f.ProfitAmount ELSE 0 END) AS MonthProfit
+  FROM ${DB}.vwFactShipToSales f
+  WHERE f.SalesYear BETWEEN 2022 AND ${y}
+  GROUP BY f.CompanyNo, f.CustomerID, f.ShipToID
 ),
-scope AS (
-  -- Secondary scope source: customer-level default rep assignment.
-  SELECT c.customer_id
-  FROM dbo.customer c
-  CROSS JOIN ctx
-  WHERE c.salesrep_id = ctx.rep_code
-  UNION
-  -- Primary scope source: orders where this rep is the primary salesrep.
-  SELECT DISTINCT h.customer_id
-  FROM dbo.oe_hdr h
-  JOIN dbo.oe_hdr_salesrep hs
-    ON hs.order_number = h.order_no
-   AND hs.primary_salesrep = 'Y'
-  CROSS JOIN ctx
-  WHERE hs.salesrep_id = ctx.rep_code
-    AND h.order_date >= '2022-01-01'
-),
-inv AS (
-  -- Attribution: invoice_line.order_no -> oe_hdr -> oe_hdr_salesrep (primary).
-  -- Orders that carry no primary-salesrep row fall back to the customer's
-  -- default rep on dbo.customer.salesrep_id.
+Base AS (
   SELECT
-    ih.customer_id,
-    ih.invoice_date,
-    il.extended_price AS net,
-    -- >>> PROFIT BASIS — SINGLE POINT OF CHANGE <<<
-    -- invoice_line has no extended_cost at NDI. cogs_amount is used here.
-    -- TODO(go-live): reconcile cogs_amount vs sales_cost against ONE month of
-    -- Joseph's actual workbook numbers before trusting the profit column.
-    (il.extended_price - ISNULL(il.cogs_amount, 0)) AS gp
-  FROM dbo.invoice_hdr ih
-  JOIN dbo.invoice_line il ON il.invoice_no = ih.invoice_no
-  LEFT JOIN dbo.oe_hdr h ON h.order_no = il.order_no
-  LEFT JOIN dbo.oe_hdr_salesrep hs
-    ON hs.order_number = h.order_no
-   AND hs.primary_salesrep = 'Y'
-  LEFT JOIN dbo.customer c2 ON c2.customer_id = ih.customer_id
-  CROSS JOIN ctx
-  WHERE ih.invoice_date >= '2022-01-01'
-    AND ih.customer_id IN (SELECT customer_id FROM scope)
-    AND (
-      hs.salesrep_id = ctx.rep_code
-      OR (hs.salesrep_id IS NULL AND c2.salesrep_id = ctx.rep_code)
-    )
+    m.CompanyNo,
+    m.CustomerID,
+    m.ShipToID,
+    m.ShipToName,
+    m.City,
+    m.State,
+    m.BuyingGroup,
+    m.SalesRepID,
+    m.SalesRepName,
+    cp.PriceLevel,
+    cp.TargetSales,
+    ISNULL(s.Sales2022, 0) AS Sales2022,
+    ISNULL(s.Sales2023, 0) AS Sales2023,
+    ISNULL(s.Sales2024, 0) AS Sales2024,
+    ISNULL(s.Sales2025, 0) AS Sales2025,
+    ISNULL(s.SalesYTD, 0) AS SalesYTD,
+    ISNULL(s.MonthSales, 0) AS MonthSales,
+    ISNULL(s.MonthProfit, 0) AS MonthProfit
+  FROM ${DB}.vwShipToMaster m
+  LEFT JOIN SalesByShipTo s
+    ON s.CompanyNo = m.CompanyNo
+   AND s.CustomerID = m.CustomerID
+   AND s.ShipToID = m.ShipToID
+  LEFT JOIN ${DB}.vwCustomerPricing cp
+    ON cp.CompanyNo = m.CompanyNo
+   AND cp.CustomerID = m.CustomerID
+  WHERE m.SalesRepID = ${repLiteral}
 ),
-geo AS (
-  -- Interim City/St source: most-frequent ship-to on the customer's orders.
-  -- TODO: replace if NDI exposes a customer-level address source.
-  SELECT customer_id, ship_city, ship_state
-  FROM (
-    SELECT
-      h.customer_id,
-      h.ship2_city  AS ship_city,
-      h.ship2_state AS ship_state,
-      ROW_NUMBER() OVER (PARTITION BY h.customer_id ORDER BY COUNT(*) DESC) AS rn
-    FROM dbo.oe_hdr h
-    WHERE h.order_date >= '2022-01-01'
-    GROUP BY h.customer_id, h.ship2_city, h.ship2_state
-  ) g
-  WHERE g.rn = 1
-),
-agg AS (
+Calc AS (
   SELECT
-    customer_id,
-    SUM(net)                                                              AS total_value,
-    SUM(CASE WHEN YEAR(invoice_date)=2022   THEN net END)                 AS y2022,
-    SUM(CASE WHEN YEAR(invoice_date)=2023   THEN net END)                 AS y2023,
-    SUM(CASE WHEN YEAR(invoice_date)=2024   THEN net END)                 AS y2024,
-    SUM(CASE WHEN YEAR(invoice_date)=2025   THEN net END)                 AS y2025,
-    SUM(CASE WHEN YEAR(invoice_date)=ctx.cy    THEN net END)              AS y_cy,
-    SUM(CASE WHEN YEAR(invoice_date)=ctx.cy-1  THEN net END)              AS y_py,
-    SUM(CASE WHEN invoice_date>=ctx.prev_month_start AND invoice_date<ctx.prev_month_end THEN net END) AS m_sales,
-    SUM(CASE WHEN invoice_date>=ctx.prev_month_start AND invoice_date<ctx.prev_month_end THEN gp  END) AS m_profit
-  FROM inv
-  CROSS JOIN ctx
-  GROUP BY customer_id
+    b.*,
+    b.Sales2022 + b.Sales2023 + b.Sales2024 + b.Sales2025 + b.SalesYTD AS TotalValue,
+    b.SalesYTD * 12.0 / ${m} AS Annualized
+  FROM Base b
 )
 SELECT
-  c.customer_id                                                                 AS [Cust Code],
-  -- TODO: price level source unidentified at NDI (dbo.customer has no price1).
-  -- Probably comes from whatever feeds Joseph's report, NULL until confirmed.
-  CAST(NULL AS varchar(20))                                                     AS [Price],
-  -- TODO: buying group source unidentified at NDI (no class_id1).
-  CAST(NULL AS varchar(20))                                                     AS [BG],
-  c.customer_name                                                               AS [Customer Name],
-  geo.ship_city                                                                 AS [City],
-  geo.ship_state                                                                AS [St],
-  agg.total_value                                                               AS [Total Value],
-  agg.y2022                                                                     AS [Year 2022],
-  agg.y2023                                                                     AS [Year 2023],
-  agg.y2024                                                                     AS [Year 2024],
-  agg.y2025                                                                     AS [Year 2025],
-  agg.y_cy                                                                      AS [Year {cy}],
-  CAST(agg.y_cy * 365.0 / NULLIF(ctx.days_elapsed, 0) AS decimal(18,2))         AS [Ann {cy}],
-  CASE WHEN agg.y_py IS NULL OR agg.y_py = 0 THEN NULL
-       ELSE CAST((agg.y_cy * 365.0 / NULLIF(ctx.days_elapsed, 0) - agg.y_py) / agg.y_py AS decimal(18,4))
-  END                                                                           AS [Pct],
-  agg.m_sales                                                                   AS [{Mon} Sales],
-  agg.m_profit                                                                  AS [{Mon} Profit],
-  -- TODO: keep-level depends on the price-level mapping above, NULL until then.
-  CAST(NULL AS varchar(20))                                                     AS [Keep Lvl]
-FROM dbo.customer c
-JOIN agg ON agg.customer_id = c.customer_id
-LEFT JOIN geo ON geo.customer_id = c.customer_id
-CROSS JOIN ctx
-ORDER BY agg.m_sales DESC, agg.y_cy DESC;
-`;
+  c.ShipToID AS [Cust Code],
+  c.PriceLevel AS [Price],
+  CASE WHEN c.BuyingGroup IS NULL THEN 'N' ELSE c.BuyingGroup END AS [BG],
+  c.ShipToName AS [Customer Name],
+  c.City AS [City],
+  c.State AS [St],
+  CAST(c.TotalValue AS decimal(19,2)) AS [Total Value],
+  CAST(c.Sales2022 AS decimal(19,2)) AS [Year 2022],
+  CAST(c.Sales2023 AS decimal(19,2)) AS [Year 2023],
+  CAST(c.Sales2024 AS decimal(19,2)) AS [Year 2024],
+  CAST(c.Sales2025 AS decimal(19,2)) AS [Year 2025],
+  CAST(c.SalesYTD AS decimal(19,2)) AS [Year Current],
+  CAST(c.Annualized AS decimal(19,2)) AS [Ann Current],
+  CAST(CASE WHEN c.Sales2025 = 0 THEN NULL ELSE c.Annualized / NULLIF(c.Sales2025, 0) - 1 END AS decimal(19,4)) AS [Pct],
+  CAST(c.MonthSales AS decimal(19,2)) AS [Month Sales],
+  CAST(c.MonthProfit AS decimal(19,2)) AS [Month Profit],
+  CASE
+    WHEN c.BuyingGroup IN ('ISG', 'OP') THEN c.BuyingGroup
+    WHEN c.TargetSales IS NOT NULL THEN CONVERT(varchar(30), CAST(CASE WHEN c.TargetSales - c.SalesYTD < 0 THEN 0 ELSE c.TargetSales - c.SalesYTD END AS decimal(19,2)))
+    ELSE NULL
+  END AS [Keep Lvl],
+  c.CustomerID,
+  c.ShipToID,
+  c.SalesRepID,
+  c.SalesRepName,
+  c.BuyingGroup,
+  c.PriceLevel,
+  c.TargetSales
+FROM Calc c
+ORDER BY [Total Value] DESC`;
+}
 
+export type SalesReportSqlInput = { repCode: string; year: number; month: number };
+
+/** Validated, fully-substituted report SQL for one rep and one period. */
+export function buildSalesReportSql({ repCode, year, month }: SalesReportSqlInput): string {
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) throw new Error(`Invalid year: ${year}`);
+  if (!Number.isInteger(month) || month < 1 || month > 12) throw new Error(`Invalid month: ${month}`);
+  const code = String(repCode ?? "").trim();
+  if (!code) throw new Error("repCode is required");
+  // Pct note: see header — Sales2025 is fixed; for year >= 2027 this must become prior-year sales.
+  return renderSalesSql(`'${code.replace(/'/g, "''")}'`, String(year), String(month));
+}
+
+/**
+ * Template for the email-schedule path (sql_schedules). `__REPCODE__` is
+ * replaced when a schedule is seeded; `{py}` / `{pm}` are replaced at run time
+ * by interpolateScheduleTokens with the previous completed month's year and
+ * month number. Runs and the in-app test path use buildSalesReportSql.
+ */
+export const SALES_ANNUALIZED_SQL = renderSalesSql("'__REPCODE__'", "{py}", "{pm}");
 
 const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /**
- * Replace `{cy}` and `{Mon}` tokens in any SQL text. `{Mon}` is the short
- * name of the PREVIOUS completed calendar month relative to `now`.
- *
- * Safe to call on every schedule SQL — strings without the tokens are
- * returned unchanged.
+ * Replace `{cy}`, `{Mon}`, `{py}`, `{pm}` tokens in any SQL text.
+ * `{Mon}` / `{pm}` are the PREVIOUS completed calendar month relative to `now`;
+ * `{py}` is that month's year. Strings without tokens are returned unchanged.
  */
 export function interpolateScheduleTokens(sql: string, now: Date = new Date()): string {
-  if (!sql.includes("{cy}") && !sql.includes("{Mon}")) return sql;
+  if (!/\{(cy|Mon|py|pm)\}/.test(sql)) return sql;
   // Anchor to the Central calendar date: the P21 server's GETDATE() is Central wall-clock.
   const [cyNum, mNum] = dateStrInTz(now, CENTRAL_TZ).split("-").map(Number);
-  const cy = cyNum;
   const prevIdx = mNum === 1 ? 11 : mNum - 2;
-  const mon = SHORT_MONTHS[prevIdx];
-  return sql.replace(/\{cy\}/g, String(cy)).replace(/\{Mon\}/g, mon);
+  const py = mNum === 1 ? cyNum - 1 : cyNum;
+  return sql
+    .replace(/\{cy\}/g, String(cyNum))
+    .replace(/\{Mon\}/g, SHORT_MONTHS[prevIdx])
+    .replace(/\{py\}/g, String(py))
+    .replace(/\{pm\}/g, String(prevIdx + 1));
 }
 
 /**
- * Rep discovery. VERIFIED 2026-08-03: NDI has no usable dbo.salesrep — reps are
- * contacts, discovered through the distinct salesrep ids used on
- * oe_hdr_salesrep and resolved to dbo.contacts by contacts.id.
- *
- * NDI has 51 reps this way, but only 8 have an email populated in P21; the
- * other 43 need manually-entered recipients on their schedule.
- *
- * NOTE: the contacts name/email column names were NOT in Kevin's extract.
- * first_name / last_name / email_address are the standard P21 contacts shape —
- * CONFIRM before go-live and adjust the COALESCE below if this install differs.
+ * Rep discovery from Kevin's ship-to master (current rep on each ship-to).
+ * Emails come from P21.dbo.contacts; REP_DISCOVERY_SQL_NO_EMAIL is the
+ * fallback if the contacts email column is wrong on this install.
  */
-export const REP_DISCOVERY_SQL = `
-SELECT
-  reps.salesrep_id AS rep_code,
-  COALESCE(
-    NULLIF(LTRIM(RTRIM(ISNULL(ct.first_name, '') + ' ' + ISNULL(ct.last_name, ''))), ''),
-    reps.salesrep_id
-  ) AS rep_name,
-  NULLIF(LTRIM(RTRIM(ISNULL(ct.email_address, ''))), '') AS rep_email
-FROM (
-  SELECT DISTINCT hs.salesrep_id
-  FROM dbo.oe_hdr_salesrep hs
-  WHERE hs.salesrep_id IS NOT NULL
-    AND LTRIM(RTRIM(hs.salesrep_id)) <> ''
-) reps
-LEFT JOIN dbo.contacts ct ON ct.id = reps.salesrep_id
-ORDER BY rep_name
-`;
+export const REP_DISCOVERY_SQL = `SELECT m.SalesRepID AS rep_code, MAX(m.SalesRepName) AS rep_name, NULLIF(LTRIM(RTRIM(ISNULL(MAX(ct.email_address),''))),'') AS rep_email
+FROM ${DB}.vwShipToMaster m
+LEFT JOIN P21.dbo.contacts ct ON ct.id = m.SalesRepID
+WHERE m.SalesRepID IS NOT NULL AND LTRIM(RTRIM(m.SalesRepID)) <> ''
+GROUP BY m.SalesRepID
+ORDER BY rep_name`;
 
+export const REP_DISCOVERY_SQL_NO_EMAIL = `SELECT m.SalesRepID AS rep_code, MAX(m.SalesRepName) AS rep_name, CAST(NULL AS varchar(255)) AS rep_email
+FROM ${DB}.vwShipToMaster m
+WHERE m.SalesRepID IS NOT NULL AND LTRIM(RTRIM(m.SalesRepID)) <> ''
+GROUP BY m.SalesRepID
+ORDER BY rep_name`;
 
 /** Classification codes that are exempt from keep-level thresholds. */
 export const KEEP_LEVEL_EXEMPT = ["ISG", "OP", "MML1", "MML3", "L5", "E2G", "EMPLOYEE"] as const;
 
-/** Annual sales required to keep each price level. */
+/**
+ * Annual sales required to keep each price level. NOT used by the report run:
+ * the view's Keep Lvl is already the shortfall against vwCustomerPricing.TargetSales.
+ * Kept only for legacy UI fallbacks on old runs.
+ */
 export const KEEP_LEVEL_THRESHOLDS: Record<string, number> = {
   L1: 450000,
   L2: 200000,
