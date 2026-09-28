@@ -2282,6 +2282,7 @@ export type Database = {
           city: string | null
           created_at: string
           cust_code: string
+          customer_id: string | null
           customer_name: string | null
           id: string
           keep_lvl_code: string | null
@@ -2294,7 +2295,10 @@ export type Database = {
           rep_code: string
           rep_name: string | null
           run_id: string
+          sales_rep_id: string | null
+          ship_to_id: string | null
           state: string | null
+          target_sales: number | null
           total_value: number | null
           y_current: number | null
           y2022: number | null
@@ -2308,6 +2312,7 @@ export type Database = {
           city?: string | null
           created_at?: string
           cust_code: string
+          customer_id?: string | null
           customer_name?: string | null
           id?: string
           keep_lvl_code?: string | null
@@ -2320,7 +2325,10 @@ export type Database = {
           rep_code: string
           rep_name?: string | null
           run_id: string
+          sales_rep_id?: string | null
+          ship_to_id?: string | null
           state?: string | null
+          target_sales?: number | null
           total_value?: number | null
           y_current?: number | null
           y2022?: number | null
@@ -2334,6 +2342,7 @@ export type Database = {
           city?: string | null
           created_at?: string
           cust_code?: string
+          customer_id?: string | null
           customer_name?: string | null
           id?: string
           keep_lvl_code?: string | null
@@ -2346,7 +2355,10 @@ export type Database = {
           rep_code?: string
           rep_name?: string | null
           run_id?: string
+          sales_rep_id?: string | null
+          ship_to_id?: string | null
           state?: string | null
+          target_sales?: number | null
           total_value?: number | null
           y_current?: number | null
           y2022?: number | null
