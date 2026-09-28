@@ -73,11 +73,31 @@ export function keepThresholdFor(row: SalesReportRow): number | null {
   return code ? (KEEP_LEVEL_THRESHOLDS[code.toUpperCase()] ?? null) : null;
 }
 
-/** Annualized pace is below the threshold needed to keep the price level. */
+/**
+ * Keep-level at risk (rule changed 2026-09-28).
+ * In plain words: the account EARNED its level last year (2025 sales at or above
+ * its keep-level target) and is NOW on pace to lose it (annualized below target).
+ * Exempt codes and accounts with no target are never at risk.
+ * Why: the old rule ("annualized below target") flagged 615 accounts in run
+ * 14e3338d, but only 6 of them met their target in 2025 and 244 had no sales in
+ * 2025 or 2026. NDI customers almost never reach target, so the old rule flagged
+ * nearly every account with a price level. New rule: 615 -> 6.
+ */
 export function isAtRisk(r: SalesReportRow): boolean {
   if (isKeepLevelExempt(r.keep_lvl_code)) return false;
   const t = keepThresholdFor(r);
-  return t !== null && (r.ann_current ?? 0) < t;
+  return t !== null && (r.y2025 ?? 0) >= t && (r.ann_current ?? 0) < t;
+}
+
+/**
+ * Informational only (2026-09-28): buying this year but pacing below target,
+ * and not at risk under the rule above. Must NOT feed the card, the rep table
+ * "At risk" column, or the RepDetail risk badge.
+ */
+export function isBelowTargetActive(r: SalesReportRow): boolean {
+  if (isKeepLevelExempt(r.keep_lvl_code)) return false;
+  const t = keepThresholdFor(r);
+  return t !== null && (r.y_current ?? 0) > 0 && (r.ann_current ?? 0) < t && !isAtRisk(r);
 }
 
 /** Annualized pace more than 20% below prior year. */

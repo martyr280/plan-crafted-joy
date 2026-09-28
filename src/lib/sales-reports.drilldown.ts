@@ -1,7 +1,7 @@
 // Client-safe drill-down shaping for the Sales Reports manager KPI cards.
 // Totals are derived from summarizeByRep over the same rows the overview uses,
 // so the drawer total is identical (same summation order) to the card number.
-import { isAtRisk, isWinBack, summarizeByRep, type SalesReportRow, type RepSummary } from "./sales-reports.shared";
+import { isAtRisk, isBelowTargetActive, isWinBack, summarizeByRep, type SalesReportRow, type RepSummary } from "./sales-reports.shared";
 
 export type DrilldownKind = "ytd" | "month" | "at_risk" | "win_back";
 export const DRILLDOWN_KINDS: DrilldownKind[] = ["ytd", "month", "at_risk", "win_back"];
@@ -45,6 +45,8 @@ export type Drilldown = {
   count: number;
   rows: DrillRow[];
   reps: DrillRepRow[];
+  /** at_risk only: informational "below target, still buying" rows. Not counted in total/count. */
+  belowTarget: DrillRow[];
 };
 
 /** The number shown on the KPI card, computed exactly as ManagerOverview does. */
@@ -106,7 +108,8 @@ export function buildDrilldown(all: SalesReportRow[], kind: DrilldownKind): Dril
           active_customers: active.get(s.rep_code) ?? 0,
         }))
       : [];
-  return { kind, total, count: rows.length, rows, reps };
+  const belowTarget = kind === "at_risk" ? all.filter(isBelowTargetActive).map(slim) : [];
+  return { kind, total, count: rows.length, rows, reps, belowTarget };
 }
 
 export function csvCell(v: unknown): string {
