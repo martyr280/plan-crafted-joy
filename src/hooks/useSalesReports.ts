@@ -6,6 +6,7 @@ import {
   listSalesReportRuns,
   runSalesReportsNow,
   exportSalesRepWorkbook,
+  runSalesReportForRep,
 } from "@/lib/sales-reports.functions";
 
 export function useSalesReportRuns() {
@@ -61,6 +62,17 @@ export function useExportRepWorkbook() {
       a.download = res.filename;
       a.click();
       URL.revokeObjectURL(url);
+    },
+  });
+}
+
+export function useTestOneRep() {
+  const fn = useServerFn(runSalesReportForRep);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { repCode: string; year: number; month: number; persist: boolean }) => fn({ data: vars }),
+    onSuccess: (_r, vars) => {
+      if (vars.persist) qc.invalidateQueries({ queryKey: ["sales-report-runs"] });
     },
   });
 }

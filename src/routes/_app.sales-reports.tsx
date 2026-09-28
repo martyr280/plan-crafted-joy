@@ -17,6 +17,7 @@ import {
   useSalesRepDetail,
   useRunSalesReports,
   useExportRepWorkbook,
+  useTestOneRep,
 } from "@/hooks/useSalesReports";
 import { isAtRisk, isDeclining, isWinBack, isKeepLevelExempt, keepThresholdFor, hasPriceLevelMapping, type SalesReportRow, type RepSummary } from "@/lib/sales-reports.shared";
 
@@ -117,6 +118,8 @@ function SalesReportsPage() {
           )}
         </div>
       </div>
+
+      {isAdmin && <TestOneRep />}
 
       {activeRun?.error && (
         <Card className="p-3 text-sm border-destructive/40 text-destructive flex items-center gap-2">
@@ -497,5 +500,79 @@ function RepDetail({
         </Table>
       </Card>
     </div>
+  );
+}
+
+function TestOneRep() {
+  const test = useTestOneRep();
+  const now = new Date();
+  const [repCode, setRepCode] = useState("");
+  const [year, setYear] = useState(String(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()));
+  const [month, setMonth] = useState(String(now.getMonth() === 0 ? 12 : now.getMonth()));
+  const [persist, setPersist] = useState(false);
+  const res = test.data as any;
+  const run = () =>
+    test.mutate(
+      { repCode, year: Number(year), month: Number(month), persist },
+      { onError: (e: any) => toast.error(e?.message ?? "Test failed") },
+    );
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="text-sm font-medium">Test one rep (admin)</div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Input className="w-32" placeholder="Rep code" value={repCode} onChange={(e) => setRepCode(e.target.value)} />
+        <Input className="w-24" type="number" placeholder="Year" value={year} onChange={(e) => setYear(e.target.value)} />
+        <Input className="w-20" type="number" min={1} max={12} placeholder="Month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          <input type="checkbox" checked={persist} onChange={(e) => setPersist(e.target.checked)} /> Save as a run
+        </label>
+        <Button size="sm" onClick={run} disabled={!repCode.trim() || test.isPending}>
+          {test.isPending ? "Running…" : "Run"}
+        </Button>
+      </div>
+      {res && (
+        <div className="space-y-2 text-sm">
+          <div className="flex flex-wrap gap-4">
+            <span>Rows: <b>{res.rowCount}</b></span>
+            <span>Status: <b>{res.status}</b></span>
+            <span>Total Value: <b>{money(res.totals.total_value)}</b></span>
+            <span>Year Current: <b>{money(res.totals.y_current)}</b></span>
+            <span>Month Sales: <b>{money(res.totals.month_sales)}</b></span>
+            <span>Month Profit: <b>{money(res.totals.month_profit)}</b></span>
+            {res.runId && <span className="text-muted-foreground">Saved run {res.runId}</span>}
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {["Cust", "Price", "BG", "Customer", "City", "St", "Total", "YTD", "Ann", "Pct", "Mo Sales", "Mo Profit", "Keep"].map((h) => (
+                    <TableHead key={h}>{h}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {res.rows.map((r: SalesReportRow, i: number) => (
+                  <TableRow key={i}>
+                    <TableCell>{r.cust_code}</TableCell>
+                    <TableCell>{r.price_level ?? "—"}</TableCell>
+                    <TableCell>{r.bg ?? "—"}</TableCell>
+                    <TableCell>{r.customer_name}</TableCell>
+                    <TableCell>{r.city}</TableCell>
+                    <TableCell>{r.state}</TableCell>
+                    <TableCell>{money(r.total_value)}</TableCell>
+                    <TableCell>{money(r.y_current)}</TableCell>
+                    <TableCell>{money(r.ann_current)}</TableCell>
+                    <TableCell>{pctFmt(r.pct)}</TableCell>
+                    <TableCell>{money(r.month_sales)}</TableCell>
+                    <TableCell>{money(r.month_profit)}</TableCell>
+                    <TableCell>{r.keep_lvl_shortfall !== null && r.keep_lvl_shortfall !== undefined ? money(r.keep_lvl_shortfall) : (r.keep_lvl_code ?? "—")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

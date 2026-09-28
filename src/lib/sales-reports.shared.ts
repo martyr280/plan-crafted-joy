@@ -25,6 +25,10 @@ export type SalesReportRow = {
   keep_lvl_code: string | null;
   keep_lvl_threshold: number | null;
   keep_lvl_shortfall: number | null;
+  customer_id?: string | null;
+  ship_to_id?: string | null;
+  target_sales?: number | null;
+  sales_rep_id?: string | null;
 };
 
 export type RepSummary = {
