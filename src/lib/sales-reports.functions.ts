@@ -77,3 +77,18 @@ export const runSalesReportForRep = createServerFn({ method: "POST" })
     const { runSalesReportForRep: run } = await import("./sales-reports.server");
     return run({ ...data, triggeredBy: context.userId });
   });
+
+export const getSalesReportDrilldown = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { runId?: string | null; kind: string }) => {
+    const kinds = ["ytd", "month", "at_risk", "win_back"] as const;
+    if (!data || !kinds.includes(data.kind as any)) throw new Error("kind must be ytd | month | at_risk | win_back");
+    return { runId: data.runId ?? null, kind: data.kind as (typeof kinds)[number] };
+  })
+  .handler(async ({ data, context }) => {
+    const { resolveAccess } = await import("./sales-reports.access.server");
+    const access = await resolveAccess(context.supabase, context.userId);
+    if (!access.canManage) throw new Response("Forbidden", { status: 403 });
+    const { loadDrilldown } = await import("./sales-reports.access.server");
+    return loadDrilldown(context.supabase, data.runId, data.kind);
+  });
