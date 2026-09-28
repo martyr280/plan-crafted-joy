@@ -19,7 +19,9 @@
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
+import { assignRun, DATE_BASES, DATE_BASIS_COLUMN, type DateBasis } from "./dispatch/assign";
 import {
+  localDateIn,
   nextCutoff,
   runDatesFor,
   zonedWallToUtc,
@@ -101,24 +103,38 @@ export async function saveDispatchSettings(patch: Partial<DispatchSettings>): Pr
 
 /* -------------------------------------------------------------- bridge SQL */
 
-/** One SELECT, three-part name, no semicolons, no comments. */
-export function buildDispatchViewSql(viewName: string, routeCode: string, runDates: string[]): string {
+/** Columns read from vw_route_dispatch (Kevin's 44-column version, 2026-09). */
+export const DISPATCH_VIEW_COLUMNS = [
+  "pick_ticket_no", "order_no", "route_code", "ship_date", "customer_id", "customer_name", "ship_to_id",
+  "ship2_name", "ship2_addr1", "ship2_addr2", "ship2_city", "ship2_state", "ship2_zip", "delivery_instructions",
+  "est_weight_lbs", "est_cube_ft", "est_pallets", "line_count",
+  "pick_ticket_print_date", "earliest_required_date", "latest_required_date", "required_date_count",
+  "earliest_expedite_date", "latest_expedite_date", "earliest_pick_date", "latest_pick_date",
+  "earliest_required_transfer_ship_date", "latest_required_transfer_ship_date",
+  "requested_date", "requested_ship_date", "promise_date", "original_promise_date",
+  "routed_eta_date", "route_override_date", "second_route_override_date",
+  "lines_with_qty_to_pick", "pick_ticket_qty", "remaining_order_line_count", "remaining_order_qty",
+  "qty_on_pick_tickets", "qty_still_allocated", "qty_covered", "qty_short", "fulfillment_status",
+] as const;
+
+/**
+ * One SELECT, three-part name, no semicolons, no comments. ship_date is NULL
+ * on every row of the view, so runs are assigned in app code from the chosen
+ * date basis (dispatch/assign.ts), not filtered in SQL. routeCode null = all rows.
+ */
+export function buildDispatchViewSql(viewName: string, routeCode: string | null): string {
   const safeView = String(viewName ?? "").trim();
   if (!/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/.test(safeView)) {
     throw new Error(`Invalid dispatch view name: ${viewName}`);
   }
-  const code = String(routeCode ?? "").replace(/'/g, "''");
-  const dates = runDates
-    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-    .map((d) => `'${d}'`)
-    .join(", ");
-  if (!dates) throw new Error("No valid run dates for dispatch query");
-  return (
-    `SELECT pick_ticket_no, order_no, route_code, ship_date, customer_id, customer_name, ship_to_id, ` +
-    `ship2_name, ship2_addr1, ship2_addr2, ship2_city, ship2_state, ship2_zip, delivery_instructions, ` +
-    `est_weight_lbs, est_cube_ft, est_pallets, line_count, total_lines_allocated ` +
-    `FROM ${safeView} WHERE route_code = '${code}' AND CAST(ship_date AS date) IN (${dates})`
-  );
+  const where = routeCode == null ? "" : ` WHERE route_code = '${String(routeCode).replace(/'/g, "''")}'`;
+  return `SELECT ${DISPATCH_VIEW_COLUMNS.join(", ")} FROM ${safeView}${where}`;
+}
+
+export async function getDispatchDateBasis(): Promise<DateBasis> {
+  const { data } = await (db() as any).from("truck_capacity_settings").select("dispatch_date_basis").limit(1).maybeSingle();
+  const v = data?.dispatch_date_basis as DateBasis | undefined;
+  return v && DATE_BASES.includes(v) ? v : "pick_ticket_print";
 }
 
 function lockAtFor(runDate: string, lockOffset: string, tz: string): string | null {
@@ -182,10 +198,19 @@ export async function buildDispatchPlanForRun(routeId: string, runDate?: string)
   let rows: P21DispatchRow[] = [];
   let bridgeJobId: string | null = null;
   try {
-    const sql = buildDispatchViewSql(settings.viewName, route.p21_route_code || routeCode, runDates);
+    const p21Code = route.p21_route_code || routeCode;
+    const sql = buildDispatchViewSql(settings.viewName, p21Code);
     const { jobId, result } = await runJob("sql.select", { sql, slug: "dispatch" }, 60000);
     bridgeJobId = jobId as string;
-    rows = ((result as any)?.rows ?? []) as P21DispatchRow[];
+    const all = ((result as any)?.rows ?? []) as P21DispatchRow[];
+    // Keep only tickets the date basis assigns to one of this cutoff's run dates.
+    const basis = await getDispatchDateBasis();
+    const today = localDateIn("America/Chicago", new Date());
+    const codeCutoffs = cutoffs.filter((c) => (c.p21_code ?? p21Code) === p21Code);
+    rows = all.filter((r) => {
+      const a = assignRun((r as any)[DATE_BASIS_COLUMN[basis]], codeCutoffs, today);
+      return a.status === "assigned" && runDates.includes(a.runDate);
+    });
   } catch (e: any) {
     const msg = `Bridge query failed: ${e?.message ?? String(e)}`;
     await recordRunError(routeId, routeCode, runDates, tz, settings, msg, bridgeJobId);

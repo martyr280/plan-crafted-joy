@@ -18,10 +18,12 @@ import { AlertTriangle, CheckCircle2, Clock, Hammer, Loader2, MapPin, Printer, R
 import { useAuth } from "@/lib/auth";
 import { useModuleView } from "@/lib/usage-log";
 import { buildLoadSheet } from "@/lib/dispatch/loadsheet";
+import { TicketBoard } from "@/components/dispatch/TicketBoard";
+import { DATE_BASES, DATE_BASIS_LABEL } from "@/lib/dispatch/assign";
 import {
   useAddressQueue, useApproveAndPush, useBuildRunNow, useCancelRun, useDispatchRun, useDispatchRuns,
   useDispatchSettings, useDriverMappings, useImportSequencePaste, usePreviewDelta, useResolveAddress,
-  useSaveDispatchSettings, useSaveDriverMapping, useSequenceTemplate, useSuggestAddressMatches,
+  useSaveDispatchSettings, useSaveDriverMapping, useDispatchBoard, useSaveDispatchDateBasis, useSequenceTemplate, useSuggestAddressMatches,
 } from "@/hooks/useDispatch";
 
 export const Route = createFileRoute("/_app/dispatch")({
@@ -123,6 +125,7 @@ function DispatchPage() {
 
       <Tabs defaultValue="board">
         <TabsList>
+          <TabsTrigger value="tickets">Tickets by cutoff</TabsTrigger>
           <TabsTrigger value="board">Runs board</TabsTrigger>
           <TabsTrigger value="addresses">Address review</TabsTrigger>
           <TabsTrigger value="sequence">Sequence editor</TabsTrigger>
@@ -154,6 +157,10 @@ function DispatchPage() {
               </Card>
             </div>
           ))}
+        </TabsContent>
+
+        <TabsContent value="tickets" className="mt-4">
+          <TicketBoard />
         </TabsContent>
 
         <TabsContent value="addresses" className="mt-4">
@@ -686,6 +693,22 @@ function SequenceTab({ routes, canWrite }: { routes: any[]; canWrite: boolean })
 
 /* -------------------------------------------------------------- settings */
 
+function DateBasisSelect() {
+  const board = useDispatchBoard();
+  const save = useSaveDispatchDateBasis();
+  const value = (board.data as any)?.basis ?? "pick_ticket_print";
+  return (
+    <div className="sm:col-span-4">
+      <Label className="text-xs">Date that puts a ticket on a truck</Label>
+      <Select value={value} onValueChange={(v) => save.mutate(v as any, { onSuccess: () => toast.success("Date basis saved") })}>
+        <SelectTrigger className="max-w-sm"><SelectValue /></SelectTrigger>
+        <SelectContent>{DATE_BASES.map((k) => <SelectItem key={k} value={k}>{DATE_BASIS_LABEL[k]}</SelectItem>)}</SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground mt-1">Pending Joe Green's confirmation. Default: pick ticket print date.</p>
+    </div>
+  );
+}
+
 function SettingsCard({ routes, isAdmin }: { routes: any[]; isAdmin: boolean }) {
   const q = useDispatchSettings();
   const save = useSaveDispatchSettings();
@@ -732,6 +755,7 @@ function SettingsCard({ routes, isAdmin }: { routes: any[]; isAdmin: boolean }) 
               <Input defaultValue={s.viewName} disabled={!isAdmin}
                 onBlur={(e) => save.mutate({ viewName: e.target.value })} />
             </div>
+            {isAdmin && <DateBasisSelect />}
             <div className="flex items-end gap-2">
               <Switch checked={s.viewAvailable} disabled={!isAdmin} onCheckedChange={(v) => save.mutate({ viewAvailable: v })} />
               <span className="text-sm">Source view available</span>

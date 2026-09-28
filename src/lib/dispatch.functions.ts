@@ -557,3 +557,63 @@ export const saveDriverMapping = createServerFn({ method: "POST" })
     if (error) return { ok: false as const, error: error.message };
     return { ok: true as const };
   });
+
+/* ---------------------------------------------- P21 tickets board (2026-09) */
+
+async function boardFromRows(rows: any[], jobId: string | null, pulledAt: string | null) {
+  const { getDispatchDateBasis } = await import("@/lib/dispatch.server");
+  const { buildDispatchBoard } = await import("@/lib/dispatch/board");
+  const { localDateIn } = await import("@/lib/truck-capacity/cutoffs");
+  const today = localDateIn("America/Chicago", new Date());
+  const [basis, { data: cutoffs }, { data: settings }, { data: demand }] = await Promise.all([
+    getDispatchDateBasis(),
+    db().from("route_cutoffs").select("route_id, p21_code, cutoff_dow, cutoff_time, run_dows, active").eq("active", true).limit(2000),
+    db().from("truck_capacity_settings").select("excluded_p21_codes").limit(1).maybeSingle(),
+    db().from("truck_capacity_p21_demand")
+      .select("route_id, ship_date, order_count, total_cube_ft, projected_capacity_frac, snapshot_at")
+      .gte("ship_date", today).order("ship_date").order("route_id").order("snapshot_at", { ascending: false }).limit(5000),
+  ]);
+  const board = buildDispatchBoard(rows, cutoffs ?? [], demand ?? [], {
+    basis, today, excludedCodes: (settings?.excluded_p21_codes ?? []) as string[],
+  });
+  return { ...board, jobId, pulledAt };
+}
+
+/** Latest board from the most recent dispatch-board bridge pull (no new job). */
+export const getDispatchBoard = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireViewer(context.userId);
+    const { data: job } = await db()
+      .from("p21_bridge_jobs")
+      .select("id, result, completed_at, created_at")
+      .eq("kind", "sql.select").eq("status", "done").eq("payload->>slug", "dispatch-board")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (!job) return null;
+    return boardFromRows(job.result?.rows ?? [], job.id, job.completed_at ?? job.created_at);
+  });
+
+/** Refresh: one sql.select bridge job against vw_route_dispatch, then rebuild. */
+export const refreshDispatchBoard = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireViewer(context.userId);
+    const { getDispatchSettings, buildDispatchViewSql } = await import("@/lib/dispatch.server");
+    const { runJob } = await import("@/lib/p21.server");
+    const s = await getDispatchSettings();
+    const sql = buildDispatchViewSql(s.viewName, null);
+    const { jobId, result } = await runJob("sql.select", { sql, slug: "dispatch-board" }, 90000);
+    return boardFromRows((result as any)?.rows ?? [], jobId as string, new Date().toISOString());
+  });
+
+export const saveDispatchDateBasis = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ basis: z.enum(["pick_ticket_print", "earliest_required", "requested", "promise"]) }).parse(i))
+  .handler(async ({ data, context }) => {
+    await requireAdmin(context.userId);
+    const { data: row } = await db().from("truck_capacity_settings").select("id").limit(1).maybeSingle();
+    if (!row) throw new Error("truck_capacity_settings row missing");
+    const { error } = await db().from("truck_capacity_settings").update({ dispatch_date_basis: data.basis, updated_by: context.userId }).eq("id", row.id);
+    if (error) throw new Error(error.message);
+    return { basis: data.basis };
+  });

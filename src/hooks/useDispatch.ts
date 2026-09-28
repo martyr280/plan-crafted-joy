@@ -21,7 +21,30 @@ import {
   saveDriverMapping,
   saveSequenceTemplate,
   suggestAddressMatches,
+  getDispatchBoard,
+  refreshDispatchBoard,
+  saveDispatchDateBasis,
 } from "@/lib/dispatch.functions";
+
+export function useDispatchBoard() {
+  const fn = useServerFn(getDispatchBoard);
+  return useQuery({ queryKey: ["dispatch", "board"], queryFn: () => fn() });
+}
+
+export function useRefreshDispatchBoard() {
+  const fn = useServerFn(refreshDispatchBoard);
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: () => fn(), onSuccess: (b) => qc.setQueryData(["dispatch", "board"], b) });
+}
+
+export function useSaveDispatchDateBasis() {
+  const fn = useServerFn(saveDispatchDateBasis);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (basis: "pick_ticket_print" | "earliest_required" | "requested" | "promise") => fn({ data: { basis } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dispatch", "board"] }),
+  });
+}
 
 export function useDispatchRuns() {
   const fn = useServerFn(listDispatchRuns);
