@@ -1,3 +1,4 @@
+import { fetchAllRows } from "./supabase-fetch-all";
 // Server-only helpers for the Sales Reports module (replaces the 25 monthly
 // per-salesperson "Upshaw" Excel workbooks).
 //
@@ -280,18 +281,28 @@ export async function runSalesReportForRep(opts: {
 
 /** Paginated fetch of every row on a run (bypasses the 1000-row Data API cap). */
 export async function fetchRunRows(client: any, runId: string, repCode?: string | null): Promise<SalesReportRow[]> {
-  const out: SalesReportRow[] = [];
-  const page = 1000;
-  for (let from = 0; ; from += page) {
-    let q = client.from("sales_report_rows").select("*").eq("run_id", runId).order("month_sales", { ascending: false });
+  // month_sales is heavily tied (most rows are 0), so id is the unique
+  // tiebreaker that keeps page boundaries stable across .range() windows.
+  const rows = await fetchAllRows<SalesReportRow>((from, to) => {
+    let q = client
+      .from("sales_report_rows")
+      .select("*")
+      .eq("run_id", runId)
+      .order("month_sales", { ascending: false })
+      .order("id", { ascending: true });
     if (repCode) q = q.eq("rep_code", repCode);
-    const { data, error } = await q.range(from, from + page - 1);
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as SalesReportRow[];
-    out.push(...rows);
-    if (rows.length < page) break;
+    return q.range(from, to);
+  });
+  assertUniqueIds(rows);
+  return rows;
+}
+
+/** Refuse to return a paged set that contains duplicate row ids. */
+export function assertUniqueIds(rows: { id?: string }[]) {
+  const ids = new Set(rows.map((r) => r.id));
+  if (ids.size !== rows.length) {
+    throw new Error(`sales_report_rows paging returned ${rows.length} rows but ${ids.size} distinct ids; refusing to use an unstable row set`);
   }
-  return out;
 }
 
 /** Rebuild the original workbook layout for one rep. */
