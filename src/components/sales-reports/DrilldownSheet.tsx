@@ -208,12 +208,28 @@ export function DrilldownSheet({
       { key: "rep", label: "Rep", value: (r) => r.rep_name, rep: true },
       { key: "pl", label: "Price level", value: (r) => r.price_level },
       { key: "target", label: "Target", num: true, value: (r) => r.target, fmt: money, foot: "sum" },
+      { key: "y2025", label: "2025 sales", num: true, value: (r) => r.y2025, fmt: money, foot: "sum" },
       { key: "ann", label: "Annualized", num: true, value: (r) => r.ann_current, fmt: money, foot: "sum" },
       { key: "gap", label: "Gap to target", num: true, value: (r) => r.gap, fmt: money, foot: "sum" },
       { key: "ytd", label: "YTD", num: true, value: (r) => r.y_current, fmt: money, foot: "sum" },
       { key: "kl", label: "Keep Lvl", value: (r) => r.keep_lvl_code ?? (r.keep_lvl_shortfall === null ? null : money(r.keep_lvl_shortfall)) },
     ];
-    body = <DrillTable rows={d.rows} cols={cols} defaultSort="gap" searchText={custSearch} onRep={rep} filename={file("list")} />;
+    body = (
+      <Tabs defaultValue="risk">
+        <TabsList>
+          <TabsTrigger value="risk">At risk ({d.rows.length.toLocaleString()})</TabsTrigger>
+          <TabsTrigger value="below">Below target, still buying ({d.belowTarget.length.toLocaleString()})</TabsTrigger>
+        </TabsList>
+        <TabsContent value="risk">
+          <p className="text-sm text-muted-foreground mb-2">Met target in 2025, now pacing below.</p>
+          <DrillTable rows={d.rows} cols={cols} defaultSort="gap" searchText={custSearch} onRep={rep} filename={file("at-risk")} />
+        </TabsContent>
+        <TabsContent value="below">
+          <p className="text-sm text-muted-foreground mb-2" data-testid="below-note">Informational. Not counted in the card.</p>
+          <DrillTable rows={d.belowTarget} cols={cols} defaultSort="gap" searchText={custSearch} onRep={rep} filename={file("below-target")} />
+        </TabsContent>
+      </Tabs>
+    );
   } else if (d && kind === "win_back") {
     const cols: Col<DrillRow>[] = [
       { key: "code", label: "Cust Code", value: (r) => r.cust_code, foot: cnt },
