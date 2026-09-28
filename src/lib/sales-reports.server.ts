@@ -334,10 +334,11 @@ export async function buildRepWorkbook(
   ];
 
   for (const r of rows) {
-    const keep = isKeepLevelExempt(r.keep_lvl_code)
-      ? r.keep_lvl_code
-      : r.keep_lvl_shortfall !== null
-        ? r.keep_lvl_shortfall
+    // Keep Lvl cell: the code (ISG/OP...) or the shortfall number, as the view emits it.
+    const keep = r.keep_lvl_shortfall !== null && r.keep_lvl_shortfall !== undefined
+      ? r.keep_lvl_shortfall
+      : isKeepLevelExempt(r.keep_lvl_code) || r.keep_lvl_code
+        ? r.keep_lvl_code
         : null;
     const row = ws.addRow([
       r.cust_code, r.price_level, r.bg, r.customer_name, r.city, r.state,

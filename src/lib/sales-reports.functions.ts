@@ -60,3 +60,20 @@ export const exportSalesRepWorkbook = createServerFn({ method: "POST" })
       contentBase64: buffer.toString("base64"),
     };
   });
+
+export const runSalesReportForRep = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { repCode: string; year: number; month: number; persist: boolean }) => {
+    if (!data || typeof data.repCode !== "string" || !data.repCode.trim()) throw new Error("repCode is required");
+    const year = Number(data.year);
+    const month = Number(data.month);
+    if (!Number.isInteger(year) || year < 2020 || year > 2100) throw new Error("year must be 2020-2100");
+    if (!Number.isInteger(month) || month < 1 || month > 12) throw new Error("month must be 1-12");
+    return { repCode: data.repCode.trim(), year, month, persist: !!data.persist };
+  })
+  .handler(async ({ data, context }) => {
+    const { assertAdmin } = await import("./p21.server");
+    await assertAdmin(context.supabase, context.userId);
+    const { runSalesReportForRep: run } = await import("./sales-reports.server");
+    return run({ ...data, triggeredBy: context.userId });
+  });
