@@ -46,7 +46,8 @@ function row(over: Partial<P21DispatchRow> = {}): P21DispatchRow {
     est_cube_ft: 40,
     est_pallets: 2,
     line_count: 5,
-    total_lines_allocated: 5,
+    fulfillment_status: "FULL",
+    qty_short: 0,
     ...over,
   } as P21DispatchRow;
 }
@@ -91,7 +92,7 @@ describe("buildDispatchPlanFromRows", () => {
     const rows = [
       row(),
       row({ order_no: "CANCEL", cancel_flag: "Y" } as Partial<P21DispatchRow>),
-      row({ order_no: "EMPTY", line_count: 0, total_lines_allocated: 0 }),
+      row({ order_no: "EMPTY", line_count: 0 }),
     ];
     const plan = buildDispatchPlanFromRows(rows, MAP, TEMPLATE, CUTOFF, CONFIG);
     const all = plan.runs.flatMap((r) => [...r.stops, ...r.holds]).map((s) => s.orderNo);
@@ -99,7 +100,7 @@ describe("buildDispatchPlanFromRows", () => {
   });
 
   it("holds partial allocations without dropping them", () => {
-    const rows = [row({ order_no: "PART", total_lines_allocated: 2 })];
+    const rows = [row({ order_no: "PART", fulfillment_status: "PARTIAL", qty_short: 3 })];
     const plan = buildDispatchPlanFromRows(rows, MAP, TEMPLATE, CUTOFF, CONFIG);
     const wed = plan.runs[0]!;
     expect(wed.stops).toHaveLength(0);

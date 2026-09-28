@@ -34,7 +34,34 @@ export type P21DispatchRow = {
   est_cube_ft: number | null;
   est_pallets: number | null;
   line_count: number | null;
-  total_lines_allocated: number | null;
+  // --- Added by Kevin 2026-09 (total_lines_allocated was REMOVED) ---------
+  pick_ticket_print_date?: string | null;
+  earliest_required_date?: string | null;
+  latest_required_date?: string | null;
+  required_date_count?: number | null;
+  earliest_expedite_date?: string | null;
+  latest_expedite_date?: string | null;
+  earliest_pick_date?: string | null;
+  latest_pick_date?: string | null;
+  earliest_required_transfer_ship_date?: string | null;
+  latest_required_transfer_ship_date?: string | null;
+  requested_date?: string | null;
+  requested_ship_date?: string | null;
+  promise_date?: string | null;
+  original_promise_date?: string | null;
+  routed_eta_date?: string | null;
+  route_override_date?: string | null;
+  second_route_override_date?: string | null;
+  lines_with_qty_to_pick?: number | null;
+  pick_ticket_qty?: number | null;
+  remaining_order_line_count?: number | null;
+  remaining_order_qty?: number | null;
+  qty_on_pick_tickets?: number | null;
+  qty_still_allocated?: number | null;
+  qty_covered?: number | null;
+  qty_short?: number | null;
+  /** 'FULL' | 'PARTIAL' */
+  fulfillment_status?: string | null;
   /** Not in the documented contract; honored when the view supplies it. */
   cancel_flag?: string | null;
 };
@@ -107,6 +134,14 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Short-ticket hold: fulfillment_status PARTIAL or qty_short > 0. Null when not held. */
+export function shortHoldReason(row: Pick<P21DispatchRow, "fulfillment_status" | "qty_short">): string | null {
+  const partial = String(row.fulfillment_status ?? "").trim().toUpperCase() === "PARTIAL";
+  const short = num(row.qty_short);
+  if (!partial && short <= 0) return null;
+  return `Short ${short.toLocaleString("en-US", { maximumFractionDigits: 2 })} units (partial allocation)`;
+}
+
 function isCancelled(row: P21DispatchRow): boolean {
   const f = String(row.cancel_flag ?? "").trim().toUpperCase();
   return f === "Y" || f === "1" || f === "TRUE";
@@ -170,12 +205,11 @@ export function buildDispatchPlanFromRows(
     let holdReason: string | null = null;
     const notes: string[] = [];
 
-    if (num(row.total_lines_allocated) < num(row.line_count)) {
+    const short = shortHoldReason(row);
+    if (short) {
       hold = true;
       holdReason = "partial_allocation";
-      notes.push(
-        `Partial allocation: ${num(row.total_lines_allocated)} of ${num(row.line_count)} lines allocated`,
-      );
+      notes.push(short);
     }
 
     if (!usableAddressId) {
