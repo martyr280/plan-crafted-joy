@@ -19,6 +19,7 @@ import {
 import { isKeepLevelExempt, summarizeByRep, type SalesReportRow } from "./sales-reports.shared";
 
 export { summarizeByRep, isAtRisk, isDeclining, isWinBack, isKeepLevelExempt } from "./sales-reports.shared";
+import { isAtRisk as isAtRiskShared } from "./sales-reports.shared";
 export type { SalesReportRow, RepSummary } from "./sales-reports.shared";
 
 export type Rep = { rep_code: string; rep_name: string | null; rep_email: string | null };
@@ -363,7 +364,8 @@ export async function buildRepWorkbook(
     if ((r.pct ?? 0) < 0) row.getCell(14).font = { name: "Arial", color: { argb: "FFFF0000" } };
     if (typeof keep === "number") {
       row.getCell(17).numFmt = money;
-      if (keep > 0) row.getCell(17).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
+      // Highlight only rows the shared at-risk rule flags (met 2025 target, pacing below now).
+      if (isAtRiskShared(r)) row.getCell(17).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
     }
   }
 

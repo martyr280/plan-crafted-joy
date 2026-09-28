@@ -245,7 +245,7 @@ function ManagerOverview({
         <KpiCard
           label="Keep-level at risk"
           value={priceLevelMapped ? String(totals.risk) : "—"}
-          sub={priceLevelMapped ? undefined : "Awaiting price-level mapping"}
+          sub={priceLevelMapped ? "Met target in 2025, now pacing below" : "Awaiting price-level mapping"}
           onClick={priceLevelMapped ? () => onDrill("at_risk") : undefined}
           icon={<AlertTriangle className="w-5 h-5" />}
         />
