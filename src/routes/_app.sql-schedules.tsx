@@ -171,7 +171,7 @@ function SqlSchedulesPage() {
               onClick={() => {
                 const s = blankSchedule();
                 s.name = "Rep Sales Annualized";
-                s.description = "Per-rep customer scorecard. Replace __REPCODE__ with the rep's P21 salesrep_id.";
+                s.description = "Per-rep customer scorecard. Replace __REPCODE__ with the rep's SalesRepID. {py}/{pm} = previous completed month.";
                 s.sql = SALES_ANNUALIZED_SQL;
                 s.email_subject = "{{name}} — {{date}}";
                 s.schedule_cron = "0 6 1 * *";
