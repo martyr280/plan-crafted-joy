@@ -2,9 +2,25 @@ import { Card } from "@/components/ui/card";
 import type { ReactNode } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
-export function KpiCard({ label, value, sub, icon, trend }: { label: string; value: ReactNode; sub?: string; icon: ReactNode; trend?: number }) {
+export function KpiCard({
+  label, value, sub, icon, trend, onClick,
+}: { label: string; value: ReactNode; sub?: string; icon: ReactNode; trend?: number; onClick?: () => void }) {
+  const clickable = !!onClick;
   return (
-    <Card className="p-5">
+    <Card
+      className={`p-5 ${clickable ? "cursor-pointer transition-colors hover:bg-accent/50 hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : ""}`}
+      {...(clickable
+        ? {
+            role: "button",
+            tabIndex: 0,
+            "aria-label": `Show details for ${label}`,
+            onClick,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick!(); }
+            },
+          }
+        : {})}
+    >
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted-foreground">{label}</p>

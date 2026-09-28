@@ -67,3 +67,11 @@ export async function loadRepDetail(client: any, userId: string, runId: string |
   const rows = await fetchRunRows(client, run.id, effectiveRep);
   return { access, run, monthLabel: monthLabelFor(run), repCode: effectiveRep, rows };
 }
+
+export async function loadDrilldown(client: any, runId: string | null, kind: import("./sales-reports.drilldown").DrilldownKind) {
+  const { buildDrilldown } = await import("./sales-reports.drilldown");
+  const run = await resolveRunId(client, runId);
+  if (!run) return { run: null, monthLabel: monthLabelFor(null), ...buildDrilldown([], kind) };
+  const rows = await fetchRunRows(client, run.id);
+  return { run, monthLabel: monthLabelFor(run), ...buildDrilldown(rows, kind) };
+}

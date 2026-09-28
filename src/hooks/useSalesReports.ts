@@ -7,7 +7,9 @@ import {
   runSalesReportsNow,
   exportSalesRepWorkbook,
   runSalesReportForRep,
+  getSalesReportDrilldown,
 } from "@/lib/sales-reports.functions";
+import type { DrilldownKind } from "@/lib/sales-reports.drilldown";
 
 export function useSalesReportRuns() {
   const fn = useServerFn(listSalesReportRuns);
@@ -74,5 +76,15 @@ export function useTestOneRep() {
     onSuccess: (_r, vars) => {
       if (vars.persist) qc.invalidateQueries({ queryKey: ["sales-report-runs"] });
     },
+  });
+}
+
+export function useSalesReportDrilldown(runId: string | null, kind: DrilldownKind | null) {
+  const fn = useServerFn(getSalesReportDrilldown);
+  return useQuery({
+    queryKey: ["sales-report-drilldown", runId, kind],
+    queryFn: () => fn({ data: { runId, kind: kind! } }),
+    enabled: !!kind,
+    staleTime: 60_000,
   });
 }
