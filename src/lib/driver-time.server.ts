@@ -233,6 +233,27 @@ export type SweepResult = {
 };
 
 
+/**
+ * Watchdog: fail any sweep left `running` for more than 15 minutes.
+ * Called at the start of every sweep AND on every scheduled tick, so a run
+ * killed mid-flight is retired even when no new sweep starts for a week.
+ */
+export async function failStaleDriverTimeRuns(now: Date = new Date()): Promise<{ failedIds: string[]; error?: string }> {
+  const cutoff = new Date(now.getTime() - 15 * 60_000).toISOString();
+  const { data, error } = await db()
+    .from("driver_warehouse_runs")
+    .update({
+      status: "failed",
+      error: "Timed out: no completion recorded within 15 minutes",
+      completed_at: new Date().toISOString(),
+    })
+    .eq("status", "running")
+    .lt("started_at", cutoff)
+    .select("id");
+  if (error) return { failedIds: [], error: error.message };
+  return { failedIds: (data ?? []).map((r: any) => String(r.id)) };
+}
+
 export async function runDriverTimeSweep(opts?: {
   now?: Date;
   triggeredBy?: string | null;
@@ -254,17 +275,8 @@ export async function runDriverTimeSweep(opts?: {
   // A run row left `running` means the process died without recording an
   // outcome. Retire stragglers so the runs list never shows a phantom sweep.
   {
-    const cutoff = new Date(now.getTime() - 15 * 60_000).toISOString();
-    const { error } = await db()
-      .from("driver_warehouse_runs")
-      .update({
-        status: "failed",
-        error: "Timed out: no completion recorded within 15 minutes",
-        completed_at: new Date().toISOString(),
-      })
-      .eq("status", "running")
-      .lt("started_at", cutoff);
-    if (error) warnings.push(`stale run cleanup failed: ${error.message}`);
+    const res = await failStaleDriverTimeRuns(now);
+    if (res.error) warnings.push(`stale run cleanup failed: ${res.error}`);
   }
 
   // The cron sweep scans the trailing 8 days, so label the row with the week
