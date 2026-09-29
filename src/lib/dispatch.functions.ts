@@ -576,8 +576,8 @@ async function boardFromRows(rows: any[], jobId: string | null, pulledAt: string
       .gte("run_date", addDaysISO(today, -60)).order("run_date").order("p21_code").limit(5000),
   ]);
   const ids = [...new Set((exc ?? []).map((e: any) => e.created_by).filter(Boolean))];
-  const { data: profs } = ids.length ? await db().from("profiles").select("id, full_name, email").in("id", ids) : { data: [] };
-  const nameOf = new Map((profs ?? []).map((p: any) => [p.id, p.full_name || p.email]));
+  const { data: profs } = ids.length ? await db().from("profiles").select("id, display_name, email").in("id", ids) : { data: [] };
+  const nameOf = new Map((profs ?? []).map((p: any) => [p.id, p.display_name || p.email]));
   const exceptions = (exc ?? []).map((e: any) => ({ ...e, created_by_name: nameOf.get(e.created_by) ?? null }));
   const board = buildDispatchBoard(rows, cutoffs ?? [], demand ?? [], {
     basis, today, excludedCodes: (settings?.excluded_p21_codes ?? []) as string[], exceptions,
