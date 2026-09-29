@@ -38,9 +38,24 @@ export type HosSegment = {
 };
 
 /** The driver's own evidence: the log's own coordinates, or the log's own vehicle. */
-export function hasOwnEvidence(seg: HosSegment): boolean {
+const BACKFILL_PLACES_STATUSES = new Set<string>(["onDuty", "yardMove", "driving"]);
+
+/** The driver's own coordinates or the log's own (not backfilled) truck. */
+function hasStrictOwnEvidence(seg: HosSegment): boolean {
   if (usableCoordinates(seg.latitude, seg.longitude)) return true;
   if (seg.vehicleBackfilled) return false;
+  const v = String(seg.vehicleId ?? "").trim();
+  return v !== "" && v !== "0";
+}
+
+export function hasOwnEvidence(seg: HosSegment): boolean {
+  if (usableCoordinates(seg.latitude, seg.longitude)) return true;
+  // Correction 2026-09-29 (after 7931ba0): a backfilled day truck may place
+  // the driver only while he is WORKING (onDuty / yardMove / driving) — yard
+  // work on a truckless log is real warehouse time (Outler 9/10, 9/17,
+  // Farahkhan 9/16). It never places him for offDuty / sleeperBerth /
+  // personalConveyance (DJ Johnson 9/21 overnight).
+  if (seg.vehicleBackfilled) return BACKFILL_PLACES_STATUSES.has(seg.status);
   const v = String(seg.vehicleId ?? "").trim();
   return v !== "" && v !== "0";
 }
@@ -187,7 +202,7 @@ function resolveLocation(
     }
   }
   const vehicleIds = new Set(
-    block.segments.filter((s) => !s.vehicleBackfilled).map((s) => s.vehicleId).filter(Boolean) as string[],
+    block.segments.filter((s) => !s.vehicleBackfilled || BACKFILL_PLACES_STATUSES.has(s.status)).map((s) => s.vehicleId).filter(Boolean) as string[],
   );
   if (vehicleIds.size !== 1) return { point: null, source: "unknown" };
   let best: { sample: GpsSample; delta: number } | null = null;
@@ -345,7 +360,7 @@ function locateSegment(seg: HosSegment, gps: GpsSample[], toleranceMs: number): 
   }
   // A vehicle that was only backfilled onto the segment says where the TRUCK
   // was, not the driver: never locate the driver from it.
-  if (hasVehicle(seg) && !seg.vehicleBackfilled) {
+  if (hasVehicle(seg) && (!seg.vehicleBackfilled || BACKFILL_PLACES_STATUSES.has(seg.status))) {
     const vehicleId = String(seg.vehicleId);
     let best: { sample: GpsSample; delta: number } | null = null;
     for (const sample of gps) {
@@ -504,6 +519,15 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
       // from opening a block.
       if (a.fence && a.source !== "assumed_hub" && !hasOwnEvidence(a.seg)) {
         if (cur) gapSegs.push(a.seg);
+        continue;
+      }
+      // Rule 2: a block may not OPEN at the local day split unless the
+      // segment there is working with the driver's own coordinates / truck.
+      if (
+        a.fence && !cur && a.source !== "assumed_hub" &&
+        eldDayBoundaries(a.seg.startMs - 1, a.seg.startMs + 1, eldDayStartHour, tzOffsetMinutes).includes(a.seg.startMs) &&
+        !(BACKFILL_PLACES_STATUSES.has(a.seg.status) && hasStrictOwnEvidence(a.seg))
+      ) {
         continue;
       }
       if (a.fence) {

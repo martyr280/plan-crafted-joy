@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { detectWarehouseEvents, eldDayBoundaries, isExcludedDriver, localDateKey, type HosSegment } from "../detect";
 import type { Geofence } from "../geo";
@@ -219,11 +221,11 @@ describe("midnight / parked-truck artifact (2026-09-29)", () => {
     expect(events.filter((e) => e.startMs < z("2026-09-21T12:19:00Z") && e.endMs > z("2026-09-21T05:00:00Z"))).toHaveLength(0);
   });
 
-  it("truck parked in the fence overnight, driver offDuty/onDuty with vehicle 0 → 0 minutes", () => {
+  it("truck parked in the fence overnight, driver offDuty/sleeperBerth with vehicle 0 → 0 minutes", () => {
     const events = detect([
-      dj("2026-09-21T05:00:00Z", "2026-09-21T09:00:00Z", "onDuty", null),
-      dj("2026-09-21T09:00:00Z", "2026-09-21T12:00:00Z", "offDuty", null),
-      dj("2026-09-21T12:00:00Z", "2026-09-21T12:30:00Z", "onDuty", null),
+      dj("2026-09-21T05:00:00Z", "2026-09-21T09:00:00Z", "sleeperBerth", null),
+      dj("2026-09-21T09:00:00Z", "2026-09-21T12:40:00Z", "offDuty", null),
+      dj("2026-09-21T12:40:00Z", "2026-09-21T12:45:00Z", "onDuty", { lat: 34.5, lon: -86.0 }),
     ]);
     expect(events.reduce((n, e) => n + e.durationMin, 0)).toBe(0);
   });
@@ -235,4 +237,32 @@ describe("midnight / parked-truck artifact (2026-09-29)", () => {
     ], [{ vehicleId: V, timeMs: z("2026-09-21T05:00:00Z"), latitude: 32.8119, longitude: -96.878 }]);
     expect(events.map((e) => [e.eventDate, e.durationMin])).toEqual([["2026-09-20", 120], ["2026-09-21", 120]]);
   });
+});
+
+describe("backfilled truck places a WORKING driver (correction to 7931ba0)", () => {
+  const DAL: Geofence = { id: "addr-dal", name: "Dallas Warehouse", hub: "Dallas", circle: { latitude: 32.8119, longitude: -96.878, radiusMeters: 300 } };
+  const z = (iso: string) => Date.parse(iso);
+  it("backfilled onDuty 08:00–16:00 in the fence with truck GPS in the fence → 480 min", () => {
+    const gps = Array.from({ length: 49 }, (_, i) => ({ vehicleId: "v9", timeMs: z("2026-09-22T13:00:00Z") + i * 600_000, latitude: 32.8119, longitude: -96.878 }));
+    const events = detectWarehouseEvents({
+      driver: { id: "d9", name: "Yard Worker" },
+      segments: [{ driverId: "d9", driverName: "Yard Worker", status: "onDuty", startMs: z("2026-09-22T13:00:00Z"), endMs: z("2026-09-22T21:00:00Z"), latitude: null, longitude: null, vehicleId: "v9", vehicleBackfilled: true } as HosSegment],
+      warehouses: [DAL], gpsSamples: gps,
+      options: { tzOffsetMinutes: -300, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "presence" },
+    });
+    expect(events.map((e) => e.durationMin)).toEqual([480]);
+  });
+});
+
+describe("regressions from cached Samsara hos_logs (Joe Green's sheets)", () => {
+  const load = (f: string) => JSON.parse(readFileSync(join(__dirname, "fixtures", f), "utf8"));
+  const run = (fx: any, date: string) =>
+    detectWarehouseEvents({
+      driver: fx.driver, segments: fx.segments, warehouses: fx.fences, gpsSamples: fx.gps,
+      options: { tzOffsetMinutes: fx.tzOffsetMinutes, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "presence", hubTags: fx.tags },
+    }).filter((e) => e.eventDate === date);
+  const total = (ev: { durationMin: number }[]) => ev.reduce((n, e) => n + e.durationMin, 0);
+  it("Joseph Outler 9/10 → 497 ±2", () => expect(Math.abs(total(run(load("outler-2026-09-10.json"), "2026-09-10")) - 497)).toBeLessThanOrEqual(2));
+  it("Joseph Outler 9/17 → 444 ±2", () => expect(Math.abs(total(run(load("outler-2026-09-17.json"), "2026-09-17")) - 444)).toBeLessThanOrEqual(2));
+  it("Karriem Farahkhan 9/16 → 426 ±2", () => expect(Math.abs(total(run(load("farahkhan-2026-09-16.json"), "2026-09-16")) - 426)).toBeLessThanOrEqual(2));
 });
