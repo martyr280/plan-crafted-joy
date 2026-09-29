@@ -9,6 +9,11 @@
 //  * Run date = the first run_dows day AFTER that cutoff date (the morning the
 //    truck departs). Several matching cutoff rows -> earliest run wins.
 //  * Run date before today (America/Chicago) -> "stale", never a current run.
+//  * Run exceptions (2026-09-29, Joe: "short weeks or driver capacity (PTO)"):
+//    a 'no_run' on the picked run date rolls the ticket to the route's next
+//    run_dows day (union of all active cutoff rows) that is not also no_run,
+//    searching up to 60 days. 'reduced' never moves tickets (flag only).
+//    Stale is judged on the final run date.
 // No I/O.
 
 import { addDaysISO, dowOfISO } from "@/lib/truck-capacity/cutoffs";
@@ -36,9 +41,13 @@ export type AssignCutoff = {
   active?: boolean;
 };
 
+export type ExceptionReason = "short_week" | "driver_pto" | "other";
+export type NoRunException = { run_date: string; reason: ExceptionReason };
+export type RolledFrom = { runDate: string; reason: ExceptionReason };
+
 export type Assignment =
-  | { status: "assigned"; runDate: string; cutoffDate: string }
-  | { status: "stale"; runDate: string; cutoffDate: string }
+  | { status: "assigned"; runDate: string; cutoffDate: string; rolledFrom?: RolledFrom }
+  | { status: "stale"; runDate: string; cutoffDate: string; rolledFrom?: RolledFrom }
   | { status: "no_date" }
   | { status: "no_cutoff" };
 
@@ -52,7 +61,9 @@ export function splitDateTime(v: unknown): { date: string; time: string | null }
   return { date: m[1], time };
 }
 
-export function assignRun(dateValue: unknown, cutoffs: AssignCutoff[], todayISO: string): Assignment {
+export const ROLL_SEARCH_DAYS = 60;
+
+export function assignRun(dateValue: unknown, cutoffs: AssignCutoff[], todayISO: string, noRuns?: NoRunException[]): Assignment {
   const active = cutoffs.filter((c) => c.active !== false && (c.run_dows ?? []).length > 0);
   if (!active.length) return { status: "no_cutoff" };
   const dt = splitDateTime(dateValue);
@@ -80,6 +91,19 @@ export function assignRun(dateValue: unknown, cutoffs: AssignCutoff[], todayISO:
     if (!best || runDate < best.runDate) best = { runDate, cutoffDate };
   }
   if (!best) return { status: "no_cutoff" };
+  const blocked = new Map((noRuns ?? []).map((e) => [String(e.run_date).slice(0, 10), e.reason]));
+  const hit = blocked.get(best.runDate);
+  if (hit) {
+    const dows = new Set(active.flatMap((c) => c.run_dows));
+    let next: string | null = null;
+    for (let i = 1; i <= ROLL_SEARCH_DAYS; i++) {
+      const d = addDaysISO(best.runDate, i);
+      if (dows.has(dowOfISO(d)) && !blocked.has(d)) { next = d; break; }
+    }
+    if (!next) return { status: "no_cutoff" };
+    const rolled = { runDate: next, cutoffDate: best.cutoffDate, rolledFrom: { runDate: best.runDate, reason: hit } };
+    return next < todayISO ? { status: "stale", ...rolled } : { status: "assigned", ...rolled };
+  }
   return best.runDate < todayISO ? { status: "stale", ...best } : { status: "assigned", ...best };
 }
 

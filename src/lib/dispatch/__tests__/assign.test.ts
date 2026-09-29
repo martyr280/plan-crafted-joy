@@ -24,3 +24,28 @@ describe("assignRun", () => {
   it("null date -> no_date", () => expect(assignRun(null, MOAR1, TODAY)).toEqual({ status: "no_date" }));
   it("splitDateTime", () => expect(splitDateTime("2026-09-28 13:05:00.000")).toEqual({ date: "2026-09-28", time: "13:05" }));
 });
+
+describe("assignRun with run exceptions", () => {
+  const NR = (run_date: string, reason: "short_week" | "driver_pto" | "other" = "driver_pto") => ({ run_date, reason });
+  it("MOAR1 Mon 10/05, no_run Tue 10/06 -> Tue 10/13", () =>
+    expect(assignRun("2026-10-05", MOAR1, TODAY, [NR("2026-10-06")])).toEqual({ status: "assigned", runDate: "2026-10-13", cutoffDate: "2026-10-05", rolledFrom: { runDate: "2026-10-06", reason: "driver_pto" } }));
+  it("DAL01 Mon 10/05, no_run Tue 10/06 -> Wed 10/07", () =>
+    expect(assignRun("2026-10-05", DAL01, TODAY, [NR("2026-10-06")])).toMatchObject({ runDate: "2026-10-07", rolledFrom: { runDate: "2026-10-06" } }));
+  it("DAL01 no_run Tue + Wed -> Thu 10/08", () =>
+    expect(assignRun("2026-10-05", DAL01, TODAY, [NR("2026-10-06"), NR("2026-10-07", "short_week")])).toMatchObject({ runDate: "2026-10-08", rolledFrom: { runDate: "2026-10-06", reason: "driver_pto" } }));
+  it("MSL01 Mon 10/05, no_run Wed 10/07 -> Thu 10/08", () =>
+    expect(assignRun("2026-10-05", MSL01, TODAY, [NR("2026-10-07")])).toMatchObject({ runDate: "2026-10-08", rolledFrom: { runDate: "2026-10-07" } }));
+  it("reduced (not passed as no_run) leaves MOAR1 on 10/06", () => {
+    const a = assignRun("2026-10-05", MOAR1, TODAY, []);
+    expect(a).toMatchObject({ runDate: "2026-10-06" });
+    expect((a as any).rolledFrom).toBeUndefined();
+  });
+  it("nothing within 60 days -> no_cutoff", () => {
+    const all = Array.from({ length: 12 }, (_, i) => NR(new Date(Date.UTC(2026, 9, 6 + 7 * i)).toISOString().slice(0, 10)));
+    expect(assignRun("2026-10-05", MOAR1, TODAY, all)).toEqual({ status: "no_cutoff" });
+  });
+  it("no exceptions -> identical to today for existing cases", () => {
+    for (const [d, c] of [["2026-09-28", MOAR1], ["2026-09-24", JAX01], ["2026-09-28", MSL01], ["2026-09-23", WTX01], ["2026-05-19", DAL01], ["2026-09-28T14:30:00", MOAR1], [null, MOAR1]] as const)
+      expect(assignRun(d, c as any, TODAY, [])).toEqual(assignRun(d, c as any, TODAY));
+  });
+});
