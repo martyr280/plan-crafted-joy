@@ -1,13 +1,15 @@
 // Pure: vw_route_dispatch rows -> Upcoming runs / Stale / Unrouted / Date check.
 // Client-safe (no I/O) so the page and tests share it.
 
-import { assignRun, daysBetween, DATE_BASES, DATE_BASIS_COLUMN, type AssignCutoff, type DateBasis } from "./assign";
+import { assignRun, daysBetween, DATE_BASES, DATE_BASIS_COLUMN, type AssignCutoff, type DateBasis, type ExceptionReason, type NoRunException, type RolledFrom } from "./assign";
 import { shortHoldReason, type P21DispatchRow } from "./build";
 
 export const ALWAYS_EXCLUDED = ["WCALL", "LTL01"];
 
 export type BoardCutoff = AssignCutoff & { route_id: string };
 export type DemandRow = { route_id: string; ship_date: string; order_count: number | null; total_cube_ft: number | null; projected_capacity_frac: number | null; snapshot_at: string | null };
+
+export type RunException = { id: string; p21_code: string; run_date: string; kind: "no_run" | "reduced"; reason: ExceptionReason; note: string | null; created_by: string | null; created_by_name?: string | null; created_at?: string | null };
 
 export type TicketView = {
   pick_ticket_no: string | null;
@@ -29,6 +31,8 @@ export type TicketView = {
   /** Run each basis would pick (date, "stale:<date>", or null). */
   runByBasis: Record<DateBasis, string | null>;
   bases_disagree: boolean;
+  /** Set when a no_run exception moved this ticket (current basis). */
+  rolled_from: RolledFrom | null;
 };
 
 export type UpcomingRun = {
@@ -44,6 +48,7 @@ export type UpcomingRun = {
   missing_weight: number;
   demand: { order_count: number | null; total_cube_ft: number | null; projected_capacity_frac: number | null; snapshot_at: string | null } | null;
   ticketList: TicketView[];
+  exception: RunException | null;
 };
 
 export type StaleTicket = TicketView & { run_date: string; age_days: number | null };
@@ -59,6 +64,7 @@ export type DispatchBoard = {
   unrouted: TicketView[];
   noCutoff: TicketView[];
   dateCheck: TicketView[];
+  exceptions: RunException[];
 };
 
 const d10 = (v: unknown) => (v == null || v === "" ? null : String(v).slice(0, 10));
@@ -68,7 +74,7 @@ export function buildDispatchBoard(
   rows: P21DispatchRow[],
   cutoffs: BoardCutoff[],
   demand: DemandRow[],
-  opts: { basis: DateBasis; today: string; excludedCodes?: string[] },
+  opts: { basis: DateBasis; today: string; excludedCodes?: string[]; exceptions?: RunException[] },
 ): DispatchBoard {
   const excluded = new Set([...ALWAYS_EXCLUDED, ...(opts.excludedCodes ?? [])].map((c) => c.trim().toUpperCase()));
   const byCode = new Map<string, BoardCutoff[]>();
@@ -77,6 +83,10 @@ export function buildDispatchBoard(
     const k = c.p21_code.trim().toUpperCase();
     byCode.set(k, [...(byCode.get(k) ?? []), c]);
   }
+  const excList = (opts.exceptions ?? []).map((e) => ({ ...e, p21_code: e.p21_code.trim().toUpperCase(), run_date: String(e.run_date).slice(0, 10) }));
+  const excByKey = new Map(excList.map((e) => [`${e.p21_code}|${e.run_date}`, e]));
+  const noRunsByCode = new Map<string, NoRunException[]>();
+  for (const e of excList) if (e.kind === "no_run") noRunsByCode.set(e.p21_code, [...(noRunsByCode.get(e.p21_code) ?? []), { run_date: e.run_date, reason: e.reason }]);
   // Latest demand snapshot per (route, date).
   const demandKey = new Map<string, DemandRow>();
   for (const d of demand) {
@@ -89,13 +99,32 @@ export function buildDispatchBoard(
   const runs = new Map<string, UpcomingRun>();
   const stale: StaleTicket[] = [], unrouted: TicketView[] = [], noCutoff: TicketView[] = [], dateCheck: TicketView[] = [];
 
+  const ensureRun = (code: string, runDate: string): UpcomingRun => {
+    const key = `${code}|${runDate}`;
+    let run = runs.get(key);
+    if (!run) {
+      const routeId = byCode.get(code)?.[0]?.route_id ?? null;
+      const dm = routeId ? demandKey.get(`${routeId}|${runDate}`) : undefined;
+      run = {
+        route_code: code, route_id: routeId, run_date: runDate, tickets: 0, orders: 0, held: 0,
+        est_cube_ft: 0, missing_cube: 0, est_weight_lbs: 0, missing_weight: 0,
+        demand: dm ? { order_count: dm.order_count, total_cube_ft: numOrNull(dm.total_cube_ft), projected_capacity_frac: numOrNull(dm.projected_capacity_frac), snapshot_at: dm.snapshot_at } : null,
+        ticketList: [],
+        exception: excByKey.get(key) ?? null,
+      };
+      runs.set(key, run);
+    }
+    return run;
+  };
+
   for (const r of rows) {
     const code = r.route_code ? String(r.route_code).trim().toUpperCase() : "";
     if (code && excluded.has(code)) { excludedN++; continue; }
     const cs = code ? byCode.get(code) ?? [] : [];
+    const nr = code ? noRunsByCode.get(code) ?? [] : [];
     const runByBasis = {} as Record<DateBasis, string | null>;
     for (const b of DATE_BASES) {
-      const a = code ? assignRun((r as any)[DATE_BASIS_COLUMN[b]], cs, opts.today) : { status: "no_cutoff" as const };
+      const a = code ? assignRun((r as any)[DATE_BASIS_COLUMN[b]], cs, opts.today, nr) : { status: "no_cutoff" as const };
       runByBasis[b] = a.status === "assigned" ? a.runDate : a.status === "stale" ? `stale:${a.runDate}` : null;
     }
     const distinct = new Set(Object.values(runByBasis).map((v) => v ?? "—"));
@@ -119,11 +148,13 @@ export function buildDispatchBoard(
       hold_reason: reason,
       runByBasis,
       bases_disagree: distinct.size > 1,
+      rolled_from: null,
     };
     if (t.held) heldN++;
     dateCheck.push(t);
     if (!code) { unrouted.push(t); continue; }
-    const a = assignRun((r as any)[DATE_BASIS_COLUMN[opts.basis]], cs, opts.today);
+    const a = assignRun((r as any)[DATE_BASIS_COLUMN[opts.basis]], cs, opts.today, nr);
+    if ((a.status === "assigned" || a.status === "stale") && a.rolledFrom) t.rolled_from = a.rolledFrom;
     if (a.status === "no_cutoff" || a.status === "no_date") { noCutoff.push(t); continue; }
     if (a.status === "stale") {
       const basisDate = d10((r as any)[DATE_BASIS_COLUMN[opts.basis]]);
@@ -131,24 +162,15 @@ export function buildDispatchBoard(
       continue;
     }
     const key = `${code}|${a.runDate}`;
-    let run = runs.get(key);
-    if (!run) {
-      const routeId = cs[0]?.route_id ?? null;
-      const dm = routeId ? demandKey.get(`${routeId}|${a.runDate}`) : undefined;
-      run = {
-        route_code: code, route_id: routeId, run_date: a.runDate, tickets: 0, orders: 0, held: 0,
-        est_cube_ft: 0, missing_cube: 0, est_weight_lbs: 0, missing_weight: 0,
-        demand: dm ? { order_count: dm.order_count, total_cube_ft: numOrNull(dm.total_cube_ft), projected_capacity_frac: numOrNull(dm.projected_capacity_frac), snapshot_at: dm.snapshot_at } : null,
-        ticketList: [],
-      };
-      runs.set(key, run);
-    }
+    const run = ensureRun(code, a.runDate);
     run.tickets++;
     if (t.held) run.held++;
     if (t.est_cube_ft == null) run.missing_cube++; else run.est_cube_ft += t.est_cube_ft;
     if (t.est_weight_lbs == null) run.missing_weight++; else run.est_weight_lbs += t.est_weight_lbs;
     run.ticketList.push(t);
   }
+  // Every upcoming exception gets a row (a no_run shows 0 tickets so people see why).
+  for (const e of excList) if (e.run_date >= opts.today && !excluded.has(e.p21_code)) ensureRun(e.p21_code, e.run_date);
   for (const run of runs.values()) run.orders = new Set(run.ticketList.map((t) => t.order_no)).size;
 
   return {
@@ -162,5 +184,6 @@ export function buildDispatchBoard(
     unrouted,
     noCutoff,
     dateCheck,
+    exceptions: excList.filter((e) => e.run_date >= opts.today).sort((a, b) => a.run_date.localeCompare(b.run_date) || a.p21_code.localeCompare(b.p21_code)),
   };
 }

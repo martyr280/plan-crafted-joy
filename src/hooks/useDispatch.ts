@@ -24,6 +24,8 @@ import {
   getDispatchBoard,
   refreshDispatchBoard,
   saveDispatchDateBasis,
+  saveRunException,
+  deleteRunException,
 } from "@/lib/dispatch.functions";
 
 export function useDispatchBoard() {
@@ -166,5 +168,23 @@ export function useSaveDriverMapping() {
   return useMutation({
     mutationFn: (v: { routeId: string; samsaraDriverId?: string | null; driverNameRaw?: string | null; confirmed: boolean }) => fn({ data: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dispatch", "drivers"] }),
+  });
+}
+
+export function useSaveRunException() {
+  const fn = useServerFn(saveRunException);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { p21Code: string; runDate: string; kind: "no_run" | "reduced"; reason: "short_week" | "driver_pto" | "other"; note?: string | null }) => fn({ data: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dispatch", "board"] }),
+  });
+}
+
+export function useDeleteRunException() {
+  const fn = useServerFn(deleteRunException);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fn({ data: { id } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dispatch", "board"] }),
   });
 }
