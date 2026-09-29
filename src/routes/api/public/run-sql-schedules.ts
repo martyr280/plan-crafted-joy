@@ -185,6 +185,14 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             }
           }
 
+          // Driver Time watchdog: every tick, fail sweeps stuck `running` > 15 min.
+          // Without this, a killed sweep stayed "running" until the next Monday.
+          let driverTimeWatchdog: any = null;
+          try {
+            const { failStaleDriverTimeRuns } = await import("@/lib/driver-time.server");
+            driverTimeWatchdog = await failStaleDriverTimeRuns(now);
+          } catch (e: any) { driverTimeWatchdog = { ok: false, error: e?.message ?? String(e) }; }
+
           // Weekly Driver Warehouse Time sweep: Mondays 8:00–8:15 AM Central.
           // Dedup-guarded by a run already started today so overlapping ticks
           // can't double-sweep. Fully try/caught: it must not starve the rest.
