@@ -704,7 +704,7 @@ function DateBasisSelect() {
         <SelectTrigger className="max-w-sm"><SelectValue /></SelectTrigger>
         <SelectContent>{DATE_BASES.map((k) => <SelectItem key={k} value={k}>{DATE_BASIS_LABEL[k]}</SelectItem>)}</SelectContent>
       </Select>
-      <p className="text-xs text-muted-foreground mt-1">Pending Joe Green's confirmation. Default: pick ticket print date.</p>
+      <p className="text-xs text-muted-foreground mt-1">Confirmed by Joe Green, Sep 29, 2026: pick ticket print date + route cutoff. Change only if NDI changes how tickets go on trucks.</p>
     </div>
   );
 }
