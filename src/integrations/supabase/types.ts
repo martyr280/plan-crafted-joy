@@ -748,6 +748,39 @@ export type Database = {
           },
         ]
       }
+      dispatch_run_exceptions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          note: string | null
+          p21_code: string
+          reason: string
+          run_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          note?: string | null
+          p21_code: string
+          reason: string
+          run_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          p21_code?: string
+          reason?: string
+          run_date?: string
+        }
+        Relationships: []
+      }
       dispatch_runs: {
         Row: {
           bridge_job_id: string | null
