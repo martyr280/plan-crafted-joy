@@ -1,6 +1,6 @@
 // Pure run assignment for Dispatch: (ticket date, route cutoffs) -> run date.
 //
-// Rule (2026-09-28, pending Joe Green's confirmation of WHICH date):
+// Rule (date basis confirmed by Joe Green 2026-09-29: pick_ticket_print):
 //  * From the chosen date, the ticket goes on the first cutoff (cutoff_dow +
 //    cutoff_time, in the cutoff's tz) that is on or after that date, for the
 //    route_cutoffs rows whose p21_code = route_code.
