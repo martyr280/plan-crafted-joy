@@ -15,6 +15,13 @@
       "when": 1790632387641,
       "tag": "0001_dispatch_date_basis",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790715203115,
+      "tag": "0002_dispatch_run_exceptions",
+      "breakpoints": true
     }
   ]
 }

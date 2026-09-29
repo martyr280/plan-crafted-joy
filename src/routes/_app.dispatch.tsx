@@ -160,7 +160,7 @@ function DispatchPage() {
         </TabsContent>
 
         <TabsContent value="tickets" className="mt-4">
-          <TicketBoard />
+          <TicketBoard isAdmin={isAdmin} />
         </TabsContent>
 
         <TabsContent value="addresses" className="mt-4">

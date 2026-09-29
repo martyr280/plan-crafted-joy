@@ -563,18 +563,24 @@ export const saveDriverMapping = createServerFn({ method: "POST" })
 async function boardFromRows(rows: any[], jobId: string | null, pulledAt: string | null) {
   const { getDispatchDateBasis } = await import("@/lib/dispatch.server");
   const { buildDispatchBoard } = await import("@/lib/dispatch/board");
-  const { localDateIn } = await import("@/lib/truck-capacity/cutoffs");
+  const { localDateIn, addDaysISO } = await import("@/lib/truck-capacity/cutoffs");
   const today = localDateIn("America/Chicago", new Date());
-  const [basis, { data: cutoffs }, { data: settings }, { data: demand }] = await Promise.all([
+  const [basis, { data: cutoffs }, { data: settings }, { data: demand }, { data: exc }] = await Promise.all([
     getDispatchDateBasis(),
     db().from("route_cutoffs").select("route_id, p21_code, cutoff_dow, cutoff_time, run_dows, active").eq("active", true).limit(2000),
     db().from("truck_capacity_settings").select("excluded_p21_codes").limit(1).maybeSingle(),
     db().from("truck_capacity_p21_demand")
       .select("route_id, ship_date, order_count, total_cube_ft, projected_capacity_frac, snapshot_at")
       .gte("ship_date", today).order("ship_date").order("route_id").order("snapshot_at", { ascending: false }).limit(5000),
+    db().from("dispatch_run_exceptions").select("id, p21_code, run_date, kind, reason, note, created_by, created_at")
+      .gte("run_date", addDaysISO(today, -60)).order("run_date").order("p21_code").limit(5000),
   ]);
+  const ids = [...new Set((exc ?? []).map((e: any) => e.created_by).filter(Boolean))];
+  const { data: profs } = ids.length ? await db().from("profiles").select("id, display_name, email").in("id", ids) : { data: [] };
+  const nameOf = new Map((profs ?? []).map((p: any) => [p.id, p.display_name || p.email]));
+  const exceptions = (exc ?? []).map((e: any) => ({ ...e, created_by_name: nameOf.get(e.created_by) ?? null }));
   const board = buildDispatchBoard(rows, cutoffs ?? [], demand ?? [], {
-    basis, today, excludedCodes: (settings?.excluded_p21_codes ?? []) as string[],
+    basis, today, excludedCodes: (settings?.excluded_p21_codes ?? []) as string[], exceptions,
   });
   return { ...board, jobId, pulledAt };
 }
@@ -616,4 +622,35 @@ export const saveDispatchDateBasis = createServerFn({ method: "POST" })
     const { error } = await db().from("truck_capacity_settings").update({ dispatch_date_basis: data.basis, updated_by: context.userId }).eq("id", row.id);
     if (error) throw new Error(error.message);
     return { basis: data.basis };
+  });
+
+/* ---------------------------------------------- Run exceptions (2026-09-29) */
+
+export const saveRunException = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({
+    p21Code: z.string().trim().min(1).max(20),
+    runDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    kind: z.enum(["no_run", "reduced"]),
+    reason: z.enum(["short_week", "driver_pto", "other"]),
+    note: z.string().trim().max(500).nullable().optional(),
+  }).parse(i))
+  .handler(async ({ data, context }) => {
+    await requireAdmin(context.userId);
+    const { error } = await db().from("dispatch_run_exceptions").upsert({
+      p21_code: data.p21Code.toUpperCase(), run_date: data.runDate, kind: data.kind, reason: data.reason,
+      note: data.note || null, created_by: context.userId,
+    }, { onConflict: "p21_code,run_date" });
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+export const deleteRunException = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    await requireAdmin(context.userId);
+    const { error } = await db().from("dispatch_run_exceptions").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
   });
