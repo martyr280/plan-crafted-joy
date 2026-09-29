@@ -28,7 +28,22 @@ export type HosSegment = {
   latitude?: number | null;
   longitude?: number | null;
   vehicleId?: string | null;
+  /**
+   * True when the HOS log itself named no vehicle ("0"/null) and vehicleId was
+   * filled in afterwards from assignments / the driver's day vehicle. Such a
+   * segment is evidence of the TRUCK, not the driver (2026-09-29, DJ Johnson
+   * 9/21 midnight artifact), so it may not create or extend a warehouse block.
+   */
+  vehicleBackfilled?: boolean;
 };
+
+/** The driver's own evidence: the log's own coordinates, or the log's own vehicle. */
+export function hasOwnEvidence(seg: HosSegment): boolean {
+  if (usableCoordinates(seg.latitude, seg.longitude)) return true;
+  if (seg.vehicleBackfilled) return false;
+  const v = String(seg.vehicleId ?? "").trim();
+  return v !== "" && v !== "0";
+}
 
 export type GpsSample = {
   vehicleId: string;
@@ -171,7 +186,9 @@ function resolveLocation(
       return { point: { latitude: s.latitude!, longitude: s.longitude! }, source: "log" };
     }
   }
-  const vehicleIds = new Set(block.segments.map((s) => s.vehicleId).filter(Boolean) as string[]);
+  const vehicleIds = new Set(
+    block.segments.filter((s) => !s.vehicleBackfilled).map((s) => s.vehicleId).filter(Boolean) as string[],
+  );
   if (vehicleIds.size !== 1) return { point: null, source: "unknown" };
   let best: { sample: GpsSample; delta: number } | null = null;
   for (const sample of gps) {
@@ -326,7 +343,9 @@ function locateSegment(seg: HosSegment, gps: GpsSample[], toleranceMs: number): 
   if (usableCoordinates(seg.latitude, seg.longitude)) {
     return { seg, point: { latitude: seg.latitude!, longitude: seg.longitude! }, source: "log" };
   }
-  if (hasVehicle(seg)) {
+  // A vehicle that was only backfilled onto the segment says where the TRUCK
+  // was, not the driver: never locate the driver from it.
+  if (hasVehicle(seg) && !seg.vehicleBackfilled) {
     const vehicleId = String(seg.vehicleId);
     let best: { sample: GpsSample; delta: number } | null = null;
     for (const sample of gps) {
@@ -479,6 +498,14 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
     };
 
     for (const a of atts) {
+      // Guard (rule 2, 2026-09-29): a block may only start or extend on the
+      // driver's own evidence (own coordinates / own vehicle) or the tagged
+      // home-hub path. This is what stops a 00:00 day split on a parked truck
+      // from opening a block.
+      if (a.fence && a.source !== "assumed_hub" && !hasOwnEvidence(a.seg)) {
+        if (cur) gapSegs.push(a.seg);
+        continue;
+      }
       if (a.fence) {
         if (cur && cur.fence.id === a.fence.id) {
           const gapMs = gapSegs.reduce((n, s) => n + (s.endMs - s.startMs), 0);

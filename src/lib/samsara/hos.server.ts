@@ -193,6 +193,8 @@ export type NormalizedHosSegment = {
   latitude: number | null;
   longitude: number | null;
   vehicleId: string | null;
+  /** Set when vehicleId was filled from assignments, not reported by the log. */
+  vehicleBackfilled?: boolean;
 };
 
 function coordOf(entry: any): { latitude: number | null; longitude: number | null } {

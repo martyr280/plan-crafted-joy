@@ -164,10 +164,10 @@ export function backfillSegmentVehicles<
       if (!dayVehicle) return seg;
       filled++;
       filledFromDay++;
-      return { ...seg, vehicleId: dayVehicle };
+      return { ...seg, vehicleId: dayVehicle, vehicleBackfilled: true };
     }
     filled++;
-    return { ...seg, vehicleId: best.vehicleId };
+    return { ...seg, vehicleId: best.vehicleId, vehicleBackfilled: true };
   });
   return { segments: out, filled, filledFromDay };
 }

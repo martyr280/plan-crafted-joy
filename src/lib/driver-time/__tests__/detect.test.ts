@@ -187,3 +187,52 @@ describe("driver exclusions", () => {
     expect(events).toHaveLength(0);
   });
 });
+
+describe("midnight / parked-truck artifact (2026-09-29)", () => {
+  // Dallas yard; DJ Johnson 53243889, truck 281474996579825. CDT = UTC-5.
+  const DAL: Geofence = { id: "addr-dal", name: "Dallas Warehouse", hub: "Dallas", circle: { latitude: 32.8119, longitude: -96.878, radiusMeters: 300 } };
+  const V = "281474996579825";
+  const z = (iso: string) => Date.parse(iso);
+  const P = { tzOffsetMinutes: -300, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "presence" as const };
+  const dj = (s: string, e: string, status: string, own: { lat: number; lon: number } | null): HosSegment => ({
+    driverId: "53243889", driverName: "DJ Johnson", status, startMs: z(s), endMs: z(e),
+    latitude: own?.lat ?? null, longitude: own?.lon ?? null,
+    vehicleId: V, vehicleBackfilled: own === null,
+  } as HosSegment);
+  // Truck parked in the fence all night: a GPS ping every 10 min 05:00Z–13:00Z.
+  const parkedGps = Array.from({ length: 49 }, (_, i) => ({ vehicleId: V, timeMs: z("2026-09-21T05:00:00Z") + i * 600_000, latitude: 32.8119, longitude: -96.878 }));
+  const detect = (segments: HosSegment[], gps = parkedGps) =>
+    detectWarehouseEvents({ driver: { id: "53243889", name: "DJ Johnson" }, segments, warehouses: [DAL], gpsSamples: gps, options: P });
+
+  it("DJ 9/21 raw rows: no block before 12:49Z, no 00:00–07:19 Central time", () => {
+    const events = detect([
+      dj("2026-09-21T05:00:00Z", "2026-09-21T12:19:00Z", "offDuty", null),
+      dj("2026-09-21T12:19:00Z", "2026-09-21T12:49:00Z", "offDuty", null),
+      dj("2026-09-21T12:49:00Z", "2026-09-21T12:56:00Z", "onDuty", null),
+      dj("2026-09-21T12:56:00Z", "2026-09-21T12:57:01.586Z", "driving", null),
+      dj("2026-09-21T12:57:01.586Z", "2026-09-21T13:20:55.013Z", "driving", { lat: 32.811877, lon: -96.878054 }),
+      dj("2026-09-21T13:20:55.013Z", "2026-09-21T16:35:00Z", "driving", { lat: 32.811246, lon: -96.877954 }),
+      dj("2026-09-21T16:35:00Z", "2026-09-21T16:35:05Z", "driving", { lat: 33.4519, lon: -94.11086 }),
+      dj("2026-09-21T16:35:05Z", "2026-09-21T16:39:07Z", "driving", { lat: 33.451787, lon: -94.109375 }),
+    ]);
+    expect(events.filter((e) => e.startMs < z("2026-09-21T12:49:00Z"))).toHaveLength(0);
+    expect(events.filter((e) => e.startMs < z("2026-09-21T12:19:00Z") && e.endMs > z("2026-09-21T05:00:00Z"))).toHaveLength(0);
+  });
+
+  it("truck parked in the fence overnight, driver offDuty/onDuty with vehicle 0 → 0 minutes", () => {
+    const events = detect([
+      dj("2026-09-21T05:00:00Z", "2026-09-21T09:00:00Z", "onDuty", null),
+      dj("2026-09-21T09:00:00Z", "2026-09-21T12:00:00Z", "offDuty", null),
+      dj("2026-09-21T12:00:00Z", "2026-09-21T12:30:00Z", "onDuty", null),
+    ]);
+    expect(events.reduce((n, e) => n + e.durationMin, 0)).toBe(0);
+  });
+
+  it("real overnight block on the driver's own vehicle 22:00–02:00 is counted and split", () => {
+    const at = { lat: 32.8119, lon: -96.878 };
+    const events = detect([
+      dj("2026-09-21T03:00:00Z", "2026-09-21T07:00:00Z", "onDuty", at), // 9/20 22:00 → 9/21 02:00 CDT
+    ], [{ vehicleId: V, timeMs: z("2026-09-21T05:00:00Z"), latitude: 32.8119, longitude: -96.878 }]);
+    expect(events.map((e) => [e.eventDate, e.durationMin])).toEqual([["2026-09-20", 120], ["2026-09-21", 120]]);
+  });
+});
