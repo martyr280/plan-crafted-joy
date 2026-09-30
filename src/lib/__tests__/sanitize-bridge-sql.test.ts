@@ -23,7 +23,7 @@ describe("sanitizeBridgeSql", () => {
     const out = sanitizeBridgeSql(SALES_ANNUALIZED_SQL);
     expect(out).not.toMatch(/;/);
     expect(out).not.toMatch(/--/);
-    expect(out).toMatch(/^WITH SalesByShipTo AS/);
+    expect(out).toMatch(/^WITH L AS/);
     expect(out).toMatch(/ORDER BY \[Total Value\] DESC/);
   });
 });
