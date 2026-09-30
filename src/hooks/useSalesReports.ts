@@ -88,3 +88,40 @@ export function useSalesReportDrilldown(runId: string | null, kind: DrilldownKin
     staleTime: 60_000,
   });
 }
+
+import {
+  listRepContacts, saveRepContact, getEmailSendList, previewSalesReportEmails, sendSalesReportEmails,
+} from "@/lib/sales-reports.functions";
+
+export function useRepContacts() {
+  const fn = useServerFn(listRepContacts);
+  return useQuery({ queryKey: ["sales-rep-contacts"], queryFn: () => fn() });
+}
+
+export function useSaveRepContact() {
+  const fn = useServerFn(saveRepContact);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { rep_code: string; email: string | null; cc_emails: string[]; send_enabled: boolean; notes: string | null }) => fn({ data: v }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-rep-contacts"] }); qc.invalidateQueries({ queryKey: ["sales-email-list"] }); },
+  });
+}
+
+export function useEmailSendList(runId: string | null) {
+  const fn = useServerFn(getEmailSendList);
+  return useQuery({ queryKey: ["sales-email-list", runId], queryFn: () => fn({ data: { runId } }) });
+}
+
+export function usePreviewEmails() {
+  const fn = useServerFn(previewSalesReportEmails);
+  return useMutation({ mutationFn: (v: { runId: string; repCodes: string[]; sendAgain: boolean; testMode: boolean }) => fn({ data: v }) });
+}
+
+export function useSendEmails() {
+  const fn = useServerFn(sendSalesReportEmails);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { runId: string; repCodes: string[]; sendAgain: boolean; testMode: boolean; expectedRows: Record<string, number> }) => fn({ data: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sales-email-list"] }),
+  });
+}

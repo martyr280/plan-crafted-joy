@@ -2308,6 +2308,39 @@ export type Database = {
         }
         Relationships: []
       }
+      sales_rep_contacts: {
+        Row: {
+          cc_emails: string[]
+          email: string | null
+          notes: string | null
+          rep_code: string
+          rep_name: string | null
+          send_enabled: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cc_emails?: string[]
+          email?: string | null
+          notes?: string | null
+          rep_code: string
+          rep_name?: string | null
+          send_enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cc_emails?: string[]
+          email?: string | null
+          notes?: string | null
+          rep_code?: string
+          rep_name?: string | null
+          send_enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       sales_report_rows: {
         Row: {
           ann_current: number | null
@@ -2444,6 +2477,62 @@ export type Database = {
           triggered_by?: string | null
         }
         Relationships: []
+      }
+      sales_report_sends: {
+        Row: {
+          attachment_name: string | null
+          cc_emails: string[]
+          created_at: string
+          id: string
+          provider_message_id: string | null
+          rep_code: string
+          row_count: number | null
+          run_id: string
+          sent_by: string | null
+          skip_reason: string | null
+          status: string
+          test_mode: boolean
+          to_email: string | null
+        }
+        Insert: {
+          attachment_name?: string | null
+          cc_emails?: string[]
+          created_at?: string
+          id?: string
+          provider_message_id?: string | null
+          rep_code: string
+          row_count?: number | null
+          run_id: string
+          sent_by?: string | null
+          skip_reason?: string | null
+          status: string
+          test_mode?: boolean
+          to_email?: string | null
+        }
+        Update: {
+          attachment_name?: string | null
+          cc_emails?: string[]
+          created_at?: string
+          id?: string
+          provider_message_id?: string | null
+          rep_code?: string
+          row_count?: number | null
+          run_id?: string
+          sent_by?: string | null
+          skip_reason?: string | null
+          status?: string
+          test_mode?: boolean
+          to_email?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_report_sends_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "sales_report_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       samsara_address_map: {
         Row: {

@@ -305,3 +305,40 @@ export async function sendCapacityDigestEmail(to: string[], d: CapacityDigestEma
   }
   return r.json();
 }
+
+/**
+ * One recipient (+ optional CC), one attachment. Never BCC. Used for per-rep
+ * Sales Report emails; same sender/from address as the other Nelson emails.
+ */
+export async function sendNelsonEmailWithAttachment(opts: {
+  to: string;
+  cc?: string[];
+  subject: string;
+  html: string;
+  text?: string;
+  filename: string;
+  content: Buffer;
+}): Promise<{ id: string | null }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
+  const payload: Record<string, unknown> = {
+    from: fromAddress(),
+    to: [opts.to],
+    subject: opts.subject,
+    html: opts.html,
+    attachments: [{ filename: opts.filename, content: opts.content.toString("base64") }],
+  };
+  if (opts.text) payload.text = opts.text;
+  if (opts.cc?.length) payload.cc = opts.cc;
+  const r = await fetch(RESEND_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`Resend send failed [${r.status}]: ${body.slice(0, 300)}`);
+  }
+  const j: any = await r.json().catch(() => ({}));
+  return { id: j?.id ?? null };
+}

@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { DrilldownSheet } from "@/components/sales-reports/DrilldownSheet";
+import { EmailReportsPanel } from "@/components/sales-reports/EmailReportsPanel";
+import { RepEmailsPanel } from "@/components/sales-reports/RepEmailsPanel";
 import type { DrilldownKind } from "@/lib/sales-reports.drilldown";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -64,6 +66,7 @@ function SalesReportsPage() {
   const [selectedRep, setSelectedRep] = useState<string | null>(null);
   const [repInsight, setRepInsight] = useState<Insight>("none");
   const [drill, setDrill] = useState<DrilldownKind | null>(null);
+  const [emailView, setEmailView] = useState<"none" | "send" | "contacts">("none");
 
   const runs = useSalesReportRuns();
   const overview = useSalesReportOverview(runId);
@@ -122,6 +125,15 @@ function SalesReportsPage() {
           )}
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="flex gap-2">
+          <Button variant={emailView === "send" ? "default" : "outline"} size="sm" onClick={() => setEmailView(emailView === "send" ? "none" : "send")}>Email reports</Button>
+          <Button variant={emailView === "contacts" ? "default" : "outline"} size="sm" onClick={() => setEmailView(emailView === "contacts" ? "none" : "contacts")}>Rep emails</Button>
+        </div>
+      )}
+      {isAdmin && emailView === "send" && <EmailReportsPanel />}
+      {isAdmin && emailView === "contacts" && <RepEmailsPanel canEdit={isAdmin} />}
 
       {isAdmin && <TestOneRep />}
 
