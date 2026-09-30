@@ -57,6 +57,9 @@ export const listDispatchRuns = createServerFn({ method: "POST" })
       db().from("dispatch_runs").select("*").gte("run_date", todayIso()).order("run_date", { ascending: true }).limit(1000),
     ]);
 
+    const { loadRunExceptions } = await import("@/lib/dispatch.server");
+    const { runFlag } = await import("@/lib/dispatch/run-exceptions");
+    const exceptions = await loadRunExceptions((routes ?? []).map((r: any) => String(r.p21_route_code || r.code)));
     const now = new Date();
     const cutoffsByRoute = new Map<string, RouteCutoff[]>();
     for (const c of (cutoffs ?? []) as RouteCutoff[]) {
@@ -68,6 +71,8 @@ export const listDispatchRuns = createServerFn({ method: "POST" })
     const rows = (routes ?? []).map((r: any) => {
       const list = cutoffsByRoute.get(r.id) ?? [];
       const next = list.length ? nextCutoff(list, now) : null;
+      const p21Code = String(r.p21_route_code || r.code);
+      const codeCutoffs = list.filter((c: any) => (c.p21_code ?? p21Code) === p21Code) as any[];
       return {
         routeId: r.id as string,
         code: r.code as string,
@@ -104,6 +109,7 @@ export const listDispatchRuns = createServerFn({ method: "POST" })
             pushedAt: x.pushed_at as string | null,
             samsaraRouteId: x.samsara_route_id as string | null,
             error: x.error as string | null,
+            exception: runFlag(exceptions, p21Code, String(x.run_date).slice(0, 10), codeCutoffs),
           })),
       };
     });
@@ -130,9 +136,16 @@ export const getDispatchRun = createServerFn({ method: "POST" })
       .select("id, code, name, hub, pallets_full_truck")
       .eq("id", run.route_id)
       .maybeSingle();
-    const { getDispatchSettings } = await import("@/lib/dispatch.server");
+    const { getDispatchSettings, loadRunExceptions } = await import("@/lib/dispatch.server");
+    const { runFlag } = await import("@/lib/dispatch/run-exceptions");
     const settings = await getDispatchSettings();
+    const { data: rt } = await db().from("truck_capacity_routes").select("code, p21_route_code").eq("id", run.route_id).maybeSingle();
+    const p21Code = String(rt?.p21_route_code || rt?.code || run.route_code || "");
+    const { data: cuts } = await db().from("route_cutoffs").select("*").eq("route_id", run.route_id).eq("active", true).limit(200);
+    const codeCutoffs = (cuts ?? []).filter((c: any) => (c.p21_code ?? p21Code) === p21Code);
+    const exception = runFlag(await loadRunExceptions([p21Code]), p21Code, String(run.run_date).slice(0, 10), codeCutoffs);
     return {
+      exception,
       run,
       route,
       stops: stops ?? [],
@@ -153,6 +166,7 @@ export const buildRunNow = createServerFn({ method: "POST" })
       ok: true as const,
       runIds: res.runIds,
       runs: res.plan.runs.map((r) => ({ runDate: r.runDate, ...r.totals })),
+      skipped: res.skipped,
     };
   });
 
@@ -161,10 +175,12 @@ export const approveAndPush = createServerFn({ method: "POST" })
   .inputValidator((i) => z.object({ runId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireWriter(context.userId);
-    const { getDispatchSettings, pushRun } = await import("@/lib/dispatch.server");
+    const { getDispatchSettings, pushRun, runExceptionBlock } = await import("@/lib/dispatch.server");
     const settings = await getDispatchSettings();
-    const { data: run } = await db().from("dispatch_runs").select("route_id, status, lock_at").eq("id", data.runId).maybeSingle();
+    const { data: run } = await db().from("dispatch_runs").select("route_id, route_code, run_date, status, lock_at").eq("id", data.runId).maybeSingle();
     if (!run) throw new Error("Dispatch run not found");
+    const blocked = await runExceptionBlock(run);
+    if (blocked) return { ok: false as const, error: blocked };
     if (!(settings.enabledRouteIds ?? []).includes(String(run.route_id))) {
       return { ok: false as const, error: "Route is in shadow mode — enable it in Dispatch settings before pushing" };
     }
