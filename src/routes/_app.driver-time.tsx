@@ -327,7 +327,7 @@ function DriverCard({ driver, isAdmin, thresholdMinutes }: { driver: any; weekSt
             </span>
           )}
           <span className="text-sm font-bold" data-testid="warehouse-over-threshold">
-            Warehouse time over {thresholdLabel(thresholdMinutes)}: {hm(driver.flaggedMinutes)}
+            Warehouse time over {thresholdLabel(thresholdMinutes)}: {formatMinutes(driver.flaggedMinutes)}
           </span>
         </div>
       </div>
