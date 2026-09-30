@@ -300,7 +300,7 @@ describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail 
       seg({ startMs: cst(5, 9), endMs: cst(5, 9, 20), status: "driving", ...ELSEWHERE }),
       seg({ startMs: cst(5, 9, 20), endMs: cst(5, 15), status: "onDuty", ...ELSEWHERE }),
       seg({ startMs: cst(5, 15), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
-    ], { basis: "presence", clockOutTail: true });
+    ], { basis: "presence", remarkRule: true });
     expect(ev.map((e) => [e.durationMin, e.locationSource])).toEqual([[480, "remark"]]);
   });
   it("B: a work stop within 30 min of leaving the fence is added; driving alone is not", () => {
