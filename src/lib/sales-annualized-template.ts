@@ -1,141 +1,191 @@
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/tz";
-// Template SQL + helpers for the per-rep "Sales Annualized" report.
-// Reproduces the layout of the Upshaw (Olivia/Mark/Hector/Michelle/Nikki) workbooks.
+// ═══ Sales Reports definition — the ONE place for these rules ═══════════════
+// Adopted 2026-09-30 (Marty approved). Matches NDI Aug 2026 files: 366/377 rows
+// before restock rule (product group 95 added after that check).
+// Replaces the 2026-09-28 build on vwFactShipToSales (REGPROD only) +
+// vwShipToMaster ("current rep on the ship-to owns all history").
 //
-// ─── SOURCE (verified through the bridge 2026-09-28) ────────────────────────
-// NDI (Kevin) owns the P21 joins in the P21_Analytics_PLAY database, schema
-// Sales. The bridge login's default database is P21, so ALWAYS use three-part
-// names. Building-block views:
-//  * P21_Analytics_PLAY.Sales.vwFactShipToSales — CompanyNo, CustomerID,
-//    ShipToID, InvoiceNo, InvoiceDate, SalesYear, SalesMonth, SalesAmount,
-//    ProfitAmount, ProductGroup, ProductClass. Already filtered to REGPROD.
-//    Sales = extended_price, Profit = extended_price - cogs_amount.
-//  * P21_Analytics_PLAY.Sales.vwShipToMaster — CompanyNo, CustomerID, ShipToID,
-//    ShipToName, City, State, BuyingGroup, SalesRepID, SalesRepName.
-//    The CURRENT rep on the ship-to owns its full sales history.
-//  * P21_Analytics_PLAY.Sales.vwCustomerPricing — CompanyNo, CustomerID,
-//    PriceLevel, TargetSales.
-//
-// We do NOT query Kevin's Sales.vwShipToPerformance: it hardcodes May
-// (SalesMonth = 5, BETWEEN 1 AND 5, 12.0/5.0, "May Sales"). buildSalesReportSql
-// rebuilds its exact logic with period year Y and month M as integer literals.
-// Rules kept from Kevin's view:
-//  * TotalValue = Sales2022 + Sales2023 + Sales2024 + Sales2025 + SalesYTD
-//  * Annualized = SalesYTD * 12.0 / M
-//  * Pct = Annualized / Sales2025 - 1 (NULL when Sales2025 = 0)
-//    !! FLAG: Pct compares against the FIXED Sales2025 column. Correct for
-//    !! Y = 2026 only. For Y = 2027 onward this must become prior-year (Y-1) sales.
-//  * Keep Lvl = ISG/OP buying group code, else the SHORTFALL
-//    max(0, TargetSales - SalesYTD), else NULL. It is NOT a threshold.
-//  * Output column names are FIXED (no month/year in any name); the workbook
-//    export regenerates the Upshaw headers from the run's period.
-//
-// Sales.SalesReportingExclusion exists but is deliberately NOT applied, matching
-// Kevin's view. Whether it should be is an open question for NDI.
+// Rules (each also has a pure TS mirror below, unit-tested):
+//  1. Source: P21.dbo.invoice_hdr + invoice_line through the bridge, invoice_date basis.
+//  2. Lines: every invoice line EXCEPT product_group_id IS NULL, product groups
+//     10 (freight), 50 (delivery/install), 95 (restocking fee), 9908, 9910, 9911
+//     (discontinued groups NDI drops), and item 999999. 9912 is KEPT.
+//  3. Kits/suites: a line that has component lines (invoice_line_uid_parent points
+//     at it) is dropped; the components are counted.
+//  4. Rep: MIN(oe_hdr_salesrep.salesrep_id) for the invoice's order; if the order
+//     has no rep, invoice_hdr.salesrep_id. A line with neither has no rep and is
+//     not put on any rep's report.
+//  5. Row = (rep, customer_id). A customer can appear under several reps.
+//  6. Year 2022..2025 = full calendar years; Year current = Jan 1 .. end of the
+//     report month; later months are never read. Prior years use rules 2-4 too.
+//  7. Total Value = Y2022+Y2023+Y2024+Y2025+Year current.
+//     Ann current = Year current x 12 / report month.
+//     Pct = Ann current / prior-year sales - 1; blank when prior year is 0.
+//     Month Profit = extended_price - cogs_amount, rounded to cents.
+//  8. Keep Lvl: BG ISG/OP -> the BG code; price level with a positive target
+//     (vwCustomerPricing.TargetSales: L1 450,000, L2 200,000, L3 100,000,
+//     L4 25,000) -> target - Year current (NOT floored at 0); any other price
+//     level (L5, MML1, MML3, E2G, ...) -> the price-level code; else blank.
+//  9. Row inclusion: the row appears only if some year 2022..current has
+//     non-zero sales. No zero-everything rows.
+// 10. Price level / BG / name / city / state: vwCustomerPricing and the
+//     customer's primary ship-to (ShipToID = CustomerID) in vwShipToMaster,
+//     name falling back to P21.dbo.customer.
 //
 // Keep the SQL single-statement and comment-free: the installed agent (v1.0.0)
 // rejects semicolons and `--`, and sanitizeBridgeSql strips them anyway.
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 const DB = "P21_Analytics_PLAY.Sales";
 
-/** Render the SQL with already-validated literal fragments. */
-function renderSalesSql(repLiteral: string, y: string, m: string): string {
-  return `WITH SalesByShipTo AS (
-  SELECT
-    f.CompanyNo,
-    f.CustomerID,
-    f.ShipToID,
-    SUM(CASE WHEN f.SalesYear = 2022 THEN f.SalesAmount ELSE 0 END) AS Sales2022,
-    SUM(CASE WHEN f.SalesYear = 2023 THEN f.SalesAmount ELSE 0 END) AS Sales2023,
-    SUM(CASE WHEN f.SalesYear = 2024 THEN f.SalesAmount ELSE 0 END) AS Sales2024,
-    SUM(CASE WHEN f.SalesYear = 2025 THEN f.SalesAmount ELSE 0 END) AS Sales2025,
-    SUM(CASE WHEN f.SalesYear = ${y} AND f.SalesMonth BETWEEN 1 AND ${m} THEN f.SalesAmount ELSE 0 END) AS SalesYTD,
-    SUM(CASE WHEN f.SalesYear = ${y} AND f.SalesMonth = ${m} THEN f.SalesAmount ELSE 0 END) AS MonthSales,
-    SUM(CASE WHEN f.SalesYear = ${y} AND f.SalesMonth = ${m} THEN f.ProfitAmount ELSE 0 END) AS MonthProfit
-  FROM ${DB}.vwFactShipToSales f
-  WHERE f.SalesYear BETWEEN 2022 AND ${y}
-  GROUP BY f.CompanyNo, f.CustomerID, f.ShipToID
-),
-Base AS (
-  SELECT
-    m.CompanyNo,
-    m.CustomerID,
-    m.ShipToID,
-    m.ShipToName,
-    m.City,
-    m.State,
-    m.BuyingGroup,
-    m.SalesRepID,
-    m.SalesRepName,
-    cp.PriceLevel,
-    cp.TargetSales,
-    ISNULL(s.Sales2022, 0) AS Sales2022,
-    ISNULL(s.Sales2023, 0) AS Sales2023,
-    ISNULL(s.Sales2024, 0) AS Sales2024,
-    ISNULL(s.Sales2025, 0) AS Sales2025,
-    ISNULL(s.SalesYTD, 0) AS SalesYTD,
-    ISNULL(s.MonthSales, 0) AS MonthSales,
-    ISNULL(s.MonthProfit, 0) AS MonthProfit
-  FROM ${DB}.vwShipToMaster m
-  LEFT JOIN SalesByShipTo s
-    ON s.CompanyNo = m.CompanyNo
-   AND s.CustomerID = m.CustomerID
-   AND s.ShipToID = m.ShipToID
-  LEFT JOIN ${DB}.vwCustomerPricing cp
-    ON cp.CompanyNo = m.CompanyNo
-   AND cp.CustomerID = m.CustomerID
-  WHERE m.SalesRepID = ${repLiteral}
-),
-Calc AS (
-  SELECT
-    b.*,
-    b.Sales2022 + b.Sales2023 + b.Sales2024 + b.Sales2025 + b.SalesYTD AS TotalValue,
-    b.SalesYTD * 12.0 / ${m} AS Annualized
-  FROM Base b
-)
-SELECT
-  c.ShipToID AS [Cust Code],
-  c.PriceLevel AS [Price],
-  CASE WHEN c.BuyingGroup IS NULL THEN 'N' ELSE c.BuyingGroup END AS [BG],
-  c.ShipToName AS [Customer Name],
-  c.City AS [City],
-  c.State AS [St],
-  CAST(c.TotalValue AS decimal(19,2)) AS [Total Value],
-  CAST(c.Sales2022 AS decimal(19,2)) AS [Year 2022],
-  CAST(c.Sales2023 AS decimal(19,2)) AS [Year 2023],
-  CAST(c.Sales2024 AS decimal(19,2)) AS [Year 2024],
-  CAST(c.Sales2025 AS decimal(19,2)) AS [Year 2025],
-  CAST(c.SalesYTD AS decimal(19,2)) AS [Year Current],
-  CAST(c.Annualized AS decimal(19,2)) AS [Ann Current],
-  CAST(CASE WHEN c.Sales2025 = 0 THEN NULL ELSE c.Annualized / NULLIF(c.Sales2025, 0) - 1 END AS decimal(19,4)) AS [Pct],
-  CAST(c.MonthSales AS decimal(19,2)) AS [Month Sales],
-  CAST(c.MonthProfit AS decimal(19,2)) AS [Month Profit],
-  CASE
-    WHEN c.BuyingGroup IN ('ISG', 'OP') THEN c.BuyingGroup
-    WHEN c.TargetSales IS NOT NULL THEN CONVERT(varchar(30), CAST(CASE WHEN c.TargetSales - c.SalesYTD < 0 THEN 0 ELSE c.TargetSales - c.SalesYTD END AS decimal(19,2)))
-    ELSE NULL
-  END AS [Keep Lvl],
-  c.CustomerID,
-  c.ShipToID,
-  c.SalesRepID,
-  c.SalesRepName,
-  c.BuyingGroup,
-  c.PriceLevel,
-  c.TargetSales
-FROM Calc c
-ORDER BY [Total Value] DESC`;
+export const EXCLUDED_PRODUCT_GROUPS = ["10", "50", "95", "9908", "9910", "9911"] as const;
+export const EXCLUDED_ITEMS = ["999999"] as const;
+export const KEEP_LVL_BG_CODES = ["ISG", "OP"] as const;
+
+// ── Pure mirrors of the rules (unit-tested; the run cross-checks them) ──────
+
+/** Rules 2-3: does this invoice line count toward sales? */
+export function isLineCounted(line: { product_group_id: string | null; item_id: string | null; hasComponentLines: boolean }): boolean {
+  if (line.product_group_id === null || line.product_group_id === undefined) return false;
+  if ((EXCLUDED_PRODUCT_GROUPS as readonly string[]).includes(String(line.product_group_id).trim())) return false;
+  if (line.item_id === null || (EXCLUDED_ITEMS as readonly string[]).includes(String(line.item_id).trim())) return false;
+  return !line.hasComponentLines;
 }
 
-export type SalesReportSqlInput = { repCode: string; year: number; month: number };
+/** Rule 4: lowest order rep (SQL MIN on text), else the invoice header rep, else null. */
+export function attributeRep(orderReps: (string | null)[], invoiceRep: string | null): string | null {
+  const reps = orderReps.filter((r): r is string => !!r && r.trim() !== "");
+  if (reps.length) return reps.reduce((a, b) => (b < a ? b : a));
+  return invoiceRep && invoiceRep.trim() !== "" ? invoiceRep : null;
+}
 
-/** Validated, fully-substituted report SQL for one rep and one period. */
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+/** Rule 8. */
+export function keepLevel(bg: string | null, priceLevel: string | null, target: number | null, ytd: number):
+  { kind: "code"; code: string } | { kind: "number"; value: number; threshold: number } | null {
+  const b = bg?.trim().toUpperCase();
+  if (b && (KEEP_LVL_BG_CODES as readonly string[]).includes(b)) return { kind: "code", code: b };
+  if (target !== null && target > 0) return { kind: "number", value: round2(target - ytd), threshold: target };
+  if (priceLevel && priceLevel.trim()) return { kind: "code", code: priceLevel.trim() };
+  return null;
+}
+
+/** Rule 9. */
+export function includeRow(a: { y2022: number; y2023: number; y2024: number; y2025: number; ytd: number }): boolean {
+  return a.y2022 !== 0 || a.y2023 !== 0 || a.y2024 !== 0 || a.y2025 !== 0 || a.ytd !== 0;
+}
+
+/** Rule 7. */
+export function deriveColumns(a: { y2022: number; y2023: number; y2024: number; y2025: number; ytd: number; priorYear: number }, month: number) {
+  const ann = round2((a.ytd * 12) / month);
+  return {
+    total_value: round2(a.y2022 + a.y2023 + a.y2024 + a.y2025 + a.ytd),
+    ann_current: ann,
+    pct: a.priorYear === 0 ? null : Math.round((ann / a.priorYear - 1) * 10000) / 10000,
+  };
+}
+
+/** Render the SQL with already-validated literal fragments. repFilter null = all reps. */
+function renderSalesSql(repFilter: string | null, y: string, m: string): string {
+  const groups = EXCLUDED_PRODUCT_GROUPS.map((g) => `'${g}'`).join(", ");
+  const items = EXCLUDED_ITEMS.map((g) => `'${g}'`).join(", ");
+  const prior = /^\d+$/.test(y) ? String(Number(y) - 1) : `(${y} - 1)`;
+  const where = repFilter ? `\nWHERE g.Rep = ${repFilter}` : "";
+  return `WITH L AS (
+  SELECT h.order_no, h.customer_id, h.salesrep_id AS InvRep, YEAR(h.invoice_date) AS Yr, MONTH(h.invoice_date) AS Mo,
+    il.extended_price AS Ep, il.extended_price - il.cogs_amount AS Pr
+  FROM P21.dbo.invoice_hdr h
+  JOIN P21.dbo.invoice_line il ON il.invoice_no = h.invoice_no
+  WHERE h.invoice_date >= '2022-01-01'
+    AND h.invoice_date < DATEADD(month, 1, DATEFROMPARTS(${y}, ${m}, 1))
+    AND il.product_group_id IS NOT NULL
+    AND il.product_group_id NOT IN (${groups})
+    AND il.item_id NOT IN (${items})
+    AND NOT EXISTS (SELECT 1 FROM P21.dbo.invoice_line c WHERE c.invoice_no = il.invoice_no AND c.invoice_line_uid_parent = il.invoice_line_uid)
+),
+O AS (
+  SELECT order_number, MIN(salesrep_id) AS OrderRep FROM P21.dbo.oe_hdr_salesrep GROUP BY order_number
+),
+A AS (
+  SELECT ISNULL(O.OrderRep, L.InvRep) AS Rep, L.customer_id AS CustomerID, L.Yr, L.Mo, L.Ep, L.Pr
+  FROM L LEFT JOIN O ON O.order_number = L.order_no
+),
+G AS (
+  SELECT Rep, CustomerID,
+    SUM(CASE WHEN Yr = 2022 THEN Ep ELSE 0 END) AS Sales2022,
+    SUM(CASE WHEN Yr = 2023 THEN Ep ELSE 0 END) AS Sales2023,
+    SUM(CASE WHEN Yr = 2024 THEN Ep ELSE 0 END) AS Sales2024,
+    SUM(CASE WHEN Yr = 2025 THEN Ep ELSE 0 END) AS Sales2025,
+    SUM(CASE WHEN Yr = ${y} THEN Ep ELSE 0 END) AS SalesYTD,
+    SUM(CASE WHEN Yr = ${prior} THEN Ep ELSE 0 END) AS PriorYear,
+    SUM(CASE WHEN Yr = ${y} AND Mo = ${m} THEN Ep ELSE 0 END) AS MonthSales,
+    SUM(CASE WHEN Yr = ${y} AND Mo = ${m} THEN Pr ELSE 0 END) AS MonthProfit
+  FROM A
+  GROUP BY Rep, CustomerID
+),
+R AS (
+  SELECT SalesRepID, MAX(SalesRepName) AS SalesRepName FROM ${DB}.vwShipToMaster GROUP BY SalesRepID
+),
+CT AS (
+  SELECT CAST(id AS varchar(32)) AS id, MAX(LTRIM(RTRIM(ISNULL(first_name, '') + ' ' + ISNULL(last_name, '')))) AS nm FROM P21.dbo.contacts GROUP BY CAST(id AS varchar(32))
+),
+C AS (
+  SELECT customer_id, MAX(customer_name) AS customer_name FROM P21.dbo.customer GROUP BY customer_id
+),
+B AS (
+  SELECT g.*, sm.ShipToName, C.customer_name, sm.City, sm.State, sm.BuyingGroup, cp.PriceLevel, cp.TargetSales,
+    ISNULL(R.SalesRepName, CT.nm) AS RepName
+  FROM G g
+  LEFT JOIN ${DB}.vwShipToMaster sm ON sm.CustomerID = g.CustomerID AND sm.ShipToID = g.CustomerID
+  LEFT JOIN ${DB}.vwCustomerPricing cp ON cp.CustomerID = g.CustomerID
+  LEFT JOIN C ON C.customer_id = g.CustomerID
+  LEFT JOIN R ON R.SalesRepID = g.Rep
+  LEFT JOIN CT ON CT.id = CAST(g.Rep AS varchar(32))${where}
+)
+SELECT
+  b.Rep AS [Rep],
+  b.RepName AS [RepName],
+  b.CustomerID AS [Cust Code],
+  b.PriceLevel AS [Price],
+  CASE WHEN b.BuyingGroup IS NULL THEN 'N' ELSE b.BuyingGroup END AS [BG],
+  ISNULL(b.ShipToName, b.customer_name) AS [Customer Name],
+  b.City AS [City],
+  b.State AS [St],
+  CAST(b.Sales2022 + b.Sales2023 + b.Sales2024 + b.Sales2025 + b.SalesYTD AS decimal(19,2)) AS [Total Value],
+  CAST(b.Sales2022 AS decimal(19,2)) AS [Year 2022],
+  CAST(b.Sales2023 AS decimal(19,2)) AS [Year 2023],
+  CAST(b.Sales2024 AS decimal(19,2)) AS [Year 2024],
+  CAST(b.Sales2025 AS decimal(19,2)) AS [Year 2025],
+  CAST(b.SalesYTD AS decimal(19,2)) AS [Year Current],
+  CAST(b.SalesYTD * 12.0 / ${m} AS decimal(19,2)) AS [Ann Current],
+  CAST(CASE WHEN b.PriorYear = 0 THEN NULL ELSE (b.SalesYTD * 12.0 / ${m}) / b.PriorYear - 1 END AS decimal(19,4)) AS [Pct],
+  CAST(b.MonthSales AS decimal(19,2)) AS [Month Sales],
+  CAST(b.MonthProfit AS decimal(19,2)) AS [Month Profit],
+  CASE
+    WHEN b.BuyingGroup IN ('ISG', 'OP') THEN b.BuyingGroup
+    WHEN b.TargetSales > 0 THEN CONVERT(varchar(30), CAST(b.TargetSales - b.SalesYTD AS decimal(19,2)))
+    ELSE b.PriceLevel
+  END AS [Keep Lvl],
+  CAST(b.PriorYear AS decimal(19,2)) AS [PriorYear],
+  b.CustomerID,
+  b.BuyingGroup,
+  b.PriceLevel,
+  b.TargetSales
+FROM B b
+WHERE b.Sales2022 <> 0 OR b.Sales2023 <> 0 OR b.Sales2024 <> 0 OR b.Sales2025 <> 0 OR b.SalesYTD <> 0
+ORDER BY b.Rep, [Total Value] DESC`;
+}
+
+export type SalesReportSqlInput = { repCode?: string | null; year: number; month: number };
+
+/** Validated, fully-substituted report SQL for one period; repCode limits it to one rep, omitted = every rep. */
 export function buildSalesReportSql({ repCode, year, month }: SalesReportSqlInput): string {
   if (!Number.isInteger(year) || year < 2020 || year > 2100) throw new Error(`Invalid year: ${year}`);
   if (!Number.isInteger(month) || month < 1 || month > 12) throw new Error(`Invalid month: ${month}`);
-  const code = String(repCode ?? "").trim();
+  if (repCode === undefined || repCode === null) return renderSalesSql(null, String(year), String(month));
+  const code = String(repCode).trim();
   if (!code) throw new Error("repCode is required");
-  // Pct note: see header — Sales2025 is fixed; for year >= 2027 this must become prior-year sales.
   return renderSalesSql(`'${code.replace(/'/g, "''")}'`, String(year), String(month));
 }
 
