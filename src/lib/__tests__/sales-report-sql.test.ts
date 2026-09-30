@@ -97,9 +97,9 @@ describe("row rules", () => {
     const p = parseReportRowChecked(raw, { rep_code: "", rep_name: null, rep_email: null }, 8)!;
     expect(p.row.rep_code).toBe("5333");
     expect(p.row.keep_lvl_shortfall).toBe(1439.21);
-    expect(p.parityMismatch).toMatch(/total_value/); // deliberately wrong total above
-    const ok = parseReportRowChecked({ ...raw, "Total Value": 2458537.42 - 0 + (263797.08 + 505599.56 + 673245.89 + 567334.10 + 448560.79 - 2458537.42) }, { rep_code: "", rep_name: null, rep_email: null }, 8)!;
-    expect(ok.parityMismatch).toBeNull();
+    expect(p.parityMismatch).toBeNull();
+    const bad = parseReportRowChecked({ ...raw, "Total Value": 1, "Keep Lvl": "0.00" }, { rep_code: "", rep_name: null, rep_email: null }, 8)!;
+    expect(bad.parityMismatch).toBe("5333/15478: total_value,keep_lvl");
   });
 });
 
