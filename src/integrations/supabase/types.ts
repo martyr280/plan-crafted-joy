@@ -2308,6 +2308,42 @@ export type Database = {
         }
         Relationships: []
       }
+      sales_recon_aug2026: {
+        Row: {
+          aug_profit: number | null
+          aug_sales: number | null
+          created_at: string
+          cust_code: string | null
+          customer_name: string | null
+          id: string
+          rep_code: string | null
+          source: string | null
+          ytd_2026: number | null
+        }
+        Insert: {
+          aug_profit?: number | null
+          aug_sales?: number | null
+          created_at?: string
+          cust_code?: string | null
+          customer_name?: string | null
+          id?: string
+          rep_code?: string | null
+          source?: string | null
+          ytd_2026?: number | null
+        }
+        Update: {
+          aug_profit?: number | null
+          aug_sales?: number | null
+          created_at?: string
+          cust_code?: string | null
+          customer_name?: string | null
+          id?: string
+          rep_code?: string | null
+          source?: string | null
+          ytd_2026?: number | null
+        }
+        Relationships: []
+      }
       sales_rep_contacts: {
         Row: {
           cc_emails: string[]
