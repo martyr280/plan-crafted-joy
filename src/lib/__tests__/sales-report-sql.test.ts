@@ -10,7 +10,7 @@ describe("buildSalesReportSql (2026-09-30 definition)", () => {
     it(`substitutes month ${m}`, () => {
       const sql = buildSalesReportSql({ year: 2026, month: m });
       expect(sql).toContain(`DATEFROMPARTS(2026, ${m}, 1)`);
-      expect(sql).toContain(`Mo = ${m} THEN Ep`);
+      expect(sql).toContain(`Mo = ${m} AND InMo = 1 THEN Ep`);
       expect(sql).toContain(`b.SalesYTD * 12.0 / ${m} AS decimal(19,2)) AS [Ann Current]`);
       expect(sql).toContain("Yr = 2025 THEN Ep ELSE 0 END) AS PriorYear");
       expect(sql).not.toMatch(/\{py\}|\{pm\}|__REPCODE__|vwFactShipToSales|WHERE g\.Rep/);
@@ -22,7 +22,8 @@ describe("buildSalesReportSql (2026-09-30 definition)", () => {
   }
   it("encodes every exclusion, keeps 9912, drops kit headers, uses MIN order rep", () => {
     const sql = buildSalesReportSql({ year: 2026, month: 8 });
-    expect(sql).toContain("il.product_group_id NOT IN ('10', '50', '95', '9908', '9910', '9911')");
+    expect(sql).toContain("il.product_group_id NOT IN ('10', '50')");
+    expect(sql).toContain("il.product_group_id IN ('95', '9908', '9910', '9911') THEN 0 ELSE 1");
     expect(sql).not.toContain("9912");
     expect(sql).toContain("il.product_group_id IS NOT NULL");
     expect(sql).toContain("il.item_id NOT IN ('999999')");
