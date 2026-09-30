@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { isValidEmail } from "./sales-report-email";
 
 export const getSalesReportsAccess = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -116,7 +117,6 @@ export const listRepContacts = createServerFn({ method: "POST" })
 export const saveRepContact = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { rep_code: string; email: string | null; cc_emails: string[]; send_enabled: boolean; notes: string | null }) => {
-    const { isValidEmail } = require_email();
     if (!d?.rep_code) throw new Error("rep_code is required");
     const email = d.email?.trim() || null;
     if (email && !isValidEmail(email)) throw new Error(`Invalid email: ${email}`);
@@ -135,8 +135,6 @@ export const saveRepContact = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-import * as emailPlan from "./sales-report-email";
-function require_email() { return emailPlan; }
 
 export const getEmailSendList = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
