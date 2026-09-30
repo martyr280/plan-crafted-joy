@@ -233,7 +233,7 @@ function DriverTimePage() {
               </div>
               <div className="space-y-4 p-3">
                 {g.drivers.map((d: any) => (
-                  <DriverCard key={d.driverId} driver={d} weekStart={weekStart} isAdmin={!!data?.isAdmin} />
+                  <DriverCard key={d.driverId} driver={d} weekStart={weekStart} isAdmin={!!data?.isAdmin} thresholdMinutes={Number((data as any)?.thresholdMinutes ?? 90)} />
                 ))}
               </div>
             </Card>
@@ -292,10 +292,12 @@ function DriverTimePage() {
 
 /* ------------------------------------------------------------- driver card */
 
-function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: string; isAdmin: boolean }) {
+export function thresholdLabel(minutes: number): string {
+  return `${Number((minutes / 60).toFixed(2))} h`;
+}
+
+function DriverCard({ driver, isAdmin, thresholdMinutes }: { driver: any; weekStart: string; isAdmin: boolean; thresholdMinutes: number }) {
   const update = useUpdateDriverTimeEvent();
-  const paycom = useSetPaycomHours();
-  const [hours, setHours] = useState("");
 
   const byDay = useMemo(() => {
     const m = new Map<string, any[]>();
@@ -324,32 +326,13 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
                 : `${money(driver.cost.cost)} est. (${driver.cost.multiplier}× · ${driver.cost.hoursSource} hours)`}
             </span>
           )}
-          <div className="flex items-center gap-1">
-            <Input
-              className="h-8 w-28"
-              placeholder="Paycom hrs"
-              value={hours}
-              onChange={(e) => setHours(e.target.value)}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const n = hours.trim() === "" ? null : Number(hours);
-                if (n !== null && !Number.isFinite(n)) return toast.error("Enter a number of hours");
-                paycom.mutate(
-                  { driverId: driver.driverId, weekStart, paycomHours: n },
-                  { onSuccess: () => toast.success("Paycom hours saved"), onError: (e: any) => toast.error(e?.message) },
-                );
-              }}
-            >
-              Save
-            </Button>
-          </div>
+          <span className="text-sm font-bold" data-testid="warehouse-over-threshold">
+            Warehouse time over {thresholdLabel(thresholdMinutes)}: {hm(driver.flaggedMinutes)}
+          </span>
         </div>
       </div>
 
-      {driver.official && <div className="mb-3 rounded border bg-muted/30 p-3 text-sm space-y-2">
+      {isAdmin && driver.official && <div className="mb-3 rounded border bg-muted/30 p-3 text-sm space-y-2">
         <div><strong>Official {formatMinutes(driver.officialMinutes)}</strong> · automated {formatMinutes(driver.automatedMinutes)} · variance {formatMinutes(driver.varianceMinutes)} (automated minus official)</div>
         <p className="text-xs text-muted-foreground">{driver.official.source} · {driver.official.reason}</p>
         {!!driver.official.intervals?.length && <details><summary className="cursor-pointer">Official time blocks ({driver.official.intervals.length})</summary>
@@ -383,7 +366,6 @@ function DriverCard({ driver, weekStart, isAdmin }: { driver: any; weekStart: st
                     )}
 
                   </div>
-                  <div className="text-[11px] text-muted-foreground">{(ev.statuses ?? []).join(" / ")}</div>
                   {ev.nelsonOnly && <Badge variant="outline" className="text-[10px]">Not in official report</Badge>}
                   {ev.superseded_at && <Badge variant="outline">superseded</Badge>}
                   {ev.needs_review && (
