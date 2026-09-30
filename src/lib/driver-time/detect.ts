@@ -98,7 +98,7 @@ export type DetectOptions = {
    * window end and are skipped when looking for a segment's "next". Default 60.
    */
   minSegmentSeconds?: number;
-  /** Rule A (warehouse remark). Default true. */
+  /** Rule A (warehouse remark). Default OFF pending decision: overcounts Kennedy Loyd vs Joe's sheets (2026-09-30 report). */
   remarkRule?: boolean;
   /** Rule B (work-stop tail). Default OFF: contradicts Joe's own Outler 9/10 sheet (see 2026-09-30 report). */
   clockOutTail?: boolean;
@@ -466,7 +466,7 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
     // Rule A: a "Warehouse" remark on any of the day's logs replaces the
     // fence-based blocks with first work start → last clock-out.
     const remarkSeg = daySegs.find((s) => s.remark && WAREHOUSE_REMARK.test(s.remark));
-    if (remarkSeg && opts.remarkRule !== false) {
+    if (remarkSeg && opts.remarkRule === true) {
       const workSegs = daySegs.filter((s) => BACKFILL_PLACES_STATUSES.has(s.status) && nonTrivial(s));
       if (workSegs.length) {
         const start = workSegs[0].startMs;

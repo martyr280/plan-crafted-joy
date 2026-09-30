@@ -272,7 +272,7 @@ describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail 
   const day = (fx: any, date: string, clockOutTail = false) =>
     detectWarehouseEvents({
       driver: fx.driver, segments: fx.segments, warehouses: fx.fences, gpsSamples: fx.gps,
-      options: { tzOffsetMinutes: fx.tzOffsetMinutes, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "presence", hubTags: fx.tags, clockOutTail },
+      options: { tzOffsetMinutes: fx.tzOffsetMinutes, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "presence", hubTags: fx.tags, clockOutTail, remarkRule: true },
     }).filter((e) => e.eventDate === date);
   const total = (ev: { durationMin: number }[]) => ev.reduce((n, e) => n + e.durationMin, 0);
 
