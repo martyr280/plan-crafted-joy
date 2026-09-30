@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useModuleView } from "@/lib/usage-log";
 import {
-  useDriverTimeWeek, useUpdateDriverTimeEvent, useSetPaycomHours, useRunDriverTimeSweep,
+  useDriverTimeWeek, useUpdateDriverTimeEvent, useRunDriverTimeSweep,
   useDriverTimeConfig, useSaveDriverTimeConfig, useDriverPayRates, useImportDriverPayRates,
   useSamsaraDiagnostics,
 } from "@/hooks/useDriverTime";
@@ -292,7 +292,7 @@ function DriverTimePage() {
 
 /* ------------------------------------------------------------- driver card */
 
-export function thresholdLabel(minutes: number): string {
+function thresholdLabel(minutes: number): string {
   return `${Number((minutes / 60).toFixed(2))} h`;
 }
 
