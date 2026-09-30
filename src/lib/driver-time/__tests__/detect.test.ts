@@ -266,3 +266,52 @@ describe("regressions from cached Samsara hos_logs (Joe Green's sheets)", () => 
   it("Joseph Outler 9/17 → 444 ±2", () => expect(Math.abs(total(run(load("outler-2026-09-17.json"), "2026-09-17")) - 444)).toBeLessThanOrEqual(2));
   it("Karriem Farahkhan 9/16 → 426 ±2", () => expect(Math.abs(total(run(load("farahkhan-2026-09-16.json"), "2026-09-16")) - 426)).toBeLessThanOrEqual(2));
 });
+
+describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail (B)", () => {
+  const load = (f: string) => JSON.parse(readFileSync(join(__dirname, "fixtures", f), "utf8"));
+  const day = (fx: any, date: string) =>
+    detectWarehouseEvents({
+      driver: fx.driver, segments: fx.segments, warehouses: fx.fences, gpsSamples: fx.gps,
+      options: { tzOffsetMinutes: fx.tzOffsetMinutes, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "presence", hubTags: fx.tags },
+    }).filter((e) => e.eventDate === date);
+  const total = (ev: { durationMin: number }[]) => ev.reduce((n, e) => n + e.durationMin, 0);
+
+  it("A: Outler 9/21 'Warehouse' remark → 517 ±5, one remark event", () => {
+    const ev = day(load("outler-2026-09-21.json"), "2026-09-21");
+    expect(Math.abs(total(ev) - 517)).toBeLessThanOrEqual(5);
+    expect(ev.map((e) => e.locationSource)).toEqual(["remark"]);
+    expect(ev[0].notes).toMatch(/Warehouse/);
+  });
+  it("A: Outler 9/22 'Warehouse' remark → 506 ±5", () => {
+    expect(Math.abs(total(day(load("outler-2026-09-22.json"), "2026-09-22")) - 506)).toBeLessThanOrEqual(5);
+  });
+  it("B: Outler 9/24 fuel stop before clock-out → 186 ±3", () => {
+    expect(Math.abs(total(day(load("outler-2026-09-24.json"), "2026-09-24")) - 186)).toBeLessThanOrEqual(3);
+  });
+  it("A: remark on a synthetic day spans first work → last clock-out", () => {
+    const ev = run([
+      seg({ startMs: cst(5, 7), endMs: cst(5, 9), status: "onDuty", latitude: null, longitude: null, remark: "warehouse " } as any),
+      seg({ startMs: cst(5, 9), endMs: cst(5, 12), status: "driving", ...ELSEWHERE }),
+      seg({ startMs: cst(5, 12), endMs: cst(5, 15), status: "onDuty", ...ELSEWHERE }),
+      seg({ startMs: cst(5, 15), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
+    ], { basis: "presence" });
+    expect(ev.map((e) => [e.durationMin, e.locationSource])).toEqual([[480, "remark"]]);
+  });
+  it("B: a work stop within 30 min of leaving the fence is added; driving alone is not", () => {
+    const tail = (stopStartMin: number) => run([
+      seg({ startMs: cst(5, 8), endMs: cst(5, 12), status: "onDuty" }),
+      seg({ startMs: cst(5, 12), endMs: cst(5, 12, stopStartMin), status: "driving", ...ELSEWHERE }),
+      seg({ startMs: cst(5, 12, stopStartMin), endMs: cst(5, 12, stopStartMin + 15), status: "onDuty", ...ELSEWHERE }),
+      seg({ startMs: cst(5, 12, stopStartMin + 15), endMs: cst(5, 14), status: "driving", ...ELSEWHERE }),
+      seg({ startMs: cst(5, 14), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
+    ], { basis: "presence" }).map((e) => e.durationMin);
+    expect(tail(15)).toEqual([270]);
+    expect(tail(40)).toEqual([240]);
+    const driveOnly = run([
+      seg({ startMs: cst(5, 8), endMs: cst(5, 12), status: "onDuty" }),
+      seg({ startMs: cst(5, 12), endMs: cst(5, 12, 20), status: "driving", ...ELSEWHERE }),
+      seg({ startMs: cst(5, 12, 20), endMs: cst(5, 20), status: "offDuty", ...ELSEWHERE }),
+    ], { basis: "presence" });
+    expect(driveOnly.map((e) => e.durationMin)).toEqual([240]);
+  });
+});

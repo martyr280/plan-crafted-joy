@@ -195,6 +195,8 @@ export type NormalizedHosSegment = {
   vehicleId: string | null;
   /** Set when vehicleId was filled from assignments, not reported by the log. */
   vehicleBackfilled?: boolean;
+  /** Driver-entered log remark (e.g. "Warehouse", "Fuel"), trimmed; null when absent. */
+  remark?: string | null;
 };
 
 function coordOf(entry: any): { latitude: number | null; longitude: number | null } {
@@ -274,6 +276,7 @@ export async function fetchHosLogs(opts: {
           latitude,
           longitude,
           vehicleId: entry.vehicle?.id ? String(entry.vehicle.id) : entry.vehicleId ? String(entry.vehicleId) : null,
+          remark: typeof entry.remark === "string" && entry.remark.trim() ? entry.remark.trim() : null,
         });
       }
     }
