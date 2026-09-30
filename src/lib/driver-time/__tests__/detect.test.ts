@@ -291,8 +291,8 @@ describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail 
   it("A: remark on a synthetic day spans first work → last clock-out", () => {
     const ev = run([
       seg({ startMs: cst(5, 7), endMs: cst(5, 9), status: "onDuty", latitude: null, longitude: null, remark: "warehouse " } as any),
-      seg({ startMs: cst(5, 9), endMs: cst(5, 12), status: "driving", ...ELSEWHERE }),
-      seg({ startMs: cst(5, 12), endMs: cst(5, 15), status: "onDuty", ...ELSEWHERE }),
+      seg({ startMs: cst(5, 9), endMs: cst(5, 9, 20), status: "driving", ...ELSEWHERE }),
+      seg({ startMs: cst(5, 9, 20), endMs: cst(5, 15), status: "onDuty", ...ELSEWHERE }),
       seg({ startMs: cst(5, 15), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
     ], { basis: "presence" });
     expect(ev.map((e) => [e.durationMin, e.locationSource])).toEqual([[480, "remark"]]);
