@@ -10,11 +10,8 @@ export const listP21SalesReps = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { result } = await runJob(
-      "sql.select",
-      { sql: REP_DISCOVERY_SQL, params: {}, slug: "rep-discovery" },
-      60_000,
-    );
+    const { discoverSalesReps } = await import("./sales-reports.server");
+    const result = { rows: await discoverSalesReps(60_000) };
     const rows = ((result as any)?.rows ?? []) as Array<{
       rep_code: string;
       rep_name: string | null;
@@ -32,11 +29,8 @@ export const seedSalesAnnualizedSchedules = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
 
-    const { result } = await runJob(
-      "sql.select",
-      { sql: REP_DISCOVERY_SQL, params: {}, slug: "rep-discovery" },
-      60_000,
-    );
+    const { discoverSalesReps } = await import("./sales-reports.server");
+    const result = { rows: await discoverSalesReps(60_000) };
     const reps = ((result as any)?.rows ?? []) as Array<{
       rep_code: string;
       rep_name: string | null;
