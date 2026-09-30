@@ -69,3 +69,20 @@ export function matchRep(repName: string | null, contacts: P21Contact[]): RepMat
 }
 
 export const REP_EMAIL_NOTE = (contactId: string) => `P21 contact by name match (${contactId}), unconfirmed`;
+
+/**
+ * Match a batch of reps. A last-two-words match is withheld when its email is
+ * already a full-name match for a DIFFERENT rep ("Melanie Joe Perry" → Joe
+ * Perry's address would send rep 5365's report to rep 1016).
+ */
+export function matchAllReps(reps: { rep_code: string; rep_name: string | null }[], contacts: P21Contact[]) {
+  const res = reps.map((r) => ({ ...r, m: matchRep(r.rep_name, contacts), withheld: null as string | null }));
+  const fullEmails = new Map<string, string>();
+  for (const r of res) if (r.m.kind === "match" && r.m.how === "full_name") fullEmails.set(r.m.contact.email!.trim().toLowerCase(), r.rep_code);
+  for (const r of res) {
+    if (r.m.kind !== "match" || r.m.how !== "last_two_words") continue;
+    const owner = fullEmails.get(r.m.contact.email!.trim().toLowerCase());
+    if (owner && owner !== r.rep_code) r.withheld = `email belongs to rep ${owner}`;
+  }
+  return res;
+}
