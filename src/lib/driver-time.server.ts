@@ -32,6 +32,8 @@ export type DriverTimeSettings = {
   includeDeactivated: boolean;
   /** "presence": any status inside the fence is warehouse time. "onduty": legacy. */
   basis: "presence" | "onduty";
+  /** Per-driver: a "Warehouse" HOS remark makes the whole day warehouse time (Joe Green 2026-09-30). Default none. */
+  warehouseRemarkDriverIds: string[];
 };
 
 export const DEFAULT_DRIVER_TIME_SETTINGS: DriverTimeSettings = {
@@ -44,6 +46,7 @@ export const DEFAULT_DRIVER_TIME_SETTINGS: DriverTimeSettings = {
   requireLicense: true,
   includeDeactivated: false,
   basis: "presence",
+  warehouseRemarkDriverIds: [],
 };
 
 export type RosterCounts = {
@@ -161,6 +164,7 @@ export async function getDriverTimeSettings(): Promise<DriverTimeSettings> {
     ...saved,
     requireLicense: saved.requireLicense ?? DEFAULT_DRIVER_TIME_SETTINGS.requireLicense,
     includeDeactivated: saved.includeDeactivated ?? DEFAULT_DRIVER_TIME_SETTINGS.includeDeactivated,
+    warehouseRemarkDriverIds: Array.isArray(saved.warehouseRemarkDriverIds) ? saved.warehouseRemarkDriverIds.map(String) : [],
     basis: saved.basis === "onduty" ? "onduty" : DEFAULT_DRIVER_TIME_SETTINGS.basis,
     // Shared warehouse/LTL identities are never individual driver records.
     // Older saved settings must not erase the built-in roster exclusions.
@@ -374,6 +378,7 @@ export async function runDriverTimeSweep(opts?: {
             excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
             basis: settings.basis,
             hubTags: (d as any).tags ?? [],
+            remarkRule: settings.warehouseRemarkDriverIds.includes(d.id),
           },
         }),
       );

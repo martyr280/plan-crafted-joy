@@ -78,6 +78,7 @@ export function useSaveDriverTimeConfig() {
       requireLicense?: boolean;
       includeDeactivated?: boolean;
       basis?: "presence" | "onduty";
+      warehouseRemarkDriverIds?: string[];
 
     }) => fn({ data: patch }),
     onSuccess: () => {
