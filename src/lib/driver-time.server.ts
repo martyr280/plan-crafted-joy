@@ -279,9 +279,12 @@ export async function runDriverTimeSweep(opts?: {
     if (res.error) warnings.push(`stale run cleanup failed: ${res.error}`);
   }
 
-  // The cron sweep scans the trailing 8 days, so label the row with the week
-  // that actually contains the window start rather than today's week.
-  const labelWeek = opts?.weekStart ? { weekStart, weekEnd } : weekBounds(new Date(startMs));
+  // The cron sweep reports on the week that just ended: label it with the
+  // Monday (Central) of the week containing (run's local date − 7 days).
+  // Computed from the run date, not from the scan window (which starts on a
+  // Sunday and used to label the previous week).
+  const { scheduledSweepWeek } = await import("@/lib/driver-time/week-label");
+  const labelWeek = opts?.weekStart ? { weekStart, weekEnd } : scheduledSweepWeek(now);
 
   const { data: runRow, error: runErr } = await db()
     .from("driver_warehouse_runs")
