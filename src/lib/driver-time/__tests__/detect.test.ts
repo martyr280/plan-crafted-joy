@@ -321,3 +321,43 @@ describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail 
     expect(driveOnly.map((e) => e.durationMin)).toEqual([240]);
   });
 });
+
+describe("Joe Green answers 2026-09-30 — rules C and D", () => {
+  const P = { basis: "presence" as const };
+  it("C: a 'clocked out' remark ends the block at the first log carrying it", () => {
+    const ev = run([
+      seg({ startMs: cst(5, 8), endMs: cst(5, 12), status: "onDuty" }),
+      seg({ startMs: cst(5, 12), endMs: cst(5, 14), status: "onDuty", remark: "Driver Clocked out & off duty" } as any),
+      seg({ startMs: cst(5, 14), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
+    ], P);
+    expect(ev.map((e) => e.durationMin)).toEqual([240]);
+  });
+  it("C: no clock-out remark → unchanged", () => {
+    const ev = run([
+      seg({ startMs: cst(5, 8), endMs: cst(5, 14), status: "onDuty", remark: "Fuel" } as any),
+      seg({ startMs: cst(5, 14), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
+    ], P);
+    expect(ev.map((e) => e.durationMin)).toEqual([360]);
+  });
+  const gilbert = (excursionRemark: string | null) => [
+    seg({ startMs: cst(5, 11, 36), endMs: cst(5, 11, 37), status: "onDuty" }),
+    seg({ startMs: cst(5, 11, 37), endMs: cst(5, 12, 17), status: "offDuty" }),
+    seg({ startMs: cst(5, 12, 17), endMs: cst(5, 12, 21), status: "driving" }),
+    seg({ startMs: cst(5, 12, 21), endMs: cst(5, 13), status: "offDuty", ...ELSEWHERE, remark: excursionRemark } as any),
+    seg({ startMs: cst(5, 13), endMs: cst(5, 13, 9), status: "driving", latitude: null, longitude: null }),
+    seg({ startMs: cst(5, 13, 9), endMs: cst(5, 15, 42), status: "onDuty" }),
+    seg({ startMs: cst(5, 15, 42), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
+  ];
+  it("D: in-fence arrival opens the block; in-fence rest counts; the excursion does not", () => {
+    const ev = run(gilbert(null), P);
+    expect(ev).toHaveLength(1);
+    expect(ev[0].startMs).toBe(cst(5, 11, 36));
+    expect(ev[0].endMs).toBe(cst(5, 15, 42));
+    // 11:36–12:17 (41) + 13:09–15:42 (153); 12:17–13:09 excluded.
+    expect(ev[0].durationMin).toBe(194);
+  });
+  it("C precedence: a clock-out remark on the excursion stops D; nothing after it counts", () => {
+    const ev = run(gilbert("Driver Clocked out & off duty"), P);
+    expect(ev).toHaveLength(0);
+  });
+});

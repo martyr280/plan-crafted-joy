@@ -126,6 +126,10 @@ export type WarehouseEvent = {
 export const WAREHOUSE_REMARK = /warehouse/i;
 /** Rule B (Joe Green, 2026-09-30): clock-out within this long of leaving the fence adds the tail. */
 export const CLOCKOUT_TAIL_MINUTES = 30;
+/** Rule C (Joe Green 2026-09-30, Farahkhan 9/25): the day's warehouse time ends at the first log carrying this remark. */
+export const CLOCKED_OUT_REMARK = /clocked out/i;
+/** Rule D: longest single drive allowed inside a rest-only gap that re-joins the same fence. */
+const REJOIN_MAX_DRIVE_MINUTES = 30;
 /** Non-driving work statuses: a "stop" for the remark end and the tail rule. */
 const STOP_WORK = new Set<string>(["onDuty", "yardMove"]);
 
@@ -462,6 +466,9 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
     const windowStart = working[0].startMs;
     const windowEnd = closing[closing.length - 1].endMs;
     if (!(windowEnd > windowStart)) continue;
+    // Rule C: first log with a clock-out remark caps the day. Everything from
+    // there on is off the clock, whatever the fence says.
+    const clockOutMs = daySegs.find((s) => s.remark && CLOCKED_OUT_REMARK.test(s.remark))?.startMs ?? Infinity;
 
     // Rule A: a "Warehouse" remark on any of the day's logs replaces the
     // fence-based blocks with first work start → last clock-out.
@@ -476,6 +483,7 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
         // last work→rest transition (clock-out).
         const lastRemarkEnd = Math.max(...daySegs.filter((s) => s.remark && WAREHOUSE_REMARK.test(s.remark)).map((s) => s.endMs));
         let end = workSegs[workSegs.length - 1].endMs;
+        const capEnd = (e: number) => Math.min(e, clockOutMs);
         for (let i = 1; i < daySegs.length; i++) {
           if (REST_STATUSES.has(daySegs[i].status) && !REST_STATUSES.has(daySegs[i - 1].status) && daySegs[i].startMs >= start) end = daySegs[i].startMs;
         }
@@ -484,6 +492,7 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
           const before = daySegs.filter((s) => STOP_WORK.has(s.status) && s.endMs <= longDrive.startMs && s.startMs >= start);
           if (before.length) end = before[before.length - 1].endMs;
         }
+        end = capEnd(end);
         if (end - start > thresholdMinutes * MINUTE) {
           events.push({
             driverId: String(input.driver.id),
@@ -559,6 +568,8 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
       endMs: number;
       statuses: string[];
       sources: Set<string>;
+      /** Rule D: out-of-fence stretches inside a re-joined block, not counted. */
+      excluded: Array<[number, number]>;
     };
     const blocks: Blk[] = [];
     let cur: Blk | null = null;
@@ -594,6 +605,22 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
             gapSegs.length === 0 ||
             (gapMs < mergeGapMinutes * MINUTE &&
               gapSegs.every((s) => s.status === "driving" || s.status === "yardMove"));
+          // Rule D: a gap of rest (plus short drives) with no work elsewhere
+          // re-joins the same fence; only the in-fence time counts.
+          const rejoin =
+            !bridgeable &&
+            a.seg.startMs < clockOutMs &&
+            gapSegs.some((s) => REST_STATUSES.has(s.status)) &&
+            gapSegs.every((s) => REST_STATUSES.has(s.status) ||
+              ((s.status === "driving" || s.status === "yardMove") && s.endMs - s.startMs <= REJOIN_MAX_DRIVE_MINUTES * MINUTE));
+          if (rejoin) {
+            if (a.seg.startMs > cur.endMs) cur.excluded.push([cur.endMs, a.seg.startMs]);
+            cur.endMs = Math.max(cur.endMs, a.seg.endMs);
+            if (!cur.statuses.includes(a.seg.status)) cur.statuses.push(a.seg.status);
+            cur.sources.add(a.source);
+            gapSegs = [];
+            continue;
+          }
           if (bridgeable) {
             cur.endMs = Math.max(cur.endMs, a.seg.endMs);
             if (!cur.statuses.includes(a.seg.status)) cur.statuses.push(a.seg.status);
@@ -611,6 +638,7 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
           endMs: a.seg.endMs,
           statuses: [a.seg.status],
           sources: new Set([a.source]),
+          excluded: [],
         };
         gapSegs = [];
       } else if (cur) {
@@ -645,9 +673,18 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
       }
     }
 
+    // 4c. Rule C cap, then counted = span minus Rule D exclusions.
+    for (const b of blocks) {
+      if (b.endMs > clockOutMs) b.endMs = Math.max(b.startMs, clockOutMs);
+      b.excluded = b.excluded
+        .map(([x, y]) => [x, Math.min(y, b.endMs)] as [number, number])
+        .filter(([x, y]) => y > x);
+    }
+    const counted = (b: Blk) => b.endMs - b.startMs - b.excluded.reduce((n, [x, y]) => n + (y - x), 0);
+
     // 5. threshold
     for (const b of blocks) {
-      if (b.endMs - b.startMs <= thresholdMinutes * MINUTE) continue;
+      if (counted(b) <= thresholdMinutes * MINUTE) continue;
       const locationSource: WarehouseEvent["locationSource"] = b.sources.has("log")
         ? "log"
         : b.sources.has("vehicle_gps")
@@ -661,7 +698,7 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
         eventDate: dayKey,
         startMs: b.startMs,
         endMs: b.endMs,
-        durationMin: Math.round((b.endMs - b.startMs) / MINUTE),
+        durationMin: Math.round(counted(b) / MINUTE),
         addressId: b.fence.id,
         addressName: b.fence.name,
         hub: b.fence.hub ?? b.fence.name,
