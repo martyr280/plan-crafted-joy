@@ -238,9 +238,9 @@ FROM P21.dbo.contacts`;
 export const KEEP_LEVEL_EXEMPT = ["ISG", "OP", "MML1", "MML3", "L5", "E2G", "EMPLOYEE"] as const;
 
 /**
- * Annual sales required to keep each price level. NOT used by the report run:
- * the view's Keep Lvl is already the shortfall against vwCustomerPricing.TargetSales.
- * Kept only for legacy UI fallbacks on old runs.
+ * Annual sales required to keep each price level. The run reads the same
+ * figures from vwCustomerPricing.TargetSales (checked 2026-09-30: identical,
+ * L5 = 0). Kept for UI fallbacks on rows without a stored threshold.
  */
 export const KEEP_LEVEL_THRESHOLDS: Record<string, number> = {
   L1: 450000,
