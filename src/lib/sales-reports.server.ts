@@ -322,7 +322,19 @@ export async function buildRepWorkbook(
   const monthLabel = SHORT_MONTH_NAMES[Math.max(0, Math.min(11, monthIdx))];
   const rows = await fetchRunRows(client, runId, repCode);
   const repName = rows[0]?.rep_name ?? repCode;
+  const buffer = await renderRepWorkbook(rows, repCode, year, monthLabel);
+  const safe = (repName || repCode).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return { filename: `${safe}-Sales-Annualized-${monthLabel}-${year}.xlsx`, buffer };
+}
 
+/** Render one rep's workbook from rows the caller already fetched and checked. */
+export async function renderRepWorkbook(
+  rows: SalesReportRow[],
+  repCode: string,
+  year: number,
+  monthLabel: string,
+): Promise<Buffer> {
+  const repName = rows[0]?.rep_name ?? repCode;
   const wb = new ExcelJS.Workbook();
   wb.creator = "Nelson AI";
   const ws = wb.addWorksheet(repName.slice(0, 28) || repCode);
@@ -382,7 +394,5 @@ export async function buildRepWorkbook(
     totals.border = { top: { style: "thin" } };
   }
 
-  const buffer = Buffer.from(await wb.xlsx.writeBuffer());
-  const safe = (repName || repCode).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return { filename: `${safe}-Sales-Annualized-${monthLabel}-${year}.xlsx`, buffer };
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
