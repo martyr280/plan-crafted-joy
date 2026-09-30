@@ -188,34 +188,55 @@ export async function buildDispatchPlanForRun(routeId: string, runDate?: string)
   }
 
   const routeCode = route.code as string;
+  const p21Code = (route.p21_route_code || routeCode) as string;
+  const codeCutoffs = cutoffs.filter((c) => (c.p21_code ?? p21Code) === p21Code);
+
+  // --- Run exceptions: a no_run date is never built. ------------------------
+  let exceptions: RunException[];
+  try {
+    exceptions = await loadRunExceptions([p21Code]);
+  } catch (e: any) {
+    return { ok: false, error: `Run exception lookup failed: ${e?.message ?? String(e)}` };
+  }
+  const skippedMsgs = runDates
+    .map((d) => pushBlockedReason(exceptions, p21Code, d, codeCutoffs))
+    .filter((m): m is string => !!m);
+  const openDates = runDates.filter((d) => !pushBlockedReason(exceptions, p21Code, d, codeCutoffs));
+  if (!openDates.length) return { ok: false, error: skippedMsgs.join(" ") };
 
   // --- FRESH bridge pull, gated behind the view's availability. ------------
   if (!settings.viewAvailable) {
-    await recordRunError(routeId, routeCode, runDates, tz, settings, `view not available: ${settings.viewName}`);
+    await recordRunError(routeId, routeCode, openDates, tz, settings, `view not available: ${settings.viewName}`);
     return { ok: false, error: `view not available: ${settings.viewName}` };
   }
 
   let rows: P21DispatchRow[] = [];
   let bridgeJobId: string | null = null;
   try {
-    const p21Code = route.p21_route_code || routeCode;
     const sql = buildDispatchViewSql(settings.viewName, p21Code);
     const { jobId, result } = await runJob("sql.select", { sql, slug: "dispatch" }, 60000);
     bridgeJobId = jobId as string;
     const all = ((result as any)?.rows ?? []) as P21DispatchRow[];
-    // Keep only tickets the date basis assigns to one of this cutoff's run dates.
+    // Ticket → run date through assignRun WITH exceptions (planRunBuild), the
+    // same call the Tickets-by-cutoff board makes: rolled tickets land here.
     const basis = await getDispatchDateBasis();
     const today = localDateIn("America/Chicago", new Date());
-    const codeCutoffs = cutoffs.filter((c) => (c.p21_code ?? p21Code) === p21Code);
-    rows = all.filter((r) => {
-      const a = assignRun((r as any)[DATE_BASIS_COLUMN[basis]], codeCutoffs, today);
-      return a.status === "assigned" && runDates.includes(a.runDate);
+    const planned = planRunBuild({
+      rows: all as unknown as Record<string, unknown>[],
+      dateColumn: DATE_BASIS_COLUMN[basis],
+      cutoffs: codeCutoffs,
+      p21Code,
+      runDates: openDates,
+      today,
+      exceptions,
     });
+    rows = planned.build.flatMap((b) => b.rows) as unknown as P21DispatchRow[];
   } catch (e: any) {
     const msg = `Bridge query failed: ${e?.message ?? String(e)}`;
-    await recordRunError(routeId, routeCode, runDates, tz, settings, msg, bridgeJobId);
+    await recordRunError(routeId, routeCode, openDates, tz, settings, msg, bridgeJobId);
     return { ok: false, error: msg };
   }
+  runDates = openDates;
 
   const [{ data: mapRows }, { data: tplRows }] = await Promise.all([
     db().from("samsara_address_map").select("p21_ship_to_id, samsara_address_id, verified").limit(50000),
