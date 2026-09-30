@@ -24,6 +24,6 @@ describe("sanitizeBridgeSql", () => {
     expect(out).not.toMatch(/;/);
     expect(out).not.toMatch(/--/);
     expect(out).toMatch(/^WITH L AS/);
-    expect(out).toMatch(/ORDER BY \[Total Value\] DESC/);
+    expect(out).toMatch(/ORDER BY b\.Rep, \[Total Value\] DESC/);
   });
 });
