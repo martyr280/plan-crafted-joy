@@ -100,7 +100,7 @@ export type DetectOptions = {
   minSegmentSeconds?: number;
   /** Rule A (warehouse remark). Default true. */
   remarkRule?: boolean;
-  /** Rule B (clock-out tail). Default true. */
+  /** Rule B (work-stop tail). Default OFF: contradicts Joe's own Outler 9/10 sheet (see 2026-09-30 report). */
   clockOutTail?: boolean;
 
 };
@@ -627,7 +627,7 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
     // through the end of that stop. Driving alone never extends a block.
     const tailMs = CLOCKOUT_TAIL_MINUTES * MINUTE;
     const lastBlk = blocks[blocks.length - 1];
-    if (opts.clockOutTail !== false && lastBlk) {
+    if (opts.clockOutTail === true && lastBlk) {
       const after = daySegs.filter((s) => s.startMs >= lastBlk.endMs).filter(nonTrivial);
       let i = 0;
       while (i < after.length && after[i].status === "driving" && after[i].endMs - after[i].startMs <= tailMs) i++;

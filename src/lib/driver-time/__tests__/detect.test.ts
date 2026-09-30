@@ -269,10 +269,10 @@ describe("regressions from cached Samsara hos_logs (Joe Green's sheets)", () => 
 
 describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail (B)", () => {
   const load = (f: string) => JSON.parse(readFileSync(join(__dirname, "fixtures", f), "utf8"));
-  const day = (fx: any, date: string) =>
+  const day = (fx: any, date: string, clockOutTail = false) =>
     detectWarehouseEvents({
       driver: fx.driver, segments: fx.segments, warehouses: fx.fences, gpsSamples: fx.gps,
-      options: { tzOffsetMinutes: fx.tzOffsetMinutes, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "presence", hubTags: fx.tags },
+      options: { tzOffsetMinutes: fx.tzOffsetMinutes, eldDayStartHour: 0, thresholdMinutes: 90, mergeGapMinutes: 10, basis: "presence", hubTags: fx.tags, clockOutTail },
     }).filter((e) => e.eventDate === date);
   const total = (ev: { durationMin: number }[]) => ev.reduce((n, e) => n + e.durationMin, 0);
 
@@ -285,8 +285,14 @@ describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail 
   it("A: Outler 9/22 'Warehouse' remark → 506 ±5", () => {
     expect(Math.abs(total(day(load("outler-2026-09-22.json"), "2026-09-22")) - 506)).toBeLessThanOrEqual(5);
   });
+  it("B is off by default: Outler 9/24 stays 153", () => {
+    expect(total(day(load("outler-2026-09-24.json"), "2026-09-24"))).toBe(153);
+  });
+  it("B (when enabled) turns Outler 9/10 497 → 529 — the conflict with Joe's sheet", () => {
+    expect(total(day(load("outler-2026-09-10.json"), "2026-09-10", true))).toBe(529);
+  });
   it("B: Outler 9/24 fuel stop before clock-out → 186 ±3", () => {
-    expect(Math.abs(total(day(load("outler-2026-09-24.json"), "2026-09-24")) - 186)).toBeLessThanOrEqual(3);
+    expect(Math.abs(total(day(load("outler-2026-09-24.json"), "2026-09-24", true)) - 186)).toBeLessThanOrEqual(3);
   });
   it("A: remark on a synthetic day spans first work → last clock-out", () => {
     const ev = run([
@@ -294,7 +300,7 @@ describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail 
       seg({ startMs: cst(5, 9), endMs: cst(5, 9, 20), status: "driving", ...ELSEWHERE }),
       seg({ startMs: cst(5, 9, 20), endMs: cst(5, 15), status: "onDuty", ...ELSEWHERE }),
       seg({ startMs: cst(5, 15), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
-    ], { basis: "presence" });
+    ], { basis: "presence", clockOutTail: true });
     expect(ev.map((e) => [e.durationMin, e.locationSource])).toEqual([[480, "remark"]]);
   });
   it("B: a work stop within 30 min of leaving the fence is added; driving alone is not", () => {
@@ -304,14 +310,14 @@ describe("Joe Green answers 2026-09-30: warehouse remark (A) and clock-out tail 
       seg({ startMs: cst(5, 12, stopStartMin), endMs: cst(5, 12, stopStartMin + 15), status: "onDuty", ...ELSEWHERE }),
       seg({ startMs: cst(5, 12, stopStartMin + 15), endMs: cst(5, 14), status: "driving", ...ELSEWHERE }),
       seg({ startMs: cst(5, 14), endMs: cst(5, 23), status: "offDuty", ...ELSEWHERE }),
-    ], { basis: "presence" }).map((e) => e.durationMin);
+    ], { basis: "presence", clockOutTail: true }).map((e) => e.durationMin);
     expect(tail(15)).toEqual([270]);
     expect(tail(40)).toEqual([240]);
     const driveOnly = run([
       seg({ startMs: cst(5, 8), endMs: cst(5, 12), status: "onDuty" }),
       seg({ startMs: cst(5, 12), endMs: cst(5, 12, 20), status: "driving", ...ELSEWHERE }),
       seg({ startMs: cst(5, 12, 20), endMs: cst(5, 20), status: "offDuty", ...ELSEWHERE }),
-    ], { basis: "presence" });
+    ], { basis: "presence", clockOutTail: true });
     expect(driveOnly.map((e) => e.durationMin)).toEqual([240]);
   });
 });
