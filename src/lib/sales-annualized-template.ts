@@ -8,8 +8,13 @@ import { CENTRAL_TZ, dateStrInTz } from "@/lib/tz";
 // Rules (each also has a pure TS mirror below, unit-tested):
 //  1. Source: P21.dbo.invoice_hdr + invoice_line through the bridge, invoice_date basis.
 //  2. Lines: every invoice line EXCEPT product_group_id IS NULL, product groups
-//     10 (freight), 50 (delivery/install), 95 (restocking fee), 9908, 9910, 9911
-//     (discontinued groups NDI drops), and item 999999. 9912 is KEPT.
+//     10 (freight), 50 (delivery/install), and item 999999 (excluded everywhere).
+//  2a. MONTH-ONLY exclusion (corrected 2026-09-30): groups 95 (restocking fee),
+//     9908, 9910, 9911 are dropped from Month Sales / Month Profit ONLY. YTD, Ann,
+//     Pct, Keep Lvl, Total Value and prior years INCLUDE them (= candidate_v1).
+//     Evidence: excluding them everywhere put YTD off NDI by 15478 -628.80,
+//     10494 -8.00, 11432 -6.00; NDI's YTD equals candidate_v1 exactly (August
+//     9911 lines included); August Month Sales ties either way. 9912 always KEPT.
 //  3. Kits/suites: a line that has component lines (invoice_line_uid_parent points
 //     at it) is dropped; the components are counted.
 //  4. Rep: MIN(oe_hdr_salesrep.salesrep_id) for the invoice's order; if the order
@@ -38,7 +43,10 @@ import { CENTRAL_TZ, dateStrInTz } from "@/lib/tz";
 
 const DB = "P21_Analytics_PLAY.Sales";
 
-export const EXCLUDED_PRODUCT_GROUPS = ["10", "50", "95", "9908", "9910", "9911"] as const;
+/** Rule 2: excluded from every column. */
+export const EXCLUDED_PRODUCT_GROUPS = ["10", "50"] as const;
+/** Rule 2a: excluded from the report-month columns only. */
+export const MONTH_ONLY_EXCLUDED_GROUPS = ["95", "9908", "9910", "9911"] as const;
 export const EXCLUDED_ITEMS = ["999999"] as const;
 export const KEEP_LVL_BG_CODES = ["ISG", "OP"] as const;
 
@@ -50,6 +58,12 @@ export function isLineCounted(line: { product_group_id: string | null; item_id: 
   if ((EXCLUDED_PRODUCT_GROUPS as readonly string[]).includes(String(line.product_group_id).trim())) return false;
   if (line.item_id === null || (EXCLUDED_ITEMS as readonly string[]).includes(String(line.item_id).trim())) return false;
   return !line.hasComponentLines;
+}
+
+/** Rule 2a: does a counted line also count toward Month Sales / Month Profit? */
+export function isLineInMonthColumns(line: { product_group_id: string | null; item_id: string | null; hasComponentLines: boolean }): boolean {
+  if (!isLineCounted(line)) return false;
+  return !(MONTH_ONLY_EXCLUDED_GROUPS as readonly string[]).includes(String(line.product_group_id).trim());
 }
 
 /** Rule 4: lowest order rep (SQL MIN on text), else the invoice header rep, else null. */
@@ -89,12 +103,14 @@ export function deriveColumns(a: { y2022: number; y2023: number; y2024: number; 
 /** Render the SQL with already-validated literal fragments. repFilter null = all reps. */
 function renderSalesSql(repFilter: string | null, y: string, m: string): string {
   const groups = EXCLUDED_PRODUCT_GROUPS.map((g) => `'${g}'`).join(", ");
+  const monthOnly = MONTH_ONLY_EXCLUDED_GROUPS.map((g) => `'${g}'`).join(", ");
   const items = EXCLUDED_ITEMS.map((g) => `'${g}'`).join(", ");
   const prior = /^\d+$/.test(y) ? String(Number(y) - 1) : `(${y} - 1)`;
   const where = repFilter ? `\nWHERE g.Rep = ${repFilter}` : "";
   return `WITH L AS (
   SELECT h.order_no, h.customer_id, h.salesrep_id AS InvRep, YEAR(h.invoice_date) AS Yr, MONTH(h.invoice_date) AS Mo,
-    il.extended_price AS Ep, il.extended_price - il.cogs_amount AS Pr
+    il.extended_price AS Ep, il.extended_price - il.cogs_amount AS Pr,
+    CASE WHEN il.product_group_id IN (${monthOnly}) THEN 0 ELSE 1 END AS InMo
   FROM P21.dbo.invoice_hdr h
   JOIN P21.dbo.invoice_line il ON il.invoice_no = h.invoice_no
   WHERE h.invoice_date >= '2022-01-01'
@@ -108,7 +124,7 @@ O AS (
   SELECT order_number, MIN(salesrep_id) AS OrderRep FROM P21.dbo.oe_hdr_salesrep GROUP BY order_number
 ),
 A AS (
-  SELECT ISNULL(O.OrderRep, L.InvRep) AS Rep, L.customer_id AS CustomerID, L.Yr, L.Mo, L.Ep, L.Pr
+  SELECT ISNULL(O.OrderRep, L.InvRep) AS Rep, L.customer_id AS CustomerID, L.Yr, L.Mo, L.Ep, L.Pr, L.InMo
   FROM L LEFT JOIN O ON O.order_number = L.order_no
 ),
 G AS (
@@ -119,8 +135,8 @@ G AS (
     SUM(CASE WHEN Yr = 2025 THEN Ep ELSE 0 END) AS Sales2025,
     SUM(CASE WHEN Yr = ${y} THEN Ep ELSE 0 END) AS SalesYTD,
     SUM(CASE WHEN Yr = ${prior} THEN Ep ELSE 0 END) AS PriorYear,
-    SUM(CASE WHEN Yr = ${y} AND Mo = ${m} THEN Ep ELSE 0 END) AS MonthSales,
-    SUM(CASE WHEN Yr = ${y} AND Mo = ${m} THEN Pr ELSE 0 END) AS MonthProfit
+    SUM(CASE WHEN Yr = ${y} AND Mo = ${m} AND InMo = 1 THEN Ep ELSE 0 END) AS MonthSales,
+    SUM(CASE WHEN Yr = ${y} AND Mo = ${m} AND InMo = 1 THEN Pr ELSE 0 END) AS MonthProfit
   FROM A
   GROUP BY Rep, CustomerID
 ),
