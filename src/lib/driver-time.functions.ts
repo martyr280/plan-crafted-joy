@@ -284,12 +284,17 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
         requireLicense: z.boolean().optional(),
         includeDeactivated: z.boolean().optional(),
         basis: z.enum(["presence", "onduty"]).optional(),
+        warehouseRemarkDriverIds: z.array(z.string().max(64)).max(500).optional(),
 
       })
       .parse(i ?? {}),
   )
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
+    if (data.warehouseRemarkDriverIds) {
+      const { data: isAdmin } = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+      if (!isAdmin) throw new Error("Only admins can change the per-driver Warehouse-remark setting");
+    }
     const { saveDriverTimeSettings } = await import("@/lib/driver-time.server");
     return { settings: await saveDriverTimeSettings(data) };
   });

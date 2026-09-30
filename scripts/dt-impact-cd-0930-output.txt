@@ -1,0 +1,6 @@
+C date | driver | before | after | diff | block → new end | remark
+2026-09-25 | Karriem Farahkhan | 153 | 0 | -153 | 16:12–18:44 → ends 16:12 | "Driver Clocked out & off duty" on driving
+
+D date | driver | before | after | diff | detail
+2026-09-16 | Melvin Gilbert | 153 | 195 | +42 | arrival 11:36, block started 13:09
+2026-09-25 | Karriem Farahkhan | 153 | 192 | +39 | arrival 13:43, block started 16:12

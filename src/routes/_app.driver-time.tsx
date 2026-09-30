@@ -549,6 +549,40 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
       </Card>
 
       <Card className="p-4">
+        <div className="font-semibold text-sm">A &apos;Warehouse&apos; remark makes the whole day warehouse time</div>
+        <p className="text-[11px] text-muted-foreground mb-2">
+          Per driver, admin only. When ticked, a day whose log carries a &quot;Warehouse&quot; remark counts from first work to the last work stop before the drive home. Off for everyone by default.
+        </p>
+        <div className="max-h-60 overflow-y-auto divide-y">
+          {[...(cfgQ.data?.drivers ?? [])]
+            .filter((d: any) => d.status !== "deactivated")
+            .sort((a: any, b: any) => a.name.localeCompare(b.name))
+            .map((d: any) => {
+              const on = (settings?.warehouseRemarkDriverIds ?? []).includes(d.id);
+              return (
+                <label key={d.id} className="flex items-center gap-2 py-1.5 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={save.isPending}
+                    onChange={() => {
+                      const cur = new Set(settings?.warehouseRemarkDriverIds ?? []);
+                      if (on) cur.delete(d.id); else cur.add(d.id);
+                      save.mutate({ warehouseRemarkDriverIds: Array.from(cur) }, {
+                        onSuccess: () => toast.success("Warehouse-remark setting saved"),
+                        onError: (err: any) => toast.error(err?.message),
+                      });
+                    }}
+                  />
+                  <span>{d.name}</span>
+                  <span className="text-[11px] text-muted-foreground">{d.id}</span>
+                </label>
+              );
+            })}
+        </div>
+      </Card>
+
+      <Card className="p-4">
         <div className="font-semibold text-sm mb-2">Warehouse geofences</div>
         {cfgQ.isLoading ? (
           <div className="text-sm text-muted-foreground flex items-center gap-2">
