@@ -144,6 +144,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       weekEnd,
       includeWeekends: data.includeWeekends,
       isAdmin,
+      thresholdMinutes: settings.thresholdMinutes,
       drivers: driverRows,
       hubGroups,
       totals: {
