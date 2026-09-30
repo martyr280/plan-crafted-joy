@@ -248,7 +248,7 @@ async function persistRepRows(runId: string, rows: SalesReportRow[]) {
 }
 
 function repOutcome(rep: Rep, repName: string, rows: SalesReportRow[]): RepStatus {
-  const active = rows.some((r) => (r.total_value ?? 0) !== 0);
+  const active = rows.some((r) => (r.y_current ?? 0) !== 0 || (r.month_sales ?? 0) !== 0);
   return { rep_code: rep.rep_code, rep_name: repName, status: active ? "ok" : "no_activity", rows: rows.length };
 }
 

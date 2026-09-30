@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildSalesReportSql, isLineCounted, attributeRep, keepLevel, includeRow, deriveColumns, EXCLUDED_PRODUCT_GROUPS,
+  buildSalesReportSql, isLineCounted, attributeRep, keepLevel, includeRow, deriveColumns, EXCLUDED_PRODUCT_GROUPS, MONTH_ONLY_EXCLUDED_GROUPS, isLineInMonthColumns,
 } from "../sales-annualized-template";
 import { sanitizeBridgeSql } from "../p21.server";
 import { parseKeepLevel, parseReportRowChecked } from "../sales-reports.server";
@@ -10,7 +10,7 @@ describe("buildSalesReportSql (2026-09-30 definition)", () => {
     it(`substitutes month ${m}`, () => {
       const sql = buildSalesReportSql({ year: 2026, month: m });
       expect(sql).toContain(`DATEFROMPARTS(2026, ${m}, 1)`);
-      expect(sql).toContain(`Mo = ${m} THEN Ep`);
+      expect(sql).toContain(`Mo = ${m} AND InMo = 1 THEN Ep`);
       expect(sql).toContain(`b.SalesYTD * 12.0 / ${m} AS decimal(19,2)) AS [Ann Current]`);
       expect(sql).toContain("Yr = 2025 THEN Ep ELSE 0 END) AS PriorYear");
       expect(sql).not.toMatch(/\{py\}|\{pm\}|__REPCODE__|vwFactShipToSales|WHERE g\.Rep/);
@@ -22,7 +22,8 @@ describe("buildSalesReportSql (2026-09-30 definition)", () => {
   }
   it("encodes every exclusion, keeps 9912, drops kit headers, uses MIN order rep", () => {
     const sql = buildSalesReportSql({ year: 2026, month: 8 });
-    expect(sql).toContain("il.product_group_id NOT IN ('10', '50', '95', '9908', '9910', '9911')");
+    expect(sql).toContain("il.product_group_id NOT IN ('10', '50')");
+    expect(sql).toContain("il.product_group_id IN ('95', '9908', '9910', '9911') THEN 0 ELSE 1");
     expect(sql).not.toContain("9912");
     expect(sql).toContain("il.product_group_id IS NOT NULL");
     expect(sql).toContain("il.item_id NOT IN ('999999')");
@@ -54,6 +55,24 @@ describe("line rules", () => {
     expect(L("9912")).toBe(true);
     expect(L("200")).toBe(true);
     expect(L("200", "999999")).toBe(false);
+    for (const g of MONTH_ONLY_EXCLUDED_GROUPS) expect(L(g)).toBe(true);
+  });
+  it("9911 in July counts in YTD; 9911 in the report month counts in YTD but not Month Sales", () => {
+    const lines = [
+      { g: "9911", mo: 7, ep: 100 }, { g: "9911", mo: 8, ep: 40 }, { g: "200", mo: 8, ep: 1000 }, { g: "95", mo: 8, ep: 5 }, { g: "10", mo: 8, ep: 9 },
+    ];
+    const f = (g: string) => ({ product_group_id: g, item_id: "X", hasComponentLines: false });
+    const ytd = lines.filter((l) => isLineCounted(f(l.g))).reduce((a, l) => a + l.ep, 0);
+    const month = lines.filter((l) => l.mo === 8 && isLineInMonthColumns(f(l.g))).reduce((a, l) => a + l.ep, 0);
+    expect(ytd).toBe(1145);
+    expect(month).toBe(1000);
+  });
+  it("SQL gates only the month columns on the month-only groups", () => {
+    const sql = buildSalesReportSql({ year: 2026, month: 8 });
+    expect(sql).toMatch(/NOT IN \('10', '50'\)/);
+    expect(sql).toMatch(/IN \('95', '9908', '9910', '9911'\) THEN 0 ELSE 1/);
+    expect(sql).toMatch(/Mo = 8 AND InMo = 1 THEN Ep/);
+    expect(sql).toMatch(/Yr = 2026 THEN Ep ELSE 0 END\) AS SalesYTD/);
   });
   it("kit header with components dropped; component and component-less kit counted", () => {
     expect(L("200", "SUITE1", true)).toBe(false);
