@@ -13,6 +13,7 @@ import {
   buildSalesReportSql,
   REP_DISCOVERY_SQL,
   REP_DISCOVERY_SQL_NO_EMAIL,
+  P21_CONTACTS_SQL,
   workbookHeaders,
   SHORT_MONTH_NAMES,
 } from "./sales-annualized-template";
@@ -22,6 +23,7 @@ export { summarizeByRep, isAtRisk, isDeclining, isWinBack, isKeepLevelExempt } f
 import { isAtRisk as isAtRiskShared } from "./sales-reports.shared";
 export type { SalesReportRow, RepSummary } from "./sales-reports.shared";
 
+import { matchRep, type P21Contact } from "./rep-contact-match";
 export type Rep = { rep_code: string; rep_name: string | null; rep_email: string | null };
 
 export type RepStatus = {
@@ -61,6 +63,14 @@ export function isTransientBridgeError(msg: string): boolean {
   return /connection is closed|timed? ?out|timeout/i.test(msg);
 }
 
+/** Read-only: every P21 contact (id, names, email, delete flag) for name matching. */
+export async function fetchP21Contacts(timeoutMs = 60_000): Promise<P21Contact[]> {
+  const { result } = await runJob("sql.select", { sql: P21_CONTACTS_SQL, params: {}, maxRows: 50_000, slug: "p21-contacts" }, timeoutMs);
+  return (((result as any)?.rows ?? []) as any[]).map((c) => ({
+    id: String(c.id).trim(), first_name: c.first_name ?? null, last_name: c.last_name ?? null, email: c.email || null, delete_flag: c.delete_flag ?? null,
+  }));
+}
+
 /** Rep discovery: 3 attempts, 10s apart, on transient errors; NULL-email fallback on a bad contacts column. */
 export async function discoverSalesReps(timeoutMs = 60_000): Promise<Rep[]> {
   let sql = REP_DISCOVERY_SQL;
@@ -68,7 +78,12 @@ export async function discoverSalesReps(timeoutMs = 60_000): Promise<Rep[]> {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const { result } = await runJob("sql.select", { sql, params: {}, slug: "rep-discovery" }, timeoutMs);
-      return ((result as any)?.rows ?? []) as Rep[];
+      const reps = ((result as any)?.rows ?? []) as Rep[];
+      const contacts = await fetchP21Contacts(timeoutMs);
+      return reps.map((r) => {
+        const m = matchRep(r.rep_name, contacts);
+        return { ...r, rep_email: m.kind === "match" ? m.contact.email!.trim() : null };
+      });
     } catch (e: any) {
       lastErr = e;
       const msg = e?.message ?? String(e);

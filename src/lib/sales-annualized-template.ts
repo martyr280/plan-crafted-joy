@@ -169,21 +169,20 @@ export function interpolateScheduleTokens(sql: string, now: Date = new Date()): 
 
 /**
  * Rep discovery from Kevin's ship-to master (current rep on each ship-to).
- * Emails come from P21.dbo.contacts; REP_DISCOVERY_SQL_NO_EMAIL is the
- * fallback if the contacts email column is wrong on this install.
+ * No email here: P21 salesrep IDs and contact IDs are different key spaces,
+ * so emails are matched by NAME against P21_CONTACTS_SQL (rep-contact-match.ts).
  */
-export const REP_DISCOVERY_SQL = `SELECT m.SalesRepID AS rep_code, MAX(m.SalesRepName) AS rep_name, NULLIF(LTRIM(RTRIM(ISNULL(MAX(ct.email_address),''))),'') AS rep_email
+export const REP_DISCOVERY_SQL = `SELECT m.SalesRepID AS rep_code, MAX(m.SalesRepName) AS rep_name, CAST(NULL AS varchar(255)) AS rep_email
 FROM ${DB}.vwShipToMaster m
-LEFT JOIN P21.dbo.contacts ct ON ct.id = m.SalesRepID
 WHERE m.SalesRepID IS NOT NULL AND LTRIM(RTRIM(m.SalesRepID)) <> ''
 GROUP BY m.SalesRepID
 ORDER BY rep_name`;
 
-export const REP_DISCOVERY_SQL_NO_EMAIL = `SELECT m.SalesRepID AS rep_code, MAX(m.SalesRepName) AS rep_name, CAST(NULL AS varchar(255)) AS rep_email
-FROM ${DB}.vwShipToMaster m
-WHERE m.SalesRepID IS NOT NULL AND LTRIM(RTRIM(m.SalesRepID)) <> ''
-GROUP BY m.SalesRepID
-ORDER BY rep_name`;
+export const REP_DISCOVERY_SQL_NO_EMAIL = REP_DISCOVERY_SQL;
+
+/** All P21 contacts, for name matching to sales reps (read-only). */
+export const P21_CONTACTS_SQL = `SELECT CAST(id AS varchar(32)) AS id, first_name, last_name, LTRIM(RTRIM(ISNULL(email_address,''))) AS email, delete_flag
+FROM P21.dbo.contacts`;
 
 /** Classification codes that are exempt from keep-level thresholds. */
 export const KEEP_LEVEL_EXEMPT = ["ISG", "OP", "MML1", "MML3", "L5", "E2G", "EMPLOYEE"] as const;

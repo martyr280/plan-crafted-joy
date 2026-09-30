@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Save } from "lucide-react";
+import { Save, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { useRepContacts, useSaveRepContact } from "@/hooks/useSalesReports";
+import { useRepContacts, useSaveRepContact, useRematchRepEmails } from "@/hooks/useSalesReports";
 import { isValidEmail } from "@/lib/sales-report-email";
 
 type Row = { rep_code: string; rep_name: string | null; email: string | null; cc_emails: string[] | null; send_enabled: boolean; notes: string | null };
@@ -14,6 +14,7 @@ type Row = { rep_code: string; rep_name: string | null; email: string | null; cc
 export function RepEmailsPanel({ canEdit }: { canEdit: boolean }) {
   const q = useRepContacts();
   const [filter, setFilter] = useState("");
+  const rematch = useRematchRepEmails();
   const rows = (q.data?.contacts ?? []) as Row[];
   const shown = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -26,7 +27,15 @@ export function RepEmailsPanel({ canEdit }: { canEdit: boolean }) {
           <div className="font-semibold">Rep emails</div>
           <div className="text-xs text-muted-foreground">Where each rep's own report goes. House accounts: turn Send off or type the email to use.</div>
         </div>
-        <Input className="max-w-xs" placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <Button size="sm" variant="outline" disabled={rematch.isPending} title="Fills only empty emails, by P21 contact name"
+              onClick={() => rematch.mutate(undefined, { onSuccess: (r: any) => toast.success(`Filled ${r.filled} email(s) from P21`), onError: (e: any) => toast.error(e?.message ?? "Re-match failed") })}>
+              <RefreshCw className={`w-3 h-3 mr-1 ${rematch.isPending ? "animate-spin" : ""}`} />Re-match from P21
+            </Button>
+          )}
+          <Input className="max-w-xs" placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        </div>
       </div>
       <Table>
         <TableHeader><TableRow>

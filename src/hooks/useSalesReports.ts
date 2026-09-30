@@ -125,3 +125,10 @@ export function useSendEmails() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sales-email-list"] }),
   });
 }
+
+import { rematchRepEmailsFromP21 } from "@/lib/sales-reports.functions";
+export function useRematchRepEmails() {
+  const fn = useServerFn(rematchRepEmailsFromP21);
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: () => fn(), onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-rep-contacts"] }); qc.invalidateQueries({ queryKey: ["sales-email-list"] }); } });
+}

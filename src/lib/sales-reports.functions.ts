@@ -188,3 +188,33 @@ export const sendSalesReportEmails = createServerFn({ method: "POST" })
     });
     return { results };
   });
+
+/**
+ * Admin: re-match rep emails from P21 contacts BY NAME (read-only on P21).
+ * Fills only rows whose email is empty; never overwrites an admin-typed email.
+ */
+export const rematchRepEmailsFromP21 = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { assertAdmin } = await import("./p21.server");
+    await assertAdmin(context.supabase, context.userId);
+    const { fetchP21Contacts } = await import("./sales-reports.server");
+    const { matchAllReps, REP_EMAIL_NOTE } = await import("./rep-contact-match");
+    const { data: rows, error } = await context.supabase.from("sales_rep_contacts").select("rep_code, rep_name, email").limit(5000);
+    if (error) throw new Error(error.message);
+    const contacts = await fetchP21Contacts(90_000);
+    const results = matchAllReps((rows ?? []) as { rep_code: string; rep_name: string | null }[], contacts);
+    let filled = 0;
+    const out: { rep_code: string; result: string }[] = [];
+    for (const r of results) {
+      const cur = (rows ?? []).find((x: any) => x.rep_code === r.rep_code) as any;
+      if (cur?.email?.trim()) { out.push({ rep_code: r.rep_code, result: "kept existing email" }); continue; }
+      if (r.m.kind !== "match" || r.withheld) { out.push({ rep_code: r.rep_code, result: r.withheld ?? r.m.kind }); continue; }
+      const { data: upd, error: ue } = await context.supabase.from("sales_rep_contacts")
+        .update({ email: r.m.contact.email!.trim(), notes: REP_EMAIL_NOTE(r.m.contact.id), updated_by: context.userId })
+        .eq("rep_code", r.rep_code).is("email", null).select("rep_code");
+      if (ue) throw new Error(ue.message);
+      if (upd?.length) { filled++; out.push({ rep_code: r.rep_code, result: `filled ${r.m.contact.email}` }); }
+    }
+    return { filled, results: out };
+  });
