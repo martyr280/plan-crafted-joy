@@ -2,8 +2,8 @@ import { fetchAllRows } from "./supabase-fetch-all";
 // Server-only helpers for the Sales Reports module (replaces the 25 monthly
 // per-salesperson "Upshaw" Excel workbooks).
 //
-// SQL comes from buildSalesReportSql() in ./sales-annualized-template, built on
-// NDI's P21_Analytics_PLAY.Sales views. Do not fork it.
+// SQL + rules come from buildSalesReportSql() in ./sales-annualized-template
+// (the 2026-09-30 invoice-line / order-rep definition). Do not fork it.
 
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -16,6 +16,9 @@ import {
   P21_CONTACTS_SQL,
   workbookHeaders,
   SHORT_MONTH_NAMES,
+  deriveColumns,
+  keepLevel,
+  includeRow,
 } from "./sales-annualized-template";
 import { isKeepLevelExempt, summarizeByRep, type SalesReportRow } from "./sales-reports.shared";
 
@@ -108,11 +111,10 @@ function pickKey(row: Record<string, any>, test: (k: string) => boolean): any {
 }
 
 /**
- * Keep Lvl from the view:
- *  - text code (ISG/OP/...): code only
- *  - numeric: already the SHORTFALL (TargetSales - YTD, floored at 0); threshold = TargetSales, code = PriceLevel
+ * Keep Lvl as the SQL emits it:
+ *  - text code (ISG/OP/L5/MML1...): code only
+ *  - numeric: target - Year current (not floored); threshold = TargetSales, code = PriceLevel
  *  - null: all null
- * Never recomputed from KEEP_LEVEL_THRESHOLDS.
  */
 export function parseKeepLevel(
   keepRaw: unknown,
@@ -126,8 +128,19 @@ export function parseKeepLevel(
   return { keep_lvl_code: priceLevel, keep_lvl_threshold: targetSales, keep_lvl_shortfall: asNum };
 }
 
-/** Turn one raw P21 row into a sales_report_rows payload. */
-export function parseReportRow(raw: Record<string, any>, rep: Rep): SalesReportRow | null {
+/** Parsed row plus how the TS mirror of the rules compares to what SQL emitted. */
+export type ParsedReportRow = { row: SalesReportRow; parityMismatch: string | null };
+
+/**
+ * Turn one raw P21 row into a sales_report_rows payload. Rep comes from the
+ * row's [Rep] column (order rep / invoice rep), falling back to `rep`.
+ * Derived columns are recomputed with the pure rules and compared with SQL.
+ */
+export function parseReportRow(raw: Record<string, any>, rep: Rep, month = 0): SalesReportRow | null {
+  return parseReportRowChecked(raw, rep, month)?.row ?? null;
+}
+
+export function parseReportRowChecked(raw: Record<string, any>, rep: Rep, month = 0): ParsedReportRow | null {
   const custCode = str(pickKey(raw, (k) => /^cust\s*code$/i.test(k)));
   if (!custCode) return null;
   const col = (re: RegExp) => pickKey(raw, (k) => re.test(k));
@@ -135,10 +148,12 @@ export function parseReportRow(raw: Record<string, any>, rep: Rep): SalesReportR
   const yearOf = (y: number) => num(col(new RegExp(`^year ${y}$`, "i")));
   const priceLevel = str(col(/^price$/i)) ?? str(col(/^pricelevel$/i));
   const targetSales = num(col(/^targetsales$/i));
+  const repCode = str(col(/^rep$/i)) ?? rep.rep_code;
+  const repName = str(col(/^repname$/i)) ?? rep.rep_name ?? repCode;
 
-  return {
-    rep_code: rep.rep_code,
-    rep_name: rep.rep_name ?? rep.rep_code,
+  const row = {
+    rep_code: repCode,
+    rep_name: repName,
     cust_code: custCode,
     price_level: priceLevel,
     bg: str(col(/^bg$/i)),
@@ -156,19 +171,62 @@ export function parseReportRow(raw: Record<string, any>, rep: Rep): SalesReportR
     month_sales: num(col(/^month\s+sales$/i)),
     month_profit: num(col(/^month\s+profit$/i)),
     ...parseKeepLevel(col(/^keep\s*lvl$/i), priceLevel, targetSales),
-    customer_id: str(col(/^customerid$/i)),
+    customer_id: str(col(/^customerid$/i)) ?? custCode,
     ship_to_id: str(col(/^shiptoid$/i)),
     target_sales: targetSales,
-    sales_rep_id: str(col(/^salesrepid$/i)),
+    sales_rep_id: repCode,
   } as SalesReportRow;
+
+  let parityMismatch: string | null = null;
+  const prior = num(col(/^prioryear$/i));
+  if (month >= 1 && prior !== null) {
+    const agg = { y2022: row.y2022 ?? 0, y2023: row.y2023 ?? 0, y2024: row.y2024 ?? 0, y2025: row.y2025 ?? 0, ytd: row.y_current ?? 0, priorYear: prior };
+    const d = deriveColumns(agg, month);
+    const k = keepLevel(str(col(/^buyinggroup$/i)), priceLevel, targetSales, agg.ytd);
+    const off = (a: number | null, b: number | null, tol: number) => (a === null || b === null ? a !== b : Math.abs(a - b) > tol);
+    const bad: string[] = [];
+    if (!includeRow(agg)) bad.push("inclusion");
+    if (off(d.total_value, row.total_value, 0.011)) bad.push("total_value");
+    if (off(d.ann_current, row.ann_current, 0.011)) bad.push("ann_current");
+    if (off(d.pct, row.pct, 0.00011)) bad.push("pct");
+    const kc = k?.kind === "code" ? k.code.toUpperCase() : null;
+    const kn = k?.kind === "number" ? k.value : null;
+    if (kc !== row.keep_lvl_code && kn === null) bad.push("keep_lvl_code");
+    if (off(kn, row.keep_lvl_shortfall, 0.011)) bad.push("keep_lvl");
+    parityMismatch = bad.length ? `${repCode}/${custCode}: ${bad.join(",")}` : null;
+  }
+  return { row, parityMismatch };
 }
 
-/** Run ONE rep for ONE period through the bridge and parse the rows (no writes). */
-export async function querySalesReportForRep(rep: Rep, year: number, month: number): Promise<SalesReportRow[]> {
-  const sql = buildSalesReportSql({ repCode: rep.rep_code, year, month });
-  const { result } = await runJob("sql.select", { sql, params: {}, slug: `sales-annualized-${rep.rep_code}` }, 180_000);
+export type ReportQueryResult = { rows: SalesReportRow[]; unattributed: SalesReportRow[]; parityMismatches: string[] };
+
+/** Run the report for ONE period (one rep, or every rep) through the bridge. No writes. */
+export async function querySalesReport(year: number, month: number, repCode: string | null = null): Promise<ReportQueryResult> {
+  const sql = buildSalesReportSql({ repCode, year, month });
+  const { result } = await runJob(
+    "sql.select",
+    { sql, params: {}, maxRows: 200_000, slug: repCode ? `sales-annualized-${repCode}` : "sales-annualized-all" },
+    600_000,
+  );
+  if ((result as any)?.truncated) throw new Error("Sales report result was truncated by the bridge; refusing a partial run");
   const raws = ((result as any)?.rows ?? []) as Record<string, any>[];
-  return raws.map((r) => parseReportRow(r, rep)).filter((r): r is SalesReportRow => !!r);
+  const fallback: Rep = { rep_code: repCode ?? "", rep_name: null, rep_email: null };
+  const rows: SalesReportRow[] = [];
+  const unattributed: SalesReportRow[] = [];
+  const parityMismatches: string[] = [];
+  for (const raw of raws) {
+    const p = parseReportRowChecked(raw, fallback, month);
+    if (!p) continue;
+    if (p.parityMismatch) parityMismatches.push(p.parityMismatch);
+    if (!p.row.rep_code) unattributed.push(p.row);
+    else rows.push(p.row);
+  }
+  return { rows, unattributed, parityMismatches };
+}
+
+/** Back-compat: one rep's rows. */
+export async function querySalesReportForRep(rep: Rep, year: number, month: number): Promise<SalesReportRow[]> {
+  return (await querySalesReport(year, month, rep.rep_code)).rows;
 }
 
 async function createRun(year: number, month: number, triggeredBy: string | null) {
@@ -224,33 +282,39 @@ export async function runSalesReports(
   const runId = await createRun(year, month, opts.triggeredBy ?? null);
 
   const repStatus: RepStatus[] = [];
-  let reps: Rep[] = [];
+  let q: ReportQueryResult;
   try {
-    reps = await discoverSalesReps();
+    q = await querySalesReport(year, month, null);
   } catch (e: any) {
     await supabaseAdmin
       .from("sales_report_runs")
-      .update({ status: "error", error: `Rep discovery failed: ${e?.message ?? String(e)}` })
+      .update({ status: "error", error: `Report query failed: ${e?.message ?? String(e)}` })
       .eq("id", runId);
-    return { runId, status: "error" as const, reps: 0, rows: 0, repStatus };
+    return { runId, status: "error" as const, reps: 0, rows: 0, repStatus, unattributed: [], parityMismatches: [] };
   }
 
+  const byRep = new Map<string, SalesReportRow[]>();
+  for (const r of q.rows) {
+    const list = byRep.get(r.rep_code) ?? [];
+    list.push(r);
+    byRep.set(r.rep_code, list);
+  }
   let totalRows = 0;
-  for (const rep of reps) {
-    if (!rep.rep_code) continue;
-    const repName = (rep.rep_name || rep.rep_code).trim();
+  for (const [code, rows] of [...byRep.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const repName = (rows.find((r) => r.rep_name)?.rep_name || code).trim();
+    const named = rows.map((r) => ({ ...r, rep_name: repName }));
+    const rep: Rep = { rep_code: code, rep_name: repName, rep_email: null };
     try {
-      const rows = await querySalesReportForRep({ ...rep, rep_name: repName }, year, month);
-      await persistRepRows(runId, rows);
-      totalRows += rows.length;
-      repStatus.push(repOutcome(rep, repName, rows));
+      await persistRepRows(runId, named);
+      totalRows += named.length;
+      repStatus.push(repOutcome(rep, repName, named));
     } catch (e: any) {
-      repStatus.push({ rep_code: rep.rep_code, rep_name: repName, status: "error", rows: 0, error: e?.message ?? String(e) });
+      repStatus.push({ rep_code: code, rep_name: repName, status: "error", rows: 0, error: e?.message ?? String(e) });
     }
   }
 
   const status = await finishRun(runId, repStatus);
-  return { runId, status, reps: repStatus.length, rows: totalRows, repStatus };
+  return { runId, status, reps: repStatus.length, rows: totalRows, repStatus, unattributed: q.unattributed, parityMismatches: q.parityMismatches };
 }
 
 /** Test hook: one rep, one period. persist=false returns rows without writing a run. */
@@ -269,7 +333,7 @@ export async function runSalesReportForRep(opts: {
   if (opts.persist) runId = await createRun(opts.year, opts.month, opts.triggeredBy ?? null);
   try {
     const raw = await querySalesReportForRep(rep, opts.year, opts.month);
-    const repName = raw.find((r) => (r as any).sales_rep_id)?.rep_name ?? repCode;
+    const repName = raw.find((r) => r.rep_name)?.rep_name ?? repCode;
     const rows = raw.map((r) => ({ ...r, rep_name: repName }));
     let status: RepStatus = repOutcome(rep, repName, rows);
     if (runId) {
