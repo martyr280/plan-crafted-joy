@@ -58,6 +58,15 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge className={map[status] ?? "bg-muted text-muted-foreground"} variant="secondary">{status}</Badge>;
 }
 
+function ExceptionBadge({ flag }: { flag: any }) {
+  if (!flag) return null;
+  return flag.kind === "no_run" ? (
+    <Badge variant="secondary" className="ml-1 bg-destructive/15 text-destructive" title={flag.message}>{flag.badge}</Badge>
+  ) : (
+    <Badge variant="secondary" className="ml-1 bg-amber-500/15 text-amber-600" title={flag.message}>{flag.badge}</Badge>
+  );
+}
+
 function DispatchPage() {
   const { hasRole } = useAuth();
   useModuleView("dispatch");
@@ -218,6 +227,7 @@ function RouteRow({ route, canWrite, onOpenRun }: { route: any; canWrite: boolea
             <button key={run.id} onClick={() => onOpenRun(run.id)} className="text-xs underline-offset-2 hover:underline">
               <span className="mr-1">{run.runDate}</span>
               <StatusBadge status={run.status} />
+              <ExceptionBadge flag={run.exception} />
               {run.stopsHeld > 0 && <span className="ml-1 text-amber-600">{run.stopsHeld} held</span>}
             </button>
           ))}
@@ -230,7 +240,10 @@ function RouteRow({ route, canWrite, onOpenRun }: { route: any; canWrite: boolea
           disabled={!canWrite || build.isPending}
           onClick={async () => {
             const res: any = await build.mutateAsync({ routeId: route.routeId });
-            if (res?.ok) toast.success(`Built ${res.runIds.length} run(s) for ${route.code}`);
+            if (res?.ok) {
+              toast.success(`Built ${res.runIds.length} run(s) for ${route.code}`);
+              for (const m of res.skipped ?? []) toast.warning(m);
+            }
             else toast.error(res?.error ?? "Build failed");
           }}
         >
@@ -287,6 +300,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
               <StatusBadge status={q.data.run.status} />
               {!q.data.enabled && <Badge variant="secondary">shadow mode</Badge>}
               {q.data.locked && <Badge variant="secondary" className="bg-amber-500/15 text-amber-600">locked</Badge>}
+              <ExceptionBadge flag={q.data.exception} />
               <span className="text-muted-foreground">lock {timeLocal(q.data.run.lock_at)}</span>
               <span className="text-muted-foreground">· pushed {timeLocal(q.data.run.pushed_at)}</span>
             </div>
@@ -298,6 +312,12 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
               <Card className="p-3"><div className="text-muted-foreground text-xs">Weight (lbs)</div><div className="font-semibold">{num(q.data.run.est_weight_lbs)}</div></Card>
             </div>
 
+            {q.data.exception && (
+              <Card className={q.data.exception.kind === "no_run" ? "p-3 border-destructive/40 bg-destructive/5 text-sm text-destructive" : "p-3 border-amber-500/40 bg-amber-500/5 text-sm text-amber-700"}>
+                {q.data.exception.message}
+              </Card>
+            )}
+
             {q.data.run.error && (
               <Card className="p-3 border-destructive/40 bg-destructive/5 text-sm text-destructive">{q.data.run.error}</Card>
             )}
@@ -305,7 +325,8 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                disabled={!canWrite || push.isPending || q.data.locked}
+                disabled={!canWrite || push.isPending || q.data.locked || q.data.exception?.kind === "no_run"}
+                title={q.data.exception?.kind === "no_run" ? q.data.exception.message : undefined}
                 onClick={async () => {
                   const res: any = await push.mutateAsync({ runId: q.data!.run.id });
                   if (res?.ok) toast.success(`Samsara ${res.action}`);

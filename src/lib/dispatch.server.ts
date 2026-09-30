@@ -19,8 +19,10 @@
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runJob } from "./p21.server";
-import { assignRun, DATE_BASES, DATE_BASIS_COLUMN, type DateBasis } from "./dispatch/assign";
+import { DATE_BASES, DATE_BASIS_COLUMN, type DateBasis } from "./dispatch/assign";
+import { planRunBuild, pushBlockedReason, type RunException } from "./dispatch/run-exceptions";
 import {
+  addDaysISO,
   localDateIn,
   nextCutoff,
   runDatesFor,
@@ -148,8 +150,35 @@ function lockAtFor(runDate: string, lockOffset: string, tz: string): string | nu
 
 /* ------------------------------------------------------------- plan builder */
 
+/** Run exceptions for the given P21 route codes (upper-cased), recent + future. */
+export async function loadRunExceptions(p21Codes: string[]): Promise<RunException[]> {
+  const codes = [...new Set(p21Codes.filter(Boolean).map((c) => String(c).toUpperCase()))];
+  if (!codes.length) return [];
+  const since = addDaysISO(localDateIn("America/Chicago", new Date()), -60);
+  const { data, error } = await (db() as any)
+    .from("dispatch_run_exceptions")
+    .select("p21_code, run_date, kind, reason, note")
+    .in("p21_code", codes)
+    .gte("run_date", since)
+    .limit(5000);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as RunException[];
+}
+
+/** no_run guard for an existing dispatch_runs row: message when blocked, else null. */
+export async function runExceptionBlock(row: { route_id: string; route_code?: string | null; run_date: string }): Promise<string | null> {
+  const [{ data: route }, { data: cutoffRows }] = await Promise.all([
+    db().from("truck_capacity_routes").select("code, p21_route_code").eq("id", row.route_id).maybeSingle(),
+    db().from("route_cutoffs").select("*").eq("route_id", row.route_id).eq("active", true).limit(200),
+  ]);
+  const p21Code = String((route as any)?.p21_route_code || (route as any)?.code || row.route_code || "");
+  const cutoffs = ((cutoffRows ?? []) as unknown as RouteCutoff[]).filter((c) => (c.p21_code ?? p21Code) === p21Code);
+  const exceptions = await loadRunExceptions([p21Code]);
+  return pushBlockedReason(exceptions, p21Code, String(row.run_date).slice(0, 10), cutoffs);
+}
+
 export type BuildResult =
-  | { ok: true; plan: DispatchPlan; bridgeJobId: string | null; runIds: string[] }
+  | { ok: true; plan: DispatchPlan; bridgeJobId: string | null; runIds: string[]; skipped: string[] }
   | { ok: false; error: string };
 
 /**
@@ -188,34 +217,55 @@ export async function buildDispatchPlanForRun(routeId: string, runDate?: string)
   }
 
   const routeCode = route.code as string;
+  const p21Code = (route.p21_route_code || routeCode) as string;
+  const codeCutoffs = cutoffs.filter((c) => (c.p21_code ?? p21Code) === p21Code);
+
+  // --- Run exceptions: a no_run date is never built. ------------------------
+  let exceptions: RunException[];
+  try {
+    exceptions = await loadRunExceptions([p21Code]);
+  } catch (e: any) {
+    return { ok: false, error: `Run exception lookup failed: ${e?.message ?? String(e)}` };
+  }
+  const skippedMsgs = runDates
+    .map((d) => pushBlockedReason(exceptions, p21Code, d, codeCutoffs))
+    .filter((m): m is string => !!m);
+  const openDates = runDates.filter((d) => !pushBlockedReason(exceptions, p21Code, d, codeCutoffs));
+  if (!openDates.length) return { ok: false, error: skippedMsgs.join(" ") };
 
   // --- FRESH bridge pull, gated behind the view's availability. ------------
   if (!settings.viewAvailable) {
-    await recordRunError(routeId, routeCode, runDates, tz, settings, `view not available: ${settings.viewName}`);
+    await recordRunError(routeId, routeCode, openDates, tz, settings, `view not available: ${settings.viewName}`);
     return { ok: false, error: `view not available: ${settings.viewName}` };
   }
 
   let rows: P21DispatchRow[] = [];
   let bridgeJobId: string | null = null;
   try {
-    const p21Code = route.p21_route_code || routeCode;
     const sql = buildDispatchViewSql(settings.viewName, p21Code);
     const { jobId, result } = await runJob("sql.select", { sql, slug: "dispatch" }, 60000);
     bridgeJobId = jobId as string;
     const all = ((result as any)?.rows ?? []) as P21DispatchRow[];
-    // Keep only tickets the date basis assigns to one of this cutoff's run dates.
+    // Ticket → run date through assignRun WITH exceptions (planRunBuild), the
+    // same call the Tickets-by-cutoff board makes: rolled tickets land here.
     const basis = await getDispatchDateBasis();
     const today = localDateIn("America/Chicago", new Date());
-    const codeCutoffs = cutoffs.filter((c) => (c.p21_code ?? p21Code) === p21Code);
-    rows = all.filter((r) => {
-      const a = assignRun((r as any)[DATE_BASIS_COLUMN[basis]], codeCutoffs, today);
-      return a.status === "assigned" && runDates.includes(a.runDate);
+    const planned = planRunBuild({
+      rows: all as unknown as Record<string, unknown>[],
+      dateColumn: DATE_BASIS_COLUMN[basis],
+      cutoffs: codeCutoffs,
+      p21Code,
+      runDates: openDates,
+      today,
+      exceptions,
     });
+    rows = planned.build.flatMap((b) => b.rows) as unknown as P21DispatchRow[];
   } catch (e: any) {
     const msg = `Bridge query failed: ${e?.message ?? String(e)}`;
-    await recordRunError(routeId, routeCode, runDates, tz, settings, msg, bridgeJobId);
+    await recordRunError(routeId, routeCode, openDates, tz, settings, msg, bridgeJobId);
     return { ok: false, error: msg };
   }
+  runDates = openDates;
 
   const [{ data: mapRows }, { data: tplRows }] = await Promise.all([
     db().from("samsara_address_map").select("p21_ship_to_id, samsara_address_id, verified").limit(50000),
@@ -242,7 +292,7 @@ export async function buildDispatchPlanForRun(routeId: string, runDate?: string)
     if (id) runIds.push(id);
   }
 
-  return { ok: true, plan, bridgeJobId, runIds };
+  return { ok: true, plan, bridgeJobId, runIds, skipped: skippedMsgs };
 }
 
 async function recordRunError(
@@ -394,6 +444,11 @@ async function pushOrReconcile(runId: string, mode: "push" | "reconcile", pushed
   if (!loaded) return { ok: false, error: "Dispatch run not found" };
   const { run, row } = loaded;
 
+  // no_run exception: never push/patch a cancelled run (approve, auto-push,
+  // reconciler). The draft row is kept, not deleted.
+  const blocked = await runExceptionBlock(row);
+  if (blocked) return { ok: false, error: blocked };
+
   const { data: driverMap } = await db()
     .from("dispatch_driver_map")
     .select("samsara_driver_id, confirmed")
@@ -495,6 +550,9 @@ export async function previewRunDelta(runId: string): Promise<DeltaPreview> {
   const loaded = await loadRunAsPlan(runId);
   if (!loaded) return { ok: false, action: "noop", reason: "not_found", error: "Dispatch run not found", changes: [] };
   const { run, row } = loaded;
+
+  const blocked = await runExceptionBlock(row);
+  if (blocked) return { ok: false, action: "noop", reason: "run_exception", error: blocked, changes: [] };
 
   const { data: driverMap } = await db()
     .from("dispatch_driver_map")

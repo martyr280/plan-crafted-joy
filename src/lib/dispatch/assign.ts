@@ -94,17 +94,27 @@ export function assignRun(dateValue: unknown, cutoffs: AssignCutoff[], todayISO:
   const blocked = new Map((noRuns ?? []).map((e) => [String(e.run_date).slice(0, 10), e.reason]));
   const hit = blocked.get(best.runDate);
   if (hit) {
-    const dows = new Set(active.flatMap((c) => c.run_dows));
-    let next: string | null = null;
-    for (let i = 1; i <= ROLL_SEARCH_DAYS; i++) {
-      const d = addDaysISO(best.runDate, i);
-      if (dows.has(dowOfISO(d)) && !blocked.has(d)) { next = d; break; }
-    }
+    const next = nextOpenRunDate(best.runDate, active, noRuns ?? []);
     if (!next) return { status: "no_cutoff" };
     const rolled = { runDate: next, cutoffDate: best.cutoffDate, rolledFrom: { runDate: best.runDate, reason: hit } };
     return next < todayISO ? { status: "stale", ...rolled } : { status: "assigned", ...rolled };
   }
   return best.runDate < todayISO ? { status: "stale", ...best } : { status: "assigned", ...best };
+}
+
+/**
+ * The route's next run day strictly after `fromISO` (union of active cutoff
+ * run_dows) that is not itself a no_run. Same roll rule assignRun uses.
+ */
+export function nextOpenRunDate(fromISO: string, cutoffs: AssignCutoff[], noRuns: NoRunException[]): string | null {
+  const active = cutoffs.filter((c) => c.active !== false && (c.run_dows ?? []).length > 0);
+  const dows = new Set(active.flatMap((c) => c.run_dows));
+  const blocked = new Set(noRuns.map((e) => String(e.run_date).slice(0, 10)));
+  for (let i = 1; i <= ROLL_SEARCH_DAYS; i++) {
+    const d = addDaysISO(fromISO, i);
+    if (dows.has(dowOfISO(d)) && !blocked.has(d)) return d;
+  }
+  return null;
 }
 
 export function daysBetween(fromISO: string, toISO: string): number {
