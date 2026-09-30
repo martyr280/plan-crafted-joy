@@ -35,6 +35,8 @@ export type HosSegment = {
    * 9/21 midnight artifact), so it may not create or extend a warehouse block.
    */
   vehicleBackfilled?: boolean;
+  /** Driver-entered HOS log remark, if any. */
+  remark?: string | null;
 };
 
 /** The driver's own evidence: the log's own coordinates, or the log's own vehicle. */
@@ -96,6 +98,10 @@ export type DetectOptions = {
    * window end and are skipped when looking for a segment's "next". Default 60.
    */
   minSegmentSeconds?: number;
+  /** Rule A (warehouse remark). Default OFF pending decision: overcounts Kennedy Loyd vs Joe's sheets (2026-09-30 report). */
+  remarkRule?: boolean;
+  /** Rule B (work-stop tail). Default OFF: contradicts Joe's own Outler 9/10 sheet (see 2026-09-30 report). */
+  clockOutTail?: boolean;
 
 };
 
@@ -110,9 +116,18 @@ export type WarehouseEvent = {
   addressName: string | null;
   hub: string | null;
   statuses: string[];
-  locationSource: "log" | "vehicle_gps" | "assumed_hub" | "unknown";
+  locationSource: "log" | "vehicle_gps" | "assumed_hub" | "unknown" | "remark";
   needsReview: boolean;
+  /** Set on remark-rule events: the matching remark text. */
+  notes?: string | null;
 };
+
+/** Rule A (Joe Green, 2026-09-30): a /warehouse/i remark makes the whole day warehouse time. */
+export const WAREHOUSE_REMARK = /warehouse/i;
+/** Rule B (Joe Green, 2026-09-30): clock-out within this long of leaving the fence adds the tail. */
+export const CLOCKOUT_TAIL_MINUTES = 30;
+/** Non-driving work statuses: a "stop" for the remark end and the tail rule. */
+const STOP_WORK = new Set<string>(["onDuty", "yardMove"]);
 
 /** Duty statuses that count as "sitting at the warehouse" under the legacy basis. */
 export const KEPT_STATUSES = new Set<DutyStatus>(["onDuty", "yardMove"]);
@@ -448,6 +463,48 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
     const windowEnd = closing[closing.length - 1].endMs;
     if (!(windowEnd > windowStart)) continue;
 
+    // Rule A: a "Warehouse" remark on any of the day's logs replaces the
+    // fence-based blocks with first work start → last clock-out.
+    const remarkSeg = daySegs.find((s) => s.remark && WAREHOUSE_REMARK.test(s.remark));
+    if (remarkSeg && opts.remarkRule === true) {
+      const workSegs = daySegs.filter((s) => BACKFILL_PLACES_STATUSES.has(s.status) && nonTrivial(s));
+      if (workSegs.length) {
+        const start = workSegs[0].startMs;
+        // End: the last onDuty/yardMove stop before the first drive > 30 min
+        // that follows the last remark log (Outler 9/22: yard work ends
+        // 16:36, then a 36-minute drive home). With no such drive, the day's
+        // last work→rest transition (clock-out).
+        const lastRemarkEnd = Math.max(...daySegs.filter((s) => s.remark && WAREHOUSE_REMARK.test(s.remark)).map((s) => s.endMs));
+        let end = workSegs[workSegs.length - 1].endMs;
+        for (let i = 1; i < daySegs.length; i++) {
+          if (REST_STATUSES.has(daySegs[i].status) && !REST_STATUSES.has(daySegs[i - 1].status) && daySegs[i].startMs >= start) end = daySegs[i].startMs;
+        }
+        const longDrive = daySegs.find((s) => s.startMs >= lastRemarkEnd && s.status === "driving" && s.endMs - s.startMs > CLOCKOUT_TAIL_MINUTES * MINUTE);
+        if (longDrive) {
+          const before = daySegs.filter((s) => STOP_WORK.has(s.status) && s.endMs <= longDrive.startMs && s.startMs >= start);
+          if (before.length) end = before[before.length - 1].endMs;
+        }
+        if (end - start > thresholdMinutes * MINUTE) {
+          events.push({
+            driverId: String(input.driver.id),
+            driverName: input.driver.name ?? input.segments[0]?.driverName ?? null,
+            eventDate: dayKey,
+            startMs: start,
+            endMs: end,
+            durationMin: Math.round((end - start) / MINUTE),
+            addressId: hubFence?.id ?? null,
+            addressName: hubFence?.name ?? null,
+            hub: hubFence ? hubFence.hub ?? hubFence.name : null,
+            statuses: Array.from(new Set(daySegs.filter((s) => s.endMs > start && s.startMs < end).map((s) => s.status))),
+            locationSource: "remark",
+            needsReview: false,
+            notes: `Log remark: "${remarkSeg.remark}"`,
+          });
+        }
+      }
+      continue;
+    }
+
     // 2. clip to the window
     const clipped: HosSegment[] = [];
     for (const s of daySegs) {
@@ -561,6 +618,32 @@ export function detectPresenceEvents(input: DetectInput): WarehouseEvent[] {
       }
     }
     pushCur();
+
+    // 4b. Rule B, work-stop tail (Joe Green 2026-09-30, Outler 9/24 fuel):
+    // after the day's LAST fence block, a work stop (onDuty/yardMove) that
+    // starts within CLOCKOUT_TAIL_MINUTES of leaving the fence, reached by
+    // driving only, lasting ≤ CLOCKOUT_TAIL_MINUTES, and followed by a
+    // clock-out or a drive > CLOCKOUT_TAIL_MINUTES, is added to the block
+    // through the end of that stop. Driving alone never extends a block.
+    const tailMs = CLOCKOUT_TAIL_MINUTES * MINUTE;
+    const lastBlk = blocks[blocks.length - 1];
+    if (opts.clockOutTail === true && lastBlk) {
+      const after = daySegs.filter((s) => s.startMs >= lastBlk.endMs).filter(nonTrivial);
+      let i = 0;
+      while (i < after.length && after[i].status === "driving" && after[i].endMs - after[i].startMs <= tailMs) i++;
+      const stop = after[i];
+      if (stop && i > 0 && STOP_WORK.has(stop.status) && stop.startMs - lastBlk.endMs <= tailMs) {
+        let j = i;
+        while (j + 1 < after.length && STOP_WORK.has(after[j + 1].status)) j++;
+        const stopEnd = after[j].endMs;
+        const nxt = after[j + 1];
+        const closes = !nxt || REST_STATUSES.has(nxt.status) || (nxt.status === "driving" && nxt.endMs - nxt.startMs > tailMs);
+        if (stopEnd - stop.startMs <= tailMs && closes) {
+          lastBlk.endMs = stopEnd;
+          for (const x of after.slice(0, j + 1)) if (!lastBlk.statuses.includes(x.status)) lastBlk.statuses.push(x.status);
+        }
+      }
+    }
 
     // 5. threshold
     for (const b of blocks) {

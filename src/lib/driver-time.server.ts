@@ -259,6 +259,8 @@ export async function runDriverTimeSweep(opts?: {
   triggeredBy?: string | null;
   lookbackDays?: number;
   weekStart?: string;
+  /** Re-pull HOS logs instead of serving cached days (cached days predating `remark`). */
+  refreshHos?: boolean;
 }): Promise<SweepResult> {
   const now = opts?.now ?? new Date();
   const lookbackDays = opts?.lookbackDays ?? 8;
@@ -340,7 +342,7 @@ export async function runDriverTimeSweep(opts?: {
     // same days reuses what a prior sweep or probe already pulled. Assignments
     // fill in the vehicle on segments Samsara reported without one, which is
     // what makes GPS evidence available for those blocks.
-    const inputs = await getDriverTimeInputs({ startMs, endMs, driverIds: roster.map((d) => d.id) });
+    const inputs = await getDriverTimeInputs({ startMs, endMs, driverIds: roster.map((d) => d.id), refreshHos: opts?.refreshHos === true });
     const segments = inputs.segments;
     const gpsSamples = inputs.gpsSamples;
 
@@ -417,6 +419,8 @@ export async function runDriverTimeSweep(opts?: {
         location_source: ev.locationSource,
         needs_review: ev.needsReview,
         superseded_at: null,
+        // Remark-rule events carry the remark text; other events leave reviewer notes alone.
+        ...(ev.locationSource === "remark" && ev.notes ? { notes: ev.notes } : {}),
       };
 
       if (!prior) {

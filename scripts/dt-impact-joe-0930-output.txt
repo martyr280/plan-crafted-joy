@@ -1,0 +1,21 @@
+REMARK TEXTS: personal conveyance (1 drivers); hotel fuel (1 drivers); not my drive time (1 drivers); hotel travel (1 drivers); pre-trip inspection (8 drivers); fuel (8 drivers); delivery (2 drivers); break (9 drivers); post-trip inspection (7 drivers); shop (6 drivers); loading (4 drivers); meal (2 drivers); lunch (3 drivers); drop & hook (2 drivers); yard movement (5 drivers); unloading (3 drivers); off duty (3 drivers); personal convenion (1 drivers); misattributed duty status time (5 drivers); grand praire tx (1 drivers); dallas (1 drivers); driver clocked out & off duty (1 drivers); warehouse (3 drivers); dot physical (1 drivers); waiting (3 drivers); unload (1 drivers); load (1 drivers); document upload (1 drivers); claim shield (1 drivers); inspection (1 drivers); post (1 drivers); repair (1 drivers); claimshield test (1 drivers); mechanic shop (1 drivers); offduty (1 drivers); hotel (1 drivers); home (1 drivers); pcpc (1 drivers); pcpc bobtail (1 drivers); pcpc empty (1 drivers); driver off duty (1 drivers); leaving trailer for repairs (1 drivers)
+
+A date | driver | before | after | diff | window | remark
+2026-09-08 | Kennedy Loyd | 420 | 752 | 332 | 04:21–16:53 | Log remark: "Warehouse"
+2026-09-09 | Joseph Outler | 406 | 507 | 101 | 08:02–16:28 | Log remark: "Warehouse"
+2026-09-10 | Joseph Outler | 497 | 529 | 32 | 08:03–16:51 | Log remark: "Warehouse"
+2026-09-11 | Kennedy Loyd | 232 | 690 | 458 | 03:01–14:31 | Log remark: "Warehouse"
+2026-09-11 | Nelson Roldan | 182 | 182 | 0 | 06:55–09:57 | Log remark: "Warehouse"
+2026-09-15 | Joseph Outler | 515 | 515 | 0 | 08:01–16:36 | Log remark: "Warehouse"
+2026-09-16 | Joseph Outler | 514 | 514 | 0 | 08:06–16:40 | Log remark: "Warehouse"
+2026-09-16 | Nelson Roldan | 92 | 178 | 86 | 06:58–09:56 | Log remark: "Warehouse"
+2026-09-17 | Joseph Outler | 444 | 444 | 0 | 08:06–15:29 | Log remark: "Warehouse"
+2026-09-21 | Joseph Outler | 0 | 517 | 517 | 08:05–16:41 | Log remark: "Warehouse"
+2026-09-22 | Joseph Outler | 0 | 507 | 507 | 08:10–16:36 | Log remark: "Warehouse"
+2026-09-25 | Kennedy Loyd | 457 | 775 | 318 | 03:07–16:02 | Log remark: "Warehouse"
+
+B date | driver | last-event before | after | diff | tail
+2026-09-09 | Alberto Fiscal | 152 | 194 | +42 | 09:10–09:52
+2026-09-16 | Melvin Gilbert | 153 | 178 | +25 | 15:42–16:07
+2026-09-24 | Joseph Outler | 153 | 186 | +33 | 15:57–16:29
+2026-09-25 | DJ Johnson | 226 | 276 | +50 | 11:18–12:08

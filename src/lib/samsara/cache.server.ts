@@ -266,7 +266,7 @@ export async function getVehicleGps(
  * One call for the whole detection input set: segments with missing vehicles
  * backfilled from assignments, plus the GPS those vehicles reported.
  */
-export async function getDriverTimeInputs(opts: Window & { driverIds: string[] }): Promise<{
+export async function getDriverTimeInputs(opts: Window & { driverIds: string[]; refreshHos?: boolean }): Promise<{
   segments: NormalizedHosSegment[];
   assignments: SamsaraAssignment[];
   gpsSamples: GpsSample[];
@@ -275,7 +275,8 @@ export async function getDriverTimeInputs(opts: Window & { driverIds: string[] }
   driverDayVehicles: number;
   stats: CacheStat[];
 }> {
-  const { segments, stat: hosStat } = await getHosSegments(opts);
+  // refreshHos: re-pull only the HOS logs (e.g. days cached before `remark` was kept).
+  const { segments, stat: hosStat } = await getHosSegments({ ...opts, refresh: opts.refresh || opts.refreshHos });
   const { assignments, stat: assignStat } = await getAssignments(opts).catch(() => ({
     assignments: [] as SamsaraAssignment[],
     stat: { dataset: "assignments" as Dataset, days: 0, cachedDays: 0, fetchedDays: 0, rows: 0 },
