@@ -200,7 +200,9 @@ export async function computeForecastForRoute(
             message: `Feature coverage ${(cov * 100).toFixed(1)}% below 95% threshold; served baseline for route ${route.code}.`,
             metadata: { route_id: routeId, coverage: cov, persisted_names: persistedNames.length },
           });
-        } catch { /* best-effort */ }
+        } catch {
+          /* best-effort */
+        }
       }
     }
   }
