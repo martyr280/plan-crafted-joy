@@ -147,9 +147,10 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         .limit(1)
         .maybeSingle();
       if (jobErr) throw new Error("Unable to read cached Dispatch report");
-      if (job?.result?.truncated) throw new Error("Cached Dispatch report is truncated");
+      const result = (job?.result ?? null) as { truncated?: boolean; rows?: TicketRow[] } | null;
+      if (result?.truncated) throw new Error("Cached Dispatch report is truncated");
       return {
-        rows: job?.result?.rows ?? [],
+        rows: result?.rows ?? [],
         pulledAt: job?.completed_at ?? job?.created_at ?? null,
       };
     },
@@ -161,7 +162,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
       const today = localDateIn("America/Chicago", new Date());
       const owned = uniquelyOwnedCodes(scope, await port.routes());
       const cutoffs = (
-        await bounded(
+        await bounded<BoardCutoff>(
           db()
             .from("route_cutoffs")
             .select("route_id,p21_code,cutoff_dow,cutoff_time,run_dows,active")
@@ -176,7 +177,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         ),
       );
       const codes = [...new Set(cutoffs.map((c) => String(c.p21_code)))];
-      const demand = await bounded(
+      const demand = await bounded<DemandRow>(
         db()
           .from("truck_capacity_p21_demand")
           .select(
@@ -186,7 +187,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
           .gte("ship_date", today),
       );
       const exceptions = codes.length
-        ? await bounded(
+        ? await bounded<RunException>(
             db()
               .from("dispatch_run_exceptions")
               .select("id,p21_code,run_date,kind,reason")
@@ -201,17 +202,19 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         .maybeSingle();
       if (sErr) throw new Error("Unable to verify Dispatch assignment settings");
       const basis = (DATE_BASES as string[]).includes(settings?.dispatch_date_basis)
-        ? settings.dispatch_date_basis
+        ? (settings!.dispatch_date_basis as DateBasis)
         : "pick_ticket_print";
-      return buildDispatchBoard(rows, cutoffs as any, demand as any, {
+      return buildDispatchBoard(rows, cutoffs, demand, {
         basis,
         today,
         excludedCodes: settings?.excluded_p21_codes ?? [],
-        exceptions: exceptions as any,
+        exceptions,
       });
     },
   };
-  let reconcileImpl: ((e: any[], o: any[], w: boolean) => any[]) | null = null;
+  let reconcileImpl:
+    | ((e: DriverEventRow[], o: OverrideRow[], w: boolean) => ReconciledDriver[])
+    | null = null;
   if (input.module === "driver-time") {
     reconcileImpl = (await import("./driver-time/reconciliation")).buildReconciledDrivers;
   }
