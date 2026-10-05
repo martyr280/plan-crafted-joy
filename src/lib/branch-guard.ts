@@ -22,7 +22,10 @@ export const denyLegacyBranchAccess = createMiddleware({ type: "function" })
   .middleware([requireSupabaseAuth])
   .server(async ({ context, next }) => {
     await checkLegacyAccessWith(async (uid) => {
-      const { data, error } = await context.supabase.from("user_roles").select("role").eq("user_id", uid);
+      const { data, error } = await context.supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid);
       if (error) throw error;
       return (data ?? []).map((r: any) => String(r.role));
     }, context.userId);

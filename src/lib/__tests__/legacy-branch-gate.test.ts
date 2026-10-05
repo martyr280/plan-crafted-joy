@@ -18,15 +18,26 @@ describe("legacy server functions reject branch managers", () => {
       const fns = src.split("createServerFn(").slice(1);
       expect(fns.length).toBeGreaterThan(0);
       for (const chunk of fns) {
-        const head = chunk.slice(0, chunk.indexOf(".handler(") >= 0 ? chunk.indexOf(".handler(") : chunk.length);
+        const head = chunk.slice(
+          0,
+          chunk.indexOf(".handler(") >= 0 ? chunk.indexOf(".handler(") : chunk.length,
+        );
         expect(head).toContain(".middleware([denyLegacyBranchAccess])");
       }
     });
   }
   it("gate denies branch roles, fails closed on lookup error, allows operators", async () => {
-    await expect(checkLegacyAccessWith(async () => ["branch_manager"], "u")).rejects.toThrow(/warehouse-scoped/);
-    await expect(checkLegacyAccessWith(async () => { throw new Error("db"); }, "u")).rejects.toThrow(/verify/);
-    await expect(checkLegacyAccessWith(async () => ["ops_logistics"], "u")).resolves.toBeUndefined();
+    await expect(checkLegacyAccessWith(async () => ["branch_manager"], "u")).rejects.toThrow(
+      /warehouse-scoped/,
+    );
+    await expect(
+      checkLegacyAccessWith(async () => {
+        throw new Error("db");
+      }, "u"),
+    ).rejects.toThrow(/verify/);
+    await expect(
+      checkLegacyAccessWith(async () => ["ops_logistics"], "u"),
+    ).resolves.toBeUndefined();
     await expect(checkLegacyAccessWith(async () => [], "")).rejects.toThrow();
   });
 });

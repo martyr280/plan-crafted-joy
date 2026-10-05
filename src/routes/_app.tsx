@@ -50,14 +50,26 @@ function AppLayout() {
         <div className="flex-1 flex flex-col min-w-0">
           <TopBar />
           <main className="flex-1 p-6 overflow-auto">
-            {!isBranch ? <Outlet /> : mod ? <BranchLogisticsPage module={mod} /> : (
+            {!isBranch ? (
+              <Outlet />
+            ) : mod ? (
+              <BranchLogisticsPage module={mod} />
+            ) : (
               <div className="max-w-md space-y-3">
                 <h1 className="text-lg font-semibold">Not available</h1>
-                <p className="text-sm text-muted-foreground">Your account can view read-only warehouse reports only.</p>
+                <p className="text-sm text-muted-foreground">
+                  Your account can view read-only warehouse reports only.
+                </p>
                 <div className="flex gap-3 text-sm">
-                  <Link to="/driver-time" className="underline">Driver Time</Link>
-                  <Link to="/truck-capacity" className="underline">Truck Capacity</Link>
-                  <Link to="/dispatch" className="underline">Dispatch</Link>
+                  <Link to="/driver-time" className="underline">
+                    Driver Time
+                  </Link>
+                  <Link to="/truck-capacity" className="underline">
+                    Truck Capacity
+                  </Link>
+                  <Link to="/dispatch" className="underline">
+                    Dispatch
+                  </Link>
                 </div>
               </div>
             )}

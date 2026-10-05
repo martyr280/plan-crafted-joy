@@ -50,16 +50,28 @@ function makeAdmin(opts: { routeRuns: Row[]; version: Row | null; route: Row }) 
       }
     };
     const builder: any = {
-      select: (s = "") => { state.select = s; return builder; },
-      eq: (k: string, v: any) => { state.eq[k] = v; return builder; },
+      select: (s = "") => {
+        state.select = s;
+        return builder;
+      },
+      eq: (k: string, v: any) => {
+        state.eq[k] = v;
+        return builder;
+      },
       gte: () => builder,
       // serve.ts filters no-run markers with .not("capacity_frac","is",null)
       not: () => builder,
       lte: () => builder,
       order: () => builder,
       limit: () => builder,
-      insert: (payload: any) => { calls.push({ table, op: "insert", payload }); return Promise.resolve({ error: null }); },
-      upsert: (payload: any) => { calls.push({ table, op: "upsert", payload }); return Promise.resolve({ error: null }); },
+      insert: (payload: any) => {
+        calls.push({ table, op: "insert", payload });
+        return Promise.resolve({ error: null });
+      },
+      upsert: (payload: any) => {
+        calls.push({ table, op: "upsert", payload });
+        return Promise.resolve({ error: null });
+      },
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
       then: (res: any, rej: any) => Promise.resolve({ data: rows(), error: null }).then(res, rej),
     };
@@ -76,34 +88,59 @@ vi.mock("@/integrations/supabase/client.server", () => ({
   },
 }));
 
-
 function lowCoverageVersion() {
   const routeMeta: RouteMeta = { id: ROUTE.id, code: ROUTE.code, hub: ROUTE.hub, truck_type: null };
   const names = persistedNamesFor(routeMeta, TUESDAY_RUNS[0]!.run_date);
   // Pad with names the live feature set cannot produce -> coverage well below 95%.
   const bogus = Array.from({ length: names.length * 2 }, (_, i) => `retired_feature_${i}`);
   const all = [...names, ...bogus];
-  return { id: "V-LOW", trained_at: "2026-07-10T00:00:00Z", coefficients: all.map(() => 0), feature_names: all,
-    lambda: 1, blend_w: 0.5, holdout_mae_baseline: 0.19, holdout_mae_model: 0.2, holdout_mae_blend: 0.18,
-    per_route_residual_mad: {}, promoted: true };
+  return {
+    id: "V-LOW",
+    trained_at: "2026-07-10T00:00:00Z",
+    coefficients: all.map(() => 0),
+    feature_names: all,
+    lambda: 1,
+    blend_w: 0.5,
+    holdout_mae_baseline: 0.19,
+    holdout_mae_model: 0.2,
+    holdout_mae_blend: 0.18,
+    per_route_residual_mad: {},
+    promoted: true,
+  };
 }
 
 describe("forecast serving: read-only option", () => {
-  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-07-13T15:00:00Z")); });
-  afterEach(() => { vi.useRealTimers(); admins.current = null; });
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T15:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    admins.current = null;
+  });
 
   it("control: default auto serving logs the low-coverage fallback and the forecast", async () => {
-    const { admin, calls } = makeAdmin({ route: ROUTE, routeRuns: TUESDAY_RUNS, version: lowCoverageVersion() });
+    const { admin, calls } = makeAdmin({
+      route: ROUTE,
+      routeRuns: TUESDAY_RUNS,
+      version: lowCoverageVersion(),
+    });
     admins.current = admin;
     const { computeForecastForRoute } = await import("../serve");
     const res = await computeForecastForRoute(ROUTE.id, 14, "auto");
     expect(res.servingMethod).toBe("baseline");
     expect(calls.some((c) => c.table === "activity_events" && c.op === "insert")).toBe(true);
-    expect(calls.some((c) => c.table === "truck_capacity_forecast_log" && c.op === "upsert")).toBe(true);
+    expect(calls.some((c) => c.table === "truck_capacity_forecast_log" && c.op === "upsert")).toBe(
+      true,
+    );
   });
 
   it("logForecast:false writes nothing for a promoted low-coverage model", async () => {
-    const { admin, calls } = makeAdmin({ route: ROUTE, routeRuns: TUESDAY_RUNS, version: lowCoverageVersion() });
+    const { admin, calls } = makeAdmin({
+      route: ROUTE,
+      routeRuns: TUESDAY_RUNS,
+      version: lowCoverageVersion(),
+    });
     admins.current = admin;
     const { computeForecastForRoute } = await import("../serve");
     const res = await computeForecastForRoute(ROUTE.id, 14, "auto", { logForecast: false });
