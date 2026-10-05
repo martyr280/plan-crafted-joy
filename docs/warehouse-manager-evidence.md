@@ -138,3 +138,11 @@ automatically afterwards.
 - `anon` can EXECUTE `backfill_sku_crossref_from_formerly`. This predates the feature and was left untouched as instructed.
 - New tables have no `tenant_id`. The project has no tenant model: `profiles.tenant_id` does not exist.
 - No end-to-end run as a real warehouse manager. That would need a real account, which is prohibited before release.
+
+## Correction 0011 — pending invite identities fail closed (2026-10-05)
+- `private.is_branch_manager` now returns true for any account bound by `branch_manager_invites.user_id` or `created_user_id` (any status, incl. failed/cancelled/revoked), not only branch_manager role rows. Restrictive deny policies, `has_role` (incl. private PDF storage), `claim_admin_if_none` and the role guard trigger all inherit this.
+- Role guard: no role can be added to a bound identity (zero-role pending accounts can't be "rescued" into operators).
+- Legacy gate: `checkLegacyAccessWith(roles, userId, binding)` denies when the self-only RPC `current_user_is_branch_bound()` (authenticated only, anon revoked; no session = bound) is not exactly `false`; any error fails closed. `assertNotBranchUser` checks invite binding too.
+- Synthetic tests: pending (pre-stage), stage-failed, revoked, needs_reconciliation zero-role fixtures denied by legacy gate and branch report; lookup failure fails closed; unbound users unchanged.
+- Evidence: vitest 51 files / 506 tests pass; `tsgo --noEmit` exit 0; lint on touched warehouse files exit 0; `bun run build` exit 0 (`build-0011.log`). Live readback: 0 bound invites, 0 branch roles, 0 mappings; anon cannot execute probe.
+- Trade-off: a revoked invite-created account stays permanently branch-bound; reusing that person as an operator needs a new account.
