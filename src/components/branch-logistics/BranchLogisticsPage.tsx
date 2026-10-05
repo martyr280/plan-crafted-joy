@@ -188,7 +188,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
               />
               <h2 className="font-semibold">Runs</h2>
               <div className="flex flex-wrap gap-2">
-                {d.runs.map((r: any) => (
+                {d.runs.map((r) => (
                   <Button
                     variant={runId === r.id ? "default" : "outline"}
                     size="sm"
