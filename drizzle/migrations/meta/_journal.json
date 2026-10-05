@@ -50,6 +50,13 @@
       "when": 1791214467105,
       "tag": "0006_branch_manager_scope_and_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791214520674,
+      "tag": "0007_branch_manager_guard_exec",
+      "breakpoints": true
     }
   ]
 }
