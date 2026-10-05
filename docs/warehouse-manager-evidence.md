@@ -163,3 +163,8 @@ automatically afterwards.
 ## Release-candidate checks after 0011 + 0012 (2026-10-05)
 - `bun run build` exit 0 (`build-0012.log`); vitest 52 files / 509 tests pass; `tsgo --noEmit` exit 0; eslint on all touched warehouse files exit 0.
 - Nothing published; no real auth users, roles, mappings, invites or email.
+
+## Formatting cleanup on edited lines (2026-10-05)
+- Fixed every lint finding on lines changed since 46c2797 in AppSidebar.tsx, truck-capacity/serve.ts, user-admin.functions.ts, _app.settings.tsx (prettier wraps; one `any` replaced by inferred type). No rules disabled, no whole-file reformat. Finding count on edited lines (git diff -U0 46c2797 ∩ eslint): now 0 in all four files.
+- Remaining findings in those four files are pre-existing baseline on untouched lines.
+- After cleanup: vitest 52 files / 509 tests pass; `tsgo --noEmit` exit 0; `bun run build` exit 0 (`build-final.log`). Nothing published; no real users/roles/access/email.
