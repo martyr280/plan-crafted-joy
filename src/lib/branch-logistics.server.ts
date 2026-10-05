@@ -25,8 +25,19 @@ export async function rolesFor(userId: string): Promise<string[]> {
   return (data ?? []).map((r) => String(r.role));
 }
 
+/** Invite binding: pending (pre-stage), failed, cancelled-after-create or revoked accounts. */
+export async function inviteBoundFor(userId: string): Promise<boolean> {
+  const { data, error } = await db()
+    .from("branch_manager_invites")
+    .select("id")
+    .or(`user_id.eq.${userId},created_user_id.eq.${userId}`)
+    .limit(1);
+  if (error) throw new Error("Unable to verify access");
+  return (data ?? []).length > 0;
+}
+
 export async function checkLegacyAccess(userId: string) {
-  return checkLegacyAccessWith(rolesFor, userId);
+  return checkLegacyAccessWith(rolesFor, userId, inviteBoundFor);
 }
 
 type Limitable = {

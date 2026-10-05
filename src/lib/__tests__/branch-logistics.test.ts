@@ -48,6 +48,11 @@ vi.mock("@/integrations/supabase/client.server", () => ({
           filters.push((r) => String(field(r, k)) <= v);
           return q;
         },
+        or: (expr: string) => {
+          const parts = expr.split(",").map((p) => p.split(".eq."));
+          filters.push((r) => parts.some(([k, v]) => String(field(r, k!)) === v));
+          return q;
+        },
         not: () => q,
         order: () => q,
         limit: (n: number) => {
@@ -171,6 +176,29 @@ describe("branch server adapter (synthetic tables, no writes)", () => {
     expect(r.drivers).toHaveLength(1);
     expect(r.drivers[0]!.events.map((e) => e.id)).toEqual(["e-b"]);
     expect(JSON.stringify(r)).not.toMatch(/PRIVATE|Foreign Driver/);
+    expect(state.writes).toBe(0);
+  });
+  it("legacy gate denies zero-role invite-created identities in every window (synthetic)", async () => {
+    // generateLink created the account; handle_new_user bound created_user_id; bm_stage not yet run.
+    state.tables.user_roles = [];
+    state.tables.branch_manager_invites = [
+      { id: "i1", status: "sending", user_id: null, created_user_id: "pending" },
+      { id: "i2", status: "failed", user_id: null, created_user_id: "stage-failed" },
+      { id: "i3", status: "revoked", user_id: "revoked", created_user_id: "revoked" },
+      { id: "i4", status: "needs_reconciliation", user_id: "staged", created_user_id: "staged" },
+    ];
+    for (const u of ["pending", "stage-failed", "revoked", "staged"])
+      await expect(checkLegacyAccess(u)).rejects.toThrow(/warehouse-scoped/);
+    // Branch report itself also refuses them: no role row / no active mapping.
+    await expect(
+      readBranchLogistics("pending", { module: "truck-capacity", weekStart: W }),
+    ).rejects.toThrow();
+    // Invite lookup failure fails closed even for an ordinary zero-role user.
+    state.fail = "branch_manager_invites";
+    await expect(checkLegacyAccess("someone-else")).rejects.toThrow(/verify/);
+    state.fail = null;
+    // Unbound zero-role user keeps prior behavior (gate passes; endpoints apply their own checks).
+    await expect(checkLegacyAccess("someone-else")).resolves.toBeUndefined();
     expect(state.writes).toBe(0);
   });
   it("legacy gate blocks managers, fails closed, permits operators", async () => {

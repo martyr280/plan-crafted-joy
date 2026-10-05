@@ -4084,6 +4084,7 @@ export type Database = {
       }
       claim_admin_if_none: { Args: never; Returns: boolean }
       current_sales_rep_code: { Args: never; Returns: string }
+      current_user_is_branch_bound: { Args: never; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

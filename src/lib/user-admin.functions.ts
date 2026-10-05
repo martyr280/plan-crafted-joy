@@ -22,9 +22,16 @@ async function assertAdmin(supabase: any, userId: string) {
 
 // Branch (warehouse-manager) accounts are managed only by the warehouse-manager invite flow.
 async function assertNotBranchUser(userId: string) {
-  const { data, error } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
-  if (error) throw new Error("Unable to verify target account");
-  if ((data ?? []).some((r: any) => r.role === "branch_manager"))
+  const [{ data, error }, { data: inv, error: e2 }] = await Promise.all([
+    supabaseAdmin.from("user_roles").select("role").eq("user_id", userId),
+    supabaseAdmin
+      .from("branch_manager_invites")
+      .select("id")
+      .or(`user_id.eq.${userId},created_user_id.eq.${userId}`)
+      .limit(1),
+  ]);
+  if (error || e2) throw new Error("Unable to verify target account");
+  if ((data ?? []).some((r: any) => r.role === "branch_manager") || (inv ?? []).length)
     throw new Error("Warehouse-manager accounts are managed under Warehouse managers, not generic roles.");
 }
 async function assertNotBranchEmail(email: string) {

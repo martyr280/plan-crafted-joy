@@ -26,18 +26,45 @@ describe("legacy server functions reject branch managers", () => {
       }
     });
   }
+  const unbound = async () => false;
   it("gate denies branch roles, fails closed on lookup error, allows operators", async () => {
-    await expect(checkLegacyAccessWith(async () => ["branch_manager"], "u")).rejects.toThrow(
+    await expect(
+      checkLegacyAccessWith(async () => ["branch_manager"], "u", unbound),
+    ).rejects.toThrow(/warehouse-scoped/);
+    await expect(
+      checkLegacyAccessWith(
+        async () => {
+          throw new Error("db");
+        },
+        "u",
+        unbound,
+      ),
+    ).rejects.toThrow(/verify/);
+    await expect(
+      checkLegacyAccessWith(async () => ["ops_logistics"], "u", unbound),
+    ).resolves.toBeUndefined();
+    await expect(checkLegacyAccessWith(async () => [], "", unbound)).rejects.toThrow();
+  });
+  it("zero-role invite-bound identity is denied; binding lookup failure or non-boolean fails closed", async () => {
+    const none = async () => [] as string[];
+    await expect(checkLegacyAccessWith(none, "pending", async () => true)).rejects.toThrow(
       /warehouse-scoped/,
     );
     await expect(
-      checkLegacyAccessWith(async () => {
-        throw new Error("db");
-      }, "u"),
+      checkLegacyAccessWith(none, "u", async () => {
+        throw new Error("rpc");
+      }),
     ).rejects.toThrow(/verify/);
     await expect(
-      checkLegacyAccessWith(async () => ["ops_logistics"], "u"),
-    ).resolves.toBeUndefined();
-    await expect(checkLegacyAccessWith(async () => [], "")).rejects.toThrow();
+      checkLegacyAccessWith(none, "u", async () => null as unknown as boolean),
+    ).rejects.toThrow();
+    // Even an operator role row cannot unlock a bound identity.
+    await expect(
+      checkLegacyAccessWith(
+        async () => ["admin"],
+        "u",
+        async () => true,
+      ),
+    ).rejects.toThrow(/warehouse-scoped/);
   });
 });

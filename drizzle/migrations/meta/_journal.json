@@ -78,6 +78,13 @@
       "when": 1791216191584,
       "tag": "0010_branch_manager_role_serialization",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791217343870,
+      "tag": "0011_branch_manager_pending_identity_deny",
+      "breakpoints": true
     }
   ]
 }
