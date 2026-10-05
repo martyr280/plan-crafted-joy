@@ -11,7 +11,9 @@ const sql = readFileSync(
 describe("pending invite identities fail closed (migration 0011)", () => {
   it("is_branch_manager includes invite user_id and created_user_id bindings, any status", () => {
     const fn = sql.slice(sql.indexOf("FUNCTION private.is_branch_manager"));
-    expect(fn).toMatch(/branch_manager_invites WHERE user_id = _user_id OR created_user_id = _user_id/);
+    expect(fn).toMatch(
+      /branch_manager_invites WHERE user_id = _user_id OR created_user_id = _user_id/,
+    );
     expect(fn.slice(0, fn.indexOf("$$;"))).not.toMatch(/status/);
   });
   it("has_role denies non-branch roles to bound identities", () => {
@@ -22,6 +24,8 @@ describe("pending invite identities fail closed (migration 0011)", () => {
   });
   it("self probe is not callable by anon and treats no session as bound", () => {
     expect(sql).toMatch(/auth\.uid\(\) IS NULL OR private\.is_branch_manager\(auth\.uid\(\)\)/);
-    expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.current_user_is_branch_bound\(\) FROM PUBLIC, anon/);
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.current_user_is_branch_bound\(\) FROM PUBLIC, anon/,
+    );
   });
 });
