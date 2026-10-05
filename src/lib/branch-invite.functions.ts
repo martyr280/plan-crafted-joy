@@ -15,6 +15,21 @@ import type {
   InviteRequest,
 } from "./branch-invite";
 
+/** These SQL args accept NULL; the generated RPC types mark every argument as a required string. */
+const SQL_NULL = null as unknown as string;
+
+const claimSchema: z.ZodType<ClaimResult> = z.union([
+  z.object({
+    outcome: z.literal("claimed"),
+    resend_key: z.string().min(1),
+    user_id: z.string().nullable(),
+    display_name: z.string().nullable(),
+  }),
+  z.object({ outcome: z.literal("already_sent") }),
+  z.object({ outcome: z.literal("in_progress") }),
+  z.object({ outcome: z.literal("needs_reconciliation") }),
+]);
+
 async function adminDb(supabase: SupabaseClient<Database>, userId: string) {
   const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw new Error("Unable to verify access");
@@ -83,9 +98,9 @@ export const saveBranchInviteDraft = createServerFn({ method: "POST" })
     const db = await adminDb(context.supabase, context.userId);
     const { data: id, error } = await db.rpc("bm_save_draft", {
       p_actor: context.userId,
-      p_id: data.id ?? null,
+      p_id: data.id ?? SQL_NULL,
       p_email: data.email,
-      p_display_name: data.displayName ?? null,
+      p_display_name: data.displayName ?? SQL_NULL,
       p_warehouse: data.warehouse,
     });
     if (error) throw rpcError(error);
@@ -138,7 +153,8 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
             p_ack_duplicate: r.ackDuplicate === true,
           });
           if (error) throw rpcError(error);
-          return res;
+          // Fail closed on any unexpected shape from the RPC.
+          return claimSchema.parse(res);
         },
         stage: async (id: string, key: string, userId: string) => {
           const { error } = await db.rpc("bm_stage", {
@@ -160,15 +176,15 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
           });
           if (error) throw new Error("mark_sent_failed");
         },
-        markFailed: async (id: string, key: string, code: string, providerId?: string | null) => {
+        markFailed: async (id: string, key: string, code: FailureCode, providerId?: string | null) => {
           const { data: st, error } = await db.rpc("bm_mark_failed", {
             p_id: id,
             p_request_key: key,
             p_code: code,
-            p_provider_id: providerId ?? null,
+            p_provider_id: providerId ?? SQL_NULL,
           });
           if (error) throw new Error("mark_failed_failed");
-          return (st as string | null) ?? null;
+          return typeof st === "string" ? st : null;
         },
       },
       auth: {
