@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getBranchLogisticsReport } from "@/lib/branch-logistics.functions";
 import { useAuth } from "@/lib/auth";
+import { currentMonday } from "@/lib/branch-week";
 import { formatMinutes } from "@/lib/driver-time/reconciliation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,18 +16,6 @@ const TITLES: Record<Module, string> = {
   "truck-capacity": "Truck Capacity",
   dispatch: "Dispatch",
 };
-
-export function currentMonday(now = new Date()): string {
-  const local = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Chicago",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-  const x = new Date(local + "T00:00:00Z");
-  x.setUTCDate(x.getUTCDate() - (x.getUTCDay() === 0 ? 6 : x.getUTCDay() - 1));
-  return x.toISOString().slice(0, 10);
-}
 
 export function BranchLogisticsPage({ module }: { module: Module }) {
   const { user } = useAuth();
