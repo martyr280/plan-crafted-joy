@@ -3,7 +3,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { denyLegacyBranchAccess } from "./branch-guard";
-import { WAREHOUSES } from "./warehouse-scope";
+import { WAREHOUSES, type Warehouse } from "./warehouse-scope";
+
+function asWarehouse(v: string): Warehouse {
+  // The table's CHECK constraint already limits this; fail closed if it ever drifts.
+  if (!(WAREHOUSES as readonly string[]).includes(v)) throw new Error("Invalid warehouse on invite");
+  return v as Warehouse;
+}
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type {
@@ -72,6 +78,7 @@ export const listBranchInvites = createServerFn({ method: "POST" })
     const now = Date.now();
     return (data ?? []).map(({ provider_message_id, ...r }) => ({
       ...r,
+      warehouse: asWarehouse(r.warehouse),
       // A send that started and whose worker vanished is shown as needing review.
       status:
         r.status === "sending" && r.claim_expires_at && Date.parse(r.claim_expires_at) <= now
