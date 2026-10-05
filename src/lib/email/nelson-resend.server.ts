@@ -375,8 +375,13 @@ export async function sendNelsonBranchInviteEmail(to: string, actionUrl: string,
   } catch {
     throw new BranchInviteSendError("unknown", null);
   }
-  if (r.ok) return;
-  // 409 = same key still processing/conflict, 429/5xx = transient: outcome not known.
-  if (r.status === 409 || r.status === 429 || r.status >= 500) throw new BranchInviteSendError("unknown", r.status);
+  if (r.ok) {
+    // Provider accepted the message. The id is a delivery receipt, not a secret.
+    const body = (await r.json().catch(() => null)) as { id?: unknown } | null;
+    return { id: typeof body?.id === "string" && body.id ? body.id : "accepted-without-id" };
+  }
+  // 409 (idempotency conflict) and 5xx: the provider may or may not have sent it.
+  // 4xx incl. 429 rate limit: rejected before sending.
+  if (r.status === 409 || r.status >= 500) throw new BranchInviteSendError("unknown", r.status);
   throw new BranchInviteSendError("definite", r.status);
 }
