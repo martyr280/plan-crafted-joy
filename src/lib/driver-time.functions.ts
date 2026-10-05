@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -55,7 +56,7 @@ function compareHubs(a: string, b: string): number {
 /* ------------------------------------------------------------------ report */
 
 export const getDriverTimeWeek = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), includeWeekends: z.boolean().default(false) }).parse(i ?? {}),
   )
@@ -165,7 +166,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
 
 
 export const updateDriverTimeEventStatus = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -192,7 +193,7 @@ export const updateDriverTimeEventStatus = createServerFn({ method: "POST" })
   });
 
 export const setPaycomHours = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -223,7 +224,7 @@ export const setPaycomHours = createServerFn({ method: "POST" })
 /* ------------------------------------------------------------------- sweep */
 
 export const runDriverTimeSweepNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(i => z.object({weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()}).parse(i ?? {}))
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
@@ -250,7 +251,7 @@ export const runDriverTimeSweepNow = createServerFn({ method: "POST" })
 /* ---------------------------------------------------------------- settings */
 
 export const getDriverTimeConfig = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
     const { getDriverTimeSettings } = await import("@/lib/driver-time.server");
@@ -273,7 +274,7 @@ export const getDriverTimeConfig = createServerFn({ method: "GET" })
   });
 
 export const saveDriverTimeConfig = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -303,7 +304,7 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
 /* --------------------------------------------------------------- pay rates */
 
 export const listDriverPayRates = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireAdmin(context.userId);
     const { data, error } = await db()
@@ -317,7 +318,7 @@ export const listDriverPayRates = createServerFn({ method: "GET" })
 
 /** Paste import: "driver id or name, rate" per line. */
 export const importDriverPayRates = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -372,7 +373,7 @@ export const importDriverPayRates = createServerFn({ method: "POST" })
 /* ------------------------------------------------------------ diagnostics */
 
 export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ lookbackDays: z.number().int().min(1).max(30).optional() }).parse(i ?? {}))
   .handler(async ({ data, context }) => {
     await requireAdmin(context.userId);
@@ -424,7 +425,7 @@ export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
 
 /** Audited warehouse actuals are independent of Paycom paid hours. */
 export const saveWarehouseActual = createServerFn({method:"POST"})
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(i => z.object({driverId:z.string().min(1).max(200),weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     reportName:z.string().max(200).optional(), hub:z.string().max(80).optional(),
     actual:actualSchema.nullable(), expectedUpdatedAt:z.string().nullable()}).parse(i))

@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
@@ -22,7 +23,7 @@ function windowFromHours(hours = 24) {
 }
 
 export const getFleetLocations = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     try {
       const vehicles = await fetchVehicleLocations();
@@ -34,7 +35,7 @@ export const getFleetLocations = createServerFn({ method: "GET" })
   });
 
 export const listTrips = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((d) => windowSchema.parse(d))
   .handler(async ({ data }) => {
     try {
@@ -48,7 +49,7 @@ export const listTrips = createServerFn({ method: "POST" })
   });
 
 export const listSafetyEvents = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((d) => windowSchema.parse(d))
   .handler(async ({ data }) => {
     try {
@@ -61,7 +62,7 @@ export const listSafetyEvents = createServerFn({ method: "POST" })
   });
 
 export const listDvirs = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((d) => windowSchema.parse(d))
   .handler(async ({ data }) => {
     try {
@@ -74,7 +75,7 @@ export const listDvirs = createServerFn({ method: "POST" })
   });
 
 export const listDocuments = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((d) => windowSchema.parse(d))
   .handler(async ({ data }) => {
     try {
@@ -87,7 +88,7 @@ export const listDocuments = createServerFn({ method: "POST" })
   });
 
 export const getDocumentForOrder = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((d) => z.object({ documentId: z.string().min(1) }).parse(d))
   .handler(async ({ data }) => {
     try {
@@ -100,5 +101,5 @@ export const getDocumentForOrder = createServerFn({ method: "POST" })
   });
 
 export const samsaraStatus = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => samsaraHealthCheck());

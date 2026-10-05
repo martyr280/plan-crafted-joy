@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -45,7 +46,7 @@ const RuleInput = z.object({
 /* ------------------------------------------------------------------ rules */
 
 export const listCapacityAlertRules = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireManager(context.userId);
     const { data, error } = await db()
@@ -55,7 +56,7 @@ export const listCapacityAlertRules = createServerFn({ method: "GET" })
   });
 
 export const saveCapacityAlertRule = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => RuleInput.parse(i))
   .handler(async ({ data, context }) => {
     await requireManager(context.userId);
@@ -72,7 +73,7 @@ export const saveCapacityAlertRule = createServerFn({ method: "POST" })
   });
 
 export const deleteCapacityAlertRule = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireManager(context.userId);
@@ -85,7 +86,7 @@ export const deleteCapacityAlertRule = createServerFn({ method: "POST" })
 
 /** Admin "Evaluate now". `dryRun` previews what WOULD fire without writing alerts or sending mail. */
 export const evaluateCapacityAlertsNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     dryRun: z.boolean().optional(),
     ruleId: z.string().uuid().nullable().optional(),
@@ -128,7 +129,7 @@ export const evaluateCapacityAlertsNow = createServerFn({ method: "POST" })
   });
 
 export const listCapacityAlertLog = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ limit: z.number().int().min(1).max(500).optional() }).parse(i ?? {}))
   .handler(async ({ data, context }) => {
     await requireManager(context.userId);
@@ -143,7 +144,7 @@ export const listCapacityAlertLog = createServerFn({ method: "POST" })
 
 /** Alert feed. Managers see everything; salespeople see only their own alerts. */
 export const listCapacityAlerts = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     status: z.enum(["all", "open", "new", "acknowledged", "resolved"]).optional(),
     limit: z.number().int().min(1).max(500).optional(),
@@ -175,7 +176,7 @@ export const listCapacityAlerts = createServerFn({ method: "POST" })
   });
 
 export const setCapacityAlertStatus = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     id: z.string().uuid(),
     status: z.enum(["new", "acknowledged", "resolved"]),
@@ -204,7 +205,7 @@ export const setCapacityAlertStatus = createServerFn({ method: "POST" })
 /* ------------------------------------------------------------- governance */
 
 export const listCapacityAlertPrefs = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireManager(context.userId);
     const [{ data: prefs }, { data: maps }] = await Promise.all([
@@ -235,7 +236,7 @@ export const listCapacityAlertPrefs = createServerFn({ method: "GET" })
   });
 
 export const saveCapacityAlertPref = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     rep_code: z.string().min(1).max(64),
     opted_in: z.boolean(),
@@ -258,7 +259,7 @@ export const saveCapacityAlertPref = createServerFn({ method: "POST" })
 
 /** Manager digest recipient list, stored in app_settings under `capacity_alerts`. */
 export const getCapacityAlertSettings = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireManager(context.userId);
     const { data } = await db().from("app_settings").select("value").eq("key", "capacity_alerts").maybeSingle();
@@ -266,7 +267,7 @@ export const getCapacityAlertSettings = createServerFn({ method: "GET" })
   });
 
 export const saveCapacityAlertSettings = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ managerEmails: z.array(z.string().email()).max(50) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireManager(context.userId);

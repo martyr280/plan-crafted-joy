@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -12,14 +13,14 @@ async function assertAdmin(userId: string) {
 }
 
 export const recomputeSkuFamilies = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.userId);
     return await recomputeFamilies();
   });
 
 export const listSkuFamilies = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ search: z.string().optional() }).parse)
   .handler(async ({ data }) => {
     let q = supabaseAdmin
@@ -56,7 +57,7 @@ export const listSkuFamilies = createServerFn({ method: "POST" })
   });
 
 export const updateSkuFamily = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ item: z.string(), item_short: z.string().min(1) }).parse)
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
@@ -66,7 +67,7 @@ export const updateSkuFamily = createServerFn({ method: "POST" })
   });
 
 export const updateFamilyPrices = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       item_short: z.string(),
@@ -89,7 +90,7 @@ export const updateFamilyPrices = createServerFn({ method: "POST" })
   });
 
 export const probeFamilyImage = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ item_short: z.string() }).parse)
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
@@ -101,7 +102,7 @@ export const probeFamilyImage = createServerFn({ method: "POST" })
   });
 
 export const listFamilyImages = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ filter: z.enum(["all", "missing"]).default("all") }).parse)
   .handler(async ({ data }) => {
     const { data: rows } = await supabaseAdmin
@@ -136,7 +137,7 @@ export const listFamilyImages = createServerFn({ method: "POST" })
   });
 
 export const generatePricerPdf = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       name: z.string().min(1).max(120),
@@ -190,7 +191,7 @@ export const generatePricerPdf = createServerFn({ method: "POST" })
   });
 
 export const listPricerPublications = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data, error } = await supabaseAdmin
       .from("pricer_publications")
@@ -211,7 +212,7 @@ export const listPricerPublications = createServerFn({ method: "POST" })
   });
 
 export const listPricerFilters = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data } = await supabaseAdmin.from("price_list").select("category,mfg").limit(20000);
     const cats = new Set<string>(), mfgs = new Set<string>();

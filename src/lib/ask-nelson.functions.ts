@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
@@ -163,7 +164,7 @@ async function generateTitle(message: string) {
 }
 
 export const listConversations = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     try {
       const data = await retrySupabase<ConversationSummary[]>("listConversations", () =>
@@ -185,7 +186,7 @@ export const listConversations = createServerFn({ method: "GET" })
   });
 
 export const getConversation = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
     try {
@@ -218,7 +219,7 @@ export const getConversation = createServerFn({ method: "POST" })
   });
 
 export const createConversation = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     const conversation = await retrySupabase<ConversationSummary>("createConversation.insert", () =>
       context.supabase
@@ -232,7 +233,7 @@ export const createConversation = createServerFn({ method: "POST" })
   });
 
 export const deleteConversation = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
     await retryTransient("deleteConversation", async () => {
@@ -245,7 +246,7 @@ export const deleteConversation = createServerFn({ method: "POST" })
   });
 
 export const askNelson = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       conversationId: z.string().uuid(),

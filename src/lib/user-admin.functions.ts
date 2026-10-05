@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -29,7 +30,7 @@ async function logActivity(eventType: string, message: string, actorId: string, 
 }
 
 export const listManagedUsers = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
 
@@ -64,7 +65,7 @@ export const listManagedUsers = createServerFn({ method: "POST" })
   });
 
 export const inviteUser = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) =>
     z.object({
       email: z.string().trim().email().max(255),
@@ -102,7 +103,7 @@ export const inviteUser = createServerFn({ method: "POST" })
   });
 
 export const createUserWithPassword = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) =>
     z.object({
       email: z.string().trim().toLowerCase().email().max(255),
@@ -152,7 +153,7 @@ export const createUserWithPassword = createServerFn({ method: "POST" })
   });
 
 export const sendPasswordReset = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => z.object({ email: z.string().trim().email().max(255) }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -173,7 +174,7 @@ export const sendPasswordReset = createServerFn({ method: "POST" })
   });
 
 export const revokeAllRoles = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => z.object({ userId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -185,7 +186,7 @@ export const revokeAllRoles = createServerFn({ method: "POST" })
   });
 
 export const setUserDisabled = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => z.object({ userId: z.string().uuid(), disabled: z.boolean() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -204,7 +205,7 @@ export const setUserDisabled = createServerFn({ method: "POST" })
   });
 
 export const setUserRole = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) =>
     z.object({
       userId: z.string().uuid(),
@@ -236,7 +237,7 @@ export const setUserRole = createServerFn({ method: "POST" })
   });
 
 export const listAdminActivity = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
     const { data, error } = await supabaseAdmin

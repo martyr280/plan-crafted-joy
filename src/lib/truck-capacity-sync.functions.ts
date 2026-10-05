@@ -1,5 +1,6 @@
 // Server functions for the SharePoint workbook sync (pull only).
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -18,7 +19,7 @@ async function requireLogisticsAdmin(userId: string) {
 }
 
 export const getWorkbookSyncStatus = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { connectorStatus, getWorkbookSyncSettings } = await import("./truck-capacity/workbook-sync.server");
     const settings = await getWorkbookSyncSettings();
@@ -39,7 +40,7 @@ export const getWorkbookSyncStatus = createServerFn({ method: "GET" })
   });
 
 export const syncWorkbookNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ force: z.boolean().optional() }).parse(i ?? {}))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
@@ -48,7 +49,7 @@ export const syncWorkbookNow = createServerFn({ method: "POST" })
   });
 
 export const uploadWorkbookSync = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ fileBase64: z.string().min(1) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);

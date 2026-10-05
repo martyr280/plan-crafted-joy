@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
 
 export const listWebhookDeliveries = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ limit: z.number().int().min(1).max(200).default(50) }).parse)
   .handler(async ({ data }) => {
     const { data: rows, error } = await supabaseAdmin
@@ -17,7 +18,7 @@ export const listWebhookDeliveries = createServerFn({ method: "POST" })
   });
 
 export const getWebhookDelivery = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data }) => {
     const { data: row, error } = await supabaseAdmin

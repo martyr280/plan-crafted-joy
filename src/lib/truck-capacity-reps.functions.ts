@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -48,7 +49,7 @@ async function loadMappings(): Promise<Mapping[]> {
  * Jimmy's explicit requirement so reps can't benchmark themselves against peers.
  */
 export const getTruckRepScope = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     const full = await hasAnyRoleSrv(context.userId, FULL_VIEW_ROLES);
     if (full) return { scoped: false as const, repCode: null, repName: null, routeCodes: [] as string[] };
@@ -76,7 +77,7 @@ export const getTruckRepScope = createServerFn({ method: "GET" })
   });
 
 export const listRouteSalespeople = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => ({ mappings: await loadMappings() }));
 
 /**
@@ -84,7 +85,7 @@ export const listRouteSalespeople = createServerFn({ method: "GET" })
  * whatever rep codes we already know about locally.
  */
 export const listKnownRepCodes = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const out = new Map<string, string | null>();
     const { data: profiles } = await db()
@@ -104,7 +105,7 @@ export const listKnownRepCodes = createServerFn({ method: "GET" })
 
 /** Replace the full salesperson set for one route. */
 export const setRouteSalespeople = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     route_code: z.string().min(1).max(64),
     reps: z.array(z.object({
@@ -134,7 +135,7 @@ export const setRouteSalespeople = createServerFn({ method: "POST" })
  * Tab, comma, semicolon and pipe all work as separators.
  */
 export const importRouteSalespeople = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     text: z.string().max(200000),
     replaceAll: z.boolean().optional(),
@@ -177,7 +178,7 @@ export const importRouteSalespeople = createServerFn({ method: "POST" })
   });
 
 export const deleteRouteSalesperson = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
@@ -201,7 +202,7 @@ function weekStartOf(iso: string): string {
  * conversation Jimmy wants to have with a rep.
  */
 export const getUnderfilledRoutes = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     weeks: z.number().int().min(1).max(52).optional(),
     threshold: z.number().min(0.05).max(1).optional(),

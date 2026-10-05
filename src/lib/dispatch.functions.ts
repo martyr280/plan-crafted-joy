@@ -6,6 +6,7 @@
 // Push button is UX, not a security boundary.
 
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -45,7 +46,7 @@ function todayIso(): string {
 /* ------------------------------------------------------------- runs board */
 
 export const listDispatchRuns = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
     const { getDispatchSettings } = await import("@/lib/dispatch.server");
@@ -119,7 +120,7 @@ export const listDispatchRuns = createServerFn({ method: "POST" })
   });
 
 export const getDispatchRun = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ runId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
@@ -155,7 +156,7 @@ export const getDispatchRun = createServerFn({ method: "POST" })
   });
 
 export const buildRunNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ routeId: z.string().uuid(), runDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireWriter(context.userId);
@@ -171,7 +172,7 @@ export const buildRunNow = createServerFn({ method: "POST" })
   });
 
 export const approveAndPush = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ runId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireWriter(context.userId);
@@ -192,7 +193,7 @@ export const approveAndPush = createServerFn({ method: "POST" })
   });
 
 export const previewDelta = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ runId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
@@ -201,7 +202,7 @@ export const previewDelta = createServerFn({ method: "POST" })
   });
 
 export const cancelRun = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ runId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireWriter(context.userId);
@@ -212,7 +213,7 @@ export const cancelRun = createServerFn({ method: "POST" })
 /* --------------------------------------------------------- address queue */
 
 export const listAddressQueue = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
 
@@ -259,7 +260,7 @@ export const listAddressQueue = createServerFn({ method: "POST" })
   });
 
 export const listSamsaraAddresses = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
     try {
@@ -273,7 +274,7 @@ export const listSamsaraAddresses = createServerFn({ method: "POST" })
 
 /** Rank existing Samsara addresses against a queue row's raw P21 address. */
 export const suggestAddressMatches = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -325,7 +326,7 @@ export const suggestAddressMatches = createServerFn({ method: "POST" })
   });
 
 export const resolveAddress = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -412,7 +413,7 @@ export const resolveAddress = createServerFn({ method: "POST" })
 /* ------------------------------------------------------ sequence template */
 
 export const listSequenceTemplate = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ routeId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
@@ -434,7 +435,7 @@ const templateRowSchema = z.object({
 });
 
 export const saveSequenceTemplate = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ routeId: z.string().uuid(), rows: z.array(templateRowSchema).max(500) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireWriter(context.userId);
@@ -464,7 +465,7 @@ export const saveSequenceTemplate = createServerFn({ method: "POST" })
  * returned so the operator sees exactly what was rejected.
  */
 export const importSequencePaste = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ routeId: z.string().uuid(), text: z.string().max(200_000), commit: z.boolean().optional() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
@@ -496,7 +497,7 @@ export const importSequencePaste = createServerFn({ method: "POST" })
 /* ------------------------------------------------------------- settings */
 
 export const getDispatchSettingsFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
     const { getDispatchSettings } = await import("@/lib/dispatch.server");
@@ -504,7 +505,7 @@ export const getDispatchSettingsFn = createServerFn({ method: "POST" })
   });
 
 export const saveDispatchSettingsFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -528,7 +529,7 @@ export const saveDispatchSettingsFn = createServerFn({ method: "POST" })
 /* -------------------------------------------------------- driver mapping */
 
 export const listDriverMappings = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
     const { data: rows } = await db().from("dispatch_driver_map").select("*").limit(1000);
@@ -544,7 +545,7 @@ export const listDriverMappings = createServerFn({ method: "POST" })
   });
 
 export const saveDriverMapping = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -603,7 +604,7 @@ async function boardFromRows(rows: any[], jobId: string | null, pulledAt: string
 
 /** Latest board from the most recent dispatch-board bridge pull (no new job). */
 export const getDispatchBoard = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
     const { data: job } = await db()
@@ -617,7 +618,7 @@ export const getDispatchBoard = createServerFn({ method: "POST" })
 
 /** Refresh: one sql.select bridge job against vw_route_dispatch, then rebuild. */
 export const refreshDispatchBoard = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
     const { getDispatchSettings, buildDispatchViewSql } = await import("@/lib/dispatch.server");
@@ -629,7 +630,7 @@ export const refreshDispatchBoard = createServerFn({ method: "POST" })
   });
 
 export const saveDispatchDateBasis = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ basis: z.enum(["pick_ticket_print", "earliest_required", "requested", "promise"]) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireAdmin(context.userId);
@@ -643,7 +644,7 @@ export const saveDispatchDateBasis = createServerFn({ method: "POST" })
 /* ---------------------------------------------- Run exceptions (2026-09-29) */
 
 export const saveRunException = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     p21Code: z.string().trim().min(1).max(20),
     runDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -662,7 +663,7 @@ export const saveRunException = createServerFn({ method: "POST" })
   });
 
 export const deleteRunException = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireAdmin(context.userId);

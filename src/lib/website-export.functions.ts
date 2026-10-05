@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -22,7 +23,7 @@ async function requireViewer(userId: string) {
 }
 
 export const getWebsiteExportStatus = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
     const { getWebsiteExportSettings, resolveFilename } = await import("./website-export.server");
@@ -46,7 +47,7 @@ export const getWebsiteExportStatus = createServerFn({ method: "POST" })
   });
 
 export const saveWebsiteExportConfig = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z
       .object({
@@ -69,7 +70,7 @@ export const saveWebsiteExportConfig = createServerFn({ method: "POST" })
   });
 
 export const probeWebsiteExportDeliveryFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z.object({ paths: z.array(z.string().min(1).max(400)).max(10).optional() }).parse(i ?? {}),
   )
@@ -80,7 +81,7 @@ export const probeWebsiteExportDeliveryFn = createServerFn({ method: "POST" })
   });
 
 export const runWebsiteExportNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ dryRun: z.boolean().optional() }).parse(i ?? {}))
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
