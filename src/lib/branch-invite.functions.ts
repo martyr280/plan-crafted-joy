@@ -4,15 +4,25 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { denyLegacyBranchAccess } from "./branch-guard";
 import { WAREHOUSES } from "./warehouse-scope";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import type {
+  ClaimResult,
+  FailureCode,
+  InviteAuthPort,
+  InviteDbPort,
+  InviteMailPort,
+  InviteRequest,
+} from "./branch-invite";
 
-async function adminDb(supabase: any, userId: string) {
+async function adminDb(supabase: SupabaseClient<Database>, userId: string) {
   const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw new Error("Unable to verify access");
-  const roles = (data ?? []).map((r: any) => String(r.role));
+  const roles = (data ?? []).map((r) => String(r.role));
   if (!roles.includes("admin") || roles.includes("branch_manager"))
     throw new Error("Forbidden: admin role required");
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin as any;
+  return supabaseAdmin;
 }
 
 const SAFE_ERRORS = [
@@ -27,7 +37,7 @@ const SAFE_ERRORS = [
   "forbidden",
   "not_confirmed_delivered",
 ];
-function rpcError(e: any): Error {
+function rpcError(e: { message?: unknown } | null | undefined): Error {
   const m = String(e?.message ?? "");
   return new Error(SAFE_ERRORS.find((c) => m.includes(c)) ?? "operation_failed");
 }
@@ -45,7 +55,7 @@ export const listBranchInvites = createServerFn({ method: "POST" })
       .limit(500);
     if (error) throw new Error("Unable to load warehouse-manager invites");
     const now = Date.now();
-    return (data ?? []).map(({ provider_message_id, ...r }: any) => ({
+    return (data ?? []).map(({ provider_message_id, ...r }) => ({
       ...r,
       // A send that started and whose worker vanished is shown as needing review.
       status:
@@ -116,9 +126,9 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
     const { runConfirmedInvite } = await import("./branch-invite");
     const { sendNelsonBranchInviteEmail } = await import("./email/nelson-resend.server");
     const origin = process.env.PUBLIC_APP_URL || undefined;
-    const ports = {
+    const ports: { db: InviteDbPort; auth: InviteAuthPort; mail: InviteMailPort } = {
       db: {
-        claim: async (r: any) => {
+        claim: async (r: InviteRequest) => {
           const { data: res, error } = await db.rpc("bm_claim", {
             p_actor: r.actorId,
             p_id: r.inviteId,
@@ -216,7 +226,7 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
         warehouse: data.warehouse,
         ackDuplicate: data.ackDuplicate === true,
       },
-      ports as any,
+      ports,
     );
     await db.from("activity_events").insert({
       event_type: "admin.branch_invite",
@@ -227,7 +237,7 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
       metadata: {
         warehouse: data.warehouse,
         status: outcome.status,
-        code: (outcome as any).code ?? null,
+        code: "code" in outcome ? outcome.code : null,
       },
     });
     return outcome;
