@@ -92,6 +92,13 @@
       "when": 1791217589700,
       "tag": "0012_revoke_anon_backfill_sku_crossref",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791217965530,
+      "tag": "0013_branch_manager_signup_reservation",
+      "breakpoints": true
     }
   ]
 }
