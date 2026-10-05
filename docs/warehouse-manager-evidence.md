@@ -85,15 +85,54 @@ Writes in all three require admin. The storage schema is reserved, so no restric
 A branch manager gains nothing beyond what the public internet already has. If catalogs or images
 should stop being public, that is a separate decision for everyone, not just warehouse managers.
 
-## Tests / typecheck / lint / build
-- vitest: `Test Files 50 passed (50)`, `Tests 500 passed (500)`. Invite suite: 19 tests, including lost
-  response after delivery, worker crash after delivery plus expiry, crash before sending, `mark_sent` failure
-  then finish activation, `mark_sent` and `mark_failed` both failing, the acknowledged fresh invite, key-reuse
-  conflict, the default-role window, and concurrency, cancellation and mismatch cases.
-- typecheck (tsgo): exit 0.
-- lint: the repository-wide `eslint .` exits 1 on existing code (about 10k findings, mostly prettier). The warehouse files have
-  only `no-explicit-any` (60) and one `react-refresh/only-export-components`. Both patterns are used elsewhere in the project.
-- build: preview builds logged "build OK". The entry for these final edits is appended after this turn.
+## Tests / typecheck / lint / build (re-run after all corrections, 2026-10-05)
+Run inside the Lovable sandbox (Linux, bun). Raw logs are in `docs/evidence/warehouse-manager/`.
+- **Tests** (`bunx vitest run`, `tests-full.txt`): `Test Files 50 passed (50)`, `Tests 500 passed (500)`, exit 0.
+- **Typecheck** (`tsgo --noEmit`, `typecheck.txt`): exit 0, no diagnostics.
+- **Build** (`bun run build` = `vite build`, `build-full.txt`): exit 0, built in 29.74s (58.7s wall).
+  Only the standard notices: `"use client"` directives ignored in node_modules, chunk size, and nitro
+  `platform` input option. `build-log.txt` is the preview's automatic build log, kept separately.
+- **Lint, new warehouse files** (`lint-warehouse-files.txt`): exit 0, zero errors or warnings, no rule
+  disabled. The 67 `any`s were replaced with real types.
+  - New types: `CapacityRunRow`, `DispatchRunRow`, `DispatchStopRow`, `TicketRow`, `ForecastDto`,
+    `DriverEventRow`, `OverrideRow`, `ReconciledDriver`, `BranchReport`. `BranchReport` is a discriminated
+    union on `module`.
+  - The invite RPC reply is now zod-validated, so an unexpected shape fails closed.
+  - The invites list now checks the warehouse value and fails closed on an unknown one.
+  - `currentMonday` moved to `src/lib/branch-week.ts`, which fixes the fast-refresh warning.
+  - Typing surfaced one real bug, now fixed: a driver event with no duration would have passed null to
+    `formatMinutes`. It now shows "Unknown".
+- **Lint, repository baseline** (`eslint .`, `lint-full.txt`): exit 1, 11,305 problems (11,257 errors,
+  48 warnings), almost all in code that predates this feature.
+  - Of the existing files this feature edited, 4 gained findings, all `prettier/prettier` formatting on the
+    edited lines:
+    - AppSidebar.tsx: 20→21
+    - serve.ts: 50→58
+    - user-admin.functions.ts: 37→43
+    - _app.settings.tsx: 70→71
+  - No new rule-level findings. Reformatting those whole files was left out to keep the diff reviewable.
+  - The other 24 edited existing files gained nothing.
+
+## Settings screenshots (view-only, as admin; no invite submitted)
+`screenshots/settings-draft-form.png`, `settings-draft-saved.png`, `settings-invite-confirmation.png`,
+`settings-draft-cancelled.png`, plus `settings.png`, `driver-time.png`, `truck-capacity.png`, `dispatch.png`.
+- **Rows created:** two synthetic drafts, `qa-screenshot-draft@example.com` and
+  `qa-screenshot-draft-2@example.com`. The first was a framing retake.
+- **No invite was submitted.** The confirmation dialog was opened and closed with Cancel, and 0 server calls
+  were made while it was open.
+- **Both drafts were then cancelled.**
+- **Live readback:** both rows are `cancelled`, `attempt_count` 0, no `user_id`, `created_user_id`,
+  `resend_key` or provider id. 0 mappings, 0 branch_manager roles, 0 profiles for those emails, no email.
+
+## Unchanged by design
+Sales Reports rules (`sales-annualized-template.ts`, `sales-reports.server.ts`), dispatch date basis and
+SELECT (`dispatch/assign.ts`, `dispatch/build.ts`) and Paycom handling are not in the diff. In the 22 legacy
+`*.functions.ts` files the only changed lines are the middleware swap.
+
+## Changed files
+`docs/evidence/warehouse-manager/changed-files.txt` (`git diff --name-status 46c2797`).
+Repository HEAD when this evidence was captured: `c8b27de`. The platform commits this turn's edits
+automatically afterwards.
 
 ## Known residuals
 - `anon` can EXECUTE `backfill_sku_crossref_from_formerly`. This predates the feature and was left untouched as instructed.
