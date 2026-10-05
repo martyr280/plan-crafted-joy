@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-const state = vi.hoisted(() => ({ data: null as any, error: null as any }));
+const state = vi.hoisted(() => ({ data: null as unknown, error: null as Error | null }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
     data: state.data,
@@ -26,6 +26,8 @@ describe("read-only branch report presentation", () => {
   it("driver totals without edit, payroll, sweep or history controls", () => {
     state.error = null;
     state.data = {
+      module: "driver-time",
+      routes: [],
       warehouse: "Birmingham",
       thresholdMinutes: 90,
       totals: { flaggedMinutes: 180 },
@@ -47,6 +49,7 @@ describe("read-only branch report presentation", () => {
   it("missing measurements show Unknown and stale cache is flagged; no action controls", () => {
     state.error = null;
     state.data = {
+      module: "dispatch",
       warehouse: "Dallas",
       routes: [],
       runs: [],

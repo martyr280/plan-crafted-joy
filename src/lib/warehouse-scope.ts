@@ -91,7 +91,42 @@ export function codesForRoutes(routes: RouteRow[]): Set<string> {
   return new Set(routes.flatMap(routeCodes));
 }
 
-export function scopedDriverInputs(scope: BranchScope, events: any[], overrides: any[]) {
+export type DriverEventRow = {
+  id: string;
+  driver_id: string;
+  driver_name: string | null;
+  hub: string | null;
+  event_date: string;
+  start_ts: string | null;
+  end_ts: string | null;
+  duration_min: number | null;
+  address_name?: string | null;
+  location_source?: string | null;
+  needs_review?: boolean | null;
+  status?: string | null;
+  superseded_at?: string | null;
+};
+export type OverrideRow = {
+  driver_id: string;
+  week_start: string;
+  warehouse_actual: ({ hub?: string | null } & Record<string, unknown>) | null;
+};
+/** Shape produced by buildReconciledDrivers; only the fields the branch DTO reads. */
+export type ReconciledDriver = {
+  driverId: string;
+  driverName: string;
+  hub: string | null;
+  flaggedMinutes: number;
+  automatedMinutes: number;
+  official?: unknown;
+  events?: DriverEventRow[];
+};
+
+export function scopedDriverInputs(
+  scope: BranchScope,
+  events: DriverEventRow[],
+  overrides: OverrideRow[],
+) {
   return {
     events: events.filter((e) => e.hub === scope.warehouse),
     overrides: overrides.filter((o) => o.warehouse_actual?.hub === scope.warehouse),
@@ -99,7 +134,7 @@ export function scopedDriverInputs(scope: BranchScope, events: any[], overrides:
 }
 
 /** Driver DTO: no audit history, official source notes, pay rates or paid hours. */
-export function branchDriverDto(driver: any) {
+export function branchDriverDto(driver: ReconciledDriver) {
   return {
     driverId: driver.driverId,
     driverName: driver.driverName,
@@ -107,7 +142,7 @@ export function branchDriverDto(driver: any) {
     flaggedMinutes: driver.flaggedMinutes,
     automatedMinutes: driver.automatedMinutes,
     hasOfficial: driver.official != null,
-    events: (driver.events ?? []).map((e: any) => ({
+    events: (driver.events ?? []).map((e) => ({
       id: e.id,
       event_date: e.event_date,
       start_ts: e.start_ts,

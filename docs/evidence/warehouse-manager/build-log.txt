@@ -1,44 +1,89 @@
-=== build 2026-10-05T15:54:10Z ===
+=== build 2026-10-05T16:07:40Z ===
+--- typecheck ---
+src/lib/__tests__/warehouse-scope.test.ts(49,7): error TS2353: Object literal may only specify known properties, and 'payRate' does not exist in type 'ReconciledDriver'.
+
+=== build 2026-10-05T16:08:09Z ===
+--- typecheck ---
+src/lib/__tests__/warehouse-scope.test.ts(49,7): error TS2353: Object literal may only specify known properties, and 'payRate' does not exist in type 'ReconciledDriver'.
+src/lib/branch-logistics.server.ts(150,24): error TS2339: Property 'truncated' does not exist on type 'string | number | boolean | Json[] | { [key: string]: Json | undefined; }'.
+Property 'truncated' does not exist on type 'string'.
+src/lib/branch-logistics.server.ts(152,28): error TS2339: Property 'rows' does not exist on type 'string | number | boolean | Json[] | { [key: string]: Json | undefined; }'.
+Property 'rows' does not exist on type 'string'.
+src/lib/branch-logistics.server.ts(173,18): error TS18046: 'c' is of type 'unknown'.
+src/lib/branch-logistics.server.ts(178,59): error TS18046: 'c' is of type 'unknown'.
+src/lib/branch-logistics.server.ts(203,55): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+Type 'undefined' is not assignable to type 'string'.
+src/lib/branch-logistics.server.ts(204,11): error TS18047: 'settings' is possibly 'null'.
+src/lib/branch-logistics.server.ts(207,9): error TS2322: Type 'string' is not assignable to type 'DateBasis'.
+
+=== build 2026-10-05T16:08:30Z ===
+--- typecheck ---
+src/lib/__tests__/warehouse-scope.test.ts(49,7): error TS2353: Object literal may only specify known properties, and 'payRate' does not exist in type 'ReconciledDriver'.
+src/lib/branch-logistics.server.ts(204,55): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+Type 'undefined' is not assignable to type 'string'.
+
+=== build 2026-10-05T16:08:57Z ===
 build OK
 
-=== build 2026-10-05T15:55:10Z ===
+=== build 2026-10-05T16:09:43Z ===
 --- typecheck ---
-src/lib/__tests__/branch-invite.test.ts(87,11): error TS2322: Type '(id: string, key: string, code: FailureCode) => Promise<void>' is not assignable to type '(inviteId: string, requestKey: string, code: FailureCode, providerId?: string | null | undefined) => Promise<string | null>'.
-Type 'Promise<void>' is not assignable to type 'Promise<string | null>'.
-Type 'void' is not assignable to type 'string | null'.
-src/lib/__tests__/branch-invite.test.ts(123,11): error TS2322: Type '(to: string, link: string, key: string) => Promise<void>' is not assignable to type '(to: string, actionLink: string, idempotencyKey: string, warehouse: string) => Promise<{ id: string; }>'.
-Type 'Promise<void>' is not assignable to type 'Promise<{ id: string; }>'.
-Type 'void' is not assignable to type '{ id: string; }'.
+src/lib/branch-invite.functions.ts(86,7): error TS2322: Type 'string | null' is not assignable to type 'string'.
+Type 'null' is not assignable to type 'string'.
+src/lib/branch-invite.functions.ts(88,7): error TS2322: Type 'string | null' is not assignable to type 'string'.
+Type 'null' is not assignable to type 'string'.
+src/lib/branch-invite.functions.ts(131,9): error TS2322: Type '(r: InviteRequest) => Promise<Json>' is not assignable to type '(r: InviteRequest) => Promise<ClaimResult>'.
+Type 'Promise<Json>' is not assignable to type 'Promise<ClaimResult>'.
+Type 'Json' is not assignable to type 'ClaimResult'.
+Type 'null' is not assignable to type 'ClaimResult'.
+src/lib/branch-invite.functions.ts(168,13): error TS2322: Type 'string | null' is not assignable to type 'string'.
+Type 'null' is not assignable to type 'string'.
 
-=== build 2026-10-05T15:55:39Z ===
---- typecheck ---
-src/lib/__tests__/branch-invite.test.ts(87,11): error TS2322: Type '(id: string, key: string, code: FailureCode) => Promise<void>' is not assignable to type '(inviteId: string, requestKey: string, code: FailureCode, providerId?: string | null | undefined) => Promise<string | null>'.
-Type 'Promise<void>' is not assignable to type 'Promise<string | null>'.
-Type 'void' is not assignable to type 'string | null'.
-src/lib/__tests__/branch-invite.test.ts(123,11): error TS2322: Type '(to: string, link: string, key: string) => Promise<void>' is not assignable to type '(to: string, actionLink: string, idempotencyKey: string, warehouse: string) => Promise<{ id: string; }>'.
-Type 'Promise<void>' is not assignable to type 'Promise<{ id: string; }>'.
-Type 'void' is not assignable to type '{ id: string; }'.
-
-=== build 2026-10-05T15:56:12Z ===
---- typecheck ---
-src/lib/__tests__/branch-invite.test.ts(87,11): error TS2322: Type '(id: string, key: string, code: FailureCode) => Promise<void>' is not assignable to type '(inviteId: string, requestKey: string, code: FailureCode, providerId?: string | null | undefined) => Promise<string | null>'.
-Type 'Promise<void>' is not assignable to type 'Promise<string | null>'.
-Type 'void' is not assignable to type 'string | null'.
-src/lib/__tests__/branch-invite.test.ts(123,11): error TS2322: Type '(to: string, link: string, key: string) => Promise<void>' is not assignable to type '(to: string, actionLink: string, idempotencyKey: string, warehouse: string) => Promise<{ id: string; }>'.
-Type 'Promise<void>' is not assignable to type 'Promise<{ id: string; }>'.
-Type 'void' is not assignable to type '{ id: string; }'.
-
-=== build 2026-10-05T15:56:22Z ===
---- typecheck ---
-src/lib/__tests__/branch-invite.test.ts(87,11): error TS2322: Type '(id: string, key: string, code: FailureCode) => Promise<void>' is not assignable to type '(inviteId: string, requestKey: string, code: FailureCode, providerId?: string | null | undefined) => Promise<string | null>'.
-Type 'Promise<void>' is not assignable to type 'Promise<string | null>'.
-Type 'void' is not assignable to type 'string | null'.
-src/lib/__tests__/branch-invite.test.ts(123,11): error TS2322: Type '(to: string, link: string, key: string) => Promise<void>' is not assignable to type '(to: string, actionLink: string, idempotencyKey: string, warehouse: string) => Promise<{ id: string; }>'.
-Type 'Promise<void>' is not assignable to type 'Promise<{ id: string; }>'.
-Type 'void' is not assignable to type '{ id: string; }'.
-
-=== build 2026-10-05T15:57:44Z ===
+=== build 2026-10-05T16:10:13Z ===
 build OK
 
-=== build 2026-10-05T15:58:47Z ===
+=== build 2026-10-05T16:10:45Z ===
+--- typecheck ---
+src/components/branch-logistics/WarehouseManagersPanel.tsx(161,9): error TS2322: Type '{ status: string; delivery_confirmed: boolean; attempt_count: number; claim_expires_at: string | null; created_at: string; display_name: string | null; email_normalized: string; id: string; last_error: string | null; sent_at: string | null; updated_at: string; warehouse: string; }[]' is not assignable to type 'Invite[]'.
+Type '{ status: string; delivery_confirmed: boolean; attempt_count: number; claim_expires_at: string | null; created_at: string; display_name: string | null; email_normalized: string; id: string; last_error: string | null; sent_at: string | null; updated_at: string; warehouse: string; }' is not assignable to type 'Invite'.
+Types of property 'warehouse' are incompatible.
+Type 'string' is not assignable to type '"Birmingham" | "Dallas" | "Ocala"'.
+
+=== build 2026-10-05T16:11:04Z ===
+build OK
+
+=== build 2026-10-05T16:11:39Z ===
+--- typecheck ---
+src/components/branch-logistics/BranchLogisticsPage.tsx(122,55): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number'.
+Type 'null' is not assignable to type 'number'.
+
+=== build 2026-10-05T16:11:45Z ===
+--- typecheck ---
+src/components/branch-logistics/BranchLogisticsPage.tsx(122,55): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number'.
+Type 'null' is not assignable to type 'number'.
+
+=== build 2026-10-05T16:11:57Z ===
+build OK
+
+=== build 2026-10-05T16:12:27Z ===
+build OK
+
+=== build 2026-10-05T16:12:44Z ===
+build OK
+
+=== build 2026-10-05T16:13:16Z ===
+build OK
+
+=== build 2026-10-05T16:13:38Z ===
+build OK
+
+=== build 2026-10-05T16:16:34Z ===
+build OK
+
+=== build 2026-10-05T16:17:20Z ===
+build OK
+
+=== build 2026-10-05T16:17:59Z ===
+build OK
+
+=== build 2026-10-05T16:19:01Z ===
 build OK

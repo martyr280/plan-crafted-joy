@@ -4,26 +4,40 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { checkLegacyAccessWith } from "./branch-guard";
 import { resolveBranchScope, uniquelyOwnedCodes } from "./warehouse-scope";
 import { loadBranchReport } from "./branch-report";
-import type { BranchReadPort, BranchRequest } from "./branch-report";
+import type {
+  BranchReadPort,
+  BranchRequest,
+  CapacityRunRow,
+  DispatchRunRow,
+  DispatchStopRow,
+  TicketRow,
+} from "./branch-report";
+import type { DriverEventRow, OverrideRow, ReconciledDriver, RouteRow } from "./warehouse-scope";
+import type { BoardCutoff, DemandRow, RunException } from "./dispatch/board";
+import type { DateBasis } from "./dispatch/assign";
 
-const db = () => supabaseAdmin as any;
+const db = () => supabaseAdmin;
 
 export async function rolesFor(userId: string): Promise<string[]> {
   if (!userId) throw new Error("Authentication required");
   const { data, error } = await db().from("user_roles").select("role").eq("user_id", userId);
   if (error) throw new Error("Unable to verify access");
-  return (data ?? []).map((r: any) => String(r.role));
+  return (data ?? []).map((r) => String(r.role));
 }
 
 export async function checkLegacyAccess(userId: string) {
   return checkLegacyAccessWith(rolesFor, userId);
 }
 
-async function bounded(q: any, limit = 5000): Promise<any[]> {
+type Limitable = {
+  limit(n: number): PromiseLike<{ data: unknown[] | null; error: unknown }>;
+};
+/** Bounded read. Rows are typed by the caller's select list (DB row shapes). */
+async function bounded<T>(q: Limitable, limit = 5000): Promise<T[]> {
   const { data, error } = await q.limit(limit);
   if (error) throw new Error("Unable to load warehouse report");
   if ((data?.length ?? 0) >= limit) throw new Error("Report exceeds safe limit; narrow the window");
-  return data ?? [];
+  return (data ?? []) as T[];
 }
 
 export async function readBranchLogistics(userId: string, input: BranchRequest) {
@@ -35,10 +49,10 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
   if (error) throw new Error("Warehouse access is not configured");
   const scope = resolveBranchScope(userId, roles, data ?? []);
 
-  let routesMemo: Promise<any[]> | null = null;
+  let routesMemo: Promise<RouteRow[]> | null = null;
   const port: BranchReadPort = {
     routes: () =>
-      (routesMemo ??= bounded(
+      (routesMemo ??= bounded<RouteRow>(
         db()
           .from("truck_capacity_routes")
           .select("id,code,name,hub,p21_route_code,active,sort_order"),
@@ -46,7 +60,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
     driverInputs: async (s, from, to) => {
       const { getDriverTimeSettings } = await import("./driver-time.server");
       const [events, overrides, settings] = await Promise.all([
-        bounded(
+        bounded<DriverEventRow>(
           db()
             .from("driver_warehouse_events")
             .select(
@@ -56,7 +70,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
             .gte("event_date", from)
             .lte("event_date", to),
         ),
-        bounded(
+        bounded<OverrideRow>(
           db()
             .from("driver_time_week_overrides")
             .select("driver_id,week_start,warehouse_actual")
@@ -68,7 +82,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
       const { isExcludedDriver } = await import("./driver-time/detect");
       return {
         events: events.filter(
-          (e) => !isExcludedDriver({ id: e.driver_id, name: e.driver_name }, settings as any),
+          (e) => !isExcludedDriver({ id: e.driver_id, name: e.driver_name }, settings),
         ),
         overrides,
         thresholdMinutes: settings.thresholdMinutes,
@@ -79,7 +93,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
       return reconcileImpl!(events, overrides, false);
     },
     capacityRuns: (ids, from, to) =>
-      bounded(
+      bounded<CapacityRunRow>(
         db()
           .from("truck_capacity_runs")
           .select("id,route_id,run_date,run_seq,capacity_frac,pallet_count,returned_pallets,source")
@@ -92,7 +106,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
       const { computeForecastForRoute } = await import("./truck-capacity.server");
       const result = await computeForecastForRoute(routeId, 28, "auto", { logForecast: false });
       return {
-        days: result.days.map((d: any) => ({
+        days: result.days.map((d) => ({
           date: d.date,
           predicted: d.blend ?? d.forecast,
           current: d.p21,
@@ -103,7 +117,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
       };
     },
     dispatchRuns: (ids) =>
-      bounded(
+      bounded<DispatchRunRow>(
         db()
           .from("dispatch_runs")
           .select(
@@ -113,7 +127,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
           .order("run_date", { ascending: false }),
       ),
     dispatchStops: (runId) =>
-      bounded(
+      bounded<DispatchStopRow>(
         db()
           .from("dispatch_stops")
           .select(
@@ -133,9 +147,10 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         .limit(1)
         .maybeSingle();
       if (jobErr) throw new Error("Unable to read cached Dispatch report");
-      if (job?.result?.truncated) throw new Error("Cached Dispatch report is truncated");
+      const result = (job?.result ?? null) as { truncated?: boolean; rows?: TicketRow[] } | null;
+      if (result?.truncated) throw new Error("Cached Dispatch report is truncated");
       return {
-        rows: job?.result?.rows ?? [],
+        rows: result?.rows ?? [],
         pulledAt: job?.completed_at ?? job?.created_at ?? null,
       };
     },
@@ -147,7 +162,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
       const today = localDateIn("America/Chicago", new Date());
       const owned = uniquelyOwnedCodes(scope, await port.routes());
       const cutoffs = (
-        await bounded(
+        await bounded<BoardCutoff>(
           db()
             .from("route_cutoffs")
             .select("route_id,p21_code,cutoff_dow,cutoff_time,run_dows,active")
@@ -162,7 +177,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         ),
       );
       const codes = [...new Set(cutoffs.map((c) => String(c.p21_code)))];
-      const demand = await bounded(
+      const demand = await bounded<DemandRow>(
         db()
           .from("truck_capacity_p21_demand")
           .select(
@@ -172,7 +187,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
           .gte("ship_date", today),
       );
       const exceptions = codes.length
-        ? await bounded(
+        ? await bounded<RunException>(
             db()
               .from("dispatch_run_exceptions")
               .select("id,p21_code,run_date,kind,reason")
@@ -186,18 +201,21 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         .limit(1)
         .maybeSingle();
       if (sErr) throw new Error("Unable to verify Dispatch assignment settings");
-      const basis = (DATE_BASES as string[]).includes(settings?.dispatch_date_basis)
-        ? settings.dispatch_date_basis
+      const rawBasis = settings?.dispatch_date_basis ?? "";
+      const basis: DateBasis = (DATE_BASES as readonly string[]).includes(rawBasis)
+        ? (rawBasis as DateBasis)
         : "pick_ticket_print";
-      return buildDispatchBoard(rows, cutoffs as any, demand as any, {
+      return buildDispatchBoard(rows, cutoffs, demand, {
         basis,
         today,
         excludedCodes: settings?.excluded_p21_codes ?? [],
-        exceptions: exceptions as any,
+        exceptions,
       });
     },
   };
-  let reconcileImpl: ((e: any[], o: any[], w: boolean) => any[]) | null = null;
+  let reconcileImpl:
+    | ((e: DriverEventRow[], o: OverrideRow[], w: boolean) => ReconciledDriver[])
+    | null = null;
   if (input.module === "driver-time") {
     reconcileImpl = (await import("./driver-time/reconciliation")).buildReconciledDrivers;
   }

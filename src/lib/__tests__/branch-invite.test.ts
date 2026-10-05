@@ -8,6 +8,7 @@ import {
   type InviteDbPort,
   type InviteAuthPort,
   type InviteMailPort,
+  type InviteOutcome,
 } from "../branch-invite";
 
 type Inv = {
@@ -307,7 +308,9 @@ describe("confirmed warehouse-manager invite (synthetic ports)", () => {
     ]);
     expect(w.mail).toHaveLength(1);
     expect(w.auth.calls).toBe(1);
-    const ok = results.filter((r) => r.status === "fulfilled").map((r: any) => r.value.status);
+    const ok = results
+      .filter((r): r is PromiseFulfilledResult<InviteOutcome> => r.status === "fulfilled")
+      .map((r) => r.value.status);
     expect(ok.filter((s) => s === "sent")).toHaveLength(1);
   });
 

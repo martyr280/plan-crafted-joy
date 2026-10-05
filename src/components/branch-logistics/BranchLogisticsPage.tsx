@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getBranchLogisticsReport } from "@/lib/branch-logistics.functions";
 import { useAuth } from "@/lib/auth";
+import { currentMonday } from "@/lib/branch-week";
 import { formatMinutes } from "@/lib/driver-time/reconciliation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,18 +16,6 @@ const TITLES: Record<Module, string> = {
   "truck-capacity": "Truck Capacity",
   dispatch: "Dispatch",
 };
-
-export function currentMonday(now = new Date()): string {
-  const local = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Chicago",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-  const x = new Date(local + "T00:00:00Z");
-  x.setUTCDate(x.getUTCDate() - (x.getUTCDay() === 0 ? 6 : x.getUTCDay() - 1));
-  return x.toISOString().slice(0, 10);
-}
 
 export function BranchLogisticsPage({ module }: { module: Module }) {
   const { user } = useAuth();
@@ -42,7 +31,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
       }),
     enabled: !!user,
   });
-  const d = q.data as any;
+  const d = q.data;
   function shift(n: number) {
     const x = new Date(weekStart + "T00:00:00Z");
     x.setUTCDate(x.getUTCDate() + n * 7);
@@ -76,9 +65,9 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
         <p role="alert" className="text-sm text-destructive">
           {(q.error as Error).message}
         </p>
-      ) : (
+      ) : d ? (
         <>
-          {module !== "driver-time" && (
+          {d.module !== "driver-time" && (
             <label className="text-sm flex items-center gap-2">
               Route
               <select
@@ -90,7 +79,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
                 }}
               >
                 <option value="">All warehouse routes</option>
-                {d.routes.map((r: any) => (
+                {d.routes.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.code} · {r.name}
                   </option>
@@ -98,7 +87,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
               </select>
             </label>
           )}
-          {module === "driver-time" && (
+          {d.module === "driver-time" && (
             <>
               <p className="text-sm">
                 Warehouse time over {d.thresholdMinutes / 60} h:{" "}
@@ -109,7 +98,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
                   No driver records for this warehouse and week.
                 </p>
               )}
-              {d.drivers.map((r: any) => (
+              {d.drivers.map((r) => (
                 <Card className="p-4 space-y-1" key={r.driverId}>
                   <h2 className="font-semibold">
                     {r.driverName} · {formatMinutes(r.flaggedMinutes)}
@@ -117,9 +106,10 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
                   <p className="text-xs text-muted-foreground">
                     {r.hasOfficial ? "Official weekday report" : "Automated estimate"}
                   </p>
-                  {r.events.map((e: any) => (
+                  {r.events.map((e) => (
                     <p className="text-sm" key={e.id}>
-                      {e.event_date} · {formatMinutes(e.duration_min)} ·{" "}
+                      {e.event_date} ·{" "}
+                      {e.duration_min == null ? "Unknown" : formatMinutes(e.duration_min)} ·{" "}
                       {e.address_name ?? "Location unresolved"}
                       {e.needs_review ? " · Needs review" : ""}
                     </p>
@@ -128,7 +118,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
               ))}
             </>
           )}
-          {module === "truck-capacity" && (
+          {d.module === "truck-capacity" && (
             <>
               <p className="text-sm">Latest actual in this week: {d.latestActual ?? "None"}</p>
               {d.runs.length === 0 && (
@@ -145,7 +135,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
                   Pick a route to see its 28-day forecast.
                 </p>
               )}
-              {d.forecasts.map((f: any) => (
+              {d.forecasts.map((f) => (
                 <section key={f.routeId} className="space-y-2">
                   <h2 className="font-semibold">28-day forecast</h2>
                   <Rows
@@ -156,7 +146,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
               ))}
             </>
           )}
-          {module === "dispatch" && (
+          {d.module === "dispatch" && (
             <>
               <p className="text-sm">Ticket data last pulled: {d.pulledAt ?? "No cached report"}</p>
               {d.pulledAt && Date.now() - Date.parse(d.pulledAt) > 36 * 3600000 && (
@@ -188,7 +178,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
               />
               <h2 className="font-semibold">Runs</h2>
               <div className="flex flex-wrap gap-2">
-                {d.runs.map((r: any) => (
+                {d.runs.map((r) => (
                   <Button
                     variant={runId === r.id ? "default" : "outline"}
                     size="sm"
@@ -208,12 +198,12 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
             </>
           )}
         </>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function Rows({ rows, fields }: { rows: any[]; fields: string[] }) {
+function Rows({ rows, fields }: { rows: Record<string, unknown>[]; fields: string[] }) {
   return rows.length ? (
     <div className="overflow-auto rounded-md border">
       <table className="w-full text-sm">
@@ -228,7 +218,7 @@ function Rows({ rows, fields }: { rows: any[]; fields: string[] }) {
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr className="border-t" key={r.id ?? i}>
+            <tr className="border-t" key={r.id == null ? i : String(r.id)}>
               {fields.map((f) => (
                 <td className="p-2" key={f}>
                   {r[f] == null ? "Unknown" : String(r[f])}

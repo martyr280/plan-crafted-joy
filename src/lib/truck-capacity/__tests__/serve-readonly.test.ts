@@ -4,19 +4,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { buildFeatureContext, featureNames, type RouteMeta } from "../features";
 
-type Row = Record<string, any>;
+type Row = Record<string, unknown>;
+type RunRow = { run_date: string; capacity_frac: number };
 
-const ROUTE: Row = {
+const ROUTE = {
   id: "R1",
   code: "BHM-SPECIAL",
   hub: "Birmingham",
   truck_type: null,
-  typical_dow: [],
+  typical_dow: [] as number[],
 };
 
 // Two Tuesdays at 0.636 inside the 56-day window as of 2026-07-13 →
 // activeDows = {2}, byDow(2) = [0.636, 0.636], month factor = 1.
-const TUESDAY_RUNS: Row[] = [
+const TUESDAY_RUNS: RunRow[] = [
   { run_date: "2026-06-30", capacity_frac: 0.636 },
   { run_date: "2026-07-07", capacity_frac: 0.636 },
 ];
@@ -27,10 +28,10 @@ function persistedNamesFor(route: RouteMeta, minRunDate: string) {
 }
 
 /** Minimal chainable stand-in for the supabase-js query builder. */
-function makeAdmin(opts: { routeRuns: Row[]; version: Row | null; route: Row }) {
+function makeAdmin(opts: { routeRuns: RunRow[]; version: Row | null; route: typeof ROUTE }) {
   const calls: Row[] = [];
   const build = (table: string) => {
-    const state: { select: string; eq: Record<string, any> } = { select: "", eq: {} };
+    const state: { select: string; eq: Record<string, unknown> } = { select: "", eq: {} };
     const rows = (): Row[] => {
       switch (table) {
         case "truck_capacity_routes":
@@ -49,12 +50,12 @@ function makeAdmin(opts: { routeRuns: Row[]; version: Row | null; route: Row }) 
           return [];
       }
     };
-    const builder: any = {
+    const builder: Record<string, unknown> = {
       select: (s = "") => {
         state.select = s;
         return builder;
       },
-      eq: (k: string, v: any) => {
+      eq: (k: string, v: unknown) => {
         state.eq[k] = v;
         return builder;
       },
@@ -64,16 +65,17 @@ function makeAdmin(opts: { routeRuns: Row[]; version: Row | null; route: Row }) 
       lte: () => builder,
       order: () => builder,
       limit: () => builder,
-      insert: (payload: any) => {
+      insert: (payload: unknown) => {
         calls.push({ table, op: "insert", payload });
         return Promise.resolve({ error: null });
       },
-      upsert: (payload: any) => {
+      upsert: (payload: unknown) => {
         calls.push({ table, op: "upsert", payload });
         return Promise.resolve({ error: null });
       },
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
-      then: (res: any, rej: any) => Promise.resolve({ data: rows(), error: null }).then(res, rej),
+      then: (res: (v: { data: Row[]; error: null }) => unknown, rej: (e: unknown) => unknown) =>
+        Promise.resolve({ data: rows(), error: null }).then(res, rej),
     };
     return builder;
   };
@@ -84,7 +86,7 @@ const admins: { current: ReturnType<typeof makeAdmin>["admin"] | null } = { curr
 
 vi.mock("@/integrations/supabase/client.server", () => ({
   get supabaseAdmin() {
-    return admins.current as any;
+    return admins.current;
   },
 }));
 

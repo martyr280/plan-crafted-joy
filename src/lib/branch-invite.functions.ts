@@ -3,16 +3,48 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { denyLegacyBranchAccess } from "./branch-guard";
-import { WAREHOUSES } from "./warehouse-scope";
+import { WAREHOUSES, type Warehouse } from "./warehouse-scope";
 
-async function adminDb(supabase: any, userId: string) {
+function asWarehouse(v: string): Warehouse {
+  // The table's CHECK constraint already limits this; fail closed if it ever drifts.
+  if (!(WAREHOUSES as readonly string[]).includes(v))
+    throw new Error("Invalid warehouse on invite");
+  return v as Warehouse;
+}
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import type {
+  ClaimResult,
+  FailureCode,
+  InviteAuthPort,
+  InviteDbPort,
+  InviteMailPort,
+  InviteRequest,
+} from "./branch-invite";
+
+/** These SQL args accept NULL; the generated RPC types mark every argument as a required string. */
+const SQL_NULL = null as unknown as string;
+
+const claimSchema: z.ZodType<ClaimResult> = z.union([
+  z.object({
+    outcome: z.literal("claimed"),
+    resend_key: z.string().min(1),
+    user_id: z.string().nullable(),
+    display_name: z.string().nullable(),
+  }),
+  z.object({ outcome: z.literal("already_sent") }),
+  z.object({ outcome: z.literal("in_progress") }),
+  z.object({ outcome: z.literal("needs_reconciliation") }),
+]);
+
+async function adminDb(supabase: SupabaseClient<Database>, userId: string) {
   const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw new Error("Unable to verify access");
-  const roles = (data ?? []).map((r: any) => String(r.role));
+  const roles = (data ?? []).map((r) => String(r.role));
   if (!roles.includes("admin") || roles.includes("branch_manager"))
     throw new Error("Forbidden: admin role required");
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin as any;
+  return supabaseAdmin;
 }
 
 const SAFE_ERRORS = [
@@ -27,7 +59,7 @@ const SAFE_ERRORS = [
   "forbidden",
   "not_confirmed_delivered",
 ];
-function rpcError(e: any): Error {
+function rpcError(e: { message?: unknown } | null | undefined): Error {
   const m = String(e?.message ?? "");
   return new Error(SAFE_ERRORS.find((c) => m.includes(c)) ?? "operation_failed");
 }
@@ -45,8 +77,9 @@ export const listBranchInvites = createServerFn({ method: "POST" })
       .limit(500);
     if (error) throw new Error("Unable to load warehouse-manager invites");
     const now = Date.now();
-    return (data ?? []).map(({ provider_message_id, ...r }: any) => ({
+    return (data ?? []).map(({ provider_message_id, ...r }) => ({
       ...r,
+      warehouse: asWarehouse(r.warehouse),
       // A send that started and whose worker vanished is shown as needing review.
       status:
         r.status === "sending" && r.claim_expires_at && Date.parse(r.claim_expires_at) <= now
@@ -73,9 +106,9 @@ export const saveBranchInviteDraft = createServerFn({ method: "POST" })
     const db = await adminDb(context.supabase, context.userId);
     const { data: id, error } = await db.rpc("bm_save_draft", {
       p_actor: context.userId,
-      p_id: data.id ?? null,
+      p_id: data.id ?? SQL_NULL,
       p_email: data.email,
-      p_display_name: data.displayName ?? null,
+      p_display_name: data.displayName ?? SQL_NULL,
       p_warehouse: data.warehouse,
     });
     if (error) throw rpcError(error);
@@ -116,9 +149,9 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
     const { runConfirmedInvite } = await import("./branch-invite");
     const { sendNelsonBranchInviteEmail } = await import("./email/nelson-resend.server");
     const origin = process.env.PUBLIC_APP_URL || undefined;
-    const ports = {
+    const ports: { db: InviteDbPort; auth: InviteAuthPort; mail: InviteMailPort } = {
       db: {
-        claim: async (r: any) => {
+        claim: async (r: InviteRequest) => {
           const { data: res, error } = await db.rpc("bm_claim", {
             p_actor: r.actorId,
             p_id: r.inviteId,
@@ -128,7 +161,8 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
             p_ack_duplicate: r.ackDuplicate === true,
           });
           if (error) throw rpcError(error);
-          return res;
+          // Fail closed on any unexpected shape from the RPC.
+          return claimSchema.parse(res);
         },
         stage: async (id: string, key: string, userId: string) => {
           const { error } = await db.rpc("bm_stage", {
@@ -150,15 +184,20 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
           });
           if (error) throw new Error("mark_sent_failed");
         },
-        markFailed: async (id: string, key: string, code: string, providerId?: string | null) => {
+        markFailed: async (
+          id: string,
+          key: string,
+          code: FailureCode,
+          providerId?: string | null,
+        ) => {
           const { data: st, error } = await db.rpc("bm_mark_failed", {
             p_id: id,
             p_request_key: key,
             p_code: code,
-            p_provider_id: providerId ?? null,
+            p_provider_id: providerId ?? SQL_NULL,
           });
           if (error) throw new Error("mark_failed_failed");
-          return (st as string | null) ?? null;
+          return typeof st === "string" ? st : null;
         },
       },
       auth: {
@@ -216,7 +255,7 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
         warehouse: data.warehouse,
         ackDuplicate: data.ackDuplicate === true,
       },
-      ports as any,
+      ports,
     );
     await db.from("activity_events").insert({
       event_type: "admin.branch_invite",
@@ -227,7 +266,7 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
       metadata: {
         warehouse: data.warehouse,
         status: outcome.status,
-        code: (outcome as any).code ?? null,
+        code: "code" in outcome ? outcome.code : null,
       },
     });
     return outcome;

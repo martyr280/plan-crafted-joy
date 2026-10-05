@@ -106,11 +106,11 @@ export function WarehouseManagersPanel() {
       setWarehouse("");
       refresh();
     },
-    onError: (e: any) => toast.error(e?.message ?? "Could not save draft"),
+    onError: (e: Error) => toast.error(e?.message ?? "Could not save draft"),
   });
   const cancelM = useMutation({
     mutationFn: (id: string) => cancel({ data: { id } }),
-    onSuccess: (r: any) => {
+    onSuccess: (r) => {
       toast.success(
         r.status === "revoked"
           ? "Access revoked. The login itself was not deleted."
@@ -118,7 +118,7 @@ export function WarehouseManagersPanel() {
       );
       refresh();
     },
-    onError: (e: any) => toast.error(e?.message ?? "Could not cancel"),
+    onError: (e: Error) => toast.error(e?.message ?? "Could not cancel"),
   });
   const inviteM = useMutation({
     mutationFn: (c: { inv: Invite; requestKey: string }) =>
@@ -132,7 +132,7 @@ export function WarehouseManagersPanel() {
           ackDuplicate: c.inv.status === "needs_reconciliation" ? ack : undefined,
         },
       }),
-    onSuccess: (r: any) => {
+    onSuccess: (r) => {
       if (r.status === "sent")
         toast.success(r.duplicate ? "Already invited — no second email sent." : "Invitation sent.");
       else if (r.status === "in_progress") toast.message("This invite is already being sent.");
@@ -142,7 +142,7 @@ export function WarehouseManagersPanel() {
       setConfirming(null);
       refresh();
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       toast.error(e?.message ?? "Invite failed. No access was granted.");
       setConfirming(null);
       refresh();
@@ -155,10 +155,10 @@ export function WarehouseManagersPanel() {
       toast.success("Access switched on. No second email was sent.");
       refresh();
     },
-    onError: (e: any) => toast.error(e?.message ?? "Could not finish activation"),
+    onError: (e: Error) => toast.error(e?.message ?? "Could not finish activation"),
   });
 
-  const rows = (q.data ?? []) as Invite[];
+  const rows: Invite[] = q.data ?? [];
   return (
     <Card className="p-4 space-y-4">
       <div>

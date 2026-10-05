@@ -27,7 +27,7 @@ export const denyLegacyBranchAccess = createMiddleware({ type: "function" })
         .select("role")
         .eq("user_id", uid);
       if (error) throw error;
-      return (data ?? []).map((r: any) => String(r.role));
+      return (data ?? []).map((r) => String(r.role));
     }, context.userId);
     return next();
   });

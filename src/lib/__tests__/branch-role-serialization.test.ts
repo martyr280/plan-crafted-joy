@@ -22,7 +22,9 @@ describe("branch-manager role serialization (migration 0010)", () => {
     expect(sql).toMatch(/pg_advisory_xact_lock\(hashtextextended\('nelson\.user_roles:'/);
   });
   it("user_id moves lock both users in fixed order and cannot move branch_manager", () => {
-    expect(sql).toMatch(/least\(OLD\.user_id, NEW\.user_id\)[\s\S]*greatest\(OLD\.user_id, NEW\.user_id\)/);
+    expect(sql).toMatch(
+      /least\(OLD\.user_id, NEW\.user_id\)[\s\S]*greatest\(OLD\.user_id, NEW\.user_id\)/,
+    );
     expect(sql).toMatch(/cannot be moved between users/);
   });
   it("bm_stage locks the user before checking existing roles", () => {
@@ -33,9 +35,13 @@ describe("branch-manager role serialization (migration 0010)", () => {
   });
   it("has_role denies non-branch roles to any user holding branch_manager", () => {
     const hr = sql.slice(sql.indexOf("FUNCTION public.has_role"));
-    expect(hr).toMatch(/NOT EXISTS \(SELECT 1 FROM public\.user_roles WHERE user_id = _user_id AND role = 'branch_manager'/);
+    expect(hr).toMatch(
+      /NOT EXISTS \(SELECT 1 FROM public\.user_roles WHERE user_id = _user_id AND role = 'branch_manager'/,
+    );
   });
   it("lock helper is not callable by clients", () => {
-    expect(sql).toMatch(/REVOKE ALL ON FUNCTION private\.bm_lock_user_roles\(uuid\) FROM PUBLIC, anon, authenticated/);
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION private\.bm_lock_user_roles\(uuid\) FROM PUBLIC, anon, authenticated/,
+    );
   });
 });
