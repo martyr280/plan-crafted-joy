@@ -1,14 +1,15 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
+type Row = Record<string, unknown>;
 const state = vi.hoisted(() => ({
-  tables: {} as Record<string, any[]>,
-  calls: [] as any[],
+  tables: {} as Record<string, Row[]>,
+  calls: [] as Array<{ table: string; select: string }>,
   fail: null as string | null,
   writes: 0,
 }));
 vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: {
     from: (table: string) => {
-      const filters: Array<(r: any) => boolean> = [];
+      const filters: Array<(r: Row) => boolean> = [];
       let limit = Infinity;
       let select = "";
       const rows = () => {
@@ -18,31 +19,33 @@ vi.mock("@/integrations/supabase/client.server", () => ({
           .slice(0, limit);
         return { data, error: state.fail === table ? { message: "synthetic error" } : null };
       };
-      const field = (r: any, k: string) =>
-        k.includes("->>") ? r[k.split("->>")[0]!]?.[k.split("->>")[1]!] : r[k];
+      const field = (r: Row, k: string): unknown =>
+        k.includes("->>")
+          ? (r[k.split("->>")[0]!] as Row | null | undefined)?.[k.split("->>")[1]!]
+          : r[k];
       const deny = () => {
         state.writes++;
         throw Error("No writes allowed");
       };
-      const q: any = {
+      const q: Record<string, unknown> = {
         select: (s: string) => {
           select = s;
           return q;
         },
-        eq: (k: string, v: any) => {
+        eq: (k: string, v: unknown) => {
           filters.push((r) => field(r, k) === v);
           return q;
         },
-        in: (k: string, vs: any[]) => {
+        in: (k: string, vs: unknown[]) => {
           filters.push((r) => vs.includes(field(r, k)));
           return q;
         },
-        gte: (k: string, v: any) => {
-          filters.push((r) => field(r, k) >= v);
+        gte: (k: string, v: string) => {
+          filters.push((r) => String(field(r, k)) >= v);
           return q;
         },
-        lte: (k: string, v: any) => {
-          filters.push((r) => field(r, k) <= v);
+        lte: (k: string, v: string) => {
+          filters.push((r) => String(field(r, k)) <= v);
           return q;
         },
         not: () => q,
@@ -55,7 +58,8 @@ vi.mock("@/integrations/supabase/client.server", () => ({
           const r = rows();
           return { ...r, data: r.data[0] ?? null };
         },
-        then: (res: any, rej: any) => Promise.resolve(rows()).then(res, rej),
+        then: (res: (v: ReturnType<typeof rows>) => unknown, rej: (e: unknown) => unknown) =>
+          Promise.resolve(rows()).then(res, rej),
         insert: deny,
         update: deny,
         upsert: deny,
@@ -162,9 +166,10 @@ describe("branch server adapter (synthetic tables, no writes)", () => {
         },
       },
     ];
-    const r: any = await readBranchLogistics("manager", { module: "driver-time", weekStart: W });
+    const r = await readBranchLogistics("manager", { module: "driver-time", weekStart: W });
+    if (r.module !== "driver-time") throw new Error("wrong module");
     expect(r.drivers).toHaveLength(1);
-    expect(r.drivers[0].events.map((e: any) => e.id)).toEqual(["e-b"]);
+    expect(r.drivers[0]!.events.map((e) => e.id)).toEqual(["e-b"]);
     expect(JSON.stringify(r)).not.toMatch(/PRIVATE|Foreign Driver/);
     expect(state.writes).toBe(0);
   });
@@ -177,9 +182,10 @@ describe("branch server adapter (synthetic tables, no writes)", () => {
     await expect(checkLegacyAccess("operator")).resolves.toBeUndefined();
   });
   it("capacity filtered to the warehouse", async () => {
-    const r: any = await readBranchLogistics("manager", { module: "truck-capacity", weekStart: W });
-    expect(r.routes.map((x: any) => x.code)).toEqual(["B"]);
-    expect(r.runs.map((x: any) => x.id)).toEqual(["b-run"]);
+    const r = await readBranchLogistics("manager", { module: "truck-capacity", weekStart: W });
+    if (r.module !== "truck-capacity") throw new Error("wrong module");
+    expect(r.routes.map((x) => x.code)).toEqual(["B"]);
+    expect(r.runs.map((x) => x.id)).toEqual(["b-run"]);
   });
   it("fails closed on role or mapping lookup errors before any business read", async () => {
     for (const t of ["user_roles", "branch_manager_warehouses"]) {
@@ -227,7 +233,8 @@ describe("branch server adapter (synthetic tables, no writes)", () => {
   });
   it("empty warehouse route set produces no business reads", async () => {
     state.tables.truck_capacity_routes = [];
-    const r: any = await readBranchLogistics("manager", { module: "dispatch", weekStart: W });
+    const r = await readBranchLogistics("manager", { module: "dispatch", weekStart: W });
+    if (r.module !== "dispatch") throw new Error("wrong module");
     expect(r.runs).toEqual([]);
     expect(r.tickets).toEqual([]);
     expect(

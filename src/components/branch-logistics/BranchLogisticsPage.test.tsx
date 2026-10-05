@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-const state = vi.hoisted(() => ({ data: null as any, error: null as any }));
+const state = vi.hoisted(() => ({ data: null as unknown, error: null as Error | null }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
     data: state.data,
