@@ -191,15 +191,17 @@ export async function computeForecastForRoute(
     coverage = cov;
     if (cov < 0.95) {
       useModel = false;
-      if (allowWrites) try {
-        await supabaseAdmin.from("activity_events").insert({
-          event_type: "truck_capacity.feature_coverage_low",
-          entity_type: "truck_capacity_model_versions",
-          entity_id: promoted.id,
-          message: `Feature coverage ${(cov * 100).toFixed(1)}% below 95% threshold; served baseline for route ${route.code}.`,
-          metadata: { route_id: routeId, coverage: cov, persisted_names: persistedNames.length },
-        });
-      } catch { /* best-effort */ }
+      if (allowWrites) {
+        try {
+          await supabaseAdmin.from("activity_events").insert({
+            event_type: "truck_capacity.feature_coverage_low",
+            entity_type: "truck_capacity_model_versions",
+            entity_id: promoted.id,
+            message: `Feature coverage ${(cov * 100).toFixed(1)}% below 95% threshold; served baseline for route ${route.code}.`,
+            metadata: { route_id: routeId, coverage: cov, persisted_names: persistedNames.length },
+          });
+        } catch { /* best-effort */ }
+      }
     }
   }
 

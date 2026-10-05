@@ -138,7 +138,11 @@ function SettingsPage() {
         </TabsContent>
         <TabsContent value="users">
           <UsersAndRoles isAdmin={hasRole("admin")} currentUserId={user?.id ?? null} currentRoles={roles} />
-          {hasRole("admin") && <div className="mt-6"><WarehouseManagersPanel /></div>}
+          {hasRole("admin") && (
+            <div className="mt-6">
+              <WarehouseManagersPanel />
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

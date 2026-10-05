@@ -31,17 +31,25 @@ async function assertNotBranchUser(userId: string) {
       .limit(1),
   ]);
   if (error || e2) throw new Error("Unable to verify target account");
-  if ((data ?? []).some((r: any) => r.role === "branch_manager") || (inv ?? []).length)
-    throw new Error("Warehouse-manager accounts are managed under Warehouse managers, not generic roles.");
+  if ((data ?? []).some((r) => r.role === "branch_manager") || (inv ?? []).length)
+    throw new Error(
+      "Warehouse-manager accounts are managed under Warehouse managers, not generic roles.",
+    );
 }
 async function assertNotBranchEmail(email: string) {
   const e = email.trim().toLowerCase();
   const [{ data: inv, error: e1 }, { data: prof, error: e2 }] = await Promise.all([
-    supabaseAdmin.from("branch_manager_invites").select("id").eq("email_normalized", e).not("status", "in", "(cancelled,revoked)").limit(1),
+    supabaseAdmin
+      .from("branch_manager_invites")
+      .select("id")
+      .eq("email_normalized", e)
+      .not("status", "in", "(cancelled,revoked)")
+      .limit(1),
     supabaseAdmin.from("profiles").select("id").ilike("email", e).limit(5),
   ]);
   if (e1 || e2) throw new Error("Unable to verify target account");
-  if ((inv ?? []).length) throw new Error("This email has an open warehouse-manager invite; use Warehouse managers.");
+  if ((inv ?? []).length)
+    throw new Error("This email has an open warehouse-manager invite; use Warehouse managers.");
   for (const p of prof ?? []) await assertNotBranchUser(p.id);
 }
 
