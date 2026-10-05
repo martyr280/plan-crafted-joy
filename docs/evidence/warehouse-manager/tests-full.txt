@@ -1,61 +1,62 @@
 
  RUN  v4.1.10 /dev-server
 
- ✓ src/lib/__tests__/no-hsl-var-tokens.test.ts (1 test) 47ms
+ ✓ src/lib/truck-capacity/__tests__/cutoffs.test.ts (28 tests) 50ms
+ ✓ src/lib/__tests__/branch-invite.test.ts (19 tests) 28ms
+ ✓ src/lib/dispatch/__tests__/sequence.test.ts (16 tests) 44ms
  ✓ src/lib/dispatch/__tests__/build.test.ts (9 tests) 50ms
- ✓ src/lib/truck-capacity/__tests__/cutoffs.test.ts (28 tests) 61ms
- ✓ src/lib/dispatch/__tests__/sequence.test.ts (16 tests) 47ms
- ✓ src/lib/driver-time/__tests__/detect.test.ts (36 tests) 84ms
- ✓ src/lib/truck-capacity/__tests__/backtest.test.ts (2 tests) 234ms
- ✓ src/lib/dispatch/__tests__/build2.test.ts (10 tests) 45ms
- ✓ src/lib/truck-capacity/__tests__/serve-readonly.test.ts (2 tests) 331ms
-     ✓ control: default auto serving logs the low-coverage fallback and the forecast  325ms
- ✓ src/lib/truck-capacity/__tests__/serve-saturation.test.ts (2 tests) 346ms
-     ✓ 1a: clamp-floor model output is not averaged against a healthy baseline  336ms
- ✓ src/lib/driver-time/__tests__/reconciliation-regression.test.ts (19 tests) 320ms
- ✓ src/components/branch-logistics/BranchLogisticsPage.test.tsx (3 tests) 76ms
- ✓ src/lib/dispatch/__tests__/run-exceptions.test.ts (6 tests) 53ms
- ✓ src/components/driver-time/__tests__/driver-card.test.tsx (3 tests) 68ms
- ✓ src/lib/driver-time/__tests__/presence.test.ts (17 tests) 37ms
- ✓ src/lib/samsara/__tests__/cache-window.test.ts (19 tests) 32ms
- ✓ src/lib/truck-capacity/__tests__/accuracy.test.ts (35 tests) 38ms
- ✓ src/lib/__tests__/branch-invite.test.ts (19 tests) 57ms
- ✓ src/lib/__tests__/sales-report-paging.test.ts (2 tests) 33ms
- ✓ src/lib/driver-time/__tests__/tz.test.ts (5 tests) 38ms
- ✓ src/lib/driver-time/__tests__/week-label.test.ts (4 tests) 39ms
- ✓ src/lib/truck-capacity/__tests__/workbook-parse.test.ts (8 tests) 177ms
- ✓ src/lib/truck-capacity/__tests__/features.test.ts (3 tests) 29ms
- ✓ src/lib/dispatch/__tests__/assign.test.ts (16 tests) 24ms
- ✓ src/lib/dispatch/__tests__/diff.test.ts (12 tests) 17ms
- ✓ src/lib/truck-capacity/__tests__/forecast-log.test.ts (10 tests) 15ms
- ✓ src/lib/driver-time/__tests__/sweep-window.test.ts (5 tests) 38ms
- ✓ src/lib/dispatch/__tests__/address-match.test.ts (12 tests) 19ms
- ✓ src/lib/driver-time/__tests__/verification.test.ts (6 tests) 18ms
- ✓ src/lib/__tests__/supabase-fetch-all.test.ts (4 tests) 14ms
- ✓ src/lib/truck-capacity/__tests__/score.test.ts (11 tests) 11ms
- ✓ src/lib/__tests__/branch-logistics.test.ts (8 tests) 96ms
- ✓ src/lib/driver-time/__tests__/diagnostics.test.ts (7 tests) 14ms
+ ✓ src/lib/driver-time/__tests__/detect.test.ts (36 tests) 87ms
+ ✓ src/lib/truck-capacity/__tests__/backtest.test.ts (2 tests) 214ms
+ ✓ src/lib/dispatch/__tests__/run-exceptions.test.ts (6 tests) 36ms
+ ✓ src/lib/truck-capacity/__tests__/serve-readonly.test.ts (2 tests) 318ms
+     ✓ control: default auto serving logs the low-coverage fallback and the forecast  311ms
+ ✓ src/lib/truck-capacity/__tests__/serve-saturation.test.ts (2 tests) 326ms
+     ✓ 1a: clamp-floor model output is not averaged against a healthy baseline  316ms
+ ✓ src/lib/driver-time/__tests__/reconciliation-regression.test.ts (19 tests) 305ms
+ ✓ src/components/branch-logistics/BranchLogisticsPage.test.tsx (3 tests) 87ms
+ ✓ src/lib/driver-time/__tests__/week-label.test.ts (4 tests) 40ms
+ ✓ src/lib/dispatch/__tests__/build2.test.ts (10 tests) 44ms
+ ✓ src/components/driver-time/__tests__/driver-card.test.tsx (3 tests) 71ms
+ ✓ src/lib/driver-time/__tests__/tz.test.ts (5 tests) 42ms
+ ✓ src/lib/truck-capacity/__tests__/workbook-parse.test.ts (8 tests) 143ms
+ ✓ src/lib/truck-capacity/__tests__/accuracy.test.ts (35 tests) 42ms
+ ✓ src/lib/__tests__/sales-report-paging.test.ts (2 tests) 36ms
+ ✓ src/lib/driver-time/__tests__/presence.test.ts (17 tests) 33ms
+ ✓ src/lib/truck-capacity/__tests__/features.test.ts (3 tests) 22ms
+ ✓ src/lib/samsara/__tests__/cache-window.test.ts (19 tests) 31ms
+ ✓ src/lib/dispatch/__tests__/assign.test.ts (16 tests) 23ms
+ ✓ src/lib/__tests__/sales-report-drilldown.test.ts (12 tests) 11ms
+ ✓ src/lib/driver-time/__tests__/sweep-window.test.ts (5 tests) 36ms
+ ✓ src/lib/dispatch/__tests__/address-match.test.ts (12 tests) 14ms
+ ✓ src/lib/driver-time/__tests__/verification.test.ts (6 tests) 15ms
+ ✓ src/lib/dispatch/__tests__/diff.test.ts (12 tests) 16ms
+ ✓ src/lib/driver-time/__tests__/geo.test.ts (12 tests) 10ms
+ ✓ src/lib/truck-capacity/__tests__/forecast-log.test.ts (10 tests) 17ms
  ✓ src/lib/__tests__/warehouse-scope.test.ts (5 tests) 13ms
- ✓ src/lib/driver-time/__tests__/roster-identity.test.ts (10 tests) 16ms
- ✓ src/lib/__tests__/sales-report-drilldown.test.ts (12 tests) 20ms
- ✓ src/lib/truck-capacity/__tests__/roll-forward.test.ts (9 tests) 11ms
  ✓ src/lib/__tests__/rep-contact-match.test.ts (8 tests) 13ms
- ✓ src/lib/driver-time/__tests__/geo.test.ts (12 tests) 16ms
- ✓ src/lib/truck-capacity/__tests__/baseline.test.ts (4 tests) 10ms
- ✓ src/lib/truck-capacity/__tests__/linalg.test.ts (4 tests) 9ms
- ✓ src/lib/truck-capacity/__tests__/baseline-window-gap.test.ts (2 tests) 7ms
+ ✓ src/lib/driver-time/__tests__/roster-identity.test.ts (10 tests) 14ms
+ ✓ src/lib/__tests__/branch-logistics.test.ts (8 tests) 111ms
+ ✓ src/lib/truck-capacity/__tests__/score.test.ts (11 tests) 12ms
+ ✓ src/lib/driver-time/__tests__/diagnostics.test.ts (7 tests) 13ms
+ ✓ src/lib/__tests__/branch-role-serialization.test.ts (5 tests) 8ms
+ ✓ src/lib/truck-capacity/__tests__/roll-forward.test.ts (9 tests) 13ms
+ ✓ src/lib/__tests__/no-hsl-var-tokens.test.ts (1 test) 94ms
+ ✓ src/lib/__tests__/supabase-fetch-all.test.ts (4 tests) 13ms
+ ✓ src/lib/truck-capacity/__tests__/baseline.test.ts (4 tests) 11ms
+ ✓ src/lib/truck-capacity/__tests__/linalg.test.ts (4 tests) 8ms
  ✓ src/lib/__tests__/website-export-csv.test.ts (7 tests) 8ms
- ✓ src/lib/__tests__/legacy-branch-gate.test.ts (24 tests) 21ms
- ✓ src/lib/__tests__/sanitize-bridge-sql.test.ts (4 tests) 7ms
- ✓ src/lib/__tests__/sales-report-email.test.ts (9 tests) 121ms
- ✓ src/lib/driver-time/__tests__/cost.test.ts (6 tests) 7ms
- ✓ src/lib/__tests__/sales-report-sql.test.ts (19 tests) 25ms
- ✓ src/lib/__tests__/central-time.test.ts (3 tests) 24ms
+ ✓ src/lib/__tests__/sales-report-email.test.ts (9 tests) 140ms
+ ✓ src/lib/truck-capacity/__tests__/baseline-window-gap.test.ts (2 tests) 8ms
+ ✓ src/lib/__tests__/sanitize-bridge-sql.test.ts (4 tests) 6ms
+ ✓ src/lib/driver-time/__tests__/cost.test.ts (6 tests) 9ms
+ ✓ src/lib/__tests__/sales-report-sql.test.ts (19 tests) 27ms
+ ✓ src/lib/__tests__/legacy-branch-gate.test.ts (24 tests) 20ms
+ ✓ src/lib/__tests__/central-time.test.ts (3 tests) 22ms
  ✓ src/lib/truck-capacity/__tests__/sql-validate.test.ts (17 tests) 12ms
 
- Test Files  49 passed (49)
-      Tests  495 passed (495)
-   Start at  16:04:21
-   Duration  4.29s (transform 6.15s, setup 0ms, import 22.52s, tests 2.85s, environment 10ms)
+ Test Files  50 passed (50)
+      Tests  500 passed (500)
+   Start at  16:04:40
+   Duration  4.01s (transform 5.59s, setup 0ms, import 18.61s, tests 2.77s, environment 16ms)
 
 vitest exit 0
