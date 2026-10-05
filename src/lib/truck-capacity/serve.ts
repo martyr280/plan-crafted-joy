@@ -114,11 +114,18 @@ async function loadP21Latest(routeId: string, from: string, to: string): Promise
   return latest;
 }
 
+export type ForecastServeOptions = {
+  /** false = pure read: no forecast_log upsert and no activity_events insert. */
+  logForecast?: boolean;
+};
+
 export async function computeForecastForRoute(
   routeId: string,
   horizonDays = 28,
   methodOverride: ServingMethod = "auto",
+  options: ForecastServeOptions = {},
 ): Promise<ForecastResponse> {
+  const allowWrites = options.logForecast !== false;
   const { data: route } = await supabaseAdmin
     .from("truck_capacity_routes").select("*").eq("id", routeId).maybeSingle();
   if (!route) return { route: null, days: [], servingMethod: "baseline", version: null };
@@ -184,7 +191,7 @@ export async function computeForecastForRoute(
     coverage = cov;
     if (cov < 0.95) {
       useModel = false;
-      try {
+      if (allowWrites) try {
         await supabaseAdmin.from("activity_events").insert({
           event_type: "truck_capacity.feature_coverage_low",
           entity_type: "truck_capacity_model_versions",
@@ -271,7 +278,7 @@ export async function computeForecastForRoute(
   // Only the "auto" serving mode writes: a "baseline"/"model" override view is a
   // what-if, not what the business was shown. Baseline-served auto days DO get
   // logged. ignoreDuplicates keeps the nightly freeze row as the row of record.
-  if (methodOverride === "auto") {
+  if (allowWrites && methodOverride === "auto") {
     try {
       const rows = forecastLogRowsFromDays(routeId, days, today, promoted?.id ?? null);
       if (rows.length > 0) {

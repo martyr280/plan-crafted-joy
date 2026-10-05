@@ -36,6 +36,34 @@
       "when": 1790794524817,
       "tag": "0004_sales_recon_aug2026",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791214229467,
+      "tag": "0005_branch_manager_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791214467105,
+      "tag": "0006_branch_manager_scope_and_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791214520674,
+      "tag": "0007_branch_manager_guard_exec",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791214543495,
+      "tag": "0008_branch_manager_revoke_client_writes",
+      "breakpoints": true
     }
   ]
 }

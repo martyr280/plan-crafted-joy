@@ -113,6 +113,98 @@ export type Database = {
         }
         Relationships: []
       }
+      branch_manager_invites: {
+        Row: {
+          attempt_count: number
+          claim_expires_at: string | null
+          claimed_at: string | null
+          created_at: string
+          created_by: string
+          display_name: string | null
+          email_normalized: string
+          first_claimed_at: string | null
+          id: string
+          last_error: string | null
+          request_key: string | null
+          resend_key: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+          warehouse: string
+        }
+        Insert: {
+          attempt_count?: number
+          claim_expires_at?: string | null
+          claimed_at?: string | null
+          created_at?: string
+          created_by: string
+          display_name?: string | null
+          email_normalized: string
+          first_claimed_at?: string | null
+          id?: string
+          last_error?: string | null
+          request_key?: string | null
+          resend_key?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+          warehouse: string
+        }
+        Update: {
+          attempt_count?: number
+          claim_expires_at?: string | null
+          claimed_at?: string | null
+          created_at?: string
+          created_by?: string
+          display_name?: string | null
+          email_normalized?: string
+          first_claimed_at?: string | null
+          id?: string
+          last_error?: string | null
+          request_key?: string | null
+          resend_key?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+          warehouse?: string
+        }
+        Relationships: []
+      }
+      branch_manager_warehouses: {
+        Row: {
+          active: boolean
+          invite_id: string
+          updated_at: string
+          user_id: string
+          warehouse: string
+        }
+        Insert: {
+          active?: boolean
+          invite_id: string
+          updated_at?: string
+          user_id: string
+          warehouse: string
+        }
+        Update: {
+          active?: boolean
+          invite_id?: string
+          updated_at?: string
+          user_id?: string
+          warehouse?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branch_manager_warehouses_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "branch_manager_invites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       capacity_alert_log: {
         Row: {
           alert_id: string | null
@@ -3934,6 +4026,39 @@ export type Database = {
     }
     Functions: {
       backfill_sku_crossref_from_formerly: { Args: never; Returns: number }
+      bm_cancel: { Args: { p_actor: string; p_id: string }; Returns: string }
+      bm_claim: {
+        Args: {
+          p_actor: string
+          p_email: string
+          p_id: string
+          p_request_key: string
+          p_warehouse: string
+        }
+        Returns: Json
+      }
+      bm_mark_failed: {
+        Args: { p_code: string; p_id: string; p_request_key: string }
+        Returns: undefined
+      }
+      bm_mark_sent: {
+        Args: { p_id: string; p_request_key: string }
+        Returns: undefined
+      }
+      bm_save_draft: {
+        Args: {
+          p_actor: string
+          p_display_name: string
+          p_email: string
+          p_id: string
+          p_warehouse: string
+        }
+        Returns: string
+      }
+      bm_stage: {
+        Args: { p_id: string; p_request_key: string; p_user_id: string }
+        Returns: undefined
+      }
       claim_admin_if_none: { Args: never; Returns: boolean }
       current_sales_rep_code: { Args: never; Returns: string }
       has_role: {
@@ -3956,6 +4081,7 @@ export type Database = {
         | "sales_rep"
         | "ops_logistics_admin"
         | "sales_manager"
+        | "branch_manager"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4092,6 +4218,7 @@ export const Constants = {
         "sales_rep",
         "ops_logistics_admin",
         "sales_manager",
+        "branch_manager",
       ],
     },
   },

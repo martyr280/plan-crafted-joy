@@ -1,16 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { isValidEmail } from "./sales-report-email";
 
 export const getSalesReportsAccess = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     const { resolveAccess } = await import("./sales-reports.access.server");
     return resolveAccess(context.supabase, context.userId);
   });
 
 export const listSalesReportRuns = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("sales_report_runs")
@@ -22,7 +23,7 @@ export const listSalesReportRuns = createServerFn({ method: "POST" })
   });
 
 export const getSalesReportOverview = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((data: { runId?: string | null }) => data ?? {})
   .handler(async ({ data, context }) => {
     const { loadOverview } = await import("./sales-reports.access.server");
@@ -30,7 +31,7 @@ export const getSalesReportOverview = createServerFn({ method: "POST" })
   });
 
 export const getSalesRepDetail = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((data: { runId?: string | null; repCode?: string | null }) => data ?? {})
   .handler(async ({ data, context }) => {
     const { loadRepDetail } = await import("./sales-reports.access.server");
@@ -38,7 +39,7 @@ export const getSalesRepDetail = createServerFn({ method: "POST" })
   });
 
 export const runSalesReportsNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     const { assertAdmin } = await import("./p21.server");
     await assertAdmin(context.supabase, context.userId);
@@ -47,7 +48,7 @@ export const runSalesReportsNow = createServerFn({ method: "POST" })
   });
 
 export const exportSalesRepWorkbook = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((data: { runId: string; repCode?: string | null }) => data)
   .handler(async ({ data, context }) => {
     const { resolveAccess } = await import("./sales-reports.access.server");
@@ -63,7 +64,7 @@ export const exportSalesRepWorkbook = createServerFn({ method: "POST" })
   });
 
 export const runSalesReportForRep = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((data: { repCode: string; year: number; month: number; persist: boolean }) => {
     if (!data || typeof data.repCode !== "string" || !data.repCode.trim()) throw new Error("repCode is required");
     const year = Number(data.year);
@@ -80,7 +81,7 @@ export const runSalesReportForRep = createServerFn({ method: "POST" })
   });
 
 export const getSalesReportDrilldown = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((data: { runId?: string | null; kind: string }) => {
     const kinds = ["ytd", "month", "at_risk", "win_back"] as const;
     if (!data || !kinds.includes(data.kind as any)) throw new Error("kind must be ytd | month | at_risk | win_back");
@@ -103,7 +104,7 @@ async function requireManage(context: any) {
 }
 
 export const listRepContacts = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireManage(context);
     const { data, error } = await context.supabase
@@ -115,7 +116,7 @@ export const listRepContacts = createServerFn({ method: "POST" })
   });
 
 export const saveRepContact = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((d: { rep_code: string; email: string | null; cc_emails: string[]; send_enabled: boolean; notes: string | null }) => {
     if (!d?.rep_code) throw new Error("rep_code is required");
     const email = d.email?.trim() || null;
@@ -137,7 +138,7 @@ export const saveRepContact = createServerFn({ method: "POST" })
 
 
 export const getEmailSendList = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((d: { runId?: string | null }) => d ?? {})
   .handler(async ({ data, context }) => {
     await requireManage(context);
@@ -153,7 +154,7 @@ const validateSend = (d: SendInput) => {
 };
 
 export const previewSalesReportEmails = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(validateSend)
   .handler(async ({ data, context }) => {
     const { assertAdmin } = await import("./p21.server");
@@ -165,7 +166,7 @@ export const previewSalesReportEmails = createServerFn({ method: "POST" })
   });
 
 export const sendSalesReportEmails = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((d: SendInput & { expectedRows: Record<string, number> }) => ({
     ...validateSend(d),
     expectedRows: Object.fromEntries(Object.entries(d?.expectedRows ?? {}).map(([k, v]) => [k, Number(v)])),
@@ -194,7 +195,7 @@ export const sendSalesReportEmails = createServerFn({ method: "POST" })
  * Fills only rows whose email is empty; never overwrites an admin-typed email.
  */
 export const rematchRepEmailsFromP21 = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     const { assertAdmin } = await import("./p21.server");
     await assertAdmin(context.supabase, context.userId);

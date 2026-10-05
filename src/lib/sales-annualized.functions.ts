@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { assertAdmin, runJob } from "./p21.server";
@@ -7,7 +8,7 @@ import { SALES_ANNUALIZED_SQL, REP_DISCOVERY_SQL } from "./sales-annualized-temp
 
 
 export const listP21SalesReps = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
     const { discoverSalesReps } = await import("./sales-reports.server");
@@ -25,7 +26,7 @@ export const listP21SalesReps = createServerFn({ method: "POST" })
 
 
 export const seedSalesAnnualizedSchedules = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
 

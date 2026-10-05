@@ -31,6 +31,7 @@ import {
 } from "@/lib/user-admin.functions";
 import { samsaraStatus } from "@/lib/samsara.functions";
 import { useQuery } from "@tanstack/react-query";
+import { WarehouseManagersPanel } from "@/components/branch-logistics/WarehouseManagersPanel";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
@@ -43,6 +44,8 @@ const ROLE_LABELS: Record<AppRole, string> = {
   ops_logistics_admin: "Logistics Admin",
   ops_reports: "Reports",
   sales_rep: "Sales Rep",
+  sales_manager: "Sales Manager",
+  branch_manager: "Warehouse manager",
 };
 
 type ProfileRow = { id: string; email: string | null; display_name: string | null };
@@ -135,6 +138,7 @@ function SettingsPage() {
         </TabsContent>
         <TabsContent value="users">
           <UsersAndRoles isAdmin={hasRole("admin")} currentUserId={user?.id ?? null} currentRoles={roles} />
+          {hasRole("admin") && <div className="mt-6"><WarehouseManagersPanel /></div>}
         </TabsContent>
       </Tabs>
     </div>

@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 import { z } from "zod";
@@ -30,7 +31,7 @@ async function requireLogisticsAdmin(userId: string) {
 }
 
 export const listTruckRoutes = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data, error } = await supabaseAdmin
       .from("truck_capacity_routes").select("*")
@@ -45,7 +46,7 @@ export const listTruckRoutes = createServerFn({ method: "GET" })
  * honest if Joe's tracker uploads lapse past that window.
  */
 export const getTruckRunsFreshness = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data, error } = await supabaseAdmin
       .from("truck_capacity_runs")
@@ -65,7 +66,7 @@ export const getTruckRunsFreshness = createServerFn({ method: "GET" })
 
 export const listTruckRuns = createServerFn({ method: "POST" })
 
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     routeId: z.string().uuid().optional(),
     from: z.string().optional(),
@@ -97,7 +98,7 @@ const UpsertRun = z.object({
 });
 
 export const upsertTruckRun = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => UpsertRun.parse(i))
   .handler(async ({ data, context }) => {
     await requireOpsOrAdmin(context.userId);
@@ -116,7 +117,7 @@ export const upsertTruckRun = createServerFn({ method: "POST" })
   });
 
 export const deleteTruckRun = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireOpsOrAdmin(context.userId);
@@ -126,7 +127,7 @@ export const deleteTruckRun = createServerFn({ method: "POST" })
   });
 
 export const getTruckForecast = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     routeId: z.string().uuid(),
     horizonDays: z.number().int().min(1).max(60).optional(),
@@ -135,7 +136,7 @@ export const getTruckForecast = createServerFn({ method: "POST" })
   .handler(async ({ data }) => computeForecastForRoute(data.routeId, data.horizonDays ?? 28, data.method ?? "auto"));
 
 export const retrainTruckModel = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireLogisticsAdmin(context.userId);
     const { trainAndMaybePromote } = await import("./truck-capacity/train");
@@ -143,7 +144,7 @@ export const retrainTruckModel = createServerFn({ method: "POST" })
   });
 
 export const listTruckModelVersions = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data, error } = await supabaseAdmin
       .from("truck_capacity_model_versions")
@@ -155,7 +156,7 @@ export const listTruckModelVersions = createServerFn({ method: "GET" })
   });
 
 export const getTruckAccuracy = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data: promoted } = await supabaseAdmin
       .from("truck_capacity_model_versions")
@@ -170,7 +171,7 @@ export const getTruckAccuracy = createServerFn({ method: "GET" })
 
 
 export const getTruckSettings = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data } = await supabaseAdmin.from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
     return {
@@ -181,7 +182,7 @@ export const getTruckSettings = createServerFn({ method: "GET" })
   });
 
 export const updateTruckSettings = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     capacity_basis: z.enum(["pallets", "weight", "cube"]),
     vendor_pickup_counts: z.boolean(),
@@ -228,7 +229,7 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
   });
 
 export const updateRoutePalletsPerTruck = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     updates: z.array(z.object({
       id: z.string().uuid(),
@@ -257,7 +258,7 @@ export const updateRoutePalletsPerTruck = createServerFn({ method: "POST" })
   });
 
 export const previewTruckImport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ fileBase64: z.string().min(1) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
@@ -266,7 +267,7 @@ export const previewTruckImport = createServerFn({ method: "POST" })
   });
 
 export const commitTruckImport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     rows: z.array(z.object({
       route_code: z.string(),
@@ -294,7 +295,7 @@ export const commitTruckImport = createServerFn({ method: "POST" })
 
 
 export const exportTruckWorkbook = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const buf = await exportCapacityWorkbook();
     return { base64: buf.toString("base64"), filename: `truck-capacity-${new Date().toISOString().slice(0,10)}.xlsx` };
@@ -358,7 +359,7 @@ function plausibilityWarnings(
 }
 
 export const runP21SnapshotNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireLogisticsAdmin(context.userId);
     const startedAt = new Date();
@@ -373,7 +374,7 @@ export const runP21SnapshotNow = createServerFn({ method: "POST" })
   });
 
 export const runP21TransferSnapshotNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireLogisticsAdmin(context.userId);
     const startedAt = new Date();
@@ -388,7 +389,7 @@ export const runP21TransferSnapshotNow = createServerFn({ method: "POST" })
   });
 
 export const testP21Sql = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ sql: z.string().min(1).max(20000) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
@@ -416,7 +417,7 @@ export const testP21Sql = createServerFn({ method: "POST" })
   });
 
 export const testP21TransferSql = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ sql: z.string().min(1).max(20000) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
@@ -444,7 +445,7 @@ export const testP21TransferSql = createServerFn({ method: "POST" })
 // `runP21Snapshot`), plus the currently-ignored list, so admins can either
 // assign a code to an internal route or hide it permanently.
 export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireLogisticsAdmin(context.userId);
     const { data: events } = await supabaseAdmin
@@ -517,7 +518,7 @@ export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
 // Case-insensitive dedupe. Also drops the code from the ignore list if
 // present so a previously-ignored code can be reclassified.
 export const assignP21RouteCode = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     code: z.string().min(1).max(64),
     routeId: z.string().uuid(),
@@ -566,7 +567,7 @@ export const assignP21RouteCode = createServerFn({ method: "POST" })
   });
 
 export const setP21RouteCodeIgnored = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     code: z.string().min(1).max(64),
     ignore: z.boolean(),
@@ -603,7 +604,7 @@ export const setP21RouteCodeIgnored = createServerFn({ method: "POST" })
 // Powers the "Coverage" card in Settings so admins can see, per route,
 // which targets to backfill next.
 export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     days: z.number().int().min(1).max(365).optional(),
   }).parse(i))
@@ -695,7 +696,7 @@ export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
 // All-routes board (Joe's default landing view). Rep scoping is applied by the
 // caller's route list; this returns every active route the caller may see.
 export const getForecastBoard = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({
     routeIds: z.array(z.string().uuid()).max(500).optional(),
   }).parse(i ?? {}))
@@ -705,7 +706,7 @@ export const getForecastBoard = createServerFn({ method: "POST" })
   });
 
 export const listRouteCutoffs = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data, error } = await supabaseAdmin
       .from("route_cutoffs").select("*")
@@ -732,7 +733,7 @@ const cutoffInput = z.object({
 });
 
 export const upsertRouteCutoff = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => cutoffInput.parse(i))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
@@ -752,7 +753,7 @@ export const upsertRouteCutoff = createServerFn({ method: "POST" })
   });
 
 export const deleteRouteCutoff = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
@@ -763,7 +764,7 @@ export const deleteRouteCutoff = createServerFn({ method: "POST" })
 
 /** Freeze today's served forecasts for every active route into forecast_log. */
 export const freezeForecastsNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireLogisticsAdmin(context.userId);
     const { freezeForecasts } = await import("./truck-capacity/freeze");
@@ -772,7 +773,7 @@ export const freezeForecastsNow = createServerFn({ method: "POST" })
 
 /** Latest forecast-freeze activity event (for the Settings readout). */
 export const getLastForecastFreeze = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data } = await supabaseAdmin
       .from("activity_events")
@@ -805,7 +806,7 @@ export const getLastForecastFreeze = createServerFn({ method: "GET" })
  * Join is strict on (route_id, forecast_date = run_date): no date fuzzing.
  */
 export const getForecastVsActual = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ days: z.number().int().min(1).max(3650).optional() }).parse(i ?? {}))
   .handler(async ({ data }) => {
     const { actualsByRouteDay, summarize } = await import("./truck-capacity/score");
@@ -1070,13 +1071,13 @@ export async function buildForecastVsTracker(
 }
 
 export const getForecastVsTracker = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => fvtInput.parse(i ?? {}))
   .handler(async ({ data, context }) => buildForecastVsTracker(data, context.userId));
 
 /** Excel export of the same reconciliation, in whole percentage points. */
 export const exportForecastVsTracker = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => fvtInput.parse(i ?? {}))
   .handler(async ({ data, context }) => {
     const res = await buildForecastVsTracker(data, context.userId);

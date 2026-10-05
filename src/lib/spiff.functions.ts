@@ -1,5 +1,6 @@
 // Server-fn wrappers for the SPIFF module (Phase 1).
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { assertAdmin } from "./p21.server";
@@ -13,7 +14,7 @@ const GenSchema = z.object({
 });
 
 export const generateSpiffRun = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => GenSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -26,7 +27,7 @@ const RebuildChecksSchema = z.object({ runId: z.string().uuid() });
 // Rebuilds spiff_checks for a draft run after the user has reassigned reps
 // or toggled included flags. Approved runs are immutable.
 export const rebuildSpiffChecks = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => RebuildChecksSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -110,7 +111,7 @@ export const rebuildSpiffChecks = createServerFn({ method: "POST" })
 const RunIdSchema = z.object({ runId: z.string().uuid() });
 
 export const downloadSpiffWorkbook = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => RunIdSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -125,7 +126,7 @@ export const downloadSpiffWorkbook = createServerFn({ method: "POST" })
   });
 
 export const sendSpiffForApproval = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => RunIdSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -134,7 +135,7 @@ export const sendSpiffForApproval = createServerFn({ method: "POST" })
   });
 
 export const sendSpiffToAp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => RunIdSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);

@@ -1,11 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { classifyAndRouteInbound } from "@/lib/inbound-routing.server";
 import { z } from "zod";
 
 export const reprocessInboundEmail = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
     // Reset markers so the row goes through the full pipeline again.
@@ -24,7 +25,7 @@ export const reprocessInboundEmail = createServerFn({ method: "POST" })
   });
 
 export const listInboundEmails = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       status: z.string().optional(),
@@ -46,7 +47,7 @@ export const listInboundEmails = createServerFn({ method: "POST" })
   });
 
 export const getInboundEmail = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data }) => {
     const { data: row, error } = await supabaseAdmin
@@ -56,7 +57,7 @@ export const getInboundEmail = createServerFn({ method: "POST" })
   });
 
 export const reclassifyInboundEmail = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
     const { data: row } = await supabaseAdmin.from("inbound_emails").select("*").eq("id", data.id).single();
@@ -83,7 +84,7 @@ export const reclassifyInboundEmail = createServerFn({ method: "POST" })
   });
 
 export const dismissInboundEmail = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
     await supabaseAdmin.from("inbound_emails").update({
@@ -98,7 +99,7 @@ export const dismissInboundEmail = createServerFn({ method: "POST" })
 // Resolve an ambiguous line by writing the chosen mapping into orders.line_items
 // and (optionally) remembering it as a sku_crossref entry for future POs.
 export const resolveOrderLineSku = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       orderId: z.string().uuid(),
@@ -155,7 +156,7 @@ export const resolveOrderLineSku = createServerFn({ method: "POST" })
 // Re-run parse-po against an order's source inbound email and overwrite the order's line items.
 // Used to recover orders that came in with 0 line items because the first extraction missed the PDF.
 export const reExtractOrderLineItems = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ orderId: z.string().uuid() }).parse)
   .handler(async ({ data }) => {
     const { data: order, error: oErr } = await supabaseAdmin

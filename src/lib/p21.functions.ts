@@ -1,4 +1,5 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { assertAdmin, runJob, bucketFor, applyE2GSnapshot, applyPricerSync, isTransientBackendError, sanitizeBridgeSql } from "./p21.server";
@@ -11,7 +12,7 @@ const EnqueueSchema = z.object({
 });
 
 export const enqueueP21Job = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => EnqueueSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -19,7 +20,7 @@ export const enqueueP21Job = createServerFn({ method: "POST" })
   });
 
 export const getBridgeStatus = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     try {
       await assertAdmin(context.supabase, context.userId);
@@ -78,7 +79,7 @@ export const getBridgeStatus = createServerFn({ method: "GET" })
 // Fetch payload/result for a single job on demand. Kept out of getBridgeStatus
 // because these blobs can be multiple MB each.
 export const getBridgeJobDetail = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => z.object({ jobId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -106,7 +107,7 @@ export const getBridgeJobDetail = createServerFn({ method: "POST" })
   });
 
 export const retryBridgeJob = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => z.object({ jobId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -140,7 +141,7 @@ const SalesSchema = z.object({
 });
 
 export const fetchSalesData = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => SalesSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -174,7 +175,7 @@ export const fetchSalesData = createServerFn({ method: "POST" })
   });
 
 export const syncArAging = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
     const buildSql = (whereClause: string) => `
@@ -248,7 +249,7 @@ export const syncArAging = createServerFn({ method: "POST" })
   });
 
 export const testP21ApiConnection = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
     const { result } = await runJob("p21.api.test", {}, 30000);
@@ -276,7 +277,7 @@ const QueryViewSchema = z.object({
 });
 
 export const queryP21View = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => QueryViewSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -285,7 +286,7 @@ export const queryP21View = createServerFn({ method: "POST" })
   });
 
 export const syncE2GReport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
     return applyE2GSnapshot();
@@ -294,7 +295,7 @@ export const syncE2GReport = createServerFn({ method: "POST" })
 export const applyE2GSnapshotServerOnly = createServerOnlyFn(applyE2GSnapshot);
 
 export const syncPricerFromP21 = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
     return applyPricerSync();
@@ -310,7 +311,7 @@ const SubmitSchema = z.object({
 });
 
 export const submitOrderToP21 = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => SubmitSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { userId } = context;
@@ -374,7 +375,7 @@ const SqlSchema = z.object({
 });
 
 export const runP21Sql = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => SqlSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);

@@ -71,6 +71,17 @@ const groups = [
   },
 ];
 
+const branchGroups = [
+  {
+    label: "Warehouse reports",
+    items: [
+      { title: "Driver Time", url: "/driver-time", icon: Timer },
+      { title: "Truck Capacity", url: "/truck-capacity", icon: Truck },
+      { title: "Dispatch", url: "/dispatch", icon: RouteIcon },
+    ],
+  },
+];
+
 const adminGroups = [
   {
     label: "Administration",
@@ -103,7 +114,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {[...groups, ...(hasRole("admin") ? adminGroups : [])].map((g) => (
+        {(hasRole("branch_manager") ? branchGroups : [...groups, ...(hasRole("admin") ? adminGroups : [])]).map((g) => (
           <SidebarGroup key={g.label}>
             <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
             <SidebarGroupContent>

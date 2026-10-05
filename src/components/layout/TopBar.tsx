@@ -17,10 +17,13 @@ const ROLE_LABELS: Record<string, string> = {
   ops_logistics_admin: "Logistics Admin",
   ops_reports: "Reports",
   sales_rep: "Sales Rep",
+  sales_manager: "Sales Manager",
+  branch_manager: "Warehouse manager",
 };
 
 export function TopBar() {
-  const { user, roles, signOut } = useAuth();
+  const { user, roles, signOut, hasRole } = useAuth();
+  const isBranch = hasRole("branch_manager");
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -47,7 +50,7 @@ export function TopBar() {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <NotificationBell />
+        {!isBranch && <NotificationBell />}
         <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
           {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </Button>

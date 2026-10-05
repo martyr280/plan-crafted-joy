@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -47,7 +48,7 @@ const RangeInput = z.object({
 /* ============================== DATA SOURCE ============================== */
 
 export const getRmaDataSource = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireRmaAdmin(context.userId);
     const setting = await getRmaSqlSetting();
@@ -65,7 +66,7 @@ export const getRmaDataSource = createServerFn({ method: "GET" })
   });
 
 export const saveRmaDataSource = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ sql: z.string().max(30000).nullable() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireRmaAdmin(context.userId);
@@ -85,7 +86,7 @@ export const saveRmaDataSource = createServerFn({ method: "POST" })
 
 /** Dry run: execute the SQL, report columns + row count, write nothing. */
 export const testRmaSql = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => z.object({ sql: z.string().min(1).max(30000) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireRmaAdmin(context.userId);
@@ -114,7 +115,7 @@ export const testRmaSql = createServerFn({ method: "POST" })
   });
 
 export const runRmaSnapshotNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireRmaAdmin(context.userId);
     return await runRmaSnapshot({ triggeredBy: context.userId });
@@ -123,7 +124,7 @@ export const runRmaSnapshotNow = createServerFn({ method: "POST" })
 /* ============================== ANALYTICS ============================== */
 
 export const getRmaOverview = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => RangeInput.parse(i))
   .handler(async ({ data }) => {
     const { snapshot, rows } = await loadSnapshotRows({ from: data.from, to: data.to });
@@ -152,7 +153,7 @@ export const getRmaOverview = createServerFn({ method: "POST" })
   });
 
 export const getRmaAttribution = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     RangeInput.extend({
       dimension: z.enum(DIMENSIONS).optional(),
@@ -178,7 +179,7 @@ export const getRmaAttribution = createServerFn({ method: "POST" })
   });
 
 export const listRmaRows = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     RangeInput.extend({
       search: z.string().max(200).optional(),
@@ -206,7 +207,7 @@ export const listRmaRows = createServerFn({ method: "POST" })
 
 /** Per-entity monthly rollups — the queryable surface a future model trains on. */
 export const listRmaEntityMonthly = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
     z.object({
       dimensionType: z.enum(DIMENSIONS).optional(),
@@ -232,13 +233,13 @@ export const listRmaEntityMonthly = createServerFn({ method: "POST" })
  * cross-link indicator on damage reports that match a return.
  */
 export const getRmaOrderIndex = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     return await snapshotOrderIndex();
   });
 
 export const getRmaSqlPreview = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireRmaAdmin(context.userId);
     return await effectiveRmaSql();

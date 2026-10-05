@@ -22,6 +22,11 @@
 - [ ] `typical_dow` backfill for 33 of 35 truck-capacity routes (not yet run).
 - [ ] Truck-capacity actuals are stale (max actual date 2026-07-29).
 
+## Warehouse manager (branch_manager) — 2026-10-05
+- [x] Schema, restrictive deny, guarded RPCs, legacy gate, scoped read endpoint, admin invite panel, synthetic tests.
+- [ ] Release review of evidence (docs/warehouse-manager-evidence.md), then publish — blocked on Marty's review.
+- [ ] First real invite — Marty presses "Invite branch manager" after publish.
+
 ## Notes
 
 - The 2026-08-28 08:00 UTC agent death was **platform-side**, not credentials:

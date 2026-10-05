@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { denyLegacyBranchAccess } from "@/lib/branch-guard";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -18,6 +19,25 @@ async function assertAdmin(supabase: any, userId: string) {
   if (!data) throw new Error("Forbidden: admin role required");
 }
 
+
+// Branch (warehouse-manager) accounts are managed only by the warehouse-manager invite flow.
+async function assertNotBranchUser(userId: string) {
+  const { data, error } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  if (error) throw new Error("Unable to verify target account");
+  if ((data ?? []).some((r: any) => r.role === "branch_manager"))
+    throw new Error("Warehouse-manager accounts are managed under Warehouse managers, not generic roles.");
+}
+async function assertNotBranchEmail(email: string) {
+  const e = email.trim().toLowerCase();
+  const [{ data: inv, error: e1 }, { data: prof, error: e2 }] = await Promise.all([
+    supabaseAdmin.from("branch_manager_invites").select("id").eq("email_normalized", e).not("status", "in", "(cancelled,revoked)").limit(1),
+    supabaseAdmin.from("profiles").select("id").ilike("email", e).limit(5),
+  ]);
+  if (e1 || e2) throw new Error("Unable to verify target account");
+  if ((inv ?? []).length) throw new Error("This email has an open warehouse-manager invite; use Warehouse managers.");
+  for (const p of prof ?? []) await assertNotBranchUser(p.id);
+}
+
 async function logActivity(eventType: string, message: string, actorId: string, metadata: Record<string, any> = {}) {
   await supabaseAdmin.from("activity_events").insert({
     event_type: eventType,
@@ -29,7 +49,7 @@ async function logActivity(eventType: string, message: string, actorId: string, 
 }
 
 export const listManagedUsers = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
 
@@ -64,7 +84,7 @@ export const listManagedUsers = createServerFn({ method: "POST" })
   });
 
 export const inviteUser = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) =>
     z.object({
       email: z.string().trim().email().max(255),
@@ -73,6 +93,7 @@ export const inviteUser = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    await assertNotBranchEmail(data.email);
 
     const origin = process.env.PUBLIC_APP_URL || undefined;
     const redirectTo = origin ? `${origin}/` : undefined;
@@ -102,7 +123,7 @@ export const inviteUser = createServerFn({ method: "POST" })
   });
 
 export const createUserWithPassword = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) =>
     z.object({
       email: z.string().trim().toLowerCase().email().max(255),
@@ -114,6 +135,7 @@ export const createUserWithPassword = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    await assertNotBranchEmail(data.email);
 
     const origin = process.env.PUBLIC_APP_URL || "https://www.nelsonbot.ai";
 
@@ -152,7 +174,7 @@ export const createUserWithPassword = createServerFn({ method: "POST" })
   });
 
 export const sendPasswordReset = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => z.object({ email: z.string().trim().email().max(255) }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -173,11 +195,12 @@ export const sendPasswordReset = createServerFn({ method: "POST" })
   });
 
 export const revokeAllRoles = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => z.object({ userId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
     if (data.userId === context.userId) throw new Error("You cannot revoke your own roles.");
+    await assertNotBranchUser(data.userId);
     const { error } = await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId);
     if (error) throw new Error(error.message);
     await logActivity("admin.role_revoke_all", `Revoked all roles for user ${data.userId}`, context.userId, { user_id: data.userId });
@@ -185,7 +208,7 @@ export const revokeAllRoles = createServerFn({ method: "POST" })
   });
 
 export const setUserDisabled = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) => z.object({ userId: z.string().uuid(), disabled: z.boolean() }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
@@ -204,7 +227,7 @@ export const setUserDisabled = createServerFn({ method: "POST" })
   });
 
 export const setUserRole = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .inputValidator((input) =>
     z.object({
       userId: z.string().uuid(),
@@ -217,6 +240,7 @@ export const setUserRole = createServerFn({ method: "POST" })
     if (data.userId === context.userId && data.role === "admin" && !data.enable) {
       throw new Error("You cannot revoke your own admin role.");
     }
+    await assertNotBranchUser(data.userId);
     if (data.enable) {
       const { error } = await supabaseAdmin
         .from("user_roles")
@@ -236,7 +260,7 @@ export const setUserRole = createServerFn({ method: "POST" })
   });
 
 export const listAdminActivity = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
     const { data, error } = await supabaseAdmin
