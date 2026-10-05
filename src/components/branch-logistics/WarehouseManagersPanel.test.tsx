@@ -1,14 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("@/lib/branch-invite.functions", () => ({
-  cancelBranchInvite: vi.fn(),
-  confirmBranchInvite: vi.fn(),
-  listBranchInvites: vi.fn(),
-  saveBranchInviteDraft: vi.fn(),
-  finishBranchInviteActivation: vi.fn(),
-}));
-
-import { branchInvitesQueryKey } from "./WarehouseManagersPanel";
+import { describe, expect, it } from "vitest";
+import { branchInvitesQueryKey } from "@/lib/branch-invite-keys";
 
 describe("branch invites cache key", () => {
   it("is scoped by authenticated user id", () => {

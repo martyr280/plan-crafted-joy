@@ -15,6 +15,7 @@ import {
 } from "@/lib/branch-invite.functions";
 import { WAREHOUSES, type Warehouse } from "@/lib/warehouse-scope";
 import { useAuth } from "@/lib/auth";
+import { branchInvitesQueryKey } from "@/lib/branch-invite-keys";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,10 +79,6 @@ const ERROR_LABEL: Record<string, string> = {
   stage_failed: "Setup did not complete.",
   failed: "Failed.",
 };
-
-// Cache is scoped to the signed-in user so a later session never sees another admin's list.
-export const branchInvitesQueryKey = (userId: string | undefined) =>
-  ["branch-invites", userId ?? "anonymous"] as const;
 
 export function WarehouseManagersPanel() {
   const qc = useQueryClient();
