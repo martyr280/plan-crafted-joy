@@ -357,7 +357,7 @@ export function WarehouseManagersPanel() {
                     />
                     <span>
                       An earlier email may already have been delivered. Sending again may give the
-                      recipient two emails; only the newest link works.
+                      recipient two emails; the earlier link may stop working.
                     </span>
                   </label>
                 )}
