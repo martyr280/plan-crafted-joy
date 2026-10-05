@@ -71,6 +71,13 @@
       "when": 1791215630701,
       "tag": "0009_branch_manager_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791216191584,
+      "tag": "0010_branch_manager_role_serialization",
+      "breakpoints": true
     }
   ]
 }
