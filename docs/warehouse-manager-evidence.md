@@ -146,3 +146,9 @@ automatically afterwards.
 - Synthetic tests: pending (pre-stage), stage-failed, revoked, needs_reconciliation zero-role fixtures denied by legacy gate and branch report; lookup failure fails closed; unbound users unchanged.
 - Evidence: vitest 51 files / 506 tests pass; `tsgo --noEmit` exit 0; lint on touched warehouse files exit 0; `bun run build` exit 0 (`build-0011.log`). Live readback: 0 bound invites, 0 branch roles, 0 mappings; anon cannot execute probe.
 - Trade-off: a revoked invite-created account stays permanently branch-bound; reusing that person as an operator needs a new account.
+
+## Correction 0012 — anon execute on backfill definer (2026-10-05)
+- Before: `backfill_sku_crossref_from_formerly()` ACL `{postgres, anon, service_role}` (anon=true, authenticated=false).
+- Migration `0012_revoke_anon_backfill_sku_crossref.sql`: REVOKE from PUBLIC, anon, authenticated; GRANT service_role. Function body unchanged; no app/agent code calls it.
+- Live after: anon=false, authenticated=false, service_role=true. No public SECURITY DEFINER function is anon-executable (full 16-function matrix in `src/lib/__tests__/definer-grant-inventory.test.ts`).
+- Evidence: vitest 52 files / 509 tests pass; `tsgo --noEmit` exit 0; lint on new test exit 0.

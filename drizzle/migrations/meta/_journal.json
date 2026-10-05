@@ -85,6 +85,13 @@
       "when": 1791217343870,
       "tag": "0011_branch_manager_pending_identity_deny",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791217589700,
+      "tag": "0012_revoke_anon_backfill_sku_crossref",
+      "breakpoints": true
     }
   ]
 }
