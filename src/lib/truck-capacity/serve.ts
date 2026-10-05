@@ -114,11 +114,18 @@ async function loadP21Latest(routeId: string, from: string, to: string): Promise
   return latest;
 }
 
+export type ForecastServeOptions = {
+  /** false = pure read: no forecast_log upsert and no activity_events insert. */
+  logForecast?: boolean;
+};
+
 export async function computeForecastForRoute(
   routeId: string,
   horizonDays = 28,
   methodOverride: ServingMethod = "auto",
+  options: ForecastServeOptions = {},
 ): Promise<ForecastResponse> {
+  const allowWrites = options.logForecast !== false;
   const { data: route } = await supabaseAdmin
     .from("truck_capacity_routes").select("*").eq("id", routeId).maybeSingle();
   if (!route) return { route: null, days: [], servingMethod: "baseline", version: null };
