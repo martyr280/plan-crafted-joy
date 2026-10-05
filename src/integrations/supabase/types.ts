@@ -120,13 +120,16 @@ export type Database = {
           claimed_at: string | null
           created_at: string
           created_by: string
+          created_user_id: string | null
           display_name: string | null
           email_normalized: string
           first_claimed_at: string | null
           id: string
           last_error: string | null
+          provider_message_id: string | null
           request_key: string | null
           resend_key: string | null
+          send_started_at: string | null
           sent_at: string | null
           status: string
           updated_at: string
@@ -139,13 +142,16 @@ export type Database = {
           claimed_at?: string | null
           created_at?: string
           created_by: string
+          created_user_id?: string | null
           display_name?: string | null
           email_normalized: string
           first_claimed_at?: string | null
           id?: string
           last_error?: string | null
+          provider_message_id?: string | null
           request_key?: string | null
           resend_key?: string | null
+          send_started_at?: string | null
           sent_at?: string | null
           status?: string
           updated_at?: string
@@ -158,13 +164,16 @@ export type Database = {
           claimed_at?: string | null
           created_at?: string
           created_by?: string
+          created_user_id?: string | null
           display_name?: string | null
           email_normalized?: string
           first_claimed_at?: string | null
           id?: string
           last_error?: string | null
+          provider_message_id?: string | null
           request_key?: string | null
           resend_key?: string | null
+          send_started_at?: string | null
           sent_at?: string | null
           status?: string
           updated_at?: string
@@ -4026,9 +4035,14 @@ export type Database = {
     }
     Functions: {
       backfill_sku_crossref_from_formerly: { Args: never; Returns: number }
+      bm_begin_send: {
+        Args: { p_id: string; p_request_key: string }
+        Returns: undefined
+      }
       bm_cancel: { Args: { p_actor: string; p_id: string }; Returns: string }
       bm_claim: {
         Args: {
+          p_ack_duplicate: boolean
           p_actor: string
           p_email: string
           p_id: string
@@ -4037,12 +4051,21 @@ export type Database = {
         }
         Returns: Json
       }
+      bm_finish_activation: {
+        Args: { p_actor: string; p_id: string }
+        Returns: string
+      }
       bm_mark_failed: {
-        Args: { p_code: string; p_id: string; p_request_key: string }
-        Returns: undefined
+        Args: {
+          p_code: string
+          p_id: string
+          p_provider_id: string
+          p_request_key: string
+        }
+        Returns: string
       }
       bm_mark_sent: {
-        Args: { p_id: string; p_request_key: string }
+        Args: { p_id: string; p_provider_id: string; p_request_key: string }
         Returns: undefined
       }
       bm_save_draft: {

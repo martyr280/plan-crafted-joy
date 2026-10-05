@@ -25,6 +25,7 @@ const SAFE_ERRORS = [
   "request_mismatch",
   "not_invitable",
   "forbidden",
+  "not_confirmed_delivered",
 ];
 function rpcError(e: any): Error {
   const m = String(e?.message ?? "");
@@ -38,12 +39,21 @@ export const listBranchInvites = createServerFn({ method: "POST" })
     const { data, error } = await db
       .from("branch_manager_invites")
       .select(
-        "id,email_normalized,display_name,warehouse,status,attempt_count,last_error,sent_at,created_at,updated_at,claim_expires_at",
+        "id,email_normalized,display_name,warehouse,status,attempt_count,last_error,sent_at,created_at,updated_at,claim_expires_at,provider_message_id",
       )
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error("Unable to load warehouse-manager invites");
-    return data ?? [];
+    const now = Date.now();
+    return (data ?? []).map(({ provider_message_id, ...r }: any) => ({
+      ...r,
+      // A send that started and whose worker vanished is shown as needing review.
+      status:
+        r.status === "sending" && r.claim_expires_at && Date.parse(r.claim_expires_at) <= now
+          ? "needs_reconciliation"
+          : r.status,
+      delivery_confirmed: !!provider_message_id,
+    }));
   });
 
 export const saveBranchInviteDraft = createServerFn({ method: "POST" })
@@ -96,6 +106,7 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
         email: z.string().trim().max(255),
         warehouse: z.enum(WAREHOUSES),
         confirm: z.literal(true),
+        ackDuplicate: z.boolean().optional(),
       })
       .strict()
       .parse(i),
@@ -114,6 +125,7 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
             p_request_key: r.requestKey,
             p_email: r.email,
             p_warehouse: r.warehouse,
+            p_ack_duplicate: r.ackDuplicate === true,
           });
           if (error) throw rpcError(error);
           return res;
@@ -126,17 +138,27 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
           });
           if (error) throw new Error(String(error.message ?? "stage_failed"));
         },
-        markSent: async (id: string, key: string) => {
-          const { error } = await db.rpc("bm_mark_sent", { p_id: id, p_request_key: key });
+        beginSend: async (id: string, key: string) => {
+          const { error } = await db.rpc("bm_begin_send", { p_id: id, p_request_key: key });
+          if (error) throw new Error("begin_send_failed");
+        },
+        markSent: async (id: string, key: string, providerId: string) => {
+          const { error } = await db.rpc("bm_mark_sent", {
+            p_id: id,
+            p_request_key: key,
+            p_provider_id: providerId,
+          });
           if (error) throw new Error("mark_sent_failed");
         },
-        markFailed: async (id: string, key: string, code: string) => {
-          const { error } = await db.rpc("bm_mark_failed", {
+        markFailed: async (id: string, key: string, code: string, providerId?: string | null) => {
+          const { data: st, error } = await db.rpc("bm_mark_failed", {
             p_id: id,
             p_request_key: key,
             p_code: code,
+            p_provider_id: providerId ?? null,
           });
           if (error) throw new Error("mark_failed_failed");
+          return (st as string | null) ?? null;
         },
       },
       auth: {
@@ -192,6 +214,7 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
         requestKey: data.requestKey,
         email: data.email,
         warehouse: data.warehouse,
+        ackDuplicate: data.ackDuplicate === true,
       },
       ports as any,
     );
@@ -208,4 +231,31 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
       },
     });
     return outcome;
+  });
+
+/** Provider receipt exists but activation did not commit: activate without sending again. */
+export const finishBranchInviteActivation = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
+  .inputValidator((i) =>
+    z
+      .object({ id: z.string().uuid(), confirm: z.literal(true) })
+      .strict()
+      .parse(i),
+  )
+  .handler(async ({ data, context }) => {
+    const db = await adminDb(context.supabase, context.userId);
+    const { data: status, error } = await db.rpc("bm_finish_activation", {
+      p_actor: context.userId,
+      p_id: data.id,
+    });
+    if (error) throw rpcError(error);
+    await db.from("activity_events").insert({
+      event_type: "admin.branch_invite",
+      entity_type: "branch_manager_invite",
+      entity_id: data.id,
+      actor_id: context.userId,
+      message: "Warehouse-manager activation finished after confirmed delivery",
+      metadata: { status },
+    });
+    return { status: status as string };
   });

@@ -1,0 +1,44 @@
+=== build 2026-10-05T15:54:10Z ===
+build OK
+
+=== build 2026-10-05T15:55:10Z ===
+--- typecheck ---
+src/lib/__tests__/branch-invite.test.ts(87,11): error TS2322: Type '(id: string, key: string, code: FailureCode) => Promise<void>' is not assignable to type '(inviteId: string, requestKey: string, code: FailureCode, providerId?: string | null | undefined) => Promise<string | null>'.
+Type 'Promise<void>' is not assignable to type 'Promise<string | null>'.
+Type 'void' is not assignable to type 'string | null'.
+src/lib/__tests__/branch-invite.test.ts(123,11): error TS2322: Type '(to: string, link: string, key: string) => Promise<void>' is not assignable to type '(to: string, actionLink: string, idempotencyKey: string, warehouse: string) => Promise<{ id: string; }>'.
+Type 'Promise<void>' is not assignable to type 'Promise<{ id: string; }>'.
+Type 'void' is not assignable to type '{ id: string; }'.
+
+=== build 2026-10-05T15:55:39Z ===
+--- typecheck ---
+src/lib/__tests__/branch-invite.test.ts(87,11): error TS2322: Type '(id: string, key: string, code: FailureCode) => Promise<void>' is not assignable to type '(inviteId: string, requestKey: string, code: FailureCode, providerId?: string | null | undefined) => Promise<string | null>'.
+Type 'Promise<void>' is not assignable to type 'Promise<string | null>'.
+Type 'void' is not assignable to type 'string | null'.
+src/lib/__tests__/branch-invite.test.ts(123,11): error TS2322: Type '(to: string, link: string, key: string) => Promise<void>' is not assignable to type '(to: string, actionLink: string, idempotencyKey: string, warehouse: string) => Promise<{ id: string; }>'.
+Type 'Promise<void>' is not assignable to type 'Promise<{ id: string; }>'.
+Type 'void' is not assignable to type '{ id: string; }'.
+
+=== build 2026-10-05T15:56:12Z ===
+--- typecheck ---
+src/lib/__tests__/branch-invite.test.ts(87,11): error TS2322: Type '(id: string, key: string, code: FailureCode) => Promise<void>' is not assignable to type '(inviteId: string, requestKey: string, code: FailureCode, providerId?: string | null | undefined) => Promise<string | null>'.
+Type 'Promise<void>' is not assignable to type 'Promise<string | null>'.
+Type 'void' is not assignable to type 'string | null'.
+src/lib/__tests__/branch-invite.test.ts(123,11): error TS2322: Type '(to: string, link: string, key: string) => Promise<void>' is not assignable to type '(to: string, actionLink: string, idempotencyKey: string, warehouse: string) => Promise<{ id: string; }>'.
+Type 'Promise<void>' is not assignable to type 'Promise<{ id: string; }>'.
+Type 'void' is not assignable to type '{ id: string; }'.
+
+=== build 2026-10-05T15:56:22Z ===
+--- typecheck ---
+src/lib/__tests__/branch-invite.test.ts(87,11): error TS2322: Type '(id: string, key: string, code: FailureCode) => Promise<void>' is not assignable to type '(inviteId: string, requestKey: string, code: FailureCode, providerId?: string | null | undefined) => Promise<string | null>'.
+Type 'Promise<void>' is not assignable to type 'Promise<string | null>'.
+Type 'void' is not assignable to type 'string | null'.
+src/lib/__tests__/branch-invite.test.ts(123,11): error TS2322: Type '(to: string, link: string, key: string) => Promise<void>' is not assignable to type '(to: string, actionLink: string, idempotencyKey: string, warehouse: string) => Promise<{ id: string; }>'.
+Type 'Promise<void>' is not assignable to type 'Promise<{ id: string; }>'.
+Type 'void' is not assignable to type '{ id: string; }'.
+
+=== build 2026-10-05T15:57:44Z ===
+build OK
+
+=== build 2026-10-05T15:58:47Z ===
+build OK

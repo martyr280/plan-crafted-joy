@@ -11,6 +11,7 @@ import {
   confirmBranchInvite,
   listBranchInvites,
   saveBranchInviteDraft,
+  finishBranchInviteActivation,
 } from "@/lib/branch-invite.functions";
 import { WAREHOUSES, type Warehouse } from "@/lib/warehouse-scope";
 import { Card } from "@/components/ui/card";
@@ -46,19 +47,26 @@ type Invite = {
   attempt_count: number;
   last_error: string | null;
   sent_at: string | null;
+  delivery_confirmed?: boolean;
 };
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft — no access",
   claimed: "Sending…",
   staged: "Sending…",
+  sending: "Sending…",
+  needs_reconciliation: "Needs review — no access",
   sent: "Invited",
   failed: "Failed — no access",
   cancelled: "Cancelled",
   revoked: "Revoked",
 };
 const ERROR_LABEL: Record<string, string> = {
-  unknown_outcome: "Email outcome unknown. Retry is safe: the provider will not send a duplicate.",
+  unknown_outcome:
+    "We could not confirm whether the email was delivered. Access is off. Check with the recipient before sending a fresh invite.",
+  activation_failed:
+    "The email was delivered, but access was not switched on. Use Finish activation; no second email is sent.",
+  previous_attempt_unresolved: "A previous attempt needs review first.",
   link_failed: "Could not create the invitation link.",
   user_mismatch: "Account did not match this email.",
   existing_account: "This email already has a Nelson login; it was not changed.",
@@ -76,11 +84,16 @@ export function WarehouseManagersPanel() {
   const save = useServerFn(saveBranchInviteDraft);
   const cancel = useServerFn(cancelBranchInvite);
   const invite = useServerFn(confirmBranchInvite);
+  const finish = useServerFn(finishBranchInviteActivation);
   const q = useQuery({ queryKey: ["branch-invites"], queryFn: () => list() });
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [warehouse, setWarehouse] = useState<Warehouse | "">("");
-  const [confirming, setConfirming] = useState<{ inv: Invite; requestKey: string } | null>(null);
+  const [confirming, setConfirming] = useState<{
+    inv: Invite;
+    requestKey: string;
+  } | null>(null);
+  const [ack, setAck] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ["branch-invites"] });
 
   const saveM = useMutation({
@@ -116,12 +129,15 @@ export function WarehouseManagersPanel() {
           email: c.inv.email_normalized,
           warehouse: c.inv.warehouse,
           confirm: true,
+          ackDuplicate: c.inv.status === "needs_reconciliation" ? ack : undefined,
         },
       }),
     onSuccess: (r: any) => {
       if (r.status === "sent")
         toast.success(r.duplicate ? "Already invited — no second email sent." : "Invitation sent.");
       else if (r.status === "in_progress") toast.message("This invite is already being sent.");
+      else if (r.status === "needs_reconciliation")
+        toast.error(ERROR_LABEL[r.code] ?? "Needs review. No access was granted.");
       else toast.error(ERROR_LABEL[r.code] ?? "Invite failed. No access was granted.");
       setConfirming(null);
       refresh();
@@ -131,6 +147,15 @@ export function WarehouseManagersPanel() {
       setConfirming(null);
       refresh();
     },
+  });
+
+  const finishM = useMutation({
+    mutationFn: (id: string) => finish({ data: { id, confirm: true } }),
+    onSuccess: () => {
+      toast.success("Access switched on. No second email was sent.");
+      refresh();
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Could not finish activation"),
   });
 
   const rows = (q.data ?? []) as Invite[];
@@ -220,20 +245,43 @@ export function WarehouseManagersPanel() {
                     variant={
                       r.status === "sent"
                         ? "default"
-                        : r.status === "failed"
+                        : r.status === "failed" || r.status === "needs_reconciliation"
                           ? "destructive"
                           : "secondary"
                     }
                   >
                     {STATUS_LABEL[r.status] ?? r.status}
                   </Badge>
-                  {r.status === "failed" && r.last_error && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {ERROR_LABEL[r.last_error] ?? r.last_error}
-                    </p>
-                  )}
+                  {(r.status === "failed" || r.status === "needs_reconciliation") &&
+                    r.last_error && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {ERROR_LABEL[r.last_error] ?? r.last_error}
+                      </p>
+                    )}
                 </TableCell>
                 <TableCell className="text-right space-x-2">
+                  {r.status === "needs_reconciliation" && r.delivery_confirmed && (
+                    <Button
+                      size="sm"
+                      disabled={finishM.isPending}
+                      onClick={() => finishM.mutate(r.id)}
+                    >
+                      Finish activation
+                    </Button>
+                  )}
+                  {r.status === "needs_reconciliation" && !r.delivery_confirmed && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setAck(false);
+                        setConfirming({ inv: r, requestKey: crypto.randomUUID() });
+                      }}
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      Send fresh invite
+                    </Button>
+                  )}
                   {(r.status === "draft" || r.status === "failed") && (
                     <Button
                       size="sm"
@@ -252,7 +300,7 @@ export function WarehouseManagersPanel() {
                       )}
                     </Button>
                   )}
-                  {["draft", "failed", "sent"].includes(r.status) && (
+                  {["draft", "failed", "sent", "needs_reconciliation"].includes(r.status) && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -300,13 +348,29 @@ export function WarehouseManagersPanel() {
                   </li>
                   <li>Access turns on only after the email is sent successfully.</li>
                 </ul>
+                {confirming?.inv.status === "needs_reconciliation" && (
+                  <label className="flex gap-2 items-start rounded-md border border-destructive p-2">
+                    <input
+                      type="checkbox"
+                      checked={ack}
+                      onChange={(e) => setAck(e.target.checked)}
+                      aria-label="I understand the recipient may receive two emails"
+                    />
+                    <span>
+                      An earlier email may already have been delivered. Sending again may give the
+                      recipient two emails; the earlier link may stop working.
+                    </span>
+                  </label>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={inviteM.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={inviteM.isPending}
+              disabled={
+                inviteM.isPending || (confirming?.inv.status === "needs_reconciliation" && !ack)
+              }
               onClick={(e) => {
                 e.preventDefault();
                 if (confirming && !inviteM.isPending) inviteM.mutate(confirming);
