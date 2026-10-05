@@ -201,8 +201,9 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         .limit(1)
         .maybeSingle();
       if (sErr) throw new Error("Unable to verify Dispatch assignment settings");
-      const basis = (DATE_BASES as string[]).includes(settings?.dispatch_date_basis)
-        ? (settings!.dispatch_date_basis as DateBasis)
+      const rawBasis = settings?.dispatch_date_basis ?? "";
+      const basis: DateBasis = (DATE_BASES as readonly string[]).includes(rawBasis)
+        ? (rawBasis as DateBasis)
         : "pick_ticket_print";
       return buildDispatchBoard(rows, cutoffs, demand, {
         basis,

@@ -5,7 +5,8 @@ import {
   branchDriverDto,
   isBranchPath,
 } from "../warehouse-scope";
-import { loadBranchReport, weekWindow } from "../branch-report";
+import { loadBranchReport, weekWindow, type BranchReadPort } from "../branch-report";
+import type { ReconciledDriver } from "../warehouse-scope";
 
 describe("warehouse scope", () => {
   it("requires exactly one active canonical warehouse and no mixed roles", () => {
@@ -39,7 +40,8 @@ describe("warehouse scope", () => {
     ]);
   });
   it("driver DTO drops pay, official notes and audit history", () => {
-    const dto = branchDriverDto({
+    // Private fields a reconciled driver may carry; the DTO must drop them.
+    const driver: ReconciledDriver & Record<string, unknown> = {
       driverId: "d",
       driverName: "N",
       hub: "Dallas",
@@ -50,7 +52,8 @@ describe("warehouse scope", () => {
       paidHours: 9,
       history: ["PRIVATE"],
       events: [],
-    });
+    };
+    const dto = branchDriverDto(driver);
     expect(JSON.stringify(dto)).not.toMatch(/PRIVATE|payRate|paidHours|history/);
   });
   it("week window and branch paths", () => {
@@ -61,7 +64,7 @@ describe("warehouse scope", () => {
   });
   it("empty authorized route set never queries business data", async () => {
     const touched: string[] = [];
-    const port: any = new Proxy(
+    const port = new Proxy(
       {},
       {
         get: (_t, k) =>
@@ -72,19 +75,19 @@ describe("warehouse scope", () => {
                 return [];
               },
       },
-    );
-    const tc: any = await loadBranchReport(
+    ) as unknown as BranchReadPort;
+    const tc = await loadBranchReport(
       { userId: "u", warehouse: "Dallas" },
       { module: "truck-capacity", weekStart: "2026-09-28" },
       port,
     );
-    const dp: any = await loadBranchReport(
+    const dp = await loadBranchReport(
       { userId: "u", warehouse: "Dallas" },
       { module: "dispatch", weekStart: "2026-09-28" },
       port,
     );
-    expect(tc.runs).toEqual([]);
-    expect(dp.tickets).toEqual([]);
+    expect(tc.module === "truck-capacity" && tc.runs).toEqual([]);
+    expect(dp.module === "dispatch" && dp.tickets).toEqual([]);
     expect(touched).toEqual([]);
   });
 });
