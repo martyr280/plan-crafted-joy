@@ -48,6 +48,11 @@ vi.mock("@/integrations/supabase/client.server", () => ({
           filters.push((r) => String(field(r, k)) <= v);
           return q;
         },
+        or: (expr: string) => {
+          const parts = expr.split(",").map((p) => p.split(".eq."));
+          filters.push((r) => parts.some(([k, v]) => String(field(r, k!)) === v));
+          return q;
+        },
         not: () => q,
         order: () => q,
         limit: (n: number) => {
