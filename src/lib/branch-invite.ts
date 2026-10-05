@@ -58,15 +58,16 @@ export async function runConfirmedInvite(req: InviteRequest, ports: { db: Invite
     return { status: "failed", code };
   };
 
-  // Never convert someone's existing login into a branch account.
-  if (!claim.user_id) {
-    let existing: string | null;
+  // An account may already exist (a previous attempt of THIS invite, or someone's existing
+  // login). bm_stage is the authority: it rejects any account that predates this invite or
+  // holds another role, before any email is sent.
+  let existing: string | null = claim.user_id;
+  if (!existing) {
     try { existing = await ports.auth.findUserIdByEmail(email); } catch { return fail("link_failed"); }
-    if (existing) return fail("existing_account");
   }
 
   let link: { userId: string; email: string; actionLink: string };
-  try { link = await ports.auth.generateLink(email, claim.display_name, claim.user_id); } catch { return fail("link_failed"); }
+  try { link = await ports.auth.generateLink(email, claim.display_name, existing); } catch { return fail("link_failed"); }
   if (!link?.userId || !link.actionLink || String(link.email ?? "").toLowerCase() !== email) return fail("user_mismatch");
   if (claim.user_id && link.userId !== claim.user_id) return fail("user_mismatch");
 
