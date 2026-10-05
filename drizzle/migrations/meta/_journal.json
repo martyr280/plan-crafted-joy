@@ -43,6 +43,13 @@
       "when": 1791214229467,
       "tag": "0005_branch_manager_enum",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791214467105,
+      "tag": "0006_branch_manager_scope_and_invites",
+      "breakpoints": true
     }
   ]
 }
