@@ -13,7 +13,13 @@ function fromAddress(): string {
   return process.env.NELSON_FROM_EMAIL || "Nelson AI <noreply@nelsonbot.ai>";
 }
 
-function brandedHtml(opts: { heading: string; intro: string; ctaLabel: string; ctaUrl: string; footnote?: string }) {
+function brandedHtml(opts: {
+  heading: string;
+  intro: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  footnote?: string;
+}) {
   const { heading, intro, ctaLabel, ctaUrl, footnote } = opts;
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${TEXT};">
@@ -71,11 +77,12 @@ export async function sendNelsonInviteEmail(to: string, actionUrl: string) {
     "You're invited to Nelson AI",
     brandedHtml({
       heading: "Welcome to Nelson AI",
-      intro: "An administrator has invited you to access Nelson AI — the operations workspace for NDI Office Furniture. Click below to accept your invitation and set your password.",
+      intro:
+        "An administrator has invited you to access Nelson AI — the operations workspace for NDI Office Furniture. Click below to accept your invitation and set your password.",
       ctaLabel: "Accept invitation",
       ctaUrl: actionUrl,
       footnote: "This invitation link will expire in 24 hours.",
-    })
+    }),
   );
 }
 
@@ -85,11 +92,12 @@ export async function sendNelsonPasswordResetEmail(to: string, actionUrl: string
     "Reset your Nelson AI password",
     brandedHtml({
       heading: "Reset your password",
-      intro: "We received a request to reset your Nelson AI password. Click below to choose a new one. If you didn't request this, you can ignore this email.",
+      intro:
+        "We received a request to reset your Nelson AI password. Click below to choose a new one. If you didn't request this, you can ignore this email.",
       ctaLabel: "Reset password",
       ctaUrl: actionUrl,
       footnote: "This link will expire in 1 hour.",
-    })
+    }),
   );
 }
 
@@ -99,11 +107,12 @@ export async function sendNelsonMagicLinkEmail(to: string, actionUrl: string) {
     "Your Nelson AI sign-in link",
     brandedHtml({
       heading: "Sign in to Nelson AI",
-      intro: "Click the button below to sign in. If you didn't request this, you can safely ignore this email.",
+      intro:
+        "Click the button below to sign in. If you didn't request this, you can safely ignore this email.",
       ctaLabel: "Sign in",
       ctaUrl: actionUrl,
       footnote: "This link will expire in 1 hour and can only be used once.",
-    })
+    }),
   );
 }
 
@@ -153,9 +162,6 @@ export async function sendNelsonCredentialsEmail(to: string, password: string, s
 </body></html>`;
   return sendResend(to, "Your Nelson AI account credentials", html);
 }
-
-
-
 
 // ---------------------------------------------------------------------------
 // Capacity alerts (Truck Capacity module)
@@ -227,7 +233,11 @@ export async function sendCapacityAlertEmail(to: string, d: CapacityAlertEmailDa
     </td></tr>
   </table>
 </body></html>`;
-  return sendResend(to, `Capacity alert: ${d.routeCode} under ${d.thresholdPct}% for ${d.streakDays} days`, html);
+  return sendResend(
+    to,
+    `Capacity alert: ${d.routeCode} under ${d.thresholdPct}% for ${d.streakDays} days`,
+    html,
+  );
 }
 
 export type CapacityDigestEmailData = {
@@ -246,7 +256,9 @@ export type CapacityDigestEmailData = {
 };
 
 export async function sendCapacityDigestEmail(to: string[], d: CapacityDigestEmailData) {
-  const rows = d.rows.map((r) => `<tr>
+  const rows = d.rows
+    .map(
+      (r) => `<tr>
     <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${NAVY};font-weight:600;">${r.routeCode}<div style="font-weight:400;color:${MUTED};font-size:12px;">${r.routeName ?? ""}</div></td>
     <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};">${r.reps.length ? r.reps.join(", ") : "<em>unassigned</em>"}</td>
     <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:center;">${r.streakDays}d</td>
@@ -254,7 +266,9 @@ export async function sendCapacityDigestEmail(to: string[], d: CapacityDigestEma
     <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:right;">${pct(r.avgMonth)}</td>
     <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:right;">${pct(r.avgQuarter)}</td>
     <td style="padding:10px 12px;border-bottom:1px solid ${BORDER};font-size:13px;color:${TEXT};text-align:right;">${pct(r.avgYear)}</td>
-  </tr>`).join("");
+  </tr>`,
+    )
+    .join("");
 
   const html = `<!doctype html>
 <html><body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${TEXT};">
@@ -297,7 +311,12 @@ export async function sendCapacityDigestEmail(to: string[], d: CapacityDigestEma
   const r = await fetch(RESEND_ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: fromAddress(), to, subject: `Capacity alert digest — ${d.rows.length} route(s) underfilled`, html }),
+    body: JSON.stringify({
+      from: fromAddress(),
+      to,
+      subject: `Capacity alert digest — ${d.rows.length} route(s) underfilled`,
+      html,
+    }),
   });
   if (!r.ok) {
     const body = await r.text();
@@ -345,7 +364,10 @@ export async function sendNelsonEmailWithAttachment(opts: {
 
 /** Thrown by sendNelsonBranchInviteEmail. `unknown` = the provider may have accepted it. Never carries the link. */
 export class BranchInviteSendError extends Error {
-  constructor(public kind: "definite" | "unknown", public status: number | null) {
+  constructor(
+    public kind: "definite" | "unknown",
+    public status: number | null,
+  ) {
     super(kind === "unknown" ? "Invite email outcome unknown" : "Invite email rejected");
   }
 }
@@ -354,7 +376,12 @@ export class BranchInviteSendError extends Error {
  * Warehouse-manager invite. Uses Resend's Idempotency-Key so a retry after an unknown
  * outcome (timeout / 5xx / network) cannot deliver a second email.
  */
-export async function sendNelsonBranchInviteEmail(to: string, actionUrl: string, idempotencyKey: string, warehouse: string) {
+export async function sendNelsonBranchInviteEmail(
+  to: string,
+  actionUrl: string,
+  idempotencyKey: string,
+  warehouse: string,
+) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new BranchInviteSendError("definite", null);
   const html = brandedHtml({
@@ -368,8 +395,17 @@ export async function sendNelsonBranchInviteEmail(to: string, actionUrl: string,
   try {
     r = await fetch(RESEND_ENDPOINT, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ from: fromAddress(), to: [to], subject: "You're invited to Nelson AI", html }),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify({
+        from: fromAddress(),
+        to: [to],
+        subject: "You're invited to Nelson AI",
+        html,
+      }),
       signal: AbortSignal.timeout(20_000),
     });
   } catch {

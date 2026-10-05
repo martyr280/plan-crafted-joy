@@ -252,11 +252,12 @@ export function WarehouseManagersPanel() {
                   >
                     {STATUS_LABEL[r.status] ?? r.status}
                   </Badge>
-                  {(r.status === "failed" || r.status === "needs_reconciliation") && r.last_error && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {ERROR_LABEL[r.last_error] ?? r.last_error}
-                    </p>
-                  )}
+                  {(r.status === "failed" || r.status === "needs_reconciliation") &&
+                    r.last_error && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {ERROR_LABEL[r.last_error] ?? r.last_error}
+                      </p>
+                    )}
                 </TableCell>
                 <TableCell className="text-right space-x-2">
                   {r.status === "needs_reconciliation" && r.delivery_confirmed && (

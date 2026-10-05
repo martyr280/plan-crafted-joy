@@ -237,7 +237,10 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
 export const finishBranchInviteActivation = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
-    z.object({ id: z.string().uuid(), confirm: z.literal(true) }).strict().parse(i),
+    z
+      .object({ id: z.string().uuid(), confirm: z.literal(true) })
+      .strict()
+      .parse(i),
   )
   .handler(async ({ data, context }) => {
     const db = await adminDb(context.supabase, context.userId);

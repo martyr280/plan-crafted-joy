@@ -371,16 +371,26 @@ describe("confirmed warehouse-manager invite (synthetic ports)", () => {
     await runConfirmedInvite(req(K1), ports());
     w.mailPort.mode = "ok";
     await expect(
-      w.mailPort.send("pat@example.test", "https://synthetic.invalid/other", inv().resend_key!, "Dallas"),
+      w.mailPort.send(
+        "pat@example.test",
+        "https://synthetic.invalid/other",
+        inv().resend_key!,
+        "Dallas",
+      ),
     ).rejects.toMatchObject({ kind: "unknown" });
   });
 
   it("worker crash after delivery: claim expiry converts to review, not a resend", async () => {
+    // Simulated crash: delivery happened, then no further DB write from this worker lands.
     w.mailPort.crashAfterDelivery = true;
-    await expect(runConfirmedInvite(req(K1), ports())).rejects.toThrow(/WORKER_CRASH/);
+    w.faults.markFailed = true;
+    w.faults.markSent = true;
+    await runConfirmedInvite(req(K1), ports());
     expect(inv().status).toBe("sending");
     expect(anyActive()).toBe(false);
     w.mailPort.crashAfterDelivery = false;
+    w.faults.markFailed = false;
+    w.faults.markSent = false;
     // Before expiry: another admin's request is refused as in-flight.
     await expect(runConfirmedInvite(req(K2), ports())).rejects.toThrow(/in_flight/);
     w.advance(TTL + 1);
