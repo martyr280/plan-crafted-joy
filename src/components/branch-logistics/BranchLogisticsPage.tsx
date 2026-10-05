@@ -119,7 +119,7 @@ export function BranchLogisticsPage({ module }: { module: Module }) {
                   </p>
                   {r.events.map((e) => (
                     <p className="text-sm" key={e.id}>
-                      {e.event_date} · {formatMinutes(e.duration_min)} ·{" "}
+                      {e.event_date} · {e.duration_min == null ? "Unknown" : formatMinutes(e.duration_min)} ·{" "}
                       {e.address_name ?? "Location unresolved"}
                       {e.needs_review ? " · Needs review" : ""}
                     </p>
