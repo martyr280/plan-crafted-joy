@@ -14,6 +14,8 @@ import {
   finishBranchInviteActivation,
 } from "@/lib/branch-invite.functions";
 import { WAREHOUSES, type Warehouse } from "@/lib/warehouse-scope";
+import { useAuth } from "@/lib/auth";
+import { branchInvitesQueryKey } from "@/lib/branch-invite-keys";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,7 +87,9 @@ export function WarehouseManagersPanel() {
   const cancel = useServerFn(cancelBranchInvite);
   const invite = useServerFn(confirmBranchInvite);
   const finish = useServerFn(finishBranchInviteActivation);
-  const q = useQuery({ queryKey: ["branch-invites"], queryFn: () => list() });
+  const { user } = useAuth();
+  const queryKey = branchInvitesQueryKey(user?.id);
+  const q = useQuery({ queryKey, queryFn: () => list(), enabled: !!user?.id });
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [warehouse, setWarehouse] = useState<Warehouse | "">("");
@@ -94,7 +98,7 @@ export function WarehouseManagersPanel() {
     requestKey: string;
   } | null>(null);
   const [ack, setAck] = useState(false);
-  const refresh = () => qc.invalidateQueries({ queryKey: ["branch-invites"] });
+  const refresh = () => qc.invalidateQueries({ queryKey });
 
   const saveM = useMutation({
     mutationFn: () =>
