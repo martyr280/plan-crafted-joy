@@ -342,3 +342,41 @@ export async function sendNelsonEmailWithAttachment(opts: {
   const j: any = await r.json().catch(() => ({}));
   return { id: j?.id ?? null };
 }
+
+/** Thrown by sendNelsonBranchInviteEmail. `unknown` = the provider may have accepted it. Never carries the link. */
+export class BranchInviteSendError extends Error {
+  constructor(public kind: "definite" | "unknown", public status: number | null) {
+    super(kind === "unknown" ? "Invite email outcome unknown" : "Invite email rejected");
+  }
+}
+
+/**
+ * Warehouse-manager invite. Uses Resend's Idempotency-Key so a retry after an unknown
+ * outcome (timeout / 5xx / network) cannot deliver a second email.
+ */
+export async function sendNelsonBranchInviteEmail(to: string, actionUrl: string, idempotencyKey: string, warehouse: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new BranchInviteSendError("definite", null);
+  const html = brandedHtml({
+    heading: "Your Nelson AI warehouse access",
+    intro: `You have been invited to view read-only Driver Time, Truck Capacity and Dispatch reports for the ${warehouse} warehouse. Click below to accept and set your password.`,
+    ctaLabel: "Accept invitation",
+    ctaUrl: actionUrl,
+    footnote: "This invitation link will expire in 24 hours.",
+  });
+  let r: Response;
+  try {
+    r = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ from: fromAddress(), to: [to], subject: "You're invited to Nelson AI", html }),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    throw new BranchInviteSendError("unknown", null);
+  }
+  if (r.ok) return;
+  // 409 = same key still processing/conflict, 429/5xx = transient: outcome not known.
+  if (r.status === 409 || r.status === 429 || r.status >= 500) throw new BranchInviteSendError("unknown", r.status);
+  throw new BranchInviteSendError("definite", r.status);
+}
