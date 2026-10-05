@@ -36,6 +36,13 @@
       "when": 1790794524817,
       "tag": "0004_sales_recon_aug2026",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791214229467,
+      "tag": "0005_branch_manager_enum",
+      "breakpoints": true
     }
   ]
 }
