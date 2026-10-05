@@ -278,7 +278,7 @@ export async function computeForecastForRoute(
   // Only the "auto" serving mode writes: a "baseline"/"model" override view is a
   // what-if, not what the business was shown. Baseline-served auto days DO get
   // logged. ignoreDuplicates keeps the nightly freeze row as the row of record.
-  if (methodOverride === "auto") {
+  if (allowWrites && methodOverride === "auto") {
     try {
       const rows = forecastLogRowsFromDays(routeId, days, today, promoted?.id ?? null);
       if (rows.length > 0) {
