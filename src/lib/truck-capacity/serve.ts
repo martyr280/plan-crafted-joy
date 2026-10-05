@@ -191,7 +191,7 @@ export async function computeForecastForRoute(
     coverage = cov;
     if (cov < 0.95) {
       useModel = false;
-      try {
+      if (allowWrites) try {
         await supabaseAdmin.from("activity_events").insert({
           event_type: "truck_capacity.feature_coverage_low",
           entity_type: "truck_capacity_model_versions",
