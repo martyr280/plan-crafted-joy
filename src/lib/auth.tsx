@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logLoginOnce } from "@/lib/usage-log";
 import type { Session, User } from "@supabase/supabase-js";
 
-export type AppRole = "admin" | "ops_orders" | "ops_ar" | "ops_logistics" | "ops_logistics_admin" | "ops_reports" | "sales_rep";
+export type AppRole = "admin" | "ops_orders" | "ops_ar" | "ops_logistics" | "ops_logistics_admin" | "ops_reports" | "sales_rep" | "sales_manager" | "branch_manager";
 
 type AuthCtx = {
   user: User | null;
