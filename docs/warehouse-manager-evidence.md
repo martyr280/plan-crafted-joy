@@ -86,7 +86,7 @@ A branch manager gains nothing beyond what the public internet already has. If c
 should stop being public, that is a separate decision for everyone, not just warehouse managers.
 
 ## Tests / typecheck / lint / build
-- vitest: `Test Files 49 passed (49)`, `Tests 500 passed (500)`. Invite suite: 19 tests, including lost
+- vitest: `Test Files 50 passed (50)`, `Tests 500 passed (500)`. Invite suite: 19 tests, including lost
   response after delivery, worker crash after delivery plus expiry, crash before sending, `mark_sent` failure
   then finish activation, `mark_sent` and `mark_failed` both failing, the acknowledged fresh invite, key-reuse
   conflict, the default-role window, and concurrency, cancellation and mismatch cases.
