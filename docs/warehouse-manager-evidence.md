@@ -152,3 +152,14 @@ automatically afterwards.
 - Migration `0012_revoke_anon_backfill_sku_crossref.sql`: REVOKE from PUBLIC, anon, authenticated; GRANT service_role. Function body unchanged; no app/agent code calls it.
 - Live after: anon=false, authenticated=false, service_role=true. No public SECURITY DEFINER function is anon-executable (full 16-function matrix in `src/lib/__tests__/definer-grant-inventory.test.ts`).
 - Evidence: vitest 52 files / 509 tests pass; `tsgo --noEmit` exit 0; lint on new test exit 0.
+
+## Independent native SQL verification (reported by m_reed, 2026-10-05)
+- Scope: migrations 0005–0010 as captured at commit b3fb5f2, run in a disposable local native PostgreSQL 17.6 cluster (matches live server_version), synthetic SQL `auth.users` fixtures only. Not PGlite.
+- Result: 20 checks passed. Two independent pg8000 connections raced branch_manager-first and ops_orders-first role inserts; in both directions the loser blocked on the advisory lock (pg_stat_activity), and after the winner committed the loser rejected the mixed role; only the winner's role remained.
+- Also passed: RLS SELECT/INSERT/UPDATE/DELETE, profile/role restrictions, no operator role at signup for claimed invites, inactive staging, invite-RPC and admin-bootstrap denial, no resend on unknown outcome.
+- Artifacts: `native-results.json` / `verify_native.py` in the reviewer's workspace (not in this repo).
+- Limits: this is native SQL verification only, NOT Supabase Auth/REST parity. Migrations 0011 (pending-identity deny) and 0012 (anon backfill revoke) were not covered; reviewer will rerun them before release.
+
+## Release-candidate checks after 0011 + 0012 (2026-10-05)
+- `bun run build` exit 0 (`build-0012.log`); vitest 52 files / 509 tests pass; `tsgo --noEmit` exit 0; eslint on all touched warehouse files exit 0.
+- Nothing published; no real auth users, roles, mappings, invites or email.
