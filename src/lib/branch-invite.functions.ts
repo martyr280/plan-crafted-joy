@@ -7,7 +7,8 @@ import { WAREHOUSES, type Warehouse } from "./warehouse-scope";
 
 function asWarehouse(v: string): Warehouse {
   // The table's CHECK constraint already limits this; fail closed if it ever drifts.
-  if (!(WAREHOUSES as readonly string[]).includes(v)) throw new Error("Invalid warehouse on invite");
+  if (!(WAREHOUSES as readonly string[]).includes(v))
+    throw new Error("Invalid warehouse on invite");
   return v as Warehouse;
 }
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -183,7 +184,12 @@ export const confirmBranchInvite = createServerFn({ method: "POST" })
           });
           if (error) throw new Error("mark_sent_failed");
         },
-        markFailed: async (id: string, key: string, code: FailureCode, providerId?: string | null) => {
+        markFailed: async (
+          id: string,
+          key: string,
+          code: FailureCode,
+          providerId?: string | null,
+        ) => {
           const { data: st, error } = await db.rpc("bm_mark_failed", {
             p_id: id,
             p_request_key: key,

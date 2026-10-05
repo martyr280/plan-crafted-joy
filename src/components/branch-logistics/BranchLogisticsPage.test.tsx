@@ -26,6 +26,8 @@ describe("read-only branch report presentation", () => {
   it("driver totals without edit, payroll, sweep or history controls", () => {
     state.error = null;
     state.data = {
+      module: "driver-time",
+      routes: [],
       warehouse: "Birmingham",
       thresholdMinutes: 90,
       totals: { flaggedMinutes: 180 },
@@ -47,6 +49,7 @@ describe("read-only branch report presentation", () => {
   it("missing measurements show Unknown and stale cache is flagged; no action controls", () => {
     state.error = null;
     state.data = {
+      module: "dispatch",
       warehouse: "Dallas",
       routes: [],
       runs: [],
