@@ -114,7 +114,10 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {(hasRole("branch_manager") ? branchGroups : [...groups, ...(hasRole("admin") ? adminGroups : [])]).map((g) => (
+        {(hasRole("branch_manager")
+          ? branchGroups
+          : [...groups, ...(hasRole("admin") ? adminGroups : [])]
+        ).map((g) => (
           <SidebarGroup key={g.label}>
             <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
             <SidebarGroupContent>
