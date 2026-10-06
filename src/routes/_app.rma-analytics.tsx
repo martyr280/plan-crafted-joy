@@ -556,7 +556,7 @@ function DataSourceTab() {
     <div className="space-y-6">
       <Card className="p-4 border-warning/40 bg-warning/5">
         <div className="flex gap-3">
-          <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+          <AlertTriangle className="w-5 h-5 text-warning-text shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-medium">Table chain verified by NDI's P21 admin on 2026-08-03.</p>
             <p className="text-muted-foreground mt-1">

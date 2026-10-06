@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Sparkles, CheckCircle2, X, AlertCircle, RefreshCw, Loader2 } from "lucide-react";
+import { Sparkles, CheckCircle2, X, AlertCircle, RefreshCw, Loader2, Info } from "lucide-react";
 import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -171,12 +171,12 @@ function OrdersPage() {
               <DialogContent className="max-w-2xl">
                 <DialogHeader><DialogTitle>Parse PO from email</DialogTitle></DialogHeader>
                 <div className="space-y-3">
-                  <Label>Paste the email body</Label>
-                  <Textarea rows={10} value={emailText} onChange={(e) => setEmailText(e.target.value)}
+                  <Label htmlFor="parse-po-email">Paste the email body</Label>
+                  <Textarea id="parse-po-email" rows={10} value={emailText} onChange={(e) => setEmailText(e.target.value)}
                     placeholder="From: orders@apexarch.com&#10;Subject: PO 77821&#10;&#10;Please process the following order..." />
                   <div>
-                    <Label>Attach PDF purchase orders (optional)</Label>
-                    <Input type="file" accept="application/pdf" multiple
+                    <Label htmlFor="parse-po-pdfs">Attach PDF purchase orders (optional)</Label>
+                    <Input id="parse-po-pdfs" type="file" accept="application/pdf" multiple
                       onChange={(e) => setPdfFiles(Array.from(e.target.files ?? []))} />
                     {pdfFiles.length > 0 && (
                       <p className="text-xs text-muted-foreground mt-1">{pdfFiles.length} PDF{pdfFiles.length > 1 ? "s" : ""} attached — will be read by AI and prices verified against the price list.</p>
@@ -194,18 +194,20 @@ function OrdersPage() {
         }
       />
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Card className="p-4"><p className="text-sm text-muted-foreground">Today received</p><p className="text-2xl font-bold">{stats.today}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Pending review</p><p className="text-2xl font-bold">{stats.pending}</p></Card>
         <Card className="p-4"><p className="text-sm text-muted-foreground">Submitted</p><p className="text-2xl font-bold">{stats.approved}</p></Card>
-        <Card
-          className={`p-4 cursor-pointer transition ${missingOnly ? "border-warning bg-warning/5" : "hover:bg-muted/40"}`}
+        <button
+          type="button"
+          aria-pressed={missingOnly}
+          className={`rounded-xl border bg-card text-card-foreground shadow-sm p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${missingOnly ? "border-warning bg-warning/5" : "hover:bg-muted/40"}`}
           onClick={() => setMissingOnly((v) => !v)}
         >
           <p className="text-sm text-muted-foreground">Missing line items</p>
-          <p className="text-2xl font-bold text-warning">{stats.missing}</p>
+          <p className="text-2xl font-bold text-warning-text">{stats.missing}</p>
           <p className="text-xs text-muted-foreground mt-1">{missingOnly ? "Filtering" : "Click to filter"}</p>
-        </Card>
+        </button>
       </div>
 
       <Card>
@@ -228,9 +230,9 @@ function OrdersPage() {
                     <TableCell className="text-sm text-muted-foreground">{formatDistanceToNow(new Date(o.created_at), { addSuffix: true })}</TableCell>
                     <TableCell className="font-medium">{o.customer_name}</TableCell>
                     <TableCell>{o.po_number ?? "—"}</TableCell>
-                    <TableCell>{missing ? <span className="text-warning font-medium">0 ⚠</span> : lines}</TableCell>
+                    <TableCell>{missing ? <span className="text-warning-text font-medium">0 ⚠</span> : lines}</TableCell>
                     <TableCell><ConfBadge v={o.ai_confidence} /></TableCell>
-                    <TableCell>{(o.ai_flags as any[])?.length ? <span className="inline-flex items-center gap-1 text-warning text-sm"><AlertCircle className="w-3 h-3" />{(o.ai_flags as any[]).length}</span> : "—"}</TableCell>
+                    <TableCell>{(o.ai_flags as any[])?.length ? <span className="inline-flex items-center gap-1 text-warning-text text-sm"><AlertCircle className="w-3 h-3" />{(o.ai_flags as any[]).length}</span> : "—"}</TableCell>
                     <TableCell><StatusBadge s={o.status} /></TableCell>
                     <TableCell><Button size="sm" variant="ghost">Review</Button></TableCell>
                   </TableRow>
@@ -254,13 +256,15 @@ function OrdersPage() {
                     {(selected.ai_flags as any[]).map((f, i) => {
                       const sev = f.severity ?? (f.type === "contract_or_price_match" ? "info" : "warning");
                       const cls = sev === "error"
-                        ? "text-destructive"
-                        : sev === "info"
-                          ? "text-warning"
-                          : "text-foreground";
+                        ? "text-destructive-text"
+                        : sev === "warning"
+                          ? "text-warning-text"
+                          : "text-muted-foreground";
+                      const Icon = sev === "info" ? Info : AlertCircle;
                       return (
-                        <p key={i} className={`text-xs ${cls}`}>
-                          <strong>{f.field}:</strong> {f.issue}{f.suggestion ? <> — <em>{f.suggestion}</em></> : null}
+                        <p key={i} className={`text-xs flex items-start gap-1 ${cls}`}>
+                          <Icon className="w-3 h-3 mt-0.5 shrink-0" aria-hidden="true" />
+                          <span><strong>{f.field}:</strong> {f.issue}{f.suggestion ? <> — <em>{f.suggestion}</em></> : null}</span>
                         </p>
                       );
                     })}
@@ -421,23 +425,23 @@ function CandidatePicker({
 }) {
   const [choice, setChoice] = useState<string>(candidates[0]?.item ?? "");
   const [remember, setRemember] = useState(false);
-  if (!candidates.length) return <span className="text-warning">ambiguous</span>;
+  if (!candidates.length) return <span className="text-warning-text">ambiguous</span>;
   return (
     <div className="space-y-1">
-      <div className="text-warning text-[11px]">Pick a finish:</div>
+      <div className="text-warning-text text-xs">Pick a finish:</div>
       <select
         value={choice}
         onChange={(e) => setChoice(e.target.value)}
-        className="w-full border rounded px-1 py-0.5 text-xs bg-background"
+        className="w-full h-8 border rounded px-2 text-xs bg-background"
       >
         {candidates.map((c) => (
           <option key={c.item} value={c.item}>{c.item}{c.description ? ` — ${c.description.slice(0, 40)}` : ""}</option>
         ))}
       </select>
-      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
-        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> remember this mapping
+      <label className="flex items-center gap-1 text-xs text-muted-foreground">
+        <input className="h-4 w-4" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> remember this mapping
       </label>
-      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => choice && onPick(choice, remember)}>
+      <Button size="sm" variant="outline" className="h-8 text-xs px-3" onClick={() => choice && onPick(choice, remember)}>
         Apply
       </Button>
     </div>

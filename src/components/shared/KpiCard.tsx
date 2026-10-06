@@ -27,7 +27,7 @@ export function KpiCard({
           <p className="text-3xl font-bold mt-1">{value}</p>
           {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
           {typeof trend === "number" && (
-            <div className={`text-xs mt-2 inline-flex items-center gap-1 ${trend >= 0 ? "text-success" : "text-destructive"}`}>
+            <div className={`text-xs mt-2 inline-flex items-center gap-1 ${trend >= 0 ? "text-success-text" : "text-destructive"}`}>
               {trend >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
               {Math.abs(trend).toFixed(1)}% vs last week
             </div>

@@ -100,7 +100,7 @@ function SettingsPage() {
                   <ul className="mt-2 space-y-1">
                     {((i as any).scopes as Array<{ endpoint: string; ok: boolean; detail: string }>).map((s) => (
                       <li key={s.endpoint} className="text-[11px] flex items-start gap-1">
-                        <span className={s.ok ? "text-success" : "text-destructive"}>{s.ok ? "✓" : "✕"}</span>
+                        <span className={s.ok ? "text-success-text" : "text-destructive"}>{s.ok ? "✓" : "✕"}</span>
                         <span className="font-medium">{s.endpoint}:</span>
                         <span className="text-muted-foreground">{s.detail}</span>
                       </li>

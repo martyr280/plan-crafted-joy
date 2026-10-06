@@ -574,7 +574,7 @@ function AttachSamsaraCell({ row, onChanged }: { row: any; onChanged: () => void
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {row.samsara_document_id ? (
-          <Button variant="ghost" size="sm" className="gap-1 text-success">
+          <Button variant="ghost" size="sm" className="gap-1 text-success-text">
             <CheckCircle2 className="w-3.5 h-3.5" /> Linked
           </Button>
         ) : (

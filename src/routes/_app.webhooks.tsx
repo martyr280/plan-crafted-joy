@@ -76,8 +76,8 @@ function WebhooksPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <StatCard icon={<Webhook className="w-4 h-4" />} label="Total deliveries" value={total} />
-        <StatCard icon={<CheckCircle2 className="w-4 h-4 text-success" />} label="Routed" value={routed} />
-        <StatCard icon={<Clock className="w-4 h-4 text-warning" />} label="Pending / review" value={pending} />
+        <StatCard icon={<CheckCircle2 className="w-4 h-4 text-success-text" />} label="Routed" value={routed} />
+        <StatCard icon={<Clock className="w-4 h-4 text-warning-text" />} label="Pending / review" value={pending} />
         <StatCard icon={<AlertCircle className="w-4 h-4 text-destructive" />} label="Errors" value={errors} />
       </div>
 

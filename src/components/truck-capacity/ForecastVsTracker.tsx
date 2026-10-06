@@ -39,7 +39,7 @@ function addDays(iso: string, n: number): string {
 
 function varianceClass(v: number): string {
   const a = Math.abs(v) * 100;
-  if (a <= 10) return "bg-success/15 text-success";
+  if (a <= 10) return "bg-success/15 text-success-text";
   if (a <= 20) return "bg-warning/20 text-warning-foreground";
   return "bg-destructive/15 text-destructive";
 }
