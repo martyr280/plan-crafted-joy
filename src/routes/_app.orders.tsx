@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,11 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { Plus, Sparkles, CheckCircle2, X, AlertCircle, RefreshCw } from "lucide-react";
+import { Sparkles, CheckCircle2, X, AlertCircle, RefreshCw, Loader2 } from "lucide-react";
 import { SifXmlImporter } from "@/components/shared/SifXmlImporter";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -53,6 +57,11 @@ function OrdersPage() {
   const [reExtracting, setReExtracting] = useState(false);
   const [missingOnly, setMissingOnly] = useState(false);
   const [stats, setStats] = useState({ today: 0, approved: 0, pending: 0, missing: 0 });
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState<any | null>(null);
+  const [confirmReject, setConfirmReject] = useState<any | null>(null);
 
   async function load() {
     const { data } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
@@ -110,19 +119,44 @@ function OrdersPage() {
   }
 
   async function approve(o: any) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     try {
-      const res = await submitOrderToP21Fn({ data: { orderId: o.id } });
-      toast.success(`Submitted as ${(res as any).p21OrderId}`);
+      const res = await submitOrderToP21Fn({ data: { orderId: o.id, idempotencyKey: o.id } });
+      const r = res as { p21OrderId: string; alreadySubmitted?: boolean };
+      toast.success(r.alreadySubmitted ? `Already submitted as ${r.p21OrderId}` : `Submitted as ${r.p21OrderId}`);
+      setConfirmApprove(null);
       setSelected(null);
       load();
     } catch (e: any) {
       toast.error(e.message ?? "P21 submit failed — is the bridge agent running?");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
   async function reject(o: any) {
-    await supabase.from("orders").update({ status: "rejected", reviewed_by: user?.id, reviewed_at: new Date().toISOString() }).eq("id", o.id);
-    toast.success("Order rejected"); setSelected(null); load();
+    if (rejecting) return;
+    setRejecting(true);
+    try {
+      const { error } = await supabase.from("orders").update({ status: "rejected", reviewed_by: user?.id, reviewed_at: new Date().toISOString() }).eq("id", o.id);
+      if (error) throw error;
+      toast.success("Order rejected");
+      setConfirmReject(null); setSelected(null); load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Reject failed");
+    } finally {
+      setRejecting(false);
+    }
+  }
+
+  function orderTotal(o: any) {
+    return ((o?.line_items as any[]) ?? []).reduce(
+      (s, li) => s + (Number(li.line_total ?? (Number(li.qty) || 0) * (Number(li.unit_price) || 0)) || 0),
+      0,
+    );
   }
 
   return (
@@ -156,7 +190,6 @@ function OrdersPage() {
               </DialogContent>
             </Dialog>
             <SifXmlImporter scope="orders" onImported={load} />
-            <Button variant="outline"><Plus className="w-4 h-4 mr-2" /> New Order</Button>
           </>
         }
       />
@@ -302,7 +335,11 @@ function OrdersPage() {
                 </div>
                 {selected.status === "pending_review" && (
                   <div className="flex gap-2 flex-wrap">
-                    <Button onClick={() => approve(selected)} className="flex-1"><CheckCircle2 className="w-4 h-4 mr-2" /> Approve & Submit to P21</Button>
+                    <Button onClick={() => setConfirmApprove(selected)} disabled={submitting} className="flex-1">
+                      {submitting
+                        ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting…</>
+                        : <><CheckCircle2 className="w-4 h-4 mr-2" /> Approve & Submit to P21</>}
+                    </Button>
                     <Button variant="outline" disabled={reExtracting} onClick={async () => {
                       setReExtracting(true);
                       try {
@@ -315,7 +352,7 @@ function OrdersPage() {
                       <RefreshCw className={`w-4 h-4 mr-2 ${reExtracting ? "animate-spin" : ""}`} />
                       Re-extract line items
                     </Button>
-                    <Button variant="outline" onClick={() => reject(selected)}><X className="w-4 h-4 mr-2" /> Reject</Button>
+                    <Button variant="outline" disabled={submitting || rejecting} onClick={() => setConfirmReject(selected)}><X className="w-4 h-4 mr-2" /> Reject</Button>
                   </div>
                 )}
                 {selected.p21_order_id && <p className="text-sm text-muted-foreground">P21 ID: {selected.p21_order_id}</p>}
@@ -324,6 +361,53 @@ function OrdersPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={!!confirmApprove} onOpenChange={(o) => { if (!o && !submitting) setConfirmApprove(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Submit this order to P21?</AlertDialogTitle>
+            <AlertDialogDescription>This creates a real order in P21. Check the summary first.</AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirmApprove && (
+            <dl className="grid grid-cols-2 gap-y-1 text-sm">
+              <dt className="text-muted-foreground">Customer</dt><dd className="font-medium">{confirmApprove.customer_name}</dd>
+              <dt className="text-muted-foreground">PO #</dt><dd>{confirmApprove.po_number ?? "—"}</dd>
+              <dt className="text-muted-foreground">Lines</dt><dd>{(confirmApprove.line_items as any[])?.length ?? 0}</dd>
+              <dt className="text-muted-foreground">Total</dt><dd className="font-medium">${orderTotal(confirmApprove).toFixed(2)}</dd>
+            </dl>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={submitting}
+              onClick={(e) => { e.preventDefault(); if (confirmApprove) approve(confirmApprove); }}
+            >
+              {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting…</> : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmReject} onOpenChange={(o) => { if (!o && !rejecting) setConfirmReject(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject this order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmReject ? `${confirmReject.customer_name} · PO ${confirmReject.po_number ?? "—"} will be marked rejected and won't be sent to P21.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={rejecting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={rejecting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); if (confirmReject) reject(confirmReject); }}
+            >
+              {rejecting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Rejecting…</> : "Reject order"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

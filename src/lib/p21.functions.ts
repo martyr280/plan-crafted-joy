@@ -308,23 +308,46 @@ export const applyPricerSyncServerOnly = createServerOnlyFn(applyPricerSync);
 
 const SubmitSchema = z.object({
   orderId: z.string().uuid(),
+  // Idempotency key — must equal orderId. One order can produce at most one P21 submission.
+  idempotencyKey: z.string().uuid(),
 });
 
 export const submitOrderToP21 = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((input) => SubmitSchema.parse(input))
+  .inputValidator((input) => {
+    const parsed = SubmitSchema.parse(input);
+    if (parsed.idempotencyKey !== parsed.orderId) throw new Error("idempotencyKey must equal orderId");
+    return parsed;
+  })
   .handler(async ({ data, context }) => {
     const { userId } = context;
     const { data: roles } = await context.supabase.from("user_roles").select("role").eq("user_id", userId);
     const allowed = (roles ?? []).some((r: any) => r.role === "admin" || r.role === "ops_orders");
     if (!allowed) throw new Error("Not authorized to submit orders");
 
-    const { data: order, error } = await supabaseAdmin
+    // Atomic claim: only one request can move pending_review -> approved (in-flight).
+    const { data: claimed, error: claimErr } = await supabaseAdmin
       .from("orders")
-      .select("id, customer_id, customer_name, po_number, line_items")
+      .update({ status: "approved", reviewed_by: userId, reviewed_at: new Date().toISOString() })
       .eq("id", data.orderId)
-      .single();
-    if (error || !order) throw new Error("Order not found");
+      .eq("status", "pending_review")
+      .is("p21_order_id", null)
+      .select("id, customer_id, customer_name, po_number, line_items")
+      .maybeSingle();
+    if (claimErr) throw new Error(claimErr.message);
+
+    if (!claimed) {
+      const { data: existing, error } = await supabaseAdmin
+        .from("orders")
+        .select("status, p21_order_id")
+        .eq("id", data.orderId)
+        .maybeSingle();
+      if (error || !existing) throw new Error("Order not found");
+      if (existing.p21_order_id) return { p21OrderId: existing.p21_order_id as string, alreadySubmitted: true };
+      if (existing.status === "approved") throw new Error("This order is already being submitted to P21");
+      throw new Error(`Order cannot be submitted (status: ${existing.status})`);
+    }
+    const order = claimed;
 
     const lines = ((order.line_items as any[]) ?? []).map((li: any) => ({
       sku: li.sku,
@@ -332,22 +355,31 @@ export const submitOrderToP21 = createServerFn({ method: "POST" })
       unitPrice: Number(li.unit_price) || 0,
     }));
 
-    const { result } = await runJob(
-      "order.submit",
-      { customerId: order.customer_id, poNumber: order.po_number, lines },
-      60000
-    );
-
-    const p21OrderId = (result as any)?.p21_order_id;
-    if (!p21OrderId) throw new Error("Bridge did not return a P21 order id");
+    let p21OrderId: string | undefined;
+    try {
+      const { result } = await runJob(
+        "order.submit",
+        { customerId: order.customer_id, poNumber: order.po_number, lines, idempotencyKey: data.idempotencyKey },
+        60000
+      );
+      p21OrderId = (result as any)?.p21_order_id;
+      if (!p21OrderId) throw new Error("Bridge did not return a P21 order id");
+    } catch (e) {
+      // Release the claim so the order can be retried.
+      await supabaseAdmin
+        .from("orders")
+        .update({ status: "pending_review" })
+        .eq("id", order.id)
+        .eq("status", "approved")
+        .is("p21_order_id", null);
+      throw e;
+    }
 
     await supabaseAdmin
       .from("orders")
       .update({
         status: "submitted_to_p21",
         p21_order_id: p21OrderId,
-        reviewed_by: userId,
-        reviewed_at: new Date().toISOString(),
         p21_submitted_at: new Date().toISOString(),
       })
       .eq("id", order.id);
@@ -365,7 +397,7 @@ export const submitOrderToP21 = createServerFn({ method: "POST" })
       message: `Order ${p21OrderId} submitted to P21 (${order.customer_name})`,
     });
 
-    return { p21OrderId };
+    return { p21OrderId, alreadySubmitted: false };
   });
 
 const SqlSchema = z.object({
