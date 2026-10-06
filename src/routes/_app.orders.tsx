@@ -190,7 +190,6 @@ function OrdersPage() {
               </DialogContent>
             </Dialog>
             <SifXmlImporter scope="orders" onImported={load} />
-            <Button variant="outline"><Plus className="w-4 h-4 mr-2" /> New Order</Button>
           </>
         }
       />
@@ -336,7 +335,11 @@ function OrdersPage() {
                 </div>
                 {selected.status === "pending_review" && (
                   <div className="flex gap-2 flex-wrap">
-                    <Button onClick={() => approve(selected)} className="flex-1"><CheckCircle2 className="w-4 h-4 mr-2" /> Approve & Submit to P21</Button>
+                    <Button onClick={() => setConfirmApprove(selected)} disabled={submitting} className="flex-1">
+                      {submitting
+                        ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting…</>
+                        : <><CheckCircle2 className="w-4 h-4 mr-2" /> Approve & Submit to P21</>}
+                    </Button>
                     <Button variant="outline" disabled={reExtracting} onClick={async () => {
                       setReExtracting(true);
                       try {
@@ -349,7 +352,7 @@ function OrdersPage() {
                       <RefreshCw className={`w-4 h-4 mr-2 ${reExtracting ? "animate-spin" : ""}`} />
                       Re-extract line items
                     </Button>
-                    <Button variant="outline" onClick={() => reject(selected)}><X className="w-4 h-4 mr-2" /> Reject</Button>
+                    <Button variant="outline" disabled={submitting || rejecting} onClick={() => setConfirmReject(selected)}><X className="w-4 h-4 mr-2" /> Reject</Button>
                   </div>
                 )}
                 {selected.p21_order_id && <p className="text-sm text-muted-foreground">P21 ID: {selected.p21_order_id}</p>}
@@ -358,6 +361,53 @@ function OrdersPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={!!confirmApprove} onOpenChange={(o) => { if (!o && !submitting) setConfirmApprove(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Submit this order to P21?</AlertDialogTitle>
+            <AlertDialogDescription>This creates a real order in P21. Check the summary first.</AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirmApprove && (
+            <dl className="grid grid-cols-2 gap-y-1 text-sm">
+              <dt className="text-muted-foreground">Customer</dt><dd className="font-medium">{confirmApprove.customer_name}</dd>
+              <dt className="text-muted-foreground">PO #</dt><dd>{confirmApprove.po_number ?? "—"}</dd>
+              <dt className="text-muted-foreground">Lines</dt><dd>{(confirmApprove.line_items as any[])?.length ?? 0}</dd>
+              <dt className="text-muted-foreground">Total</dt><dd className="font-medium">${orderTotal(confirmApprove).toFixed(2)}</dd>
+            </dl>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={submitting}
+              onClick={(e) => { e.preventDefault(); if (confirmApprove) approve(confirmApprove); }}
+            >
+              {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting…</> : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmReject} onOpenChange={(o) => { if (!o && !rejecting) setConfirmReject(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject this order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmReject ? `${confirmReject.customer_name} · PO ${confirmReject.po_number ?? "—"} will be marked rejected and won't be sent to P21.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={rejecting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={rejecting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); if (confirmReject) reject(confirmReject); }}
+            >
+              {rejecting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Rejecting…</> : "Reject order"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
