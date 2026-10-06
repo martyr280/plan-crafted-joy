@@ -52,35 +52,47 @@ export async function submitOrder(payload) {
     return { ...result, replayed: true };
   }
 
-  const promise = (async () => {
-    // Re-check in case another process wrote the store meanwhile.
-    const again = loadStore();
-    if (again[key]) return again[key];
+  // Register the in-flight entry before any await so a concurrent submit for
+  // the same key always finds it and coalesces instead of creating a duplicate.
+  let resolveFn, rejectFn;
+  const promise = new Promise((resolve, reject) => {
+    resolveFn = resolve;
+    rejectFn = reject;
+  });
+  inflight.set(key, promise);
 
-    if (!customerId || !Array.isArray(lines) || lines.length === 0) {
-      throw new Error("customerId and lines[] are required");
+  (async () => {
+    try {
+      // Re-check in case another process wrote the store meanwhile.
+      const again = loadStore();
+      if (again[key]) {
+        resolveFn(again[key]);
+        return;
+      }
+      if (!customerId || !Array.isArray(lines) || lines.length === 0) {
+        throw new Error("customerId and lines[] are required");
+      }
+      // TODO: replace with the real P21 order-creation stored procedure / API.
+      // This is a placeholder that returns a fake order number so the bridge can be
+      // tested end-to-end before the production sproc is wired up.
+      const rows = await query("SELECT GETDATE() AS now");
+      const fakeOrderNo = `P21-${Math.floor(Math.random() * 900000 + 100000)}`;
+      const result = {
+        p21_order_id: fakeOrderNo,
+        submitted_at: rows[0].now,
+        customerId,
+        poNumber,
+        lineCount: lines.length,
+      };
+      again[key] = result;
+      saveStore(again);
+      resolveFn(result);
+    } catch (e) {
+      rejectFn(e);
+    } finally {
+      inflight.delete(key);
     }
-    // TODO: replace with the real P21 order-creation stored procedure / API.
-    // This is a placeholder that returns a fake order number so the bridge can be
-    // tested end-to-end before the production sproc is wired up.
-    const rows = await query("SELECT GETDATE() AS now");
-    const fakeOrderNo = `P21-${Math.floor(Math.random() * 900000 + 100000)}`;
-    const result = {
-      p21_order_id: fakeOrderNo,
-      submitted_at: rows[0].now,
-      customerId,
-      poNumber,
-      lineCount: lines.length,
-    };
-    again[key] = result;
-    saveStore(again);
-    return result;
   })();
 
-  inflight.set(key, promise);
-  try {
-    return await promise;
-  } finally {
-    inflight.delete(key);
-  }
+  return await promise;
 }
