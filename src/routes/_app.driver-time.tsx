@@ -523,8 +523,8 @@ function ragOf(min: number, greenUnder: number, redAtOrOver: number): Rag {
 }
 
 const RAG_CLASS: Record<Rag, string> = {
-  green: "text-success bg-success/10",
-  yellow: "text-warning bg-warning/10",
+  green: "text-success-text bg-success/10",
+  yellow: "text-warning-text bg-warning/10",
   red: "text-destructive bg-destructive/10",
   none: "text-muted-foreground",
 };
@@ -668,7 +668,7 @@ function DiagnosticsTab() {
               : "border-destructive/50 bg-destructive/10 p-5"
           }
         >
-          <div className={`flex items-start gap-3 ${verdict.ok ? "text-success" : "text-destructive"}`}>
+          <div className={`flex items-start gap-3 ${verdict.ok ? "text-success-text" : "text-destructive"}`}>
             {verdict.ok ? <CheckCircle2 className="mt-0.5 h-6 w-6" /> : <AlertTriangle className="mt-0.5 h-6 w-6" />}
             <p className="text-lg font-semibold leading-snug">{verdict.text}</p>
           </div>
@@ -733,7 +733,7 @@ function DiagnosticsTab() {
                 {d.probes.map((p: any) => (
                   <div key={p.endpoint} className="flex items-start gap-2 text-sm">
                     {p.ok
-                      ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
+                      ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-success-text" />
                       : <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />}
                     <div>
                       <div>{p.endpoint}</div>
@@ -841,8 +841,8 @@ function DiagnosticsTab() {
                 />
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
-                <span className="rounded px-2 py-1 text-success bg-success/10">&lt; {greenUnder} min</span>
-                <span className="rounded px-2 py-1 text-warning bg-warning/10">
+                <span className="rounded px-2 py-1 text-success-text bg-success/10">&lt; {greenUnder} min</span>
+                <span className="rounded px-2 py-1 text-warning-text bg-warning/10">
                   {greenUnder}–{Math.max(greenUnder, redAtOrOver - 1)} min
                 </span>
                 <span className="rounded px-2 py-1 text-destructive bg-destructive/10">≥ {redAtOrOver} min</span>

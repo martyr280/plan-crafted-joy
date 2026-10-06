@@ -129,9 +129,9 @@ function SalesPage() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
-          <div className="p-4 font-semibold border-b">Top customers {live && <span className="text-xs text-success ml-2">live</span>}</div>
+          <div className="p-4 font-semibold border-b">Top customers {live && <span className="text-xs text-success-text ml-2">live</span>}</div>
           <Table><TableHeader><TableRow><TableHead>Customer</TableHead><TableHead>Orders</TableHead><TableHead>Net</TableHead><TableHead>vs prior</TableHead></TableRow></TableHeader>
-            <TableBody>{top.map((t) => <TableRow key={t.name}><TableCell>{t.name}</TableCell><TableCell>{t.orders}</TableCell><TableCell>${Number(t.net).toLocaleString()}</TableCell><TableCell className={t.pct >= 0 ? "text-success" : "text-destructive"}>{t.pct}%</TableCell></TableRow>)}</TableBody>
+            <TableBody>{top.map((t) => <TableRow key={t.name}><TableCell>{t.name}</TableCell><TableCell>{t.orders}</TableCell><TableCell>${Number(t.net).toLocaleString()}</TableCell><TableCell className={t.pct >= 0 ? "text-success-text" : "text-destructive"}>{t.pct}%</TableCell></TableRow>)}</TableBody>
           </Table>
         </Card>
         <Card>

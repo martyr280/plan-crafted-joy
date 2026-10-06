@@ -113,7 +113,7 @@ function EmailMonitorPage() {
           <div className="text-2xl font-semibold mt-1">{totals.total}</div>
         </Card>
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-success text-xs"><CheckCircle2 className="w-3 h-3" /> Delivered</div>
+          <div className="flex items-center gap-2 text-success-text text-xs"><CheckCircle2 className="w-3 h-3" /> Delivered</div>
           <div className="text-2xl font-semibold mt-1">{totals.delivered}</div>
         </Card>
         <Card className="p-4">
