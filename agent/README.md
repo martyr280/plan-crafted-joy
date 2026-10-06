@@ -176,6 +176,10 @@ To wire up the schedule, set two values:
 
 Manual sync (admin only) is also available via the `syncE2GReport` server function — wire it to a button in Settings if you want one-click resyncs.
 
+### Idempotency
+
+`order.submit` requires `idempotencyKey` (non-empty string). Successful results are persisted locally and replayed on repeat submits (`replayed: true`), and concurrent submits for the same key are coalesced into one. The store file is `order-submit-idempotency.json` under `AGENT_DATA_DIR` (or next to the exe, else the working directory). Failed submits are not stored.
+
 ## Adding new job kinds
 
 1. Drop a new file in `handlers/`, exporting an `async function (payload) { ... }`.
