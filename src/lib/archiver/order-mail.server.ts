@@ -6,7 +6,7 @@
  * In SHADOW nothing here calls performAction, touches archiver_learned (except the
  * admin-only forget), or creates filings / file.* jobs.
  */
-import { buildClassifyConfig, compileDotNetRegex, isFreeMailDomain, splitList, type LearnedStore } from "./classify";
+import { buildClassifyConfig, compileDotNetRegex, isFreeMailDomain, type LearnedStore } from "./classify";
 import { learnFromHuman, type HumanAction } from "./filing";
 import { buildImportPlan, type DesktopFiles } from "./importer";
 import {
@@ -557,4 +557,3 @@ export async function probeArchive(p: Ports, a: Actor) {
   return { id: data.id as string, existing: false };
 }
 
-export { splitList };
