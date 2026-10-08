@@ -254,7 +254,16 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
             dispatchReconciler = await runDispatchReconcilerTick(now);
           } catch (e: any) { dispatchReconciler = { ok: false, error: e?.message ?? String(e) }; }
 
-          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, truckCapacityFreeze, truckCapacitySharePoint, salesReports, capacityAlerts, driverTime, websiteExport, dispatchBuilder, dispatchReconciler, ranAt: new Date().toISOString() });
+          // Order Mail (desktop Email Archiver replacement): sweep the watched folder every tick.
+          // Shadow mode by default (records decisions only). Dormant until a Microsoft connector is
+          // linked AND a mailbox row is enabled. Lock-guarded inside; never throws.
+          let orderMail: any = null;
+          try {
+            const { runArchiverTick } = await import("@/lib/archiver/archiver.server");
+            orderMail = await runArchiverTick(now, "cron");
+          } catch (e: any) { orderMail = { ok: false, error: e?.message ?? String(e) }; }
+
+          return Response.json({ ok: true, ...result, spiff, truckCapacity, truckCapacityRetrain, truckCapacityFreeze, truckCapacitySharePoint, salesReports, capacityAlerts, driverTime, websiteExport, dispatchBuilder, dispatchReconciler, orderMail, ranAt: new Date().toISOString() });
 
 
 
