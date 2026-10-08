@@ -42,3 +42,20 @@ describe("desktop import plan", () => {
     expect(noteKeyToLedgerKey("2026-10-07T09:00:00|Subject")).toBe("2026-10-07T09:00:00|Subject");
   });
 });
+
+import { withoutProtected } from "../importer";
+describe("re-import protection", () => {
+  it("keeps web-created rules and forgotten learned rows out of a desktop re-import", () => {
+    const plan: any = {
+      contentRules: [{ id: "r1" }, { id: "r2" }], internalRoutes: [{ address: "JPerry@ndiof.com" }, { address: "x@ndiof.com" }],
+      multiRoutes: [{ kind: "domain", value: "dealer.com" }], learned: [{ bucket: "domain", key: "ndiof.com" }, { bucket: "sender", key: "a@b.com" }],
+    };
+    const r = withoutProtected(plan, { contentRuleIds: ["r2"], internalRouteAddresses: ["jperry@ndiof.com"],
+      multiRouteKeys: ["domain|DEALER.com"], forgottenLearned: ["domain|ndiof.com"] });
+    expect(r.plan.contentRules).toEqual([{ id: "r1" }]);
+    expect(r.plan.internalRoutes).toEqual([{ address: "x@ndiof.com" }]);
+    expect(r.plan.multiRoutes).toEqual([]);
+    expect(r.plan.learned).toEqual([{ bucket: "sender", key: "a@b.com" }]);
+    expect(r.skipped).toEqual({ content_rules: 1, internal_routes: 1, multi_routes: 1, learned: 1 });
+  });
+});

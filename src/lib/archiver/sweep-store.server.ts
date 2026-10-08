@@ -26,10 +26,11 @@ async function inChunks<T>(values: string[], f: (chunk: string[]) => Promise<T[]
 export async function loadArchiverKnowledge(): Promise<Knowledge> {
   const teams = await fetchAll<any>("archiver_teams", "key, display_name, folder_path, sender_domains, keywords, kind, active, sort_order",
     (q) => q.eq("kind", "team").eq("active", true).order("sort_order"));
-  const learnedRows = await fetchAll<any>("archiver_learned", "bucket, key, team_key, count, source, first_at, last_at, root, run");
-  const rules = await fetchAll<any>("archiver_content_rules", "id, phrase, team_key, scope, match, weight", (q) => q.order("id"));
-  const routes = await fetchAll<any>("archiver_internal_routes", "address, team_key");
-  const multi = await fetchAll<any>("archiver_multi_routes", "id, kind, value, team_keys, scope, match", (q) => q.order("created_at"));
+  const learnedRows = await fetchAll<any>("archiver_learned", "bucket, key, team_key, count, source, first_at, last_at, root, run",
+    (q) => q.neq("source", "forgotten"));
+  const rules = await fetchAll<any>("archiver_content_rules", "id, phrase, team_key, scope, match, weight", (q) => q.eq("enabled", true).order("id"));
+  const routes = await fetchAll<any>("archiver_internal_routes", "address, team_key", (q) => q.eq("enabled", true));
+  const multi = await fetchAll<any>("archiver_multi_routes", "id, kind, value, team_keys, scope, match", (q) => q.eq("enabled", true).order("created_at"));
   const learned: LearnedStore = { senders: {}, domains: {} };
   for (const r of learnedRows) {
     (r.bucket === "sender" ? learned.senders : learned.domains)[r.key] = {

@@ -121,3 +121,34 @@ export function buildImportPlan(f: DesktopFiles, opts: ImportOptions = {}) {
 }
 
 export type ImportPlan = ReturnType<typeof buildImportPlan>;
+
+/**
+ * Rows people changed in the web app win over a later desktop import:
+ * - content rules / internal routes / multi routes that already exist with source='web' are left alone
+ *   (matched on the same natural key the importer upserts on: id, address, kind+value);
+ * - learned rows marked 'forgotten' stay forgotten (otherwise a re-import would bring back
+ *   exactly the bad entries that were removed, e.g. ndiof.com on 7 Oct 2026).
+ */
+export interface ProtectedKeys {
+  contentRuleIds: Iterable<string>;
+  internalRouteAddresses: Iterable<string>;
+  multiRouteKeys: Iterable<string>; // `${kind}|${value}` lower-case
+  forgottenLearned: Iterable<string>; // `${bucket}|${key}` lower-case
+}
+export function withoutProtected(plan: ImportPlan, p: ProtectedKeys): { plan: ImportPlan; skipped: Record<string, number> } {
+  const ids = new Set(Array.from(p.contentRuleIds, String));
+  const addrs = new Set(Array.from(p.internalRouteAddresses, (a) => String(a).toLowerCase()));
+  const multi = new Set(Array.from(p.multiRouteKeys, (k) => String(k).toLowerCase()));
+  const forgotten = new Set(Array.from(p.forgottenLearned, (k) => String(k).toLowerCase()));
+  const contentRules = plan.contentRules.filter((r) => !ids.has(String(r.id)));
+  const internalRoutes = plan.internalRoutes.filter((r) => !addrs.has(String(r.address).toLowerCase()));
+  const multiRoutes = plan.multiRoutes.filter((r) => !multi.has(`${r.kind}|${r.value}`.toLowerCase()));
+  const learned = plan.learned.filter((r) => !forgotten.has(`${r.bucket}|${r.key}`.toLowerCase()));
+  return {
+    plan: { ...plan, contentRules, internalRoutes, multiRoutes, learned },
+    skipped: {
+      content_rules: plan.contentRules.length - contentRules.length, internal_routes: plan.internalRoutes.length - internalRoutes.length,
+      multi_routes: plan.multiRoutes.length - multiRoutes.length, learned: plan.learned.length - learned.length,
+    },
+  };
+}

@@ -165,6 +165,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           created_by_name: string
+          enabled: boolean
           hits: number
           id: string
           last_hit_at: string | null
@@ -180,6 +181,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           created_by_name?: string
+          enabled?: boolean
           hits?: number
           id: string
           last_hit_at?: string | null
@@ -195,6 +197,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           created_by_name?: string
+          enabled?: boolean
           hits?: number
           id?: string
           last_hit_at?: string | null
@@ -350,6 +353,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           created_by_name: string
+          enabled: boolean
           note: string
           source: string
           team_key: string
@@ -359,6 +363,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           created_by_name?: string
+          enabled?: boolean
           note?: string
           source?: string
           team_key: string
@@ -368,6 +373,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           created_by_name?: string
+          enabled?: boolean
           note?: string
           source?: string
           team_key?: string
@@ -517,6 +523,7 @@ export type Database = {
           evidence: string | null
           excluded_reason: string | null
           graph_id: string | null
+          human_team_key: string | null
           id: string
           internet_message_id: string | null
           is_verification: boolean
@@ -550,6 +557,7 @@ export type Database = {
           evidence?: string | null
           excluded_reason?: string | null
           graph_id?: string | null
+          human_team_key?: string | null
           id?: string
           internet_message_id?: string | null
           is_verification?: boolean
@@ -583,6 +591,7 @@ export type Database = {
           evidence?: string | null
           excluded_reason?: string | null
           graph_id?: string | null
+          human_team_key?: string | null
           id?: string
           internet_message_id?: string | null
           is_verification?: boolean
@@ -620,6 +629,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           created_by_name: string
+          enabled: boolean
           hits: number
           id: string
           kind: string
@@ -634,6 +644,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           created_by_name?: string
+          enabled?: boolean
           hits?: number
           id: string
           kind: string
@@ -648,6 +659,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           created_by_name?: string
+          enabled?: boolean
           hits?: number
           id?: string
           kind?: string
