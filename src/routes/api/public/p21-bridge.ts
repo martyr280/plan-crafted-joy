@@ -70,10 +70,16 @@ export const Route = createFileRoute("/api/public/p21-bridge")({
 
         if (action === "claim") {
           const limit = Math.min(Math.max(Number(body.limit ?? 5), 1), 25);
-          const { data: pending } = await supabaseAdmin
+          let pendingQuery = supabaseAdmin
             .from("p21_bridge_jobs")
             .select("id")
-            .eq("status", "pending")
+            .eq("status", "pending");
+          if (Array.isArray(body.kinds) && body.kinds.length > 0) {
+            pendingQuery = pendingQuery.in("kind", body.kinds.map(String));
+          } else {
+            pendingQuery = pendingQuery.not("kind", "in", '("file.save","file.move","archive.probe","archive.ledger.read")');
+          }
+          const { data: pending } = await pendingQuery
             .order("created_at", { ascending: true })
             .limit(limit);
           const ids = (pending ?? []).map((r) => r.id);
