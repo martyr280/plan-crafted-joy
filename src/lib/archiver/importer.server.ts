@@ -5,7 +5,7 @@
  * caller decides; see removeLearned in buildImportPlan).
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import type { ImportPlan } from "./importer";
+import { withoutProtected, type ImportPlan, type ProtectedKeys } from "./importer";
 
 /** 'yyyy-MM-ddTHH:mm:ss' wall-clock in America/Chicago -> ISO UTC. Empty/invalid -> null. */
 export function chicagoLocalToIso(local: string): string | null {
@@ -26,6 +26,22 @@ export function chicagoLocalToIso(local: string): string | null {
   return new Date(t).toISOString();
 }
 
+/** Keys the importer must not overwrite: web-created rules/routes and forgotten learned rows. */
+export async function loadProtectedKeys(): Promise<ProtectedKeys> {
+  const db = supabaseAdmin as any;
+  const read = async (table: string, cols: string, f: (q: any) => any) => {
+    const { data, error } = await f(db.from(table).select(cols)).limit(10000);
+    if (error) throw new Error(`${table} read failed: ${error.message}`);
+    return (data ?? []) as any[];
+  };
+  return {
+    contentRuleIds: (await read("archiver_content_rules", "id", (q) => q.eq("source", "web"))).map((r) => r.id),
+    internalRouteAddresses: (await read("archiver_internal_routes", "address", (q) => q.eq("source", "web"))).map((r) => r.address),
+    multiRouteKeys: (await read("archiver_multi_routes", "kind, value", (q) => q.eq("source", "web"))).map((r) => `${r.kind}|${r.value}`),
+    forgottenLearned: (await read("archiver_learned", "bucket, key", (q) => q.eq("source", "forgotten"))).map((r) => `${r.bucket}|${r.key}`),
+  };
+}
+
 async function upsertBatches(table: string, rows: Record<string, unknown>[], onConflict: string) {
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await (supabaseAdmin as any).from(table).upsert(rows.slice(i, i + 500), { onConflict });
@@ -38,6 +54,8 @@ export async function applyImportPlan(
   actor: { userId?: string | null; userName: string; source: string; removeLearned?: Array<{ bucket: string; key: string }> },
 ) {
   const now = new Date().toISOString();
+  const guarded = withoutProtected(plan, await loadProtectedKeys());
+  plan = guarded.plan;
   if (plan.teams.length) {
     await upsertBatches("archiver_teams", plan.teams.map((t) => ({ ...t, updated_at: now })), "key");
   }
@@ -80,7 +98,7 @@ export async function applyImportPlan(
     const { error } = await (supabaseAdmin as any).from("app_settings").upsert({ key: "archiver", value, updated_at: now }, { onConflict: "key" });
     if (error) throw new Error(`settings upsert failed: ${error.message}`);
   }
-  const counts = { ...plan.counts, learned_deleted: learnedDeleted };
+  const counts = { ...plan.counts, learned_deleted: learnedDeleted, skipped_protected: guarded.skipped };
   await (supabaseAdmin as any).from("archiver_actions").insert({
     action: "import", user_id: actor.userId ?? null, user_name: actor.userName,
     detail: { source: actor.source, counts, warnings: plan.warnings },
