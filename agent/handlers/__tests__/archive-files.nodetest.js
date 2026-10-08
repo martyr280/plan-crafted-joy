@@ -1,4 +1,4 @@
-// Run: node --test agent/handlers/__tests__/archive-files.test.js
+// Run: node --test agent/handlers/__tests__/archive-files.nodetest.js   (named .nodetest.js so the app's vitest suite does not collect it)
 // Offline: a temp folder stands in for ARCHIVE_ROOT; downloads use an injected fake fetch.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";

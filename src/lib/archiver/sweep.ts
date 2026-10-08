@@ -86,6 +86,7 @@ export interface SweepCounts {
   by_team: Record<string, number>;
   desktop_compared: number;
   desktop_agree: number;
+  filing_setup_failed: number;
   delta_complete: boolean;
 }
 
@@ -121,7 +122,7 @@ export async function sweepMailbox(mb: MailboxRow, deps: SweepDeps, limits = { m
   const startAt = mb.start_at ? new Date(mb.start_at) : null;
   const counts: SweepCounts = {
     pages: 0, seen: 0, removed: 0, before_start: 0, already_known: 0, duplicate_copy: 0, excluded: 0,
-    outlook_processed_skipped: 0, classified: 0, by_team: {}, desktop_compared: 0, desktop_agree: 0, delta_complete: false,
+    outlook_processed_skipped: 0, classified: 0, by_team: {}, desktop_compared: 0, desktop_agree: 0, filing_setup_failed: 0, delta_complete: false,
   };
 
   let folderId = mb.folder_id;
@@ -199,7 +200,10 @@ export async function sweepMailbox(mb: MailboxRow, deps: SweepDeps, limits = { m
         counts.desktop_compared++;
         if (row.desktop_team_key === d.customerKey) counts.desktop_agree++;
       }
-      if (live && deps.onLiveDecision && d.customerKey !== "SKIPPED") await deps.onLiveDecision(ins.id, row, m, d);
+      if (live && deps.onLiveDecision && d.customerKey !== "SKIPPED") {
+        // A failure here leaves the email 'queued' with no filings; retryOrphans() picks it up.
+        try { await deps.onLiveDecision(ins.id, row, m, d); } catch { counts.filing_setup_failed++; }
+      }
     }
 
     // Persist progress after every page: a crash resumes here, and unique keys stop double inserts.
