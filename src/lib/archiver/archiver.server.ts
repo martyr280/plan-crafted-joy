@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { GraphClient, type GraphAuth } from "./graph";
 import { sweepMailbox, type SweepCounts } from "./sweep";
 import { listEnabledMailboxes, supabaseSweepStore } from "./sweep-store.server";
+import { makeOnLiveDecision, purgeOldMime, reconcileFilings, retryOrphans, syncDesktopLedger } from "./filing.server";
 
 const db = supabaseAdmin as any;
 const LOCK_KEY = "archiver_lock";
@@ -59,13 +60,15 @@ export async function runArchiverTick(now = new Date(), trigger: "cron" | "manua
     const holder = `${trigger}-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`;
     if (!(await acquireLock(holder, now))) return { ok: true, skipped: "locked" };
     const results: Array<{ mailbox: string; counts?: SweepCounts; error?: string }> = [];
+    const after: Record<string, unknown> = {};
     try {
       const graph = new GraphClient(auth);
       for (const mb of mailboxes) {
         const startedAt = new Date().toISOString();
         const mode = settings.mode === "live" && settings.filing_enabled === true ? "live" : "shadow";
         try {
-          const counts = await sweepMailbox(mb, { store: supabaseSweepStore, graph, settings, now });
+          const counts = await sweepMailbox(mb, { store: supabaseSweepStore, graph, settings, now,
+            onLiveDecision: mode === "live" ? makeOnLiveDecision(graph, mb.mailbox) : undefined });
           results.push({ mailbox: mb.mailbox, counts });
           await db.from("archiver_mailboxes").update({ last_sweep_at: now.toISOString(), last_error: null }).eq("id", mb.id);
           if (counts.classified > 0 || counts.excluded > 0 || trigger === "manual") {
@@ -80,10 +83,18 @@ export async function runArchiverTick(now = new Date(), trigger: "cron" | "manua
             ended_at: new Date().toISOString(), status: "error", error: message });
         }
       }
+      // Each follow-up step is isolated: one failing never blocks the others.
+      const step = async (name: string, f: () => Promise<unknown>) => {
+        try { after[name] = await f(); } catch (e: any) { after[name] = { error: String(e?.message ?? e).slice(0, 300) }; }
+      };
+      await step("orphans", () => retryOrphans(graph, now));
+      await step("reconcile", () => reconcileFilings(now, graph));
+      if (settings.ledger_sync_enabled !== false) await step("desktopLedger", () => syncDesktopLedger(now));
+      if (now.getUTCHours() === 8 && now.getUTCMinutes() < 2) await step("purge", () => purgeOldMime(now));
     } finally {
       await releaseLock(holder);
     }
-    return { ok: results.every((r) => !r.error), results };
+    return { ok: results.every((r) => !r.error), results, after };
   } catch (e: any) {
     return { ok: false, error: String(e?.message ?? e) };
   }
