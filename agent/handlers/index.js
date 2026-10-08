@@ -8,6 +8,7 @@ import { pricerSync } from "./pricer-sync.js";
 import { sqlSelect } from "./sql-select.js";
 import { websiteExportSftp } from "./website-export.js";
 import { sftpProbe } from "./sftp-probe.js";
+import { fileSave, fileMove, archiveProbe, archiveLedgerRead } from "./archive-files.js";
 
 // Allowlist of job kinds the agent will execute. The app cannot ask for
 // anything not listed here — keeps SQL safe and predictable.
@@ -23,4 +24,8 @@ export const handlers = {
   "sql.select": sqlSelect,
   "website.export.sftp": websiteExportSftp,
   "sftp.probe": sftpProbe,
+  "file.save": fileSave,
+  "file.move": fileMove,
+  "archive.probe": archiveProbe,
+  "archive.ledger.read": archiveLedgerRead,
 };

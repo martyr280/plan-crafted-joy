@@ -15,7 +15,7 @@ if (!BRIDGE_URL || !BRIDGE_SECRET) {
   process.exit(1);
 }
 
-const VERSION = "1.4.1";
+const VERSION = "1.5.0";
 const REQUEST_TIMEOUT_MS = Number(process.env.BRIDGE_REQUEST_TIMEOUT_MS ?? 30000);
 const pollMs = Number(POLL_INTERVAL_MS);
 
@@ -102,7 +102,7 @@ async function tick() {
       lastAliveLog = Date.now();
       console.error(`[${new Date().toISOString()}] heartbeat ok`);
     }
-    const { jobs } = await call("claim", { limit: 5 });
+    const { jobs } = await call("claim", { limit: 5, kinds: Object.keys(handlers) });
     for (const job of jobs ?? []) await runJob(job);
   } catch (e) {
     console.error("tick error:", e?.message ?? e);
