@@ -113,6 +113,689 @@ export type Database = {
         }
         Relationships: []
       }
+      archiver_actions: {
+        Row: {
+          action: string
+          created_at: string
+          detail: Json
+          from_team: string | null
+          id: string
+          message_id: string | null
+          team_keys: string[]
+          to_team: string | null
+          user_id: string | null
+          user_name: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          detail?: Json
+          from_team?: string | null
+          id?: string
+          message_id?: string | null
+          team_keys?: string[]
+          to_team?: string | null
+          user_id?: string | null
+          user_name?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          detail?: Json
+          from_team?: string | null
+          id?: string
+          message_id?: string | null
+          team_keys?: string[]
+          to_team?: string | null
+          user_id?: string | null
+          user_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archiver_actions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "archiver_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      archiver_content_rules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          created_by_name: string
+          hits: number
+          id: string
+          last_hit_at: string | null
+          match: string
+          note: string
+          phrase: string
+          scope: string
+          source: string
+          team_key: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          hits?: number
+          id: string
+          last_hit_at?: string | null
+          match?: string
+          note?: string
+          phrase: string
+          scope?: string
+          source?: string
+          team_key: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          hits?: number
+          id?: string
+          last_hit_at?: string | null
+          match?: string
+          note?: string
+          phrase?: string
+          scope?: string
+          source?: string
+          team_key?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archiver_content_rules_team_key_fkey"
+            columns: ["team_key"]
+            isOneToOne: false
+            referencedRelation: "archiver_teams"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      archiver_decisions: {
+        Row: {
+          also_team_keys: string[]
+          ambiguity: string
+          confidence: number
+          decided_at: string
+          destination: string
+          engine_version: string
+          evidence: string
+          id: string
+          message_id: string
+          mode: string
+          route_source: string
+          rule_id: string
+          stem: string
+          team_key: string
+        }
+        Insert: {
+          also_team_keys?: string[]
+          ambiguity?: string
+          confidence: number
+          decided_at?: string
+          destination?: string
+          engine_version: string
+          evidence?: string
+          id?: string
+          message_id: string
+          mode: string
+          route_source?: string
+          rule_id?: string
+          stem: string
+          team_key: string
+        }
+        Update: {
+          also_team_keys?: string[]
+          ambiguity?: string
+          confidence?: number
+          decided_at?: string
+          destination?: string
+          engine_version?: string
+          evidence?: string
+          id?: string
+          message_id?: string
+          mode?: string
+          route_source?: string
+          rule_id?: string
+          stem?: string
+          team_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archiver_decisions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "archiver_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      archiver_filings: {
+        Row: {
+          bridge_job_id: string | null
+          bytes: number | null
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          file_name: string
+          id: string
+          idempotency_key: string
+          kind: string
+          message_id: string
+          rel_path: string
+          sha256: string | null
+          status: string
+          team_key: string
+          written_path: string | null
+        }
+        Insert: {
+          bridge_job_id?: string | null
+          bytes?: number | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          file_name: string
+          id?: string
+          idempotency_key: string
+          kind: string
+          message_id: string
+          rel_path: string
+          sha256?: string | null
+          status?: string
+          team_key: string
+          written_path?: string | null
+        }
+        Update: {
+          bridge_job_id?: string | null
+          bytes?: number | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          file_name?: string
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          message_id?: string
+          rel_path?: string
+          sha256?: string | null
+          status?: string
+          team_key?: string
+          written_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archiver_filings_bridge_job_id_fkey"
+            columns: ["bridge_job_id"]
+            isOneToOne: false
+            referencedRelation: "p21_bridge_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "archiver_filings_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "archiver_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      archiver_internal_routes: {
+        Row: {
+          address: string
+          created_at: string
+          created_by: string | null
+          created_by_name: string
+          note: string
+          source: string
+          team_key: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          note?: string
+          source?: string
+          team_key: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          note?: string
+          source?: string
+          team_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archiver_internal_routes_team_key_fkey"
+            columns: ["team_key"]
+            isOneToOne: false
+            referencedRelation: "archiver_teams"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      archiver_learned: {
+        Row: {
+          bucket: string
+          count: number
+          first_at: string
+          key: string
+          last_at: string
+          root: string
+          run: string
+          source: string
+          team_key: string
+          updated_at: string
+        }
+        Insert: {
+          bucket: string
+          count?: number
+          first_at?: string
+          key: string
+          last_at?: string
+          root?: string
+          run?: string
+          source: string
+          team_key: string
+          updated_at?: string
+        }
+        Update: {
+          bucket?: string
+          count?: number
+          first_at?: string
+          key?: string
+          last_at?: string
+          root?: string
+          run?: string
+          source?: string
+          team_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      archiver_ledger: {
+        Row: {
+          destination: string
+          entry_id: string
+          filed_at: string
+          host: string
+          imported_at: string
+          key: string
+          source: string
+          stem: string
+          user_name: string
+        }
+        Insert: {
+          destination?: string
+          entry_id?: string
+          filed_at?: string
+          host?: string
+          imported_at?: string
+          key: string
+          source: string
+          stem?: string
+          user_name?: string
+        }
+        Update: {
+          destination?: string
+          entry_id?: string
+          filed_at?: string
+          host?: string
+          imported_at?: string
+          key?: string
+          source?: string
+          stem?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
+      archiver_mailboxes: {
+        Row: {
+          client_state: string | null
+          created_at: string
+          delta_link: string | null
+          enabled: boolean
+          folder_id: string | null
+          folder_path: string
+          id: string
+          last_error: string | null
+          last_sweep_at: string | null
+          mailbox: string
+          start_at: string | null
+          subscription_expires_at: string | null
+          subscription_id: string | null
+        }
+        Insert: {
+          client_state?: string | null
+          created_at?: string
+          delta_link?: string | null
+          enabled?: boolean
+          folder_id?: string | null
+          folder_path: string
+          id?: string
+          last_error?: string | null
+          last_sweep_at?: string | null
+          mailbox: string
+          start_at?: string | null
+          subscription_expires_at?: string | null
+          subscription_id?: string | null
+        }
+        Update: {
+          client_state?: string | null
+          created_at?: string
+          delta_link?: string | null
+          enabled?: boolean
+          folder_id?: string | null
+          folder_path?: string
+          id?: string
+          last_error?: string | null
+          last_sweep_at?: string | null
+          mailbox?: string
+          start_at?: string | null
+          subscription_expires_at?: string | null
+          subscription_id?: string | null
+        }
+        Relationships: []
+      }
+      archiver_messages: {
+        Row: {
+          also_team_keys: string[]
+          ambiguity: string | null
+          attachment_names: string[]
+          body_text: string
+          confidence: number | null
+          created_at: string
+          desktop_team_key: string | null
+          evidence: string | null
+          excluded_reason: string | null
+          graph_id: string | null
+          id: string
+          internet_message_id: string | null
+          is_verification: boolean
+          ledger_key: string
+          mailbox_id: string | null
+          mode: string
+          outlook_marked_at: string | null
+          received_at: string
+          received_local: string
+          route_source: string | null
+          rule_id: string | null
+          sender_address: string
+          sender_name: string
+          size_bytes: number | null
+          status: string
+          stem: string | null
+          storage_path: string | null
+          subject: string
+          team_key: string | null
+          updated_at: string
+          web_link: string | null
+        }
+        Insert: {
+          also_team_keys?: string[]
+          ambiguity?: string | null
+          attachment_names?: string[]
+          body_text?: string
+          confidence?: number | null
+          created_at?: string
+          desktop_team_key?: string | null
+          evidence?: string | null
+          excluded_reason?: string | null
+          graph_id?: string | null
+          id?: string
+          internet_message_id?: string | null
+          is_verification?: boolean
+          ledger_key: string
+          mailbox_id?: string | null
+          mode?: string
+          outlook_marked_at?: string | null
+          received_at: string
+          received_local: string
+          route_source?: string | null
+          rule_id?: string | null
+          sender_address?: string
+          sender_name?: string
+          size_bytes?: number | null
+          status?: string
+          stem?: string | null
+          storage_path?: string | null
+          subject?: string
+          team_key?: string | null
+          updated_at?: string
+          web_link?: string | null
+        }
+        Update: {
+          also_team_keys?: string[]
+          ambiguity?: string | null
+          attachment_names?: string[]
+          body_text?: string
+          confidence?: number | null
+          created_at?: string
+          desktop_team_key?: string | null
+          evidence?: string | null
+          excluded_reason?: string | null
+          graph_id?: string | null
+          id?: string
+          internet_message_id?: string | null
+          is_verification?: boolean
+          ledger_key?: string
+          mailbox_id?: string | null
+          mode?: string
+          outlook_marked_at?: string | null
+          received_at?: string
+          received_local?: string
+          route_source?: string | null
+          rule_id?: string | null
+          sender_address?: string
+          sender_name?: string
+          size_bytes?: number | null
+          status?: string
+          stem?: string | null
+          storage_path?: string | null
+          subject?: string
+          team_key?: string | null
+          updated_at?: string
+          web_link?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archiver_messages_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "archiver_mailboxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      archiver_multi_routes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          created_by_name: string
+          hits: number
+          id: string
+          kind: string
+          match: string
+          note: string
+          scope: string
+          source: string
+          team_keys: string[]
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          hits?: number
+          id: string
+          kind: string
+          match?: string
+          note?: string
+          scope?: string
+          source?: string
+          team_keys: string[]
+          value: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          hits?: number
+          id?: string
+          kind?: string
+          match?: string
+          note?: string
+          scope?: string
+          source?: string
+          team_keys?: string[]
+          value?: string
+        }
+        Relationships: []
+      }
+      archiver_notes: {
+        Row: {
+          by_name: string
+          created_at: string
+          done: boolean
+          done_at: string | null
+          ledger_key: string
+          message_id: string | null
+          needs_reply: boolean
+          note: string
+          received: string
+          sender: string
+          subject: string
+          team_key: string
+          updated_at: string
+        }
+        Insert: {
+          by_name?: string
+          created_at?: string
+          done?: boolean
+          done_at?: string | null
+          ledger_key: string
+          message_id?: string | null
+          needs_reply?: boolean
+          note?: string
+          received?: string
+          sender?: string
+          subject?: string
+          team_key?: string
+          updated_at?: string
+        }
+        Update: {
+          by_name?: string
+          created_at?: string
+          done?: boolean
+          done_at?: string | null
+          ledger_key?: string
+          message_id?: string | null
+          needs_reply?: boolean
+          note?: string
+          received?: string
+          sender?: string
+          subject?: string
+          team_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archiver_notes_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "archiver_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      archiver_runs: {
+        Row: {
+          counts: Json
+          ended_at: string | null
+          error: string | null
+          id: string
+          mailbox_id: string | null
+          mode: string
+          started_at: string
+          status: string
+          trigger: string
+        }
+        Insert: {
+          counts?: Json
+          ended_at?: string | null
+          error?: string | null
+          id?: string
+          mailbox_id?: string | null
+          mode: string
+          started_at?: string
+          status?: string
+          trigger: string
+        }
+        Update: {
+          counts?: Json
+          ended_at?: string | null
+          error?: string | null
+          id?: string
+          mailbox_id?: string | null
+          mode?: string
+          started_at?: string
+          status?: string
+          trigger?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archiver_runs_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "archiver_mailboxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      archiver_teams: {
+        Row: {
+          active: boolean
+          display_name: string
+          folder_path: string
+          key: string
+          keywords: string[]
+          kind: string
+          sender_domains: string[]
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          display_name: string
+          folder_path: string
+          key: string
+          keywords?: string[]
+          kind?: string
+          sender_domains?: string[]
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          display_name?: string
+          folder_path?: string
+          key?: string
+          keywords?: string[]
+          kind?: string
+          sender_domains?: string[]
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       branch_manager_invites: {
         Row: {
           attempt_count: number
