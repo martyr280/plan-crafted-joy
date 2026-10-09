@@ -9,7 +9,6 @@ import type { Actor, Ports } from "./order-mail.server";
 async function ports(): Promise<Ports> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const arch = await import("./archiver.server");
-  const filing = await import("./filing.server");
   const imp = await import("./importer.server");
   return {
     db: supabaseAdmin as any,
@@ -23,7 +22,8 @@ async function ports(): Promise<Ports> {
     },
     getSettings: arch.getArchiverSettings,
     graphConfigured: (s) => arch.graphStatus(s).configured,
-    performAction: filing.performAction,
+    // filing.server (node:crypto) loads only when a live action actually runs.
+    performAction: async (...a) => (await import("./filing.server")).performAction(...a),
     runTick: () => arch.runArchiverTick(new Date(), "manual"),
     applyImportPlan: imp.applyImportPlan,
   };
