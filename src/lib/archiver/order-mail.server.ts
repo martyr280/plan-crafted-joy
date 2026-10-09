@@ -204,6 +204,24 @@ export interface ListMailInput {
   page: number;
   pageSize: number;
 }
+/** PostgREST .or() text for the mail search box. `,` `(` `)` are the only .or() grammar
+ * characters that could break out of the ilike value, so they are replaced with spaces. */
+export function mailSearchFilter(raw: string | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const t = escapeLike(raw.trim()).replace(/[,()]/g, " ");
+  return `subject.ilike.%${t}%,sender_address.ilike.%${t}%`;
+}
+
+export async function listNeedsReply(p: Ports) {
+  const rows = await fetchAll(
+    p,
+    "archiver_notes",
+    "ledger_key, message_id, note, subject, sender, team_key, received, by_name, updated_at",
+    (q) => q.eq("needs_reply", true).eq("done", false).order("updated_at", { ascending: false }),
+  );
+  return rows;
+}
+
 export async function listMail(p: Ports, i: ListMailInput) {
   const size = Math.min(Math.max(1, i.pageSize), 100);
   const page = Math.max(0, i.page);
