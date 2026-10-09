@@ -200,9 +200,9 @@ function HealthTab() {
     <div className="space-y-4">
       <Card className="p-4 text-sm">
         <p>Agreement is measured against the desktop archiver's own filing log. Go-live gate: 98% agreement over at least 500 emails and zero wrong-team results the desktop got right.</p>
-        <p className="mt-2 font-semibold">
+        <div className="mt-2 font-semibold">
           Gate: <Badge className={met ? "bg-success text-success-foreground" : "bg-muted-foreground text-background"}>{met ? "met" : "not met"}</Badge>
-        </p>
+        </div>
       </Card>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {[["Compared", r.compared], ["Agreed", r.agreed], ["Disagreed", r.disagreed], ["Agreement", pct === "—" ? pct : `${pct}%`], ["Human-corrected", r.humanCorrected.total], ["Web was right", r.humanCorrected.webRight], ["Desktop was right", r.humanCorrected.desktopRight], ["No desktop result yet", r.noDesktopYet]].map(([l, v]) => (
