@@ -8,7 +8,7 @@
  * Every function is idempotent: filings carry a unique idempotency_key and the
  * agent replays a completed key instead of writing a second file.
  */
-import { createHash } from "node:crypto";
+import { createHash } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { buildClassifyConfig, isFreeMailDomain, promoteLearnedDomains, type Decision, type LearnedStore } from "./classify";
 import { GraphClient, type GraphMessageMeta } from "./graph";
