@@ -70,7 +70,7 @@ export function ConfirmButton({
   title: string;
   description: ReactNode;
   confirmLabel?: string;
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => unknown;
   disabled?: boolean;
   variant?: "outline" | "default" | "destructive" | "secondary";
   size?: "sm" | "default";
