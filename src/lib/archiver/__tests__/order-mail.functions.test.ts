@@ -3,6 +3,10 @@ import {
   createContentRule,
   createInternalRoute,
   humanTeamFor,
+  listMail,
+  listNeedsReply,
+  mailSearchFilter,
+  teachSender,
   mailAction,
   requireOperator,
   setNote,
@@ -247,5 +251,45 @@ describe("shadow report", () => {
     ]);
     expect([r.compared, r.agreed, r.disagreed]).toEqual([3, 1, 2]);
     expect(r.humanCorrected).toEqual({ total: 3, webRight: 2, desktopRight: 1 });
+  });
+});
+
+describe("user text never shapes a PostgREST filter", () => {
+  const nasty = "a,b)@x.com),and(bucket.eq.domain";
+  it("teachSender uses two plain .eq() reads and no .or()", async () => {
+    const { db, calls } = fakeDb({ archiver_teams: TEAMS });
+    await teachSender(
+      ports({ db }, { mode: "live", filing_enabled: true }),
+      actor,
+      { address: "Joe,Smith)@Acme.com", team: "E2G" },
+    );
+    const learned = calls.filter((c) => c.table === "archiver_learned" && c.op === "select");
+    expect(learned).toHaveLength(2);
+    for (const c of learned) expect(c.filters.some((f) => f[0] === "or")).toBe(false);
+    expect(learned[0].filters).toContainEqual(["eq", "key", "joe,smith)@acme.com"]);
+    expect(learned[1].filters).toContainEqual(["eq", "key", "acme.com"]);
+  });
+  it("listMail search strips , ( ) before the .or() string", async () => {
+    expect(mailSearchFilter(nasty)).toBe(
+      "subject.ilike.%a b @x.com  and bucket.eq.domain%,sender_address.ilike.%a b @x.com  and bucket.eq.domain%",
+    );
+    expect(mailSearchFilter("  ")).toBeNull();
+    const { db, calls } = fakeDb();
+    await listMail(ports({ db }), { q: "x,y)", page: 0, pageSize: 50 });
+    const or = calls.find((c) => c.table === "archiver_messages")!.filters.find((f) => f[0] === "or")!;
+    expect(String(or[1])).not.toMatch(/[()]|y\)/);
+    expect(String(or[1]).split(",")).toHaveLength(2);
+  });
+});
+
+describe("listNeedsReply", () => {
+  it("reads only needs_reply=true and done=false notes", async () => {
+    const { db, calls } = fakeDb({ archiver_notes: { data: [{ ledger_key: "k" }], error: null } });
+    const rows = await listNeedsReply(ports({ db }));
+    expect(rows).toEqual([{ ledger_key: "k" }]);
+    const c = calls.find((x) => x.table === "archiver_notes")!;
+    expect(c.op).toBe("select");
+    expect(c.filters).toContainEqual(["eq", "needs_reply", true]);
+    expect(c.filters).toContainEqual(["eq", "done", false]);
   });
 });
