@@ -74,6 +74,11 @@ export const getMail = op()
     return s.getMail(p, data.id);
   });
 
+export const listNeedsReply = op().handler(async ({ context }) => {
+  const { p, s } = await setup(context as Ctx);
+  return s.listNeedsReply(p);
+});
+
 export const listRules = op().handler(async ({ context }) => {
   const { p, s } = await setup(context as Ctx);
   return s.listRules(p);
