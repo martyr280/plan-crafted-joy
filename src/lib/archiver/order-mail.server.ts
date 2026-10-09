@@ -217,10 +217,8 @@ export async function listMail(p: Ports, i: ListMailInput) {
   if (i.team) q = q.eq("team_key", i.team);
   if (i.from) q = q.gte("received_at", i.from);
   if (i.to) q = q.lt("received_at", i.to);
-  if (i.q?.trim()) {
-    const t = escapeLike(i.q.trim()).replace(/[,()]/g, " ");
-    q = q.or(`subject.ilike.%${t}%,sender_address.ilike.%${t}%`);
-  }
+  const filter = mailSearchFilter(i.q);
+  if (filter) q = q.or(filter);
   const {
     data,
     error,
@@ -715,10 +713,14 @@ export async function teachSender(p: Ports, a: Actor, i: { address: string; team
     return { mode, recorded: true as const, learned: [] };
   }
   const dom = addr.split("@").pop()!;
-  const { data: rows } = await p.db
-    .from("archiver_learned")
-    .select("*")
-    .or(`and(bucket.eq.sender,key.eq.${addr}),and(bucket.eq.domain,key.eq.${dom})`);
+  // Two plain .eq() reads: no user text is ever interpolated into a PostgREST filter string.
+  const [senderRes, domainRes] = await Promise.all([
+    p.db.from("archiver_learned").select("*").eq("bucket", "sender").eq("key", addr).limit(1),
+    p.db.from("archiver_learned").select("*").eq("bucket", "domain").eq("key", dom).limit(1),
+  ]);
+  if (senderRes.error) throw new Error(`learned read failed: ${senderRes.error.message}`);
+  if (domainRes.error) throw new Error(`learned read failed: ${domainRes.error.message}`);
+  const rows = [...(senderRes.data ?? []), ...(domainRes.data ?? [])];
   const store: LearnedStore = { senders: {}, domains: {} };
   for (const r of rows ?? []) {
     if (r.source === "forgotten") continue; // relearning starts fresh
