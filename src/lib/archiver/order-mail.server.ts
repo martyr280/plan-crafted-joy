@@ -26,7 +26,8 @@ import {
 export const PROBE_JOB_ID = "aec30dfe-6540-4bcb-b7f2-2ef8522b0e38";
 export const MAIL_BUCKET = "archiver-mail";
 export const OPERATOR_ROLES = ["admin", "ops_orders"] as const;
-export const LIVE_MIN_AGENT_VERSION = "1.5.0";
+import { LIVE_MIN_AGENT_VERSION, versionAtLeast } from "./order-mail.shared";
+export { LIVE_MIN_AGENT_VERSION, versionAtLeast };
 
 export interface Actor {
   id: string;
@@ -204,6 +205,34 @@ export interface ListMailInput {
   page: number;
   pageSize: number;
 }
+/** PostgREST .or() text for the mail search box. `,` `(` `)` are the only .or() grammar
+ * characters that could break out of the ilike value, so they are replaced with spaces. */
+export function mailSearchFilter(raw: string | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const t = escapeLike(raw.trim()).replace(/[,()]/g, " ");
+  return `subject.ilike.%${t}%,sender_address.ilike.%${t}%`;
+}
+
+export async function listTeams(p: Ports) {
+  const { data, error } = await p.db
+    .from("archiver_teams")
+    .select("key, display_name, kind, active, sort_order")
+    .order("sort_order")
+    .limit(10000);
+  if (error) throw new Error(`teams read failed: ${error.message}`);
+  return (data ?? []) as Array<{ key: string; display_name: string; kind: string; active: boolean }>;
+}
+
+export async function listNeedsReply(p: Ports) {
+  const rows = await fetchAll(
+    p,
+    "archiver_notes",
+    "ledger_key, message_id, note, subject, sender, team_key, received, by_name, updated_at",
+    (q) => q.eq("needs_reply", true).eq("done", false).order("updated_at", { ascending: false }),
+  );
+  return rows;
+}
+
 export async function listMail(p: Ports, i: ListMailInput) {
   const size = Math.min(Math.max(1, i.pageSize), 100);
   const page = Math.max(0, i.page);
@@ -217,10 +246,8 @@ export async function listMail(p: Ports, i: ListMailInput) {
   if (i.team) q = q.eq("team_key", i.team);
   if (i.from) q = q.gte("received_at", i.from);
   if (i.to) q = q.lt("received_at", i.to);
-  if (i.q?.trim()) {
-    const t = escapeLike(i.q.trim()).replace(/[,()]/g, " ");
-    q = q.or(`subject.ilike.%${t}%,sender_address.ilike.%${t}%`);
-  }
+  const filter = mailSearchFilter(i.q);
+  if (filter) q = q.or(filter);
   const {
     data,
     error,
@@ -715,10 +742,14 @@ export async function teachSender(p: Ports, a: Actor, i: { address: string; team
     return { mode, recorded: true as const, learned: [] };
   }
   const dom = addr.split("@").pop()!;
-  const { data: rows } = await p.db
-    .from("archiver_learned")
-    .select("*")
-    .or(`and(bucket.eq.sender,key.eq.${addr}),and(bucket.eq.domain,key.eq.${dom})`);
+  // Two plain .eq() reads: no user text is ever interpolated into a PostgREST filter string.
+  const [senderRes, domainRes] = await Promise.all([
+    p.db.from("archiver_learned").select("*").eq("bucket", "sender").eq("key", addr).limit(1),
+    p.db.from("archiver_learned").select("*").eq("bucket", "domain").eq("key", dom).limit(1),
+  ]);
+  if (senderRes.error) throw new Error(`learned read failed: ${senderRes.error.message}`);
+  if (domainRes.error) throw new Error(`learned read failed: ${domainRes.error.message}`);
+  const rows = [...(senderRes.data ?? []), ...(domainRes.data ?? [])];
   const store: LearnedStore = { senders: {}, domains: {} };
   for (const r of rows ?? []) {
     if (r.source === "forgotten") continue; // relearning starts fresh
@@ -803,15 +834,6 @@ const SETTING_KEYS = new Set([
   "content_only_senders",
   "ignore_subject_patterns",
 ]);
-
-export function versionAtLeast(v: string | null | undefined, min: string): boolean {
-  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(v ?? ""));
-  if (!m) return false;
-  const a = [+m[1], +m[2], +m[3]],
-    b = min.split(".").map(Number);
-  for (let k = 0; k < 3; k++) if (a[k] !== b[k]) return a[k] > b[k];
-  return true;
-}
 
 export function validateSettingsPatch(
   patch: Record<string, unknown>,

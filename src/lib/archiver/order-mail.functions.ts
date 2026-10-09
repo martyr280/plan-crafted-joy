@@ -9,7 +9,6 @@ import type { Actor, Ports } from "./order-mail.server";
 async function ports(): Promise<Ports> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const arch = await import("./archiver.server");
-  const filing = await import("./filing.server");
   const imp = await import("./importer.server");
   return {
     db: supabaseAdmin as any,
@@ -23,7 +22,8 @@ async function ports(): Promise<Ports> {
     },
     getSettings: arch.getArchiverSettings,
     graphConfigured: (s) => arch.graphStatus(s).configured,
-    performAction: filing.performAction,
+    // filing.server (node:crypto) loads only when a live action actually runs.
+    performAction: async (...a) => (await import("./filing.server")).performAction(...a),
     runTick: () => arch.runArchiverTick(new Date(), "manual"),
     applyImportPlan: imp.applyImportPlan,
   };
@@ -42,15 +42,18 @@ async function setup(context: Ctx, admin = false) {
   return { p, s, actor };
 }
 
-const op = () => createServerFn({ method: "POST" }).middleware([denyLegacyBranchAccess]);
+// Each export spells out createServerFn(...) literally: the TanStack compiler only turns a
+// literal createServerFn chain into a client RPC stub (a helper wrapper ran the handler in the browser).
 const team = z.string().min(1).max(100);
 
-export const getOverview = op().handler(async ({ context }) => {
+export const getOverview = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess]).handler(async ({ context }) => {
   const { p, s } = await setup(context as Ctx);
   return s.getOverview(p);
 });
 
-export const listMail = op()
+export const listMail = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       status: z.string().max(40).optional(),
@@ -67,19 +70,34 @@ export const listMail = op()
     return s.listMail(p, data);
   });
 
-export const getMail = op()
+export const getMail = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     const { p, s } = await setup(context as Ctx);
     return s.getMail(p, data.id);
   });
 
-export const listRules = op().handler(async ({ context }) => {
+export const listTeams = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess]).handler(async ({ context }) => {
+  const { p, s } = await setup(context as Ctx);
+  return s.listTeams(p);
+});
+
+export const listNeedsReply = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess]).handler(async ({ context }) => {
+  const { p, s } = await setup(context as Ctx);
+  return s.listNeedsReply(p);
+});
+
+export const listRules = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess]).handler(async ({ context }) => {
   const { p, s } = await setup(context as Ctx);
   return s.listRules(p);
 });
 
-export const searchLearned = op()
+export const searchLearned = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       q: z.string().max(200).default(""),
@@ -92,7 +110,8 @@ export const searchLearned = op()
     return s.searchLearned(p, data);
   });
 
-export const shadowReport = op()
+export const shadowReport = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({ from: z.string().max(40).optional(), to: z.string().max(40).optional() }),
   )
@@ -101,12 +120,14 @@ export const shadowReport = op()
     return s.shadowReport(p, data);
   });
 
-export const getSettings = op().handler(async ({ context }) => {
+export const getSettings = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess]).handler(async ({ context }) => {
   const { p } = await setup(context as Ctx, true);
   return (await p.getSettings()) as Record<string, any>;
 });
 
-export const mailAction = op()
+export const mailAction = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       id: z.string().uuid(),
@@ -120,7 +141,8 @@ export const mailAction = op()
     return s.mailAction(p, actor, data);
   });
 
-export const setNote = op()
+export const setNote = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       id: z.string().uuid(),
@@ -142,25 +164,29 @@ const contentRule = z.object({
   note: z.string().max(500).optional(),
 });
 
-export const createContentRule = op()
+export const createContentRule = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(contentRule)
   .handler(async ({ context, data }) => {
     const { p, s, actor } = await setup(context as Ctx);
     return s.createContentRule(p, actor, data);
   });
-export const updateContentRule = op()
+export const updateContentRule = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(contentRule.extend({ id: z.string().min(1).max(100) }))
   .handler(async ({ context, data }) => {
     const { p, s, actor } = await setup(context as Ctx);
     return s.updateContentRule(p, actor, data);
   });
-export const disableContentRule = op()
+export const disableContentRule = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().min(1).max(100) }))
   .handler(async ({ context, data }) => {
     const { p, s, actor } = await setup(context as Ctx);
     return s.disableContentRule(p, actor, data.id);
   });
-export const createInternalRoute = op()
+export const createInternalRoute = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       address: z.string().max(320).optional(),
@@ -172,13 +198,15 @@ export const createInternalRoute = op()
     const { p, s, actor } = await setup(context as Ctx);
     return s.createInternalRoute(p, actor, data);
   });
-export const disableInternalRoute = op()
+export const disableInternalRoute = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ address: z.string().min(3).max(320) }))
   .handler(async ({ context, data }) => {
     const { p, s, actor } = await setup(context as Ctx);
     return s.disableInternalRoute(p, actor, data.address);
   });
-export const createMultiRoute = op()
+export const createMultiRoute = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       kind: z.string().max(20).optional(),
@@ -193,14 +221,16 @@ export const createMultiRoute = op()
     const { p, s, actor } = await setup(context as Ctx);
     return s.createMultiRoute(p, actor, data);
   });
-export const disableMultiRoute = op()
+export const disableMultiRoute = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ id: z.string().min(1).max(100) }))
   .handler(async ({ context, data }) => {
     const { p, s, actor } = await setup(context as Ctx);
     return s.disableMultiRoute(p, actor, data.id);
   });
 
-export const previewRule = op()
+export const previewRule = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       phrase: z.string().min(1).max(400),
@@ -213,14 +243,16 @@ export const previewRule = op()
     return s.previewRule(p, data);
   });
 
-export const teachSender = op()
+export const teachSender = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ address: z.string().max(320), team }))
   .handler(async ({ context, data }) => {
     const { p, s, actor } = await setup(context as Ctx);
     return s.teachSender(p, actor, data);
   });
 
-export const forgetLearned = op()
+export const forgetLearned = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({ bucket: z.enum(["sender", "domain"]), key: z.string().min(1).max(320) }),
   )
@@ -229,14 +261,16 @@ export const forgetLearned = op()
     return s.forgetLearned(p, actor, data);
   });
 
-export const updateSettings = op()
+export const updateSettings = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(z.record(z.string(), z.unknown()))
   .handler(async ({ context, data }) => {
     const { p, s, actor } = await setup(context as Ctx, true);
     return s.updateSettings(p, actor, data);
   });
 
-export const updateMailbox = op()
+export const updateMailbox = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       id: z.string().uuid(),
@@ -250,12 +284,14 @@ export const updateMailbox = op()
     return s.updateMailbox(p, actor, data);
   });
 
-export const runSweepNow = op().handler(async ({ context }) => {
+export const runSweepNow = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess]).handler(async ({ context }) => {
   const { p, s, actor } = await setup(context as Ctx, true);
   return s.runSweepNow(p, actor);
 });
 
-export const importDesktop = op()
+export const importDesktop = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
   .inputValidator(
     z.object({
       files: z.array(z.object({ name: z.string().max(200), text: z.string() })).max(10),
@@ -268,7 +304,8 @@ export const importDesktop = op()
     return s.importDesktop(p, actor, data);
   });
 
-export const probeArchive = op().handler(async ({ context }) => {
+export const probeArchive = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess]).handler(async ({ context }) => {
   const { p, s, actor } = await setup(context as Ctx, true);
   return s.probeArchive(p, actor);
 });

@@ -28,6 +28,7 @@ import { Route as AppQuotesRouteImport } from './routes/_app.quotes'
 import { Route as AppPricingRouteImport } from './routes/_app.pricing'
 import { Route as AppPricerRouteImport } from './routes/_app.pricer'
 import { Route as AppOrdersRouteImport } from './routes/_app.orders'
+import { Route as AppOrderMailRouteImport } from './routes/_app.order-mail'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
 import { Route as AppInventorySyncRouteImport } from './routes/_app.inventory-sync'
 import { Route as AppInventoryRouteImport } from './routes/_app.inventory'
@@ -145,6 +146,11 @@ const AppPricerRoute = AppPricerRouteImport.update({
 const AppOrdersRoute = AppOrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOrderMailRoute = AppOrderMailRouteImport.update({
+  id: '/order-mail',
+  path: '/order-mail',
   getParentRoute: () => AppRoute,
 } as any)
 const AppLogisticsRoute = AppLogisticsRouteImport.update({
@@ -292,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof AppInventoryRoute
   '/inventory-sync': typeof AppInventorySyncRoute
   '/logistics': typeof AppLogisticsRoute
+  '/order-mail': typeof AppOrderMailRoute
   '/orders': typeof AppOrdersRoute
   '/pricer': typeof AppPricerRoute
   '/pricing': typeof AppPricingRoute
@@ -335,6 +342,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof AppInventoryRoute
   '/inventory-sync': typeof AppInventorySyncRoute
   '/logistics': typeof AppLogisticsRoute
+  '/order-mail': typeof AppOrderMailRoute
   '/orders': typeof AppOrdersRoute
   '/pricer': typeof AppPricerRoute
   '/pricing': typeof AppPricingRoute
@@ -381,6 +389,7 @@ export interface FileRoutesById {
   '/_app/inventory': typeof AppInventoryRoute
   '/_app/inventory-sync': typeof AppInventorySyncRoute
   '/_app/logistics': typeof AppLogisticsRoute
+  '/_app/order-mail': typeof AppOrderMailRoute
   '/_app/orders': typeof AppOrdersRoute
   '/_app/pricer': typeof AppPricerRoute
   '/_app/pricing': typeof AppPricingRoute
@@ -428,6 +437,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/inventory-sync'
     | '/logistics'
+    | '/order-mail'
     | '/orders'
     | '/pricer'
     | '/pricing'
@@ -471,6 +481,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/inventory-sync'
     | '/logistics'
+    | '/order-mail'
     | '/orders'
     | '/pricer'
     | '/pricing'
@@ -516,6 +527,7 @@ export interface FileRouteTypes {
     | '/_app/inventory'
     | '/_app/inventory-sync'
     | '/_app/logistics'
+    | '/_app/order-mail'
     | '/_app/orders'
     | '/_app/pricer'
     | '/_app/pricing'
@@ -691,6 +703,13 @@ declare module '@tanstack/react-router' {
       path: '/orders'
       fullPath: '/orders'
       preLoaderRoute: typeof AppOrdersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/order-mail': {
+      id: '/_app/order-mail'
+      path: '/order-mail'
+      fullPath: '/order-mail'
+      preLoaderRoute: typeof AppOrderMailRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/logistics': {
@@ -878,6 +897,7 @@ interface AppRouteChildren {
   AppInventoryRoute: typeof AppInventoryRoute
   AppInventorySyncRoute: typeof AppInventorySyncRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
+  AppOrderMailRoute: typeof AppOrderMailRoute
   AppOrdersRoute: typeof AppOrdersRoute
   AppPricerRoute: typeof AppPricerRoute
   AppPricingRoute: typeof AppPricingRoute
@@ -911,6 +931,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppInventoryRoute: AppInventoryRoute,
   AppInventorySyncRoute: AppInventorySyncRoute,
   AppLogisticsRoute: AppLogisticsRoute,
+  AppOrderMailRoute: AppOrderMailRoute,
   AppOrdersRoute: AppOrdersRoute,
   AppPricerRoute: AppPricerRoute,
   AppPricingRoute: AppPricingRoute,
