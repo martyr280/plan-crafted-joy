@@ -26,7 +26,8 @@ import {
 export const PROBE_JOB_ID = "aec30dfe-6540-4bcb-b7f2-2ef8522b0e38";
 export const MAIL_BUCKET = "archiver-mail";
 export const OPERATOR_ROLES = ["admin", "ops_orders"] as const;
-export const LIVE_MIN_AGENT_VERSION = "1.5.0";
+import { LIVE_MIN_AGENT_VERSION, versionAtLeast } from "./order-mail.shared";
+export { LIVE_MIN_AGENT_VERSION, versionAtLeast };
 
 export interface Actor {
   id: string;
@@ -833,15 +834,6 @@ const SETTING_KEYS = new Set([
   "content_only_senders",
   "ignore_subject_patterns",
 ]);
-
-export function versionAtLeast(v: string | null | undefined, min: string): boolean {
-  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(v ?? ""));
-  if (!m) return false;
-  const a = [+m[1], +m[2], +m[3]],
-    b = min.split(".").map(Number);
-  for (let k = 0; k < 3; k++) if (a[k] !== b[k]) return a[k] > b[k];
-  return true;
-}
 
 export function validateSettingsPatch(
   patch: Record<string, unknown>,

@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader } from "@/components/ui/sidebar";
-import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, Sparkles, MailWarning, Gauge, Undo2, Timer, FileUp, Route as RouteIcon } from "lucide-react";
+import { LayoutDashboard, FileInput, BarChart3, Truck, Receipt, BadgeDollarSign, FileBarChart, AlertTriangle, Settings, ScrollText, Network, Inbox, Webhook, Package, Tag, Layers, BookOpen, Sparkles, MailWarning, Gauge, Undo2, Timer, FileUp, Route as RouteIcon, Mail } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import nelsonAiLogo from "@/assets/nelson-ai-logo.png";
 
@@ -18,6 +18,7 @@ const groups = [
       { title: "Inbound Email", url: "/inbox", icon: Inbox },
       { title: "Email Monitor", url: "/email-monitor", icon: MailWarning },
       { title: "Order Intake", url: "/orders", icon: FileInput },
+      { title: "Order Mail", url: "/order-mail", icon: Mail, roles: ["admin", "ops_orders"] },
       { title: "Design Quotes", url: "/quotes", icon: Layers },
     ],
   },
