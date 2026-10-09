@@ -212,6 +212,16 @@ export function mailSearchFilter(raw: string | undefined): string | null {
   return `subject.ilike.%${t}%,sender_address.ilike.%${t}%`;
 }
 
+export async function listTeams(p: Ports) {
+  const { data, error } = await p.db
+    .from("archiver_teams")
+    .select("key, display_name, kind, active, sort_order")
+    .order("sort_order")
+    .limit(10000);
+  if (error) throw new Error(`teams read failed: ${error.message}`);
+  return (data ?? []) as Array<{ key: string; display_name: string; kind: string; active: boolean }>;
+}
+
 export async function listNeedsReply(p: Ports) {
   const rows = await fetchAll(
     p,
