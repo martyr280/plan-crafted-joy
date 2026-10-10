@@ -85,9 +85,9 @@ describe("Order Mail page", () => {
     expect(html).not.toContain("Mail Activity");
   });
   it("go-live gate: 98% over 500+ and zero desktop-right corrections", () => {
-    expect(gateMet({ compared: 500, agreed: 490, humanCorrected: { desktopRight: 0 } })).toBe(true);
-    expect(gateMet({ compared: 499, agreed: 499, humanCorrected: { desktopRight: 0 } })).toBe(false);
-    expect(gateMet({ compared: 500, agreed: 489, humanCorrected: { desktopRight: 0 } })).toBe(false);
-    expect(gateMet({ compared: 1000, agreed: 1000, humanCorrected: { desktopRight: 1 } })).toBe(false);
+    expect(gateMet({ compared: 500, agreed: 490, humanCorrected: { desktopOnlyRight: 0 } })).toBe(true);
+    expect(gateMet({ compared: 499, agreed: 499, humanCorrected: { desktopOnlyRight: 0 } })).toBe(false);
+    expect(gateMet({ compared: 500, agreed: 489, humanCorrected: { desktopOnlyRight: 0 } })).toBe(false);
+    expect(gateMet({ compared: 1000, agreed: 1000, humanCorrected: { desktopOnlyRight: 1 } })).toBe(false);
   });
 });

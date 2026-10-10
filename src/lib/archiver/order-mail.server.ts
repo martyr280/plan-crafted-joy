@@ -382,6 +382,12 @@ export function summarizeShadow(rows: any[]) {
       desktopRight: human.filter(
         (r) => r.desktop_team_key != null && r.desktop_team_key === r.human_team_key,
       ).length,
+      desktopOnlyRight: human.filter(
+        (r) =>
+          r.desktop_team_key != null &&
+          r.desktop_team_key === r.human_team_key &&
+          r.team_key !== r.human_team_key,
+      ).length,
     },
   };
 }
