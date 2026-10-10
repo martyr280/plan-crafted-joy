@@ -250,7 +250,16 @@ describe("shadow report", () => {
       { id: "4", team_key: "C", desktop_team_key: null, human_team_key: "C" },
     ]);
     expect([r.compared, r.agreed, r.disagreed]).toEqual([3, 1, 2]);
-    expect(r.humanCorrected).toEqual({ total: 3, webRight: 2, desktopRight: 1 });
+    expect(r.humanCorrected).toEqual({ total: 3, webRight: 2, desktopRight: 1, desktopOnlyRight: 1 });
+  });
+  it("both engines right does not count as desktop-only right", () => {
+    const r = summarizeShadow([{ id: "1", team_key: "A", desktop_team_key: "A", human_team_key: "A" }]);
+    expect(r.humanCorrected.desktopRight).toBe(1);
+    expect(r.humanCorrected.desktopOnlyRight).toBe(0);
+  });
+  it("desktop right and web wrong counts as desktop-only right", () => {
+    const r = summarizeShadow([{ id: "1", team_key: "B", desktop_team_key: "A", human_team_key: "A" }]);
+    expect(r.humanCorrected.desktopOnlyRight).toBe(1);
   });
 });
 
