@@ -185,9 +185,9 @@ function OverviewTab({ ov, isAdmin }: { ov: any; isAdmin: boolean }) {
 
 export const GATE_PCT = 98;
 export const GATE_MIN = 500;
-export function gateMet(r: { compared: number; agreed: number; humanCorrected: { desktopRight: number } }) {
+export function gateMet(r: { compared: number; agreed: number; humanCorrected: { desktopOnlyRight: number } }) {
   const pct = r.compared ? (r.agreed / r.compared) * 100 : 0;
-  return r.compared >= GATE_MIN && pct >= GATE_PCT && r.humanCorrected.desktopRight === 0;
+  return r.compared >= GATE_MIN && pct >= GATE_PCT && r.humanCorrected.desktopOnlyRight === 0;
 }
 
 function HealthTab() {
@@ -205,7 +205,7 @@ function HealthTab() {
         </div>
       </Card>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {[["Compared", r.compared], ["Agreed", r.agreed], ["Disagreed", r.disagreed], ["Agreement", pct === "—" ? pct : `${pct}%`], ["Human-corrected", r.humanCorrected.total], ["Web was right", r.humanCorrected.webRight], ["Desktop was right", r.humanCorrected.desktopRight], ["No desktop result yet", r.noDesktopYet]].map(([l, v]) => (
+        {[["Compared", r.compared], ["Agreed", r.agreed], ["Disagreed", r.disagreed], ["Agreement", pct === "—" ? pct : `${pct}%`], ["Human-corrected", r.humanCorrected.total], ["Web was right", r.humanCorrected.webRight], ["Desktop was right", r.humanCorrected.desktopRight], ["Desktop right, web wrong", r.humanCorrected.desktopOnlyRight], ["No desktop result yet", r.noDesktopYet]].map(([l, v]) => (
           <Card key={l as string} className="p-4"><div className="text-xs text-muted-foreground">{l}</div><div className="text-2xl font-bold">{v}</div></Card>
         ))}
       </div>
