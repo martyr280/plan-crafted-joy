@@ -203,7 +203,7 @@ export function ForecastVsTracker() {
       {q.error && <Card className="p-4 text-sm text-destructive">{(q.error as any)?.message ?? "Failed to load"}</Card>}
 
       {data?.strict && <Card className="p-4 space-y-2">
-        <div className="font-semibold">Strict single-departure score</div>
+        <div className="font-semibold">Conservative timing cohort (one recorded departure)</div>
         <div>{hitsCell(data.strict.overall.within10N, data.strict.overall.n, data.strict.overall.within10)} within 10 points. <GateBadge status={data.strict.readiness.at10.status} /></div>
         <div className="text-sm">Coverage: {data.strict.coverage.eligible} of {data.strict.coverage.denominator} route-days with actuals; {data.strict.coverage.excluded} excluded.</div>
         <div className="text-xs text-muted-foreground">{data.strict.limitation} Forecast and actual are fractions of one full truck. Total truck equivalents are the sum of departures and are not scored as mean occupancy.</div>

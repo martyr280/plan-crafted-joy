@@ -273,12 +273,35 @@ export async function parseTruckCapacityWorkbook(
   const workbookSha = createHash("sha256").update(Buffer.from(buffer as ArrayBuffer)).digest("hex");
   const parseSheetDate = (value: ExcelJS.CellValue) => {
     const scalar = cellScalar(value);
-    return parseDateCell(wb.properties.date1904 && typeof scalar === "number" ? scalar + 1462 : value);
+    const serial = typeof scalar === "number" ? scalar : typeof scalar === "string" && /^\d{5}(\.\d+)?$/.test(scalar.trim()) ? Number(scalar.trim()) : null;
+    return parseDateCell(wb.properties.date1904 && serial != null ? serial + 1462 : value);
+  };
+  const headersFor = (ws: ExcelJS.Worksheet) => {
+    const headers: Partial<Record<Field, number>> = {};
+    ws.getRow(1).eachCell({ includeEmpty: false }, (cell, col) => {
+      const field = matchHeader(cell.value);
+      if (field && headers[field] == null) headers[field] = col;
+    });
+    return headers;
   };
 
   const result: ParseResult = { sheets: [], rows: [], unmatchedSheets: [], warnings: [], quarantine: [] };
   const sequenceUsed = new Map<string, Set<number>>();
   const departureKeys = new Set<string>();
+  // Reserve labels across the entire workbook before assigning any unlabeled
+  // departure. Alias sheets for a route must not depend on worksheet ordering.
+  wb.eachSheet((ws) => {
+    const mapped = sheetMap.get(normalizeSheetName(ws.name));
+    const headers = headersFor(ws);
+    if (!mapped?.active || !mapped.route_id || headers.date == null || headers.capacity == null) return;
+    for (let r = 2; r <= ws.rowCount; r++) {
+      const date = parseSheetDate(ws.getRow(r).getCell(headers.date).value);
+      if (!date || date.seq == null) continue;
+      const key = `${mapped.route_id}|${date.iso}`;
+      const used = sequenceUsed.get(key) ?? new Set<number>();
+      used.add(date.seq); sequenceUsed.set(key, used);
+    }
+  });
 
   wb.eachSheet((ws) => {
     const normalized = normalizeSheetName(ws.name);
@@ -310,30 +333,18 @@ export async function parseTruckCapacityWorkbook(
     }
 
     // Header row is row 1. Later duplicates of the same field are ignored.
-    const headerRow = ws.getRow(1);
-    const headers: Partial<Record<Field, number>> = {};
-    headerRow.eachCell({ includeEmpty: false }, (cell, col) => {
-      const field = matchHeader(cell.value);
-      if (field && headers[field] == null) headers[field] = col;
-    });
+    const headers = headersFor(ws);
     out.headers = headers;
-    if (headers.date == null) {
+    if (headers.date == null || headers.capacity == null) {
       out.status = "no_headers";
-      result.warnings.push(`${ws.name}: no "Date" header found in row 1`);
+      const reason = "missing required Date or Capacity header";
+      result.warnings.push(`${ws.name}: ${reason}; import blocked`);
+      result.quarantine.push({ sheet: ws.name, excel_row: 1, reason, raw_date: null, capacity: null, capacity_format: "", vendor: null, vendor_format: "" });
       result.sheets.push(out);
       return;
     }
 
     const seqUsed = sequenceUsed;
-    // Reserve explicit labels before assigning unlabeled departures, including
-    // rows that will be quarantined, so a bad cell cannot renumber later loads.
-    for (let r = 2; r <= ws.rowCount; r++) {
-      const date = parseSheetDate(ws.getRow(r).getCell(headers.date).value);
-      if (!date || date.seq == null) continue;
-      const key = `${mapped.route_id}|${date.iso}`;
-      const used = seqUsed.get(key) ?? new Set<number>();
-      used.add(date.seq); seqUsed.set(key, used);
-    }
     const nextSeq = (iso: string, explicit: number | null): number => {
       const key = `${mapped.route_id}|${iso}`;
       let used = seqUsed.get(key);
@@ -363,7 +374,9 @@ export async function parseTruckCapacityWorkbook(
       const parsedDate = parseSheetDate(row.getCell(headers.date).value);
       if (!parsedDate) {
         // A row with no date is not a run — formula-only tail rows land here.
-        if (cellText(row.getCell(headers.date).value) != null) { out.skipped_no_date += 1; quarantine("invalid date or departure label"); }
+        const rawDate = row.getCell(headers.date).value;
+        const invalidFormula = rawDate != null && typeof rawDate === "object" && ("formula" in rawDate || "sharedFormula" in rawDate || "error" in rawDate);
+        if (invalidFormula || cellText(rawDate) != null) { out.skipped_no_date += 1; quarantine("invalid date, formula result or departure label"); }
         continue;
       }
       const year = Number(parsedDate.iso.slice(0, 4));

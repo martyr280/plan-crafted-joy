@@ -1,0 +1,46 @@
+TAP version 13
+# Subtest: file.save writes into the team folder, never overwrites, stamps received time, replays on retry
+ok 1 - file.save writes into the team folder, never overwrites, stamps received time, replays on retry
+  ---
+  duration_ms: 57.033
+  type: 'test'
+  ...
+# Subtest: file.save refuses paths outside ARCHIVE_ROOT and bad downloads
+ok 2 - file.save refuses paths outside ARCHIVE_ROOT and bad downloads
+  ---
+  duration_ms: 11.82
+  type: 'test'
+  ...
+# Subtest: stems are cleaned like the desktop and capped
+ok 3 - stems are cleaned like the desktop and capped
+  ---
+  duration_ms: 0.3497
+  type: 'test'
+  ...
+# Subtest: file.move moves (Archive / Wrong team?) and copies (Also file to) without overwriting
+ok 4 - file.move moves (Archive / Wrong team?) and copies (Also file to) without overwriting
+  ---
+  duration_ms: 27.532
+  type: 'test'
+  ...
+# Subtest: archive.probe reports reachability and leaves nothing behind
+ok 5 - archive.probe reports reachability and leaves nothing behind
+  ---
+  duration_ms: 13.1062
+  type: 'test'
+  ...
+# Subtest: archive.ledger.read returns whole lines from an offset and restarts after compaction
+ok 6 - archive.ledger.read returns whole lines from an offset and restarts after compaction
+  ---
+  duration_ms: 8.0912
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 238.8113

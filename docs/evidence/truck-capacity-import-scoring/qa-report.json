@@ -5,78 +5,82 @@
   "date": "2026-10-12",
   "import_contract": {
     "occupancy": "0..1 numeric fractions or explicit percent strings, normalized once",
-    "ambiguous": "Bare values above 1 and explicit percentages above 100%, invalid formulas/dates/vendors, and duplicate departure identities quarantine the entire workbook before run writes or missing flags",
+    "ambiguous": "Bare values above 1 and explicit percentages above 100%, invalid formulas/dates/vendors, and duplicate departure identities quarantine the entire workbook before run writes or missing flags; missing mandatory Date/Capacity headers and malformed or uncached date formulas block all run writes/missing markers",
     "blanks": "Null remains no-run; zero remains an observed empty load; workbook export preserves null",
-    "identity": "Explicit run labels reserved before unlabeled sheet-order sequences. Identical workbook reimports are stable; reordering unlabeled same-date rows cannot prove a persistent departure identity and should use explicit labels.",
+    "identity": "Explicit labels are reserved across all active mapped sheets before unlabeled assignment; alias-sheet order cannot collide with explicit identities. Identical reimports are stable. Unlabeled row rearrangements still cannot prove historical departure identity.",
     "provenance": "Original cells/formulas, number formats, raw date, workbook epoch, sheet/row and SHA-256 retained in prior_values for accepted rows; quarantine report retains rejected evidence",
     "history": "No deletions; full prior actual history retained without the former 25-entry truncation; conflicting source-owned history blocks writes; no auto-retraining on manual import"
   },
   "scoring": {
     "legacy": "Existing mean departure occupancy per route-day retained for comparable finite records",
-    "strict": "Single departure with occupancy 0..1, present in sheet, known current cutoff, finite served occupancy 0..1 from a date strictly before cutoff date",
+    "strict": "Conservative timing cohort for one recorded departure: known cutoff time and timezone, finite 0..1 values, no missing-from-sheet flag, and the latest possible America/Chicago forecast-day instant at or before the earliest applicable configured cutoff bound. This does not independently validate legacy actual units or departure completeness.",
     "denominator": "All in-scope route-days with non-null finite actuals; exclusions include no forecast; metrics denominator is eligible route-days and coverage separately discloses all actual route-days",
-    "timing": "Date-only logs cannot establish cutoff-day intraday timing. Historical cutoff changes are unverified. A prior-day forecast can be selected even when a later cutoff-day estimate exists.",
+    "timing": "Full Central source-day bounds are compared with real route-zone cutoff instants; seconds are retained. Missing time/zone, unsupported zones and DST gaps are excluded. DST folds and overlapping feeder rules use the earliest valid cutoff instant. Historical cutoff changes remain unverified.",
     "units": "Mean occupancy and summed truck equivalents displayed separately. Ambiguous historical actuals have no fabricated total truck equivalents."
   },
   "checks": {
     "full_vitest": {
       "status": "passed",
-      "files": 64,
-      "tests": 627,
-      "command": "npx vitest run --config vitest.local.config.ts",
-      "fetch": "blocked"
-    },
-    "baseline_vitest": {
-      "status": "passed",
-      "files": 61,
-      "tests": 585
+      "files": 65,
+      "tests": 648,
+      "version": "4.1.10",
+      "command": "bun run test"
     },
     "node_tests": {
       "status": "passed",
-      "tests": 6,
-      "command": "node --test agent/handlers/__tests__/archive-files.nodetest.js"
-    },
-    "timezone_fixtures": {
-      "status": "passed",
-      "tests_each": 106,
-      "zones": [
-        "America/Los_Angeles",
-        "America/New_York"
-      ]
-    },
-    "new_files_lint": {
-      "status": "passed",
-      "files": 6
+      "tests": 6
     },
     "full_type": {
-      "status": "failed_baseline",
-      "errors": 3,
-      "exact_baseline_output_match": true,
-      "locations": [
-        "src/router.tsx:63",
-        "src/routes/_app.email-monitor.tsx:21",
-        "src/routes/_app.inbox.tsx:24"
-      ]
+      "status": "passed",
+      "command": "bun run typecheck"
     },
-    "full_build": {
-      "status": "failed_baseline",
-      "reason": "Lovable MCP Vite plugin rejects Windows backslash routesDir against forward-slash root; identical on untouched source"
+    "baseline_type_frozen": {
+      "status": "passed",
+      "explanation": "Original three errors were reproduced only under newly resolved non-frozen npm versions; guarded ErrorComponentProps usage supports both contracts."
+    },
+    "full_build_windows": {
+      "status": "failed_upstream_platform",
+      "reason": "MCP plugin 0.22.0 rejects Windows slash normalization; Linux CI pending"
     },
     "full_lint": {
       "status": "failed_baseline",
-      "current_errors": 73867,
+      "current_errors": 73581,
       "current_warnings": 49,
-      "baseline_errors": 73960,
+      "baseline_errors": 73977,
       "baseline_warnings": 49
+    },
+    "new_files_lint": {
+      "status": "passed",
+      "files": 7
     },
     "diff_check": {
       "status": "passed"
     },
-    "npm_ci": {
-      "status": "failed_baseline",
-      "reason": "Tracked package-lock.json does not match package.json"
+    "frozen_install": {
+      "status": "passed",
+      "command": "bun install --frozen-lockfile --ignore-scripts",
+      "bun": "1.3.13",
+      "node": "22.18.0",
+      "dependency_versions_changed": false
     },
-    "dependency_setup": "npm install --package-lock=false --ignore-scripts --no-audit --no-fund; tracked dependency files unchanged; Node 22.18.0, npm 11.12.1, Vitest 4.1.11"
+    "lock_diagnosis": {
+      "npm": "package-lock.json last updated May 5; differs from 15 current manifest entries. npm ci failure predates this PR.",
+      "bun": "bun.lockb updated October 8 with manifest changes; frozen install succeeds. CI uses existing Bun lockfile without regeneration."
+    },
+    "remote_ci_initial_head": {
+      "head": "fc0e080f5b294f8834de55c7d7ad54f24b145a3a",
+      "workflow_runs": 0,
+      "statuses": 0,
+      "check_runs": 0
+    },
+    "remote_ci_updated_head": {
+      "status": "pending",
+      "workflow": ".github/workflows/app-qa.yml",
+      "jobs": [
+        "Linux build, types and offline tests",
+        "Full lint (existing baseline backlog)"
+      ]
+    }
   },
   "source_p21_findings": [
     "Default orders SQL uses required_date/open remaining demand and item-master cube/weight, with no UOM/carton conversion in that query; it is not the agreed pick-ticket dispatch date rule. No default dispatch rule was changed.",
@@ -91,9 +95,85 @@
     "Historical intraday forecast/cutoff timing cannot be reconstructed from date-only history"
   ],
   "release_decisions": [
-    "Review draft PR and exact revision before merge or production deployment",
-    "Validate build/type/lint in the supported deployment environment and resolve or explicitly accept baseline blockers",
-    "Establish units and source identity before allowing quarantined imports; any historical data repair requires separate approval"
+    "Independent re-review of corrected imports and timing eligibility must finish before readiness is claimed",
+    "Await exact-head Linux build/type/offline-test CI results",
+    "Full lint remains a visible failing check; baseline backlog needs a separate scoped remediation or explicit release acceptance",
+    "Marty must approve the exact revision before merge or deployment",
+    "Historical actual units/departure completeness and production evidence gaps remain unresolved; no data repair is authorized"
   ],
-  "boundaries": "No protected telemetry retries or alternate data routes, database repairs, snapshots, bridge jobs, retraining, production mutations, authentication/security changes, emails, merge or deployment. No guaranteed 80% result claimed."
+  "boundaries": "No protected telemetry retries or alternate data routes, database repairs, snapshots, bridge jobs, retraining, production mutations, authentication/security changes, emails, merge or deployment. No guaranteed 80% result claimed.",
+  "initial_release": {
+    "commit": "fc0e080f5b294f8834de55c7d7ad54f24b145a3a",
+    "checks": {
+      "full_vitest": {
+        "status": "passed",
+        "files": 64,
+        "tests": 627,
+        "command": "npx vitest run --config vitest.local.config.ts",
+        "fetch": "blocked"
+      },
+      "baseline_vitest": {
+        "status": "passed",
+        "files": 61,
+        "tests": 585
+      },
+      "node_tests": {
+        "status": "passed",
+        "tests": 6,
+        "command": "node --test agent/handlers/__tests__/archive-files.nodetest.js"
+      },
+      "timezone_fixtures": {
+        "status": "passed",
+        "tests_each": 106,
+        "zones": [
+          "America/Los_Angeles",
+          "America/New_York"
+        ]
+      },
+      "new_files_lint": {
+        "status": "passed",
+        "files": 6
+      },
+      "full_type": {
+        "status": "failed_baseline",
+        "errors": 3,
+        "exact_baseline_output_match": true,
+        "locations": [
+          "src/router.tsx:63",
+          "src/routes/_app.email-monitor.tsx:21",
+          "src/routes/_app.inbox.tsx:24"
+        ]
+      },
+      "full_build": {
+        "status": "failed_baseline",
+        "reason": "Lovable MCP Vite plugin rejects Windows backslash routesDir against forward-slash root; identical on untouched source"
+      },
+      "full_lint": {
+        "status": "failed_baseline",
+        "current_errors": 73867,
+        "current_warnings": 49,
+        "baseline_errors": 73960,
+        "baseline_warnings": 49
+      },
+      "diff_check": {
+        "status": "passed"
+      },
+      "npm_ci": {
+        "status": "failed_baseline",
+        "reason": "Tracked package-lock.json does not match package.json"
+      },
+      "dependency_setup": "npm install --package-lock=false --ignore-scripts --no-audit --no-fund; tracked dependency files unchanged; Node 22.18.0, npm 11.12.1, Vitest 4.1.11"
+    }
+  },
+  "review": {
+    "status": "review fixes implemented; independent re-review pending",
+    "fixed_findings": [
+      "Missing/renamed Capacity header could clear prior actuals",
+      "Invalid or uncached date formula could mark prior actual missing",
+      "1904 numeric/text/formula serial parity",
+      "Workbook-global explicit label reservation",
+      "Central date bounds versus route-zone cutoff instants, including DST"
+    ],
+    "disclosure": "Range and timing checks cannot detect historical scaling or collapsed departures. These synthetic edge cases are not claimed to explain October 12 production accuracy."
+  }
 }

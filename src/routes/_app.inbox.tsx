@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Card } from "@/components/ui/card";
@@ -24,13 +24,13 @@ export const Route = createFileRoute("/_app/inbox")({
   errorComponent: InboxError,
 });
 
-function InboxError({ error, reset }: { error: Error; reset: () => void }) {
+function InboxError({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
   return (
     <div className="p-6">
       <Card className="p-6 border-destructive/40 bg-destructive/5">
         <h2 className="font-semibold mb-2">Could not load Inbox</h2>
-        <pre className="text-xs whitespace-pre-wrap text-destructive mb-4">{error?.message ?? "Unknown error"}</pre>
+        <pre className="text-xs whitespace-pre-wrap text-destructive mb-4">{error instanceof Error ? error.message : "Unknown error"}</pre>
         <Button variant="outline" onClick={() => { router.invalidate(); reset(); }}>Retry</Button>
       </Card>
     </div>

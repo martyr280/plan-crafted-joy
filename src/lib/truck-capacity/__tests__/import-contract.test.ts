@@ -92,14 +92,42 @@ describe("validated occupancy contract", () => {
     const ws = wb.addWorksheet("Dallas-Local");
     ws.addRow(["Date", "Capacity"]);
     ws.addRow([44727, 0.5]);
+    ws.addRow(["44727", 0.5]);
+    ws.addRow([{ formula: "44727", result: 44727 }, 0.5]);
+    ws.addRow([{ formula: '"44727"', result: "44727" }, 0.5]);
     const parsed = await parseManualWorkbook(
       Buffer.from(await wb.xlsx.writeBuffer()),
       new Set(["DAL-LOCAL"]),
     );
     expect(parsed.rows[0].run_date).toBe("2026-06-16");
+    expect(parsed.rows.map((r) => r.run_date)).toEqual(Array(4).fill("2026-06-16"));
+    expect(parsed.quarantine).toEqual([]);
     expect(parsed.rows[0].provenance).toMatchObject({ date1904: true, raw_date: 44727 });
     expect(parsed.rows[0].provenance?.workbook_sha256).toMatch(/^[a-f0-9]{64}$/);
   });
+  it.each([false, true])(
+    "reserves explicit labels workbook-wide regardless of sheet order (%s)",
+    async (reverse) => {
+      const wb = new ExcelJS.Workbook();
+      const names = reverse ? ["Dallas Local", "Dallas-Local"] : ["Dallas-Local", "Dallas Local"];
+      for (const name of names) {
+        const ws = wb.addWorksheet(name);
+        ws.addRow(["Date", "Capacity"]);
+        ws.addRow(name === "Dallas Local" ? ["9/14/2026 - Run 1", 0.7] : ["9/14/2026", 0.5]);
+      }
+      const parsed = await parseManualWorkbook(
+        Buffer.from(await wb.xlsx.writeBuffer()),
+        new Set(["DAL-LOCAL"]),
+      );
+      expect(parsed.quarantine).toEqual([]);
+      expect(
+        parsed.rows.sort((a, b) => a.run_seq - b.run_seq).map((r) => [r.run_seq, r.capacity_frac]),
+      ).toEqual([
+        [1, 0.7],
+        [2, 0.5],
+      ]);
+    },
+  );
   it("quarantines duplicate explicit labels, invalid dates, and invalid vendor units", async () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Dallas-Local");
@@ -130,6 +158,7 @@ describe("strict score coverage", () => {
     missingFromSheet: false,
     cutoffKnown: true,
     cutoffDate: "2026-09-08",
+    cutoffAtUtc: "2026-09-08T21:00:00Z",
     runDate: "2026-09-09",
     logs: [log("2026-09-07")],
   };
@@ -144,8 +173,9 @@ describe("strict score coverage", () => {
     [{ runs: 2 }, "multiple_departures"],
     [{ cutoffKnown: false }, "unknown_cutoff"],
     [{ logs: [] }, "no_forecast"],
-    [{ logs: [log("2026-09-08")] }, "cutoff_day_timing_unknown"],
-    [{ cutoffDate: "2026-09-06" }, "after_cutoff"],
+    [{ logs: [log("2026-09-08")] }, "date_only_timing_unknown"],
+    [{ cutoffDate: "2026-09-06", cutoffAtUtc: "2026-09-06T21:00:00Z" }, "after_cutoff"],
+    [{ cutoffAtUtc: null }, "cutoff_timing_unknown"],
     [{ logs: [log("2026-09-09")] }, "no_forecast"],
     [{ logs: [log("2026-09-07", 1.4)] }, "ambiguous_forecast"],
   ])("discloses exclusion %j", (patch, reason) => {

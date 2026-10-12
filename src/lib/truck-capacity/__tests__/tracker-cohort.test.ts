@@ -58,7 +58,16 @@ beforeEach(() => {
     truck_capacity_routes: [
       { id: "r", code: "DAL-LOCAL", name: "Dallas", hub: "Dallas", active: true },
     ],
-    route_cutoffs: [{ route_id: "r", cutoff_dow: 2, run_dows: [3], active: true }],
+    route_cutoffs: [
+      {
+        route_id: "r",
+        cutoff_dow: 2,
+        cutoff_time: "16:00",
+        tz: "America/Chicago",
+        run_dows: [3],
+        active: true,
+      },
+    ],
     truck_capacity_runs: [
       { route_id: "r", run_date: "2026-09-09", capacity_frac: 0.6 },
       { route_id: "r", run_date: "2026-09-16", capacity_frac: 0.4 },
@@ -101,5 +110,14 @@ describe("tracker reconciliation integration", () => {
     expect(result.strict.overall.within10).toBeNull();
     expect(result.strict.coverage).toMatchObject({ eligible: 0, denominator: 4, excluded: 4 });
     expect(result.coverage.unscoredNoForecast).toBe(4);
+  });
+  it("explicitly discloses that timing eligibility cannot validate legacy actual units or collapsed departures", async () => {
+    state.tables.truck_capacity_runs[0].capacity_frac = 0.014;
+    const result = await buildForecastVsTracker(input, "operator");
+    expect(result.strict.overall.n).toBe(1);
+    expect(result.strict.limitation).toContain(
+      "legacy actual units and departure completeness remain unverified",
+    );
+    expect(result.rows[0].actual).toBe(0.014);
   });
 });

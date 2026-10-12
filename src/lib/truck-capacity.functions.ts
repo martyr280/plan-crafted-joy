@@ -939,7 +939,7 @@ export async function buildForecastVsTracker(
       .gte("forecast_date", from).lte("forecast_date", to).gte("made_on", madeOnFrom)
       .order("route_id").order("forecast_date").order("made_on")
       .range(f, t)),
-    supabaseAdmin.from("route_cutoffs").select("route_id, cutoff_dow, run_dows, active").eq("active", true).limit(5000),
+    supabaseAdmin.from("route_cutoffs").select("route_id, cutoff_dow, cutoff_time, tz, run_dows, active").eq("active", true).limit(5000),
   ]);
   for (const r of [routeRes, cutRes]) if (r.error) throw new Error(r.error.message);
   const runRes = { data: runRows };
@@ -955,6 +955,8 @@ export async function buildForecastVsTracker(
   for (const c of cutRes.data ?? []) {
     cutoffsByRoute.set(c.route_id, [...(cutoffsByRoute.get(c.route_id) ?? []), {
       cutoff_dow: Number(c.cutoff_dow),
+      cutoff_time: c.cutoff_time,
+      tz: c.tz,
       run_dows: ((c.run_dows ?? []) as any[]).map(Number),
       active: c.active !== false,
     }]);
@@ -982,7 +984,7 @@ export async function buildForecastVsTracker(
   }
 
   const rows: any[] = [];
-  const strictRows: Array<import("./truck-capacity/accuracy").ScoredRun & { cutoff_date: string; made_on: string }> = [];
+  const strictRows: Array<import("./truck-capacity/accuracy").ScoredRun & { cutoff_date: string; cutoff_bound_utc: string | null; made_on: string }> = [];
   const exclusions: Record<string, number> = {};
   let unscoredNoForecast = 0;
   const lastActualByHub: Record<string, string> = {};
@@ -996,11 +998,12 @@ export async function buildForecastVsTracker(
 
     const actual = agg.sum / agg.n;
     const { cutoffDate, cutoffKnown } = acc.cutoffDateForRun(runDate, cutoffsByRoute.get(routeId) ?? []);
-    const strict = acc.strictComparison({ runs: agg.n, actual: agg.invalid ? NaN : actual, missingFromSheet: agg.missing, cutoffKnown, cutoffDate, runDate, logs: logByKey.get(key) ?? [] });
+    const cutoffAtUtc = acc.strictCutoffInstantForRun(runDate, cutoffsByRoute.get(routeId) ?? []);
+    const strict = acc.strictComparison({ runs: agg.n, actual: agg.invalid ? NaN : actual, missingFromSheet: agg.missing, cutoffKnown, cutoffDate, cutoffAtUtc, runDate, logs: logByKey.get(key) ?? [] });
     if (strict.reason) exclusions[strict.reason] = (exclusions[strict.reason] ?? 0) + 1;
     if (strict.picked) {
       const forecast = Number(strict.picked.row.served);
-      strictRows.push({ hub: route.hub ?? null, route_id: routeId, code: route.code, run_date: runDate, week_start: acc.weekStartSunday(runDate), cutoff_date: cutoffDate, made_on: strict.picked.madeOn, forecast, actual, variance: forecast - actual });
+      strictRows.push({ hub: route.hub ?? null, route_id: routeId, code: route.code, run_date: runDate, week_start: acc.weekStartSunday(runDate), cutoff_date: cutoffDate, cutoff_bound_utc: cutoffAtUtc, made_on: strict.picked.madeOn, forecast, actual, variance: forecast - actual });
     }
     const picked = acc.pickForecastAtCutoff(logByKey.get(key) ?? [], cutoffDate, runDate);
     if (!picked) { unscoredNoForecast += 1; continue; }
@@ -1014,6 +1017,7 @@ export async function buildForecastVsTracker(
       week_start: acc.weekStartSunday(runDate),
       cutoff_date: cutoffDate,
       cutoff_known: cutoffKnown,
+      cutoff_bound_utc: cutoffAtUtc,
       made_on: picked.madeOn,
       lead_days: picked.leadDays,
       after_cutoff: picked.afterCutoff,
@@ -1054,13 +1058,13 @@ export async function buildForecastVsTracker(
     rows,
     ...aggregates,
     readiness,
-    comparisonUnit: "Legacy: mean departure occupancy per route-day; strict: single-departure occupancy",
+    comparisonUnit: "Legacy: mean recorded departure occupancy per route-day; strict: timing eligibility for one recorded departure. Legacy actual units and departure completeness remain unverified.",
     strict: {
       rows: strictRows,
       ...acc.aggregate(strictRows),
       readiness: acc.readinessRow("All hubs", acc.aggregate(strictRows).overall),
       coverage: { eligible: strictRows.length, denominator: actualAcc.size, excluded: actualAcc.size - strictRows.length, exclusions },
-      limitation: "Date-only forecast history cannot prove cutoff-day timing. Current configured cutoffs are used; historical cutoff changes are unverified. Multiple departures are excluded until forecast units are established.",
+      limitation: "Forecast dates are America/Chicago days. Eligibility requires their latest possible instant to precede the current route cutoff in its timezone. Cutoff gaps or missing time/zone are excluded; DST folds use the earlier instant. Historical cutoff changes, legacy actual units and departure completeness remain unverified; range and timing checks cannot detect historical scaling or collapsed departures.",
     },
     coverage: {
       routeDaysWithActuals: actualAcc.size,
@@ -1187,9 +1191,9 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
     }
 
     const strictSheet = wb.addWorksheet("Strict route-days");
-    strictSheet.addRow(["Route", "Run date", "Cutoff date", "Forecast made on", "Forecast %", "Actual %", "Variance pts"]);
+    strictSheet.addRow(["Route", "Run date", "Cutoff date", "Conservative cutoff bound (UTC)", "Forecast made on (Central date)", "Forecast %", "Actual %", "Variance pts"]);
     strictSheet.getRow(1).font = { bold: true };
-    for (const r of res.strict.rows) strictSheet.addRow([r.code, r.run_date, r.cutoff_date, r.made_on, P(r.forecast), P(r.actual), P(r.variance)]);
+    for (const r of res.strict.rows) strictSheet.addRow([r.code, r.run_date, r.cutoff_date, r.cutoff_bound_utc, r.made_on, P(r.forecast), P(r.actual), P(r.variance)]);
 
     const buf = Buffer.from(await wb.xlsx.writeBuffer());
     return { base64: buf.toString("base64"), filename: `forecast-vs-tracker-${new Date().toISOString().slice(0, 10)}.xlsx` };
