@@ -1,0 +1,67 @@
+name: Application QA
+
+on:
+  pull_request:
+  push:
+    branches: ["fix/truck-capacity-import-scoring-2026-10-12"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-type-tests:
+    name: Linux build, types and offline tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18.0"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+      - name: Install existing locked dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Full type check
+        run: bun run typecheck
+      - name: Full offline tests
+        run: bun run test
+      - name: New test and QA files lint
+        run: bunx eslint src/lib/truck-capacity/import-contract.ts src/lib/truck-capacity/__tests__/import-contract.test.ts src/lib/truck-capacity/__tests__/workbook-upsert.test.ts src/lib/truck-capacity/__tests__/tracker-cohort.test.ts src/lib/truck-capacity/__tests__/accuracy-timing.test.ts tests/no-network.ts vitest.local.config.ts
+      - name: Node fixtures
+        run: node --test agent/handlers/__tests__/archive-files.nodetest.js
+      - name: Full application build
+        run: bun run build
+      - name: Confirm build did not modify tracked source
+        run: git diff --exit-code
+
+  full-lint:
+    name: Full lint (existing baseline backlog)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18.0"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Full lint, with bounded console output
+        run: |
+          set +e
+          bun run lint > lint-output.txt 2>&1
+          result=$?
+          tail -n 80 lint-output.txt
+          exit "$result"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-lint-output
+          path: lint-output.txt

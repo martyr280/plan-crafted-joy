@@ -1,0 +1,9 @@
+$ vitest run --config vitest.local.config.ts
+
+ RUN  v4.1.10 <workspace>
+
+
+ Test Files  65 passed (65)
+      Tests  648 passed (648)
+   Start at  11:59:10
+   Duration  4.81s (transform 7.13s, setup 1.79s, import 17.29s, tests 4.69s, environment 17ms)

@@ -4,6 +4,7 @@
 // Auth goes through the Lovable connector gateway (delegated OAuth, the operator
 // signs in with his NDI Microsoft account). No client secrets live in code.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { validateImportRows } from "./import-contract";
 import {
   parseTruckCapacityWorkbook,
   normalizeSheetName,
@@ -173,14 +174,30 @@ export type UpsertCounts = {
  * (source='sharepoint') get flagged, so Joe's original 'import' history is never
  * relabelled as missing.
  */
-export async function applyWorkbookRows(rows: ParsedRow[]): Promise<UpsertCounts> {
-  const counts: UpsertCounts = { inserted: 0, updated: 0, unchanged: 0, missing_marked: 0, duplicate_keys: [] };
+export async function applyWorkbookRows(
+  rows: ParsedRow[],
+  opts: { source?: "sharepoint" | "import"; markMissing?: boolean } = {},
+): Promise<UpsertCounts> {
+  validateImportRows(rows);
+  const source = opts.source ?? "sharepoint";
+  const counts: UpsertCounts = {
+    inserted: 0,
+    updated: 0,
+    unchanged: 0,
+    missing_marked: 0,
+    duplicate_keys: [],
+  };
 
   // Dedupe within the payload; Postgres refuses to touch a conflict target twice.
   const byKey = new Map<string, ParsedRow>();
   for (const r of rows) {
     const key = `${r.route_id}|${r.run_date}|${r.run_seq}`;
-    if (byKey.has(key)) counts.duplicate_keys.push({ route_id: r.route_id, run_date: r.run_date, run_seq: r.run_seq });
+    if (byKey.has(key))
+      counts.duplicate_keys.push({
+        route_id: r.route_id,
+        run_date: r.run_date,
+        run_seq: r.run_seq,
+      });
     byKey.set(key, r);
   }
   const deduped = Array.from(byKey.values());
@@ -195,7 +212,9 @@ export async function applyWorkbookRows(rows: ParsedRow[]): Promise<UpsertCounts
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await supabaseAdmin
         .from("truck_capacity_runs")
-        .select("id, route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, driver, pallet_count, returned_pallets, notes, source, prior_values, missing_from_sheet")
+        .select(
+          "id, route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, driver, pallet_count, returned_pallets, notes, source, prior_values, missing_from_sheet",
+        )
         .eq("route_id", routeId)
         .order("run_date", { ascending: true })
         .range(from, from + pageSize - 1);
@@ -225,7 +244,8 @@ export async function applyWorkbookRows(rows: ParsedRow[]): Promise<UpsertCounts
         pallet_count: r.pallet_count,
         returned_pallets: r.returned_pallets,
         notes: r.notes,
-        source: "sharepoint",
+        source,
+        prior_values: r.provenance ? [{ import_provenance: r.provenance }] : null,
         entered_by: null,
         missing_from_sheet: false,
       });
@@ -235,13 +255,27 @@ export async function applyWorkbookRows(rows: ParsedRow[]): Promise<UpsertCounts
     for (const f of DIFF_FIELDS) {
       if (!sameValue((prev as any)[f], (r as any)[f])) changed[f] = (prev as any)[f];
     }
-    const needsSource = prev.source !== "sharepoint";
-    const needsUnflag = prev.missing_from_sheet === true;
-    if (Object.keys(changed).length === 0 && !needsSource && !needsUnflag) {
+    // Import paths cannot silently claim or overwrite another source's history.
+    if (prev.source !== source && Object.keys(changed).length)
+      throw new Error(
+        `Departure ${key} conflicts with ${prev.source} history; review before importing`,
+      );
+    const needsUnflag = prev.source === source && prev.missing_from_sheet === true;
+    const history = Array.isArray(prev.prior_values)
+      ? prev.prior_values
+      : prev.prior_values
+        ? [prev.prior_values]
+        : [];
+    const needsProvenance =
+      r.provenance != null &&
+      !history.some(
+        (entry: { import_provenance?: unknown }) =>
+          JSON.stringify(entry.import_provenance) === JSON.stringify(r.provenance),
+      );
+    if (Object.keys(changed).length === 0 && !needsUnflag && !needsProvenance) {
       counts.unchanged += 1;
       continue;
     }
-    const history = Array.isArray(prev.prior_values) ? prev.prior_values : prev.prior_values ? [prev.prior_values] : [];
     updates.push({
       id: prev.id,
       route_id: r.route_id,
@@ -253,12 +287,23 @@ export async function applyWorkbookRows(rows: ParsedRow[]): Promise<UpsertCounts
       pallet_count: r.pallet_count,
       returned_pallets: r.returned_pallets,
       notes: r.notes,
-      source: "sharepoint",
-      missing_from_sheet: false,
+      source: prev.source,
+      missing_from_sheet: needsUnflag ? false : prev.missing_from_sheet,
       updated_at: nowIso,
-      prior_values: Object.keys(changed).length
-        ? [...history, { at: nowIso, from_source: prev.source, changed }].slice(-25)
-        : history.length ? history : null,
+      prior_values:
+        Object.keys(changed).length || needsProvenance
+          ? [
+              ...history,
+              {
+                at: nowIso,
+                from_source: prev.source,
+                changed,
+                import_provenance: r.provenance ?? null,
+              },
+            ]
+          : history.length
+            ? history
+            : null,
     });
   }
 
@@ -271,7 +316,8 @@ export async function applyWorkbookRows(rows: ParsedRow[]): Promise<UpsertCounts
   for (let i = 0; i < updates.length; i += 500) {
     const batch = updates.slice(i, i + 500);
     const { error } = await supabaseAdmin
-      .from("truck_capacity_runs").upsert(batch, { onConflict: "id" });
+      .from("truck_capacity_runs")
+      .upsert(batch, { onConflict: "id" });
     if (error) throw new Error(`Update failed: ${error.message}`);
     counts.updated += batch.length;
   }
@@ -284,7 +330,7 @@ export async function applyWorkbookRows(rows: ParsedRow[]): Promise<UpsertCounts
   const maxDate = deduped.reduce((m, r) => (r.run_date > m ? r.run_date : m), deduped[0].run_date);
   for (const [key, row] of existing) {
     if (seen.has(key)) continue;
-    if (row.source !== "sharepoint") continue;
+    if (opts.markMissing === false || row.source !== source) continue;
     if (row.run_date < minDate || row.run_date > maxDate) continue;
     if (row.missing_from_sheet) continue;
     missingIds.push(row.id);
@@ -292,7 +338,9 @@ export async function applyWorkbookRows(rows: ParsedRow[]): Promise<UpsertCounts
   for (let i = 0; i < missingIds.length; i += 500) {
     const batch = missingIds.slice(i, i + 500);
     const { error } = await supabaseAdmin
-      .from("truck_capacity_runs").update({ missing_from_sheet: true, updated_at: nowIso }).in("id", batch);
+      .from("truck_capacity_runs")
+      .update({ missing_from_sheet: true, updated_at: nowIso })
+      .in("id", batch);
     if (error) throw new Error(`Missing-flag update failed: ${error.message}`);
     counts.missing_marked += batch.length;
   }
@@ -377,44 +425,67 @@ export async function runWorkbookSync(opts: {
 
     const sheetMap = await loadSheetMap();
     const parsed: ParseResult = await parseTruckCapacityWorkbook(buffer, sheetMap);
+    // Fail the whole import before writing or marking absent rows. Quarantined
+    // cells are retained in the parser report and logged for review.
+    if (parsed.quarantine.length)
+      throw new Error(`Workbook quarantined: ${JSON.stringify(parsed.quarantine)}`);
     const counts = await applyWorkbookRows(parsed.rows);
 
     const perSheet = parsed.sheets.map((s) => ({
-      sheet: s.sheet, route_id: s.route_id, status: s.status,
-      rows: s.rows, no_run_rows: s.no_run_rows,
-      rejected_capacity: s.rejected_capacity, skipped_no_date: s.skipped_no_date,
+      sheet: s.sheet,
+      route_id: s.route_id,
+      status: s.status,
+      rows: s.rows,
+      no_run_rows: s.no_run_rows,
+      rejected_capacity: s.rejected_capacity,
+      skipped_no_date: s.skipped_no_date,
     }));
     const skipped = parsed.sheets.reduce((n, s) => n + s.skipped_no_date + s.rejected_capacity, 0);
 
     if (logId) {
-      await supabaseAdmin.from("truck_capacity_sync_log").update({
-        finished_at: new Date().toISOString(),
-        status: "success",
-        sheets_seen: parsed.sheets.length,
-        rows_inserted: counts.inserted,
-        rows_updated: counts.updated,
-        rows_skipped: skipped,
-        rows_missing: counts.missing_marked,
-        unmatched_sheets: parsed.unmatchedSheets,
-        errors: [...parsed.warnings, ...counts.duplicate_keys.map((d) => `duplicate key ${d.run_date}#${d.run_seq}`)],
-      }).eq("id", logId);
+      await supabaseAdmin
+        .from("truck_capacity_sync_log")
+        .update({
+          finished_at: new Date().toISOString(),
+          status: "success",
+          sheets_seen: parsed.sheets.length,
+          rows_inserted: counts.inserted,
+          rows_updated: counts.updated,
+          rows_skipped: skipped,
+          rows_missing: counts.missing_marked,
+          unmatched_sheets: parsed.unmatchedSheets,
+          errors: [
+            ...parsed.warnings,
+            ...counts.duplicate_keys.map((d) => `duplicate key ${d.run_date}#${d.run_seq}`),
+          ],
+        })
+        .eq("id", logId);
     }
     if (!isUpload) {
-      await supabaseAdmin.from("truck_capacity_sync_state").upsert({
-        id: true,
-        etag: meta?.eTag ?? null,
-        file_modified_at: meta?.lastModifiedDateTime ?? null,
-        last_synced_at: new Date().toISOString(),
-        last_status: "success",
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "id" });
+      await supabaseAdmin.from("truck_capacity_sync_state").upsert(
+        {
+          id: true,
+          etag: meta?.eTag ?? null,
+          file_modified_at: meta?.lastModifiedDateTime ?? null,
+          last_synced_at: new Date().toISOString(),
+          last_status: "success",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
     }
 
     return {
-      ok: true, logId, status: "success",
-      fileModifiedAt: meta?.lastModifiedDateTime ?? null, eTag: meta?.eTag ?? null,
-      sheetsSeen: parsed.sheets.length, counts, perSheet,
-      unmatchedSheets: parsed.unmatchedSheets, warnings: parsed.warnings,
+      ok: true,
+      logId,
+      status: "success",
+      fileModifiedAt: meta?.lastModifiedDateTime ?? null,
+      eTag: meta?.eTag ?? null,
+      sheetsSeen: parsed.sheets.length,
+      counts,
+      perSheet,
+      unmatchedSheets: parsed.unmatchedSheets,
+      warnings: parsed.warnings,
     };
   } catch (e: any) {
     const message = e?.message ?? String(e);

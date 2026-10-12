@@ -14,7 +14,7 @@
 //
 // No Supabase, no clock reads beyond what callers pass in.
 
-import { addDaysISO, dowOfISO } from "./cutoffs";
+import { addDaysISO, dowOfISO, tzOffsetMinutes } from "./cutoffs";
 
 /**
  * First date every route had a seeded forecast in truck_capacity_forecast_log.
@@ -24,9 +24,11 @@ import { addDaysISO, dowOfISO } from "./cutoffs";
 export const ACCURACY_DEFAULT_MADE_FROM = "2026-07-31";
 
 export type CutoffLite = {
-  cutoff_dow: number;      // 0=Sun..6=Sat
-  run_dows: number[];      // weekdays this cutoff feeds
+  cutoff_dow: number; // 0=Sun..6=Sat
+  run_dows: number[]; // weekdays this cutoff feeds
   active?: boolean;
+  cutoff_time?: string | null;
+  tz?: string | null;
 };
 
 export type LogRowLite = {
@@ -91,7 +93,9 @@ export function pickForecastAtCutoff(
   cutoffDate: string,
   runDate: string,
 ): PickedForecast | null {
-  const before = logRows.filter((r) => r.made_on < runDate && r.served != null);
+  const before = logRows.filter(
+    (r) => r.made_on < runDate && r.served != null && Number.isFinite(Number(r.served)),
+  );
   if (!before.length) return null;
   const atCutoff = before.filter((r) => r.made_on <= cutoffDate);
   let chosen: LogRowLite;
@@ -104,6 +108,119 @@ export function pickForecastAtCutoff(
     afterCutoff = true;
   }
   return { row: chosen, madeOn: chosen.made_on, leadDays: daysBetween(chosen.made_on, runDate), afterCutoff };
+}
+
+export type StrictExclusion =
+  | "missing_from_sheet"
+  | "ambiguous_actual"
+  | "ambiguous_forecast"
+  | "multiple_departures"
+  | "unknown_cutoff"
+  | "no_forecast"
+  | "date_only_timing_unknown"
+  | "cutoff_timing_unknown"
+  | "after_cutoff";
+
+/** Enumerate real instants; reject DST gaps and retain both fold occurrences. */
+function wallInstants(date: string, time: string, tz: string): number[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(time))
+    return [];
+  const fullTime = time.length === 5 ? `${time}:00` : time;
+  const wall = `${date}T${fullTime}`;
+  const naive = Date.parse(`${wall}Z`);
+  if (!Number.isFinite(naive) || new Date(naive).toISOString().slice(0, 19) !== wall) return [];
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const offsets = new Set(
+      [-36, -24, -12, 0, 12, 24, 36].map((h) =>
+        tzOffsetMinutes(tz, new Date(naive + h * 3_600_000)),
+      ),
+    );
+    return [...offsets]
+      .map((offset) => naive - offset * 60_000)
+      .filter((instant) => {
+        const parts = fmt.formatToParts(new Date(instant));
+        const get = (type: string) => parts.find((p) => p.type === type)?.value;
+        return (
+          `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}` ===
+          wall
+        );
+      });
+  } catch {
+    return [];
+  }
+}
+
+/** Earliest applicable real cutoff is conservative when feeder rules overlap. */
+export function strictCutoffInstantForRun(runDate: string, cutoffs: CutoffLite[]): string | null {
+  const { cutoffDate, cutoffKnown } = cutoffDateForRun(runDate, cutoffs);
+  if (!cutoffKnown) return null;
+  const feeding = cutoffs.filter(
+    (c) =>
+      c.active !== false &&
+      c.run_dows.includes(dowOfISO(runDate)) &&
+      c.cutoff_dow === dowOfISO(cutoffDate),
+  );
+  const instants: number[] = [];
+  for (const c of feeding) {
+    if (!c.cutoff_time || !c.tz) return null;
+    const candidates = wallInstants(cutoffDate, c.cutoff_time, c.tz);
+    if (!candidates.length) return null;
+    instants.push(...candidates);
+  }
+  return instants.length ? new Date(Math.min(...instants)).toISOString() : null;
+}
+
+/** Writers store America/Chicago dates; use the latest possible instant, not a guessed timestamp. */
+export function latestPossibleForecastInstant(madeOn: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(madeOn)) return null;
+  const day = Date.parse(`${madeOn}T00:00:00Z`);
+  if (!Number.isFinite(day) || new Date(day).toISOString().slice(0, 10) !== madeOn) return null;
+  const nextMidnight = wallInstants(addDaysISO(madeOn, 1), "00:00", "America/Chicago");
+  return nextMidnight.length === 1 ? nextMidnight[0]! - 1 : null;
+}
+
+/** Date-only logs cannot prove a cutoff-day forecast existed before its hour. */
+export function strictComparison(input: {
+  runs: number;
+  actual: number;
+  missingFromSheet: boolean;
+  cutoffKnown: boolean;
+  cutoffDate: string;
+  runDate: string;
+  logs: LogRowLite[];
+  cutoffAtUtc?: string | null;
+}): { picked: PickedForecast | null; reason: StrictExclusion | null } {
+  const excluded = (reason: StrictExclusion) => ({ picked: null, reason });
+  if (input.missingFromSheet) return excluded("missing_from_sheet");
+  if (!Number.isFinite(input.actual) || input.actual < 0 || input.actual > 1)
+    return excluded("ambiguous_actual");
+  if (input.runs !== 1) return excluded("multiple_departures");
+  if (!input.cutoffKnown) return excluded("unknown_cutoff");
+  const cutoffMs = input.cutoffAtUtc ? Date.parse(input.cutoffAtUtc) : NaN;
+  if (!Number.isFinite(cutoffMs)) return excluded("cutoff_timing_unknown");
+  const proven = input.logs.filter((r) => {
+    const latest = latestPossibleForecastInstant(r.made_on);
+    return latest != null && latest <= cutoffMs;
+  });
+  const picked = pickForecastAtCutoff(proven, addDaysISO(input.runDate, -1), input.runDate);
+  if (picked) {
+    if (Number(picked.row.served) < 0 || Number(picked.row.served) > 1)
+      return excluded("ambiguous_forecast");
+    return { picked, reason: null };
+  }
+  const legacy = pickForecastAtCutoff(input.logs, input.cutoffDate, input.runDate);
+  if (!legacy) return excluded("no_forecast");
+  return excluded(legacy.afterCutoff ? "after_cutoff" : "date_only_timing_unknown");
 }
 
 /* ------------------------------- aggregation ------------------------------- */
@@ -164,7 +281,11 @@ export function metricsOf(variances: number[]): AccuracyMetrics {
   };
 }
 
-export const READINESS_GATE = { tolerancePts: 10, share: 0.8, label: "8 of every 10 runs within 10 points" } as const;
+export const READINESS_GATE = {
+  tolerancePts: 10,
+  share: 0.8,
+  label: "80% of scored route-days within 10 points",
+} as const;
 
 // UNCONFIRMED — minimum sample for a verdict is Marty's call, not the customer's.
 export const READINESS_MIN_RUNS = 10;

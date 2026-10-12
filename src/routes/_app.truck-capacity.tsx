@@ -1064,10 +1064,10 @@ function ImportTab() {
   }
 
   async function onCommit() {
-    if (!report?.rows) return;
+    if (!report?.canCommit) return;
     setBusy(true);
     try {
-      const { inserted } = await commit({ data: { rows: report.rows } });
+      const { inserted } = await commit({ data: { fileBase64: report.fileBase64 } });
       toast.success(`Imported ${inserted} runs`);
       setReport(null);
     } catch (e: any) { toast.error(e?.message ?? "Import failed"); }
@@ -1077,32 +1077,70 @@ function ImportTab() {
   return (
     <div className="space-y-4 pt-4">
       <Card className="p-4">
-        <div className="text-sm font-medium mb-2">One-time seed from the "Primary Truck Capacity" workbook</div>
-        <div className="text-xs text-muted-foreground mb-3">
-          Upload the .xlsx — a dry-run will show per-sheet counts before any rows are written. Rows with year &lt; 2020, missing dates, or missing capacity are skipped. Dates with " - Run 2/3" suffix become <code>run_seq</code>.
+        <div className="text-sm font-medium mb-2">
+          One-time seed from the "Primary Truck Capacity" workbook
         </div>
-        <Input type="file" accept=".xlsx" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} disabled={busy} />
+        <div className="text-xs text-muted-foreground mb-3">
+          Upload the .xlsx — a dry-run will show per-sheet counts before any rows are written. Blank
+          capacity stays a no-run marker; zero stays zero. Ambiguous units block the import for
+          review. Unlabeled repeated dates receive separate departure numbers. Dates with " - Run
+          2/3" suffix become <code>run_seq</code>.
+        </div>
+        <Input
+          type="file"
+          accept=".xlsx"
+          onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+          disabled={busy}
+        />
       </Card>
 
       {report && (
         <Card className="p-3">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-sm">Dry-run preview: <b>{report.totalOk}</b> rows ready to import.</div>
-            <Button onClick={onCommit} disabled={busy || report.totalOk === 0}>
+            <div className="text-sm">
+              Dry-run preview: <b>{report.totalOk}</b> rows ready to import.
+            </div>
+            <Button onClick={onCommit} disabled={busy || !report.canCommit || report.totalOk === 0}>
               {busy && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Commit import
             </Button>
           </div>
+          {report.quarantine?.length > 0 && (
+            <div className="mb-3 text-sm text-destructive">
+              Import blocked:{" "}
+              {report.quarantine
+                .map(
+                  (r: {
+                    sheet: string;
+                    excel_row: number;
+                    reason: string;
+                    capacity: unknown;
+                    capacity_format: string;
+                  }) =>
+                    `${r.sheet} row ${r.excel_row}: ${r.reason} (raw ${JSON.stringify(r.capacity)}, format ${r.capacity_format || "General"})`,
+                )
+                .join("; ")}
+            </div>
+          )}
           <Table>
-            <TableHeader><TableRow>
-              <TableHead>Sheet</TableHead><TableHead>Route</TableHead><TableHead>Status</TableHead>
-              <TableHead>OK</TableHead><TableHead>Bad date</TableHead><TableHead>No capacity</TableHead><TableHead>Old year</TableHead>
-            </TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Sheet</TableHead>
+                <TableHead>Route</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>OK</TableHead>
+                <TableHead>Bad date</TableHead>
+                <TableHead>No capacity</TableHead>
+                <TableHead>Old year</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {report.sheets.map((s: any) => (
                 <TableRow key={s.sheet}>
                   <TableCell>{s.sheet}</TableCell>
                   <TableCell className="text-xs">{s.route_code ?? "—"}</TableCell>
-                  <TableCell><Badge variant={s.status === "ok" ? "default" : "outline"}>{s.status}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant={s.status === "ok" ? "default" : "outline"}>{s.status}</Badge>
+                  </TableCell>
                   <TableCell>{s.ok}</TableCell>
                   <TableCell>{s.skipped_bad_date}</TableCell>
                   <TableCell>{s.skipped_no_capacity}</TableCell>
@@ -1960,7 +1998,7 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
     retry: false,
   });
 
-  const mappings = mapsQ.data?.mappings ?? [];
+  const mappings = useMemo(() => mapsQ.data?.mappings ?? [], [mapsQ.data?.mappings]);
 
   const repOptions = useMemo(() => {
     const m = new Map<string, string | null>();

@@ -5,6 +5,7 @@
 // HEADER TEXT (case-insensitive, fuzzy startsWith), never by position, because
 // two layouts exist in the same file and one sheet (OKL) has a typo header.
 import ExcelJS from "exceljs";
+import { createHash } from "node:crypto";
 
 /* ------------------------------ header matching ----------------------------- */
 
@@ -113,17 +114,20 @@ export function excelSerialToIso(serial: number): string | null {
  * seq is null when the cell carries no explicit run number; the caller then
  * assigns 1, 2, … in sheet order for repeated dates.
  */
-export function parseDateCell(v: any): { iso: string; seq: number | null } | null {
+export function parseDateCell(
+  v: unknown,
+  date1904 = false,
+): { iso: string; seq: number | null } | null {
   const s = cellScalar(v);
   if (s == null || s === "") return null;
 
   if (s instanceof Date) {
     // ExcelJS parses date cells as UTC midnight; read UTC parts so no shift.
     const iso = `${s.getUTCFullYear()}-${String(s.getUTCMonth() + 1).padStart(2, "0")}-${String(s.getUTCDate()).padStart(2, "0")}`;
-    return { iso, seq: null };
+    return Number.isFinite(s.getTime()) ? { iso, seq: null } : null;
   }
   if (typeof s === "number") {
-    const iso = excelSerialToIso(s);
+    const iso = excelSerialToIso(s + (date1904 ? 1462 : 0));
     return iso ? { iso, seq: null } : null;
   }
 
@@ -131,7 +135,11 @@ export function parseDateCell(v: any): { iso: string; seq: number | null } | nul
   if (!text) return null;
   const runMatch = text.match(/[-–—]\s*run\s*(\d+)\s*$/i);
   const seq = runMatch ? Number(runMatch[1]) : null;
-  const datePart = (runMatch ? text.slice(0, runMatch.index) : text).trim().replace(/[-–—]\s*$/, "").trim();
+  if (seq != null && (!Number.isSafeInteger(seq) || seq < 1)) return null;
+  const datePart = (runMatch ? text.slice(0, runMatch.index) : text)
+    .trim()
+    .replace(/[-–—]\s*$/, "")
+    .trim();
 
   const mdy = datePart.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
   if (mdy) {
@@ -139,17 +147,23 @@ export function parseDateCell(v: any): { iso: string; seq: number | null } | nul
     const dd = Number(mdy[2]);
     let yy = Number(mdy[3]);
     if (yy < 100) yy += yy < 50 ? 2000 : 1900;
-    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= new Date(Date.UTC(yy, mm, 0)).getUTCDate()) {
       return { iso: `${yy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`, seq };
     }
     return null;
   }
-  const iso = datePart.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return { iso: `${iso[1]}-${iso[2]}-${iso[3]}`, seq };
+  const iso = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    const date = `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const parsed = new Date(`${date}T00:00:00Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date
+      ? { iso: date, seq }
+      : null;
+  }
 
   // Pure serial-as-text (some sheets store the date as a string).
   if (/^\d{5}(\.\d+)?$/.test(datePart)) {
-    const fromSerial = excelSerialToIso(Number(datePart));
+    const fromSerial = excelSerialToIso(Number(datePart) + (date1904 ? 1462 : 0));
     if (fromSerial) return { iso: fromSerial, seq };
   }
   return null;
@@ -163,16 +177,27 @@ export type CapacityResult =
   | { kind: "rejected"; value: null; raw: number };
 
 /**
- * Capacity is a fraction 0–1. >1 and ≤100 is a percent typed without the sign
- * (divide by 100); >100 is rejected outright and logged. Empty is a no-run
- * marker, not a zero.
+ * Occupancy is a fraction 0-1. Explicit percent strings are converted once.
+ * Values above 100% and bare values above 1 require unit review.
+ * Empty is a no-run marker, not a zero.
  */
-export function normalizeCapacity(v: any): CapacityResult {
+export function normalizeCapacity(v: unknown, numFmt = ""): CapacityResult {
+  // Format is retained as evidence, never permission to rescale a bare value.
+  void numFmt;
+  const scalar = cellScalar(v);
+  if (scalar == null && v != null && typeof v === "object")
+    return { kind: "rejected", value: null, raw: NaN };
+  if (scalar == null || (typeof scalar === "string" && scalar.trim() === ""))
+    return { kind: "empty", value: null };
+  const text = typeof scalar === "string" ? scalar.trim() : null;
+  if (text != null && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*%?$/.test(text))
+    return { kind: "rejected", value: null, raw: NaN };
   const n = toNumber(v);
-  if (n == null) return { kind: "empty", value: null };
+  if (n == null) return { kind: "rejected", value: null, raw: NaN };
   if (n < 0) return { kind: "rejected", value: null, raw: n };
   if (n <= 1) return { kind: "ok", value: n };
-  if (n <= 100) return { kind: "ok", value: n / 100 };
+  // Explicit percentages and Excel percentage formats already denote fractions.
+  // Bare values >1 have no established unit; never infer truck equivalents.
   return { kind: "rejected", value: null, raw: n };
 }
 
@@ -207,6 +232,17 @@ export function normalizeDriver(v: any): string | null {
 /* --------------------------------- parsing ---------------------------------- */
 
 export type ParsedRow = {
+  provenance?: {
+    workbook_sha256?: string;
+    raw_date?: ExcelJS.CellValue;
+    date1904?: boolean;
+    sheet: string;
+    excel_row: number;
+    capacity: ExcelJS.CellValue;
+    capacity_format: string;
+    vendor: ExcelJS.CellValue;
+    vendor_format: string;
+  };
   route_id: string;
   run_date: string;
   run_seq: number;
@@ -233,6 +269,16 @@ export type ParsedSheet = {
 };
 
 export type ParseResult = {
+  quarantine: Array<{
+    sheet: string;
+    excel_row: number;
+    reason: string;
+    raw_date: ExcelJS.CellValue;
+    capacity: ExcelJS.CellValue;
+    capacity_format: string;
+    vendor: ExcelJS.CellValue;
+    vendor_format: string;
+  }>;
   sheets: ParsedSheet[];
   rows: ParsedRow[];
   unmatchedSheets: string[];
@@ -254,8 +300,46 @@ export async function parseTruckCapacityWorkbook(
 ): Promise<ParseResult> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as any);
+  const workbookSha = createHash("sha256")
+    .update(Buffer.from(buffer as ArrayBuffer))
+    .digest("hex");
+  const parseSheetDate = (value: ExcelJS.CellValue) => {
+    return parseDateCell(value, !!wb.properties.date1904);
+  };
+  const headersFor = (ws: ExcelJS.Worksheet) => {
+    const headers: Partial<Record<Field, number>> = {};
+    ws.getRow(1).eachCell({ includeEmpty: false }, (cell, col) => {
+      const field = matchHeader(cell.value);
+      if (field && headers[field] == null) headers[field] = col;
+    });
+    return headers;
+  };
 
-  const result: ParseResult = { sheets: [], rows: [], unmatchedSheets: [], warnings: [] };
+  const result: ParseResult = {
+    sheets: [],
+    rows: [],
+    unmatchedSheets: [],
+    warnings: [],
+    quarantine: [],
+  };
+  const sequenceUsed = new Map<string, Set<number>>();
+  const departureKeys = new Set<string>();
+  // Reserve labels across the entire workbook before assigning any unlabeled
+  // departure. Alias sheets for a route must not depend on worksheet ordering.
+  wb.eachSheet((ws) => {
+    const mapped = sheetMap.get(normalizeSheetName(ws.name));
+    const headers = headersFor(ws);
+    if (!mapped?.active || !mapped.route_id || headers.date == null || headers.capacity == null)
+      return;
+    for (let r = 2; r <= ws.rowCount; r++) {
+      const date = parseSheetDate(ws.getRow(r).getCell(headers.date).value);
+      if (!date || date.seq == null) continue;
+      const key = `${mapped.route_id}|${date.iso}`;
+      const used = sequenceUsed.get(key) ?? new Set<number>();
+      used.add(date.seq);
+      sequenceUsed.set(key, used);
+    }
+  });
 
   wb.eachSheet((ws) => {
     const normalized = normalizeSheetName(ws.name);
@@ -287,24 +371,34 @@ export async function parseTruckCapacityWorkbook(
     }
 
     // Header row is row 1. Later duplicates of the same field are ignored.
-    const headerRow = ws.getRow(1);
-    const headers: Partial<Record<Field, number>> = {};
-    headerRow.eachCell({ includeEmpty: false }, (cell, col) => {
-      const field = matchHeader(cell.value);
-      if (field && headers[field] == null) headers[field] = col;
-    });
+    const headers = headersFor(ws);
     out.headers = headers;
-    if (headers.date == null) {
+    if (headers.date == null || headers.capacity == null) {
       out.status = "no_headers";
-      result.warnings.push(`${ws.name}: no "Date" header found in row 1`);
+      const reason = "missing required Date or Capacity header";
+      result.warnings.push(`${ws.name}: ${reason}; import blocked`);
+      result.quarantine.push({
+        sheet: ws.name,
+        excel_row: 1,
+        reason,
+        raw_date: null,
+        capacity: null,
+        capacity_format: "",
+        vendor: null,
+        vendor_format: "",
+      });
       result.sheets.push(out);
       return;
     }
 
-    const seqUsed = new Map<string, Set<number>>();
+    const seqUsed = sequenceUsed;
     const nextSeq = (iso: string, explicit: number | null): number => {
-      let used = seqUsed.get(iso);
-      if (!used) { used = new Set(); seqUsed.set(iso, used); }
+      const key = `${mapped.route_id}|${iso}`;
+      let used = seqUsed.get(key);
+      if (!used) {
+        used = new Set();
+        seqUsed.set(key, used);
+      }
       if (explicit != null && explicit >= 1) {
         const s = Math.floor(explicit);
         used.add(s);
@@ -319,47 +413,124 @@ export async function parseTruckCapacityWorkbook(
     const last = ws.actualRowCount > 0 ? ws.rowCount : 0;
     for (let r = 2; r <= last; r++) {
       const row = ws.getRow(r);
-      const parsedDate = parseDateCell(row.getCell(headers.date).value);
+      const capCell = headers.capacity != null ? row.getCell(headers.capacity) : null;
+      const vendorCell = headers.vendor_pickup != null ? row.getCell(headers.vendor_pickup) : null;
+      const provenance = {
+        workbook_sha256: workbookSha,
+        raw_date: row.getCell(headers.date).value,
+        date1904: !!wb.properties.date1904,
+        sheet: ws.name,
+        excel_row: r,
+        capacity: capCell?.value ?? null,
+        capacity_format: capCell?.numFmt ?? "",
+        vendor: vendorCell?.value ?? null,
+        vendor_format: vendorCell?.numFmt ?? "",
+      };
+      const quarantine = (reason: string) => {
+        result.quarantine.push({
+          ...provenance,
+          raw_date: row.getCell(headers.date!).value,
+          reason,
+        });
+        out.rejected_capacity += 1;
+        result.warnings.push(`${ws.name} row ${r}: ${reason}; import blocked for review`);
+      };
+      const parsedDate = parseSheetDate(row.getCell(headers.date).value);
       if (!parsedDate) {
         // A row with no date is not a run — formula-only tail rows land here.
-        if (cellText(row.getCell(headers.date).value) != null) out.skipped_no_date += 1;
+        const rawDate = row.getCell(headers.date).value;
+        const populated = Object.entries(headers).some(([field, col]) => {
+          if (field === "date" || col == null) return false;
+          const value = row.getCell(col).value;
+          const scalar = cellScalar(value);
+          if (scalar == null) return value != null; // errors are populated, never blank data
+          return typeof scalar !== "string" || scalar.trim() !== "";
+        });
+        const scalarDate = cellScalar(rawDate);
+        const formulaCell =
+          rawDate != null &&
+          typeof rawDate === "object" &&
+          ("formula" in rawDate || "sharedFormula" in rawDate);
+        const formulaError =
+          rawDate != null &&
+          typeof rawDate === "object" &&
+          ("error" in rawDate ||
+            ("result" in rawDate &&
+              rawDate.result != null &&
+              typeof rawDate.result === "object" &&
+              "error" in rawDate.result));
+        // ExcelJS drops cached empty strings on XLSX load. An unresolved formula
+        // is only a template spacer when ALL recognized data cells are empty;
+        // explicit errors and populated/zero-load rows always require review.
+        const emptyTemplate =
+          formulaCell &&
+          !populated &&
+          !formulaError &&
+          (!("result" in rawDate) ||
+            rawDate.result === undefined ||
+            (typeof scalarDate === "string" && scalarDate.trim() === ""));
+        const invalidFormula =
+          rawDate != null &&
+          typeof rawDate === "object" &&
+          ("formula" in rawDate || "sharedFormula" in rawDate || "error" in rawDate) &&
+          !emptyTemplate;
+        if (!emptyTemplate && (invalidFormula || cellText(rawDate) != null || populated)) {
+          out.skipped_no_date += 1;
+          quarantine("invalid or missing date on populated row, formula result or departure label");
+        }
         continue;
       }
       const year = Number(parsedDate.iso.slice(0, 4));
       if (!(year >= 2000 && year <= 2100)) {
         out.skipped_no_date += 1;
+        quarantine("date outside supported 2000–2100 range");
         continue;
       }
 
+      const runSeq = nextSeq(parsedDate.iso, parsedDate.seq);
+      const explicitKey = `${mapped.route_id}|${parsedDate.iso}|${runSeq}`;
+      if (departureKeys.has(explicitKey)) {
+        quarantine("duplicate departure identity; review explicit labels and mapped sheets");
+        continue;
+      }
+      departureKeys.add(explicitKey);
       let capacity: number | null = null;
       if (headers.capacity != null) {
-        const cap = normalizeCapacity(row.getCell(headers.capacity).value);
+        const cap = normalizeCapacity(capCell!.value, capCell!.numFmt);
         if (cap.kind === "rejected") {
-          out.rejected_capacity += 1;
-          result.warnings.push(
-            `${ws.name} row ${r}: capacity ${cap.raw} out of range — row rejected`,
-          );
+          quarantine("capacity unit ambiguous or invalid (occupancy must be 0–100%)");
           continue;
         }
         capacity = cap.value;
       }
-      if (capacity == null) out.no_run_rows += 1;
 
       let vendor: number | null = null;
       if (headers.vendor_pickup != null) {
-        const v = normalizeCapacity(row.getCell(headers.vendor_pickup).value);
+        const v = normalizeCapacity(vendorCell!.value, vendorCell!.numFmt);
+        if (v.kind === "rejected") {
+          quarantine("vendor capacity unit ambiguous or invalid");
+          continue;
+        }
         vendor = v.kind === "ok" ? v.value : null;
       }
+      if (capacity == null) out.no_run_rows += 1;
 
       result.rows.push({
         route_id: mapped.route_id,
         run_date: parsedDate.iso,
-        run_seq: nextSeq(parsedDate.iso, parsedDate.seq),
+        run_seq: runSeq,
+        provenance,
         capacity_frac: capacity,
         vendor_pickup_frac: vendor,
         driver: headers.driver != null ? normalizeDriver(row.getCell(headers.driver).value) : null,
-        pallet_count: headers.pallet_count != null ? toIntOrNull(row.getCell(headers.pallet_count).value) : null,
-        returned_pallets: headers.returned_pallets != null ? toIntOrNull(row.getCell(headers.returned_pallets).value) : null,
+        pallet_count:
+          headers.pallet_count != null
+            ? toIntOrNull(row.getCell(headers.pallet_count).value)
+            : null,
+        returned_pallets:
+          headers.returned_pallets != null
+            ? toIntOrNull(row.getCell(headers.returned_pallets).value)
+            : null,
         notes: headers.notes != null ? cellText(row.getCell(headers.notes).value) : null,
         excel_row: r,
       });

@@ -1,0 +1,14 @@
+
+> build
+> vite build
+
+error during build:
+Error: @lovable.dev/mcp-js: routesDir "src/routes" must resolve under <baseline>, got <baseline>\src\routes
+    at assertContains (file:///<workspace>/node_modules/@lovable.dev/mcp-js/dist/stacks/tanstack/vite.js:11:65)
+    at resolveAllRoutes (file:///<workspace>/node_modules/@lovable.dev/mcp-js/dist/stacks/tanstack/vite.js:33:2)
+    at BasicMinimalPluginContext.configResolved (file:///<workspace>/node_modules/@lovable.dev/mcp-js/dist/stacks/tanstack/vite.js:243:130)
+    at file:///<workspace>/node_modules/vite/dist/node/chunks/config.js:35933:87
+    at Array.map (<anonymous>)
+    at resolveConfig (file:///<workspace>/node_modules/vite/dist/node/chunks/config.js:35933:68)
+    at async createBuilder (file:///<workspace>/node_modules/vite/dist/node/chunks/config.js:34126:19)
+    at async CAC.<anonymous> (file:///<workspace>/node_modules/vite/dist/node/cli.js:629:10)
