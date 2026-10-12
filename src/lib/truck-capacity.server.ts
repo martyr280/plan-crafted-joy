@@ -806,9 +806,9 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
     for (const r of list) {
       const dateLabel = r.run_seq && r.run_seq > 1 ? `${r.run_date} - Run ${r.run_seq}` : r.run_date;
       if (withVendor) {
-        ws.addRow([dateLabel, Number(r.capacity_frac), { formula: `1-B${rowIdx}` }, r.vendor_pickup_frac != null ? Number(r.vendor_pickup_frac) : null, r.driver, r.pallet_count, r.notes, r.returned_pallets]);
+        ws.addRow([dateLabel, r.capacity_frac == null ? null : Number(r.capacity_frac), { formula: `1-B${rowIdx}` }, r.vendor_pickup_frac != null ? Number(r.vendor_pickup_frac) : null, r.driver, r.pallet_count, r.notes, r.returned_pallets]);
       } else {
-        ws.addRow([dateLabel, Number(r.capacity_frac), { formula: `1-B${rowIdx}` }, r.driver, r.pallet_count, r.notes, r.returned_pallets]);
+        ws.addRow([dateLabel, r.capacity_frac == null ? null : Number(r.capacity_frac), { formula: `1-B${rowIdx}` }, r.driver, r.pallet_count, r.notes, r.returned_pallets]);
       }
       const row = ws.getRow(rowIdx);
       row.getCell(2).numFmt = "0.00%";
@@ -826,181 +826,22 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
 /* ============================== EXCEL IMPORT ============================== */
 
 // Sheet map imported from single source of truth to keep server + seed script in sync.
-import { SHEET_TO_ROUTE_CODE } from "./truck-capacity/sheet-map";
-
-type ImportRow = {
-  route_code: string;
-  run_date: string;
-  run_seq: number;
-  capacity_frac: number;
-  vendor_pickup_frac: number | null;
-  driver: string | null;
-  pallet_count: number | null;
-  returned_pallets: number | null;
-  notes: string | null;
-};
-
-type ImportReport = {
-  sheets: Array<{
-    sheet: string; route_code: string | null; status: "ok" | "unmapped" | "skipped";
-    ok: number; skipped_bad_date: number; skipped_no_capacity: number; skipped_old_year: number;
-  }>;
-  rows: ImportRow[];
-  totalOk: number;
-};
-
-function normHeader(s: any): string {
-  return String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function parseDateCell(v: any): { iso: string | null; seq: number } {
-  if (v == null || v === "") return { iso: null, seq: 1 };
-  if (v instanceof Date) {
-    // Use UTC parts to avoid TZ shifts.
-    const y = v.getUTCFullYear(), mo = v.getUTCMonth() + 1, dd = v.getUTCDate();
-    return { iso: `${y}-${String(mo).padStart(2, "0")}-${String(dd).padStart(2, "0")}`, seq: 1 };
-  }
-  if (typeof v === "number") {
-    // Excel serial date → UTC ymd (no TZ shift).
-    const ms = Math.round((v - 25569) * 86400 * 1000);
-    const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return { iso: null, seq: 1 };
-    const y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1, dd = d.getUTCDate();
-    return { iso: `${y}-${String(mo).padStart(2, "0")}-${String(dd).padStart(2, "0")}`, seq: 1 };
-  }
-  const s = String(v);
-  const m = s.match(/^(.+?)\s*[-–]\s*Run\s*(\d+)\s*$/i);
-  const datePart = (m ? m[1] : s).trim();
-  const seq = m ? Number(m[2]) : 1;
-
-  // Explicit M/D/YYYY or M-D-YYYY → build YYYY-MM-DD without new Date() (avoids TZ shifts).
-  const mdy = datePart.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-  if (mdy) {
-    let [, mo, dd, yy] = mdy;
-    let year = Number(yy);
-    if (year < 100) year += year < 50 ? 2000 : 1900;
-    const mm = Number(mo), d = Number(dd);
-    if (mm >= 1 && mm <= 12 && d >= 1 && d <= 31) {
-      return { iso: `${year}-${String(mm).padStart(2, "0")}-${String(d).padStart(2, "0")}`, seq };
-    }
-  }
-  // ISO YYYY-MM-DD passthrough.
-  const isoMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) return { iso: `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`, seq };
-
-  const d = new Date(datePart);
-  if (Number.isNaN(d.getTime())) return { iso: null, seq };
-  const y = d.getUTCFullYear(), mo2 = d.getUTCMonth() + 1, dd2 = d.getUTCDate();
-  return { iso: `${y}-${String(mo2).padStart(2, "0")}-${String(dd2).padStart(2, "0")}`, seq };
-}
 
 
-function toNum(v: any): number | null {
-  if (v == null || v === "") return null;
-  if (typeof v === "object" && "result" in v) v = (v as any).result;
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  const s = String(v).replace(/[%\s]/g, "");
-  const n = Number(s);
-  if (!Number.isFinite(n)) return null;
-  // If workbook expressed as percentage 45 → 0.45
-  return String(v).includes("%") ? n / 100 : n;
-}
+import { parseManualWorkbook, type ImportRow } from "./truck-capacity/import-contract";
 
-export async function parseImportWorkbook(fileBase64: string): Promise<ImportReport> {
-  const buf = Buffer.from(fileBase64, "base64");
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buf as any);
-
-  const { data: routes } = await supabaseAdmin.from("truck_capacity_routes").select("code");
-  const validCodes = new Set((routes ?? []).map((r) => r.code));
-
-  const report: ImportReport = { sheets: [], rows: [], totalOk: 0 };
-
-  wb.eachSheet((ws) => {
-    const key = normHeader(ws.name);
-    const routeCode = SHEET_TO_ROUTE_CODE[key];
-    const sheetOut = {
-      sheet: ws.name, route_code: routeCode === "__SKIP__" ? null : (routeCode ?? null),
-      status: "ok" as "ok" | "unmapped" | "skipped",
-      ok: 0, skipped_bad_date: 0, skipped_no_capacity: 0, skipped_old_year: 0,
-    };
-    if (!routeCode) { sheetOut.status = "unmapped"; report.sheets.push(sheetOut); return; }
-    if (routeCode === "__SKIP__") { sheetOut.status = "skipped"; report.sheets.push(sheetOut); return; }
-    if (!validCodes.has(routeCode)) { sheetOut.status = "unmapped"; report.sheets.push(sheetOut); return; }
-
-    const headerRow = ws.getRow(1);
-    const headers: Record<string, number> = {};
-    headerRow.eachCell((cell, col) => { headers[normHeader(cell.value)] = col; });
-    const colDate = headers["date"];
-    const colCap = headers["capacity"];
-    const colVendor = headers["vendor pickup capacity"];
-    const colDriver = headers["driver"];
-    const colPallets = headers["pallet count"];
-    const colNotes = headers["notes"];
-    const colReturned = headers["returned pallets"];
-    if (!colDate || !colCap) { sheetOut.status = "unmapped"; report.sheets.push(sheetOut); return; }
-
-    for (let r = 2; r <= ws.rowCount; r++) {
-      const row = ws.getRow(r);
-      const rawDate = row.getCell(colDate).value;
-      const { iso, seq } = parseDateCell(rawDate);
-      if (!iso) { if (rawDate != null && rawDate !== "") sheetOut.skipped_bad_date++; continue; }
-      const y = Number(iso.slice(0, 4));
-      if (!(y >= 2020 && y <= 2100)) { sheetOut.skipped_old_year++; continue; }
-      const cap = toNum(row.getCell(colCap).value);
-      if (cap == null) { sheetOut.skipped_no_capacity++; continue; }
-      const capClamped = Math.max(0, Math.min(1.25, cap));
-      report.rows.push({
-        route_code: routeCode,
-        run_date: iso,
-        run_seq: Math.max(1, Math.floor(seq)),
-        capacity_frac: capClamped,
-        vendor_pickup_frac: colVendor ? (() => { const n = toNum(row.getCell(colVendor).value); return n == null ? null : Math.max(0, Math.min(1.25, n)); })() : null,
-        driver: colDriver ? (row.getCell(colDriver).value ? String(row.getCell(colDriver).value) : null) : null,
-        pallet_count: colPallets ? (() => { const n = toNum(row.getCell(colPallets).value); return n == null ? null : Math.round(n); })() : null,
-        returned_pallets: colReturned ? (() => { const n = toNum(row.getCell(colReturned).value); return n == null ? null : Math.round(n); })() : null,
-
-        notes: colNotes ? (row.getCell(colNotes).value ? String(row.getCell(colNotes).value) : null) : null,
-      });
-      sheetOut.ok++;
-    }
-    report.totalOk += sheetOut.ok;
-    report.sheets.push(sheetOut);
-  });
-
-  return report;
+export async function parseImportWorkbook(fileBase64: string) {
+  const { data: routes, error } = await supabaseAdmin.from("truck_capacity_routes").select("code");
+  if (error) throw new Error(error.message);
+  return parseManualWorkbook(Buffer.from(fileBase64, "base64"), new Set((routes ?? []).map((r) => r.code)));
 }
 
 export async function applyImportRows(rows: ImportRow[]): Promise<{ inserted: number }> {
-  if (rows.length === 0) return { inserted: 0 };
-  const { data: routes } = await supabaseAdmin.from("truck_capacity_routes").select("id, code");
+  const { data: routes, error } = await supabaseAdmin.from("truck_capacity_routes").select("id, code");
+  if (error) throw new Error(error.message);
   const codeToId = new Map((routes ?? []).map((r) => [r.code, r.id]));
-  const inserts = rows
-    .filter((r) => codeToId.has(r.route_code))
-    .map((r) => ({
-      route_id: codeToId.get(r.route_code)!,
-      run_date: r.run_date, run_seq: r.run_seq,
-      capacity_frac: r.capacity_frac, vendor_pickup_frac: r.vendor_pickup_frac,
-      driver: r.driver, pallet_count: r.pallet_count, returned_pallets: r.returned_pallets,
-      notes: r.notes, source: "import",
-    }));
-  // Dedupe within the payload: Postgres rejects an ON CONFLICT DO UPDATE that
-  // would touch the same conflict target twice in one statement
-  // ("cannot affect row a second time"). Keep the last occurrence per key —
-  // matches "last write wins" if a workbook lists the same route/date/seq twice.
-  const dedup = new Map<string, (typeof inserts)[number]>();
-  for (const row of inserts) {
-    dedup.set(`${row.route_id}|${row.run_date}|${row.run_seq}`, row);
-  }
-  const deduped = Array.from(dedup.values());
-  let inserted = 0;
-  for (let i = 0; i < deduped.length; i += 500) {
-    const batch = deduped.slice(i, i + 500);
-    const { error } = await supabaseAdmin
-      .from("truck_capacity_runs")
-      .upsert(batch, { onConflict: "route_id,run_date,run_seq" });
-    if (error) throw new Error(`Import upsert failed: ${error.message}`);
-    inserted += batch.length;
-  }
-  return { inserted };
+  if (rows.some((r) => !codeToId.has(r.route_code))) throw new Error("Unknown route in import");
+  const { applyWorkbookRows } = await import("./truck-capacity/workbook-sync.server");
+  const counts = await applyWorkbookRows(rows.map(({ route_code, ...row }) => ({ ...row, route_id: codeToId.get(route_code)! })), { source: "import", markMissing: false });
+  return { inserted: counts.inserted + counts.updated };
 }

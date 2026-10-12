@@ -1,0 +1,105 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Local fluent query mocks model dynamic database responses. */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+const state = vi.hoisted(() => ({ tables: {} as Record<string, any[]> }));
+vi.mock("@tanstack/react-start", () => ({
+  createServerFn: () => {
+    const chain: any = {
+      middleware: () => chain,
+      inputValidator: () => chain,
+      handler: (fn: unknown) => fn,
+    };
+    return chain;
+  },
+}));
+vi.mock("@/lib/branch-guard", () => ({ denyLegacyBranchAccess: {} }));
+vi.mock("@/integrations/supabase/auth-middleware", () => ({ requireSupabaseAuth: {} }));
+vi.mock("@/lib/p21.server", () => ({
+  runJob: () => {
+    throw Error("No bridge jobs");
+  },
+}));
+vi.mock("@/lib/sql-schedules.server", () => ({
+  validateSelectSql: vi.fn(),
+  stripLeadingSqlComments: vi.fn(),
+}));
+vi.mock("@/lib/truck-capacity.server", () => ({
+  computeForecastForRoute: vi.fn(),
+  exportCapacityWorkbook: vi.fn(),
+  parseImportWorkbook: vi.fn(),
+  applyImportRows: vi.fn(),
+  runP21Snapshot: vi.fn(),
+  DEFAULT_P21_SQL: "",
+  DEFAULT_P21_TRANSFER_SQL: "",
+  validateP21SqlText: vi.fn(),
+  validateP21SqlOutput: vi.fn(),
+}));
+vi.mock("@/integrations/supabase/client.server", () => ({
+  supabaseAdmin: {
+    rpc: () => Promise.resolve({ data: true }),
+    from(table: string) {
+      const query: any = {
+        select: () => query,
+        not: () => query,
+        eq: () => query,
+        gte: () => query,
+        lte: () => query,
+        order: () => query,
+        limit: () => Promise.resolve({ data: state.tables[table] ?? [], error: null }),
+        range: (f: number, t: number) =>
+          Promise.resolve({ data: (state.tables[table] ?? []).slice(f, t + 1), error: null }),
+      };
+      return query;
+    },
+  },
+}));
+import { buildForecastVsTracker } from "../../truck-capacity.functions";
+beforeEach(() => {
+  state.tables = {
+    truck_capacity_routes: [
+      { id: "r", code: "DAL-LOCAL", name: "Dallas", hub: "Dallas", active: true },
+    ],
+    route_cutoffs: [{ route_id: "r", cutoff_dow: 2, run_dows: [3], active: true }],
+    truck_capacity_runs: [
+      { route_id: "r", run_date: "2026-09-09", capacity_frac: 0.6 },
+      { route_id: "r", run_date: "2026-09-16", capacity_frac: 0.4 },
+      { route_id: "r", run_date: "2026-09-16", capacity_frac: 0.8 },
+      { route_id: "r", run_date: "2026-09-23", capacity_frac: 0.5, missing_from_sheet: true },
+      { route_id: "r", run_date: "2026-09-30", capacity_frac: 0 },
+    ],
+    truck_capacity_forecast_log: ["2026-09-09", "2026-09-16", "2026-09-23"].map((date) => ({
+      route_id: "r",
+      forecast_date: date,
+      made_on: "2026-09-07",
+      served: 0.5,
+      predicted: 0.5,
+      method: "baseline",
+    })),
+  };
+});
+describe("tracker reconciliation integration", () => {
+  const input = { from: "2026-09-01", to: "2026-09-30", madeOnFrom: "2026-07-31" };
+  it("retains comparable legacy metrics and discloses the complete strict denominator", async () => {
+    const result = await buildForecastVsTracker(input, "operator");
+    expect(result.overall).toMatchObject({ n: 3, within10N: 3 });
+    expect(result.strict.overall).toMatchObject({ n: 1, within10N: 1 });
+    expect(result.strict.coverage).toEqual({
+      eligible: 1,
+      denominator: 4,
+      excluded: 3,
+      exclusions: { multiple_departures: 1, missing_from_sheet: 1, no_forecast: 1 },
+    });
+    expect(result.coverage.unscoredNoForecast).toBe(1);
+    const multi = result.rows.find((r) => r.run_date === "2026-09-16");
+    expect(multi).toMatchObject({ runs: 2, strict_eligible: false });
+    expect(multi.actual).toBeCloseTo(0.6);
+    expect(multi.total_truck_equivalents).toBeCloseTo(1.2);
+  });
+  it("shows an empty strict score with four actual route-days when forecasts are absent", async () => {
+    state.tables.truck_capacity_forecast_log = [];
+    const result = await buildForecastVsTracker(input, "operator");
+    expect(result.overall.n).toBe(0);
+    expect(result.strict.overall.within10).toBeNull();
+    expect(result.strict.coverage).toMatchObject({ eligible: 0, denominator: 4, excluded: 4 });
+    expect(result.coverage.unscoredNoForecast).toBe(4);
+  });
+});

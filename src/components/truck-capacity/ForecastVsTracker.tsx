@@ -202,6 +202,15 @@ export function ForecastVsTracker() {
       )}
       {q.error && <Card className="p-4 text-sm text-destructive">{(q.error as any)?.message ?? "Failed to load"}</Card>}
 
+      {data?.strict && <Card className="p-4 space-y-2">
+        <div className="font-semibold">Strict single-departure score</div>
+        <div>{hitsCell(data.strict.overall.within10N, data.strict.overall.n, data.strict.overall.within10)} within 10 points. <GateBadge status={data.strict.readiness.at10.status} /></div>
+        <div className="text-sm">Coverage: {data.strict.coverage.eligible} of {data.strict.coverage.denominator} route-days with actuals; {data.strict.coverage.excluded} excluded.</div>
+        <div className="text-xs text-muted-foreground">{data.strict.limitation} Forecast and actual are fractions of one full truck. Total truck equivalents are the sum of departures and are not scored as mean occupancy.</div>
+        <div className="text-xs">Exclusions (one reason per route-day): {Object.entries(data.strict.coverage.exclusions).map(([reason, n]) => reason.replaceAll("_", " ") + ": " + n).join("; ") || "none"}</div>
+        <div className="text-xs text-muted-foreground">Legacy comparison below retains mean departure occupancy and approximate cutoff choices for continuity.</div>
+      </Card>}
+
       {data && data.overall.n === 0 && (
         <Card className="p-8 text-center text-sm text-muted-foreground">
           No scored runs in this window — upload the latest tracker in the Import tab or widen the window.
@@ -212,7 +221,7 @@ export function ForecastVsTracker() {
         <>
           <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
             <KpiCard
-              label="Scored runs" value={data.overall.n}
+              label="Legacy scored route-days" value={data.overall.n}
               sub={`of ${data.coverage.routeDaysWithActuals} route-days with tracker actuals`}
               icon={<Target className="w-5 h-5" />}
             />
@@ -236,9 +245,9 @@ export function ForecastVsTracker() {
           </div>
 
           <Card className="p-4">
-            <h3 className="font-semibold mb-1">Readiness by hub</h3>
+            <h3 className="font-semibold mb-1">Legacy comparison by hub</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Readiness gate: 8 of every 10 scored runs within 10 points of the tracker. The 5-point rate is shown alongside so a tighter gate can be chosen.
+              Legacy gate: 8 of every 10 scored route-days within 10 points of the tracker. The 5-point rate is shown alongside so a tighter gate can be chosen.
             </p>
             <Table>
               <TableHeader>
@@ -387,7 +396,9 @@ export function ForecastVsTracker() {
                       <TableHead>Cutoff</TableHead>
                       <TableHead>Forecast made on</TableHead>
                       <TableHead className="text-right">Forecast %</TableHead>
-                      <TableHead className="text-right">Tracker %</TableHead>
+                      <TableHead className="text-right">Mean occupancy %</TableHead>
+                      <TableHead>Departures / total truck equivalents</TableHead>
+                      <TableHead>Strict comparison</TableHead>
                       <TableHead className="text-right">Variance pts</TableHead>
                       <TableHead>Method</TableHead>
                       <TableHead>Guard</TableHead>
@@ -408,6 +419,8 @@ export function ForecastVsTracker() {
                         </TableCell>
                         <TableCell className="text-right">{pts(r.forecast)}</TableCell>
                         <TableCell className="text-right">{pts(r.actual)}</TableCell>
+                        <TableCell>{r.runs} / {r.total_truck_equivalents == null ? "Unknown units" : Number(r.total_truck_equivalents).toFixed(2)}</TableCell>
+                        <TableCell className="text-xs">{r.strict_eligible ? `${pts(r.strict_forecast)}% made ${r.strict_made_on}` : String(r.strict_exclusion).replaceAll("_", " ")}</TableCell>
                         <TableCell className="text-right font-medium">
                           {r.variance >= 0 ? "+" : "−"}{pts(Math.abs(r.variance))}
                         </TableCell>

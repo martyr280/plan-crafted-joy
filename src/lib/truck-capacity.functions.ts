@@ -263,34 +263,18 @@ export const previewTruckImport = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
     const report = await parseImportWorkbook(data.fileBase64);
-    return { sheets: report.sheets, totalOk: report.totalOk, rows: report.rows };
+    return { ...report, fileBase64: data.fileBase64, canCommit: report.quarantine.length === 0 };
   });
 
 export const commitTruckImport = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    rows: z.array(z.object({
-      route_code: z.string(),
-      run_date: z.string(),
-      run_seq: z.number().int().min(1),
-      capacity_frac: z.number(),
-      vendor_pickup_frac: z.number().nullable(),
-      driver: z.string().nullable(),
-      pallet_count: z.number().int().nullable(),
-      returned_pallets: z.number().int().nullable(),
-      notes: z.string().nullable(),
-    })).max(20000),
-  }).parse(i))
+  .inputValidator((i) => z.object({ fileBase64: z.string().min(1) }).parse(i))
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
-    const result = await applyImportRows(data.rows);
-    // Best-effort retrain after import so accuracy metrics reflect the new data.
-    let retrain: any = null;
-    try {
-      const { trainAndMaybePromote } = await import("./truck-capacity/train");
-      retrain = await trainAndMaybePromote(context.userId);
-    } catch (e: any) { retrain = { ok: false, error: e?.message ?? String(e) }; }
-    return { ...result, retrain };
+    const report = await parseImportWorkbook(data.fileBase64);
+    if (report.quarantine.length) throw new Error("Workbook has quarantined rows; resolve units and departure labels before import");
+    const result = await applyImportRows(report.rows);
+    return { ...result, retrain: null };
   });
 
 
@@ -944,7 +928,7 @@ export async function buildForecastVsTracker(
   // stable order so .range() windows neither skip nor repeat rows.
   const [routeRes, runRows, logRows, cutRes] = await Promise.all([
     supabaseAdmin.from("truck_capacity_routes").select("id, code, name, hub, active, sort_order").limit(2000),
-    fetchAllRows<any>((f, t) => supabaseAdmin.from("truck_capacity_runs").select("route_id, run_date, capacity_frac")
+    fetchAllRows<any>((f, t) => supabaseAdmin.from("truck_capacity_runs").select("route_id, run_date, capacity_frac, missing_from_sheet")
       // No-run markers (NULL capacity) are not tracker actuals — exclude them.
       .not("capacity_frac", "is", null)
       .gte("run_date", from).lte("run_date", to)
@@ -977,13 +961,15 @@ export async function buildForecastVsTracker(
   }
 
   // Actuals: avg(capacity_frac) across run_seq for the route-day.
-  const actualAcc = new Map<string, { sum: number; n: number }>();
+  const actualAcc = new Map<string, { sum: number; n: number; missing: boolean; invalid: boolean }>();
   for (const r of runRes.data ?? []) {
     if (!routeById.has(r.route_id)) continue;
     if (r.capacity_frac == null || !Number.isFinite(Number(r.capacity_frac))) continue;
     const k = `${r.route_id}|${r.run_date}`;
-    const cur = actualAcc.get(k) ?? { sum: 0, n: 0 };
+    const cur = actualAcc.get(k) ?? { sum: 0, n: 0, missing: false, invalid: false };
     cur.sum += Number(r.capacity_frac); cur.n += 1;
+    cur.missing ||= r.missing_from_sheet === true;
+    cur.invalid ||= Number(r.capacity_frac) < 0 || Number(r.capacity_frac) > 1;
     actualAcc.set(k, cur);
   }
 
@@ -996,6 +982,8 @@ export async function buildForecastVsTracker(
   }
 
   const rows: any[] = [];
+  const strictRows: Array<import("./truck-capacity/accuracy").ScoredRun & { cutoff_date: string; made_on: string }> = [];
+  const exclusions: Record<string, number> = {};
   let unscoredNoForecast = 0;
   const lastActualByHub: Record<string, string> = {};
 
@@ -1008,6 +996,12 @@ export async function buildForecastVsTracker(
 
     const actual = agg.sum / agg.n;
     const { cutoffDate, cutoffKnown } = acc.cutoffDateForRun(runDate, cutoffsByRoute.get(routeId) ?? []);
+    const strict = acc.strictComparison({ runs: agg.n, actual: agg.invalid ? NaN : actual, missingFromSheet: agg.missing, cutoffKnown, cutoffDate, runDate, logs: logByKey.get(key) ?? [] });
+    if (strict.reason) exclusions[strict.reason] = (exclusions[strict.reason] ?? 0) + 1;
+    if (strict.picked) {
+      const forecast = Number(strict.picked.row.served);
+      strictRows.push({ hub: route.hub ?? null, route_id: routeId, code: route.code, run_date: runDate, week_start: acc.weekStartSunday(runDate), cutoff_date: cutoffDate, made_on: strict.picked.madeOn, forecast, actual, variance: forecast - actual });
+    }
     const picked = acc.pickForecastAtCutoff(logByKey.get(key) ?? [], cutoffDate, runDate);
     if (!picked) { unscoredNoForecast += 1; continue; }
     const forecast = Number(picked.row.served);
@@ -1029,6 +1023,12 @@ export async function buildForecastVsTracker(
       method: picked.row.method ?? null,
       guard: !!picked.row.p21_guard_applied,
       runs: agg.n,
+      total_truck_equivalents: agg.invalid ? null : agg.sum,
+      strict_eligible: strict.picked != null,
+      strict_forecast: strict.picked?.row.served ?? null,
+      strict_made_on: strict.picked?.madeOn ?? null,
+      strict_exclusion: strict.reason,
+      missing_from_sheet: agg.missing,
     });
   }
 
@@ -1054,6 +1054,14 @@ export async function buildForecastVsTracker(
     rows,
     ...aggregates,
     readiness,
+    comparisonUnit: "Legacy: mean departure occupancy per route-day; strict: single-departure occupancy",
+    strict: {
+      rows: strictRows,
+      ...acc.aggregate(strictRows),
+      readiness: acc.readinessRow("All hubs", acc.aggregate(strictRows).overall),
+      coverage: { eligible: strictRows.length, denominator: actualAcc.size, excluded: actualAcc.size - strictRows.length, exclusions },
+      limitation: "Date-only forecast history cannot prove cutoff-day timing. Current configured cutoffs are used; historical cutoff changes are unverified. Multiple departures are excluded until forecast units are established.",
+    },
     coverage: {
       routeDaysWithActuals: actualAcc.size,
       scored: rows.length,
@@ -1096,7 +1104,12 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
     put("Special-run lanes included", res.window.includeSpecial ? "Yes" : "No");
     put("Hub", res.window.hub ?? "All hubs");
     put("");
-    put("Scored runs", res.overall.n);
+    put("Legacy scored route-days", res.overall.n);
+    put("Comparison units", res.comparisonUnit);
+    put("Strict eligible / actual route-days", `${res.strict.coverage.eligible} / ${res.strict.coverage.denominator}`);
+    put("Strict hits within 10 points", res.strict.overall.within10N);
+    put("Strict exclusions", JSON.stringify(res.strict.coverage.exclusions));
+    put("Strict timing limitation", res.strict.limitation);
     put("Route-days with tracker actuals", res.coverage.routeDaysWithActuals);
     put("Route-days with no usable forecast", res.coverage.unscoredNoForecast);
     put("Tracker rows fetched", res.coverage.runRowsFetched);
@@ -1160,14 +1173,23 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
       { header: "Forecast %", key: "f", width: 12 }, { header: "Tracker %", key: "t", width: 12 },
       { header: "Variance pts", key: "v", width: 13 }, { header: "Method", key: "method", width: 10 },
       { header: "P21 guard", key: "guard", width: 11 }, { header: "After cutoff", key: "after", width: 13 },
+      { header: "Departures", key: "departures", width: 12 },
+      { header: "Total truck equivalents", key: "total", width: 23 },
+      { header: "Strict exclusion", key: "excluded", width: 30 },
     ];
     rs.getRow(1).font = { bold: true };
     for (const r of res.rows as any[]) {
       rs.addRow({ hub: r.hub ?? "", code: r.code, run: r.run_date,
         cut: r.cutoff_known ? r.cutoff_date : `${r.cutoff_date} (est)`,
         made: r.made_on, lead: r.lead_days, f: P(r.forecast), t: P(r.actual), v: P(r.variance),
-        method: r.method ?? "", guard: r.guard ? "Yes" : "", after: r.after_cutoff ? "Yes" : "" });
+        method: r.method ?? "", guard: r.guard ? "Yes" : "", after: r.after_cutoff ? "Yes" : "",
+        departures: r.runs, total: r.total_truck_equivalents, excluded: r.strict_exclusion ?? "Eligible" });
     }
+
+    const strictSheet = wb.addWorksheet("Strict route-days");
+    strictSheet.addRow(["Route", "Run date", "Cutoff date", "Forecast made on", "Forecast %", "Actual %", "Variance pts"]);
+    strictSheet.getRow(1).font = { bold: true };
+    for (const r of res.strict.rows) strictSheet.addRow([r.code, r.run_date, r.cutoff_date, r.made_on, P(r.forecast), P(r.actual), P(r.variance)]);
 
     const buf = Buffer.from(await wb.xlsx.writeBuffer());
     return { base64: buf.toString("base64"), filename: `forecast-vs-tracker-${new Date().toISOString().slice(0, 10)}.xlsx` };

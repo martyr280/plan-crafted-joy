@@ -91,7 +91,7 @@ export function pickForecastAtCutoff(
   cutoffDate: string,
   runDate: string,
 ): PickedForecast | null {
-  const before = logRows.filter((r) => r.made_on < runDate && r.served != null);
+  const before = logRows.filter((r) => r.made_on < runDate && r.served != null && Number.isFinite(Number(r.served)));
   if (!before.length) return null;
   const atCutoff = before.filter((r) => r.made_on <= cutoffDate);
   let chosen: LogRowLite;
@@ -104,6 +104,29 @@ export function pickForecastAtCutoff(
     afterCutoff = true;
   }
   return { row: chosen, madeOn: chosen.made_on, leadDays: daysBetween(chosen.made_on, runDate), afterCutoff };
+}
+
+export type StrictExclusion = "missing_from_sheet" | "ambiguous_actual" | "ambiguous_forecast" | "multiple_departures" | "unknown_cutoff" | "no_forecast" | "cutoff_day_timing_unknown" | "after_cutoff";
+
+/** Date-only logs cannot prove a cutoff-day forecast existed before its hour. */
+export function strictComparison(input: {
+  runs: number; actual: number; missingFromSheet: boolean;
+  cutoffKnown: boolean; cutoffDate: string; runDate: string; logs: LogRowLite[];
+}): { picked: PickedForecast | null; reason: StrictExclusion | null } {
+  const excluded = (reason: StrictExclusion) => ({ picked: null, reason });
+  if (input.missingFromSheet) return excluded("missing_from_sheet");
+  if (!Number.isFinite(input.actual) || input.actual < 0 || input.actual > 1) return excluded("ambiguous_actual");
+  if (input.runs !== 1) return excluded("multiple_departures");
+  if (!input.cutoffKnown) return excluded("unknown_cutoff");
+  const proven = input.logs.filter((r) => r.made_on < input.cutoffDate);
+  const picked = pickForecastAtCutoff(proven, input.cutoffDate, input.runDate);
+  if (picked) {
+    if (Number(picked.row.served) < 0 || Number(picked.row.served) > 1) return excluded("ambiguous_forecast");
+    return { picked, reason: null };
+  }
+  const legacy = pickForecastAtCutoff(input.logs, input.cutoffDate, input.runDate);
+  if (!legacy) return excluded("no_forecast");
+  return excluded(legacy.afterCutoff ? "after_cutoff" : "cutoff_day_timing_unknown");
 }
 
 /* ------------------------------- aggregation ------------------------------- */
@@ -164,7 +187,7 @@ export function metricsOf(variances: number[]): AccuracyMetrics {
   };
 }
 
-export const READINESS_GATE = { tolerancePts: 10, share: 0.8, label: "8 of every 10 runs within 10 points" } as const;
+export const READINESS_GATE = { tolerancePts: 10, share: 0.8, label: "80% of scored route-days within 10 points" } as const;
 
 // UNCONFIRMED — minimum sample for a verdict is Marty's call, not the customer's.
 export const READINESS_MIN_RUNS = 10;

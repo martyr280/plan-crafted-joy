@@ -26,7 +26,7 @@ async function fixture(): Promise<Buffer> {
   const okl = wb.addWorksheet("OKL");
   okl.addRow(["Date", "Capacity", "Unused Capcity", "Vendor Pickup Capacity", "Driver", "Pallet Count", "Notes", "Returned Pallets"]);
   okl.addRow([45700, 0.85, 0.15, 0.1, "  dj   smith ", 18, "on time", 2]);          // Excel serial date
-  okl.addRow(["2/12/2026 - Run 1", 92, 0.08, null, "ALBERTO FISCAL", 20, null, 0]);  // percent > 1, "- Run N"
+  okl.addRow(["2/12/2026 - Run 1", "92%", 0.08, null, "ALBERTO FISCAL", 20, null, 0]);  // percent > 1, "- Run N"
   okl.addRow(["2/12/2026 - Run 2", 0.4, 0.6, null, "bob o'neal", 9, "second run", null]);
   okl.addRow(["2/16/2026", null, 1, null, null, null, "Labor Day", null]);           // no-run marker
   okl.addRow(["2/17/2026", 4000, 0, null, "x", null, "bad", null]);                  // rejected: > 100
@@ -89,7 +89,8 @@ describe("date cells", () => {
 describe("capacity normalization", () => {
   it("keeps fractions, converts 1–100 as percent, rejects > 100, treats blank as no-run", () => {
     expect(normalizeCapacity(0.85)).toEqual({ kind: "ok", value: 0.85 });
-    expect(normalizeCapacity(92)).toEqual({ kind: "ok", value: 0.92 });
+    expect(normalizeCapacity("92%")).toEqual({ kind: "ok", value: 0.92 });
+    expect(normalizeCapacity(92).kind).toBe("rejected");
     expect(normalizeCapacity(4000)).toEqual({ kind: "rejected", value: null, raw: 4000 });
     expect(normalizeCapacity(null)).toEqual({ kind: "empty", value: null });
     expect(normalizeCapacity("")).toEqual({ kind: "empty", value: null });

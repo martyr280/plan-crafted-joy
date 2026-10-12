@@ -1064,10 +1064,10 @@ function ImportTab() {
   }
 
   async function onCommit() {
-    if (!report?.rows) return;
+    if (!report?.canCommit) return;
     setBusy(true);
     try {
-      const { inserted } = await commit({ data: { rows: report.rows } });
+      const { inserted } = await commit({ data: { fileBase64: report.fileBase64 } });
       toast.success(`Imported ${inserted} runs`);
       setReport(null);
     } catch (e: any) { toast.error(e?.message ?? "Import failed"); }
@@ -1079,7 +1079,7 @@ function ImportTab() {
       <Card className="p-4">
         <div className="text-sm font-medium mb-2">One-time seed from the "Primary Truck Capacity" workbook</div>
         <div className="text-xs text-muted-foreground mb-3">
-          Upload the .xlsx — a dry-run will show per-sheet counts before any rows are written. Rows with year &lt; 2020, missing dates, or missing capacity are skipped. Dates with " - Run 2/3" suffix become <code>run_seq</code>.
+          Upload the .xlsx — a dry-run will show per-sheet counts before any rows are written. Blank capacity stays a no-run marker; zero stays zero. Ambiguous units block the import for review. Unlabeled repeated dates receive separate departure numbers. Dates with " - Run 2/3" suffix become <code>run_seq</code>.
         </div>
         <Input type="file" accept=".xlsx" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} disabled={busy} />
       </Card>
@@ -1088,10 +1088,11 @@ function ImportTab() {
         <Card className="p-3">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm">Dry-run preview: <b>{report.totalOk}</b> rows ready to import.</div>
-            <Button onClick={onCommit} disabled={busy || report.totalOk === 0}>
+            <Button onClick={onCommit} disabled={busy || !report.canCommit || report.totalOk === 0}>
               {busy && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Commit import
             </Button>
           </div>
+          {report.quarantine?.length > 0 && <div className="mb-3 text-sm text-destructive">Import blocked: {report.quarantine.map((r: { sheet: string; excel_row: number; reason: string; capacity: unknown; capacity_format: string }) => `${r.sheet} row ${r.excel_row}: ${r.reason} (raw ${JSON.stringify(r.capacity)}, format ${r.capacity_format || "General"})`).join("; ")}</div>}
           <Table>
             <TableHeader><TableRow>
               <TableHead>Sheet</TableHead><TableHead>Route</TableHead><TableHead>Status</TableHead>

@@ -1,0 +1,99 @@
+{
+  "base_sha": "83fd68e03befad3c234dc5c0fbee71f0184bded7",
+  "main_reverified": true,
+  "executor": "MARTYR-D",
+  "date": "2026-10-12",
+  "import_contract": {
+    "occupancy": "0..1 numeric fractions or explicit percent strings, normalized once",
+    "ambiguous": "Bare values above 1 and explicit percentages above 100%, invalid formulas/dates/vendors, and duplicate departure identities quarantine the entire workbook before run writes or missing flags",
+    "blanks": "Null remains no-run; zero remains an observed empty load; workbook export preserves null",
+    "identity": "Explicit run labels reserved before unlabeled sheet-order sequences. Identical workbook reimports are stable; reordering unlabeled same-date rows cannot prove a persistent departure identity and should use explicit labels.",
+    "provenance": "Original cells/formulas, number formats, raw date, workbook epoch, sheet/row and SHA-256 retained in prior_values for accepted rows; quarantine report retains rejected evidence",
+    "history": "No deletions; full prior actual history retained without the former 25-entry truncation; conflicting source-owned history blocks writes; no auto-retraining on manual import"
+  },
+  "scoring": {
+    "legacy": "Existing mean departure occupancy per route-day retained for comparable finite records",
+    "strict": "Single departure with occupancy 0..1, present in sheet, known current cutoff, finite served occupancy 0..1 from a date strictly before cutoff date",
+    "denominator": "All in-scope route-days with non-null finite actuals; exclusions include no forecast; metrics denominator is eligible route-days and coverage separately discloses all actual route-days",
+    "timing": "Date-only logs cannot establish cutoff-day intraday timing. Historical cutoff changes are unverified. A prior-day forecast can be selected even when a later cutoff-day estimate exists.",
+    "units": "Mean occupancy and summed truck equivalents displayed separately. Ambiguous historical actuals have no fabricated total truck equivalents."
+  },
+  "checks": {
+    "full_vitest": {
+      "status": "passed",
+      "files": 64,
+      "tests": 627,
+      "command": "npx vitest run --config vitest.local.config.ts",
+      "fetch": "blocked"
+    },
+    "baseline_vitest": {
+      "status": "passed",
+      "files": 61,
+      "tests": 585
+    },
+    "node_tests": {
+      "status": "passed",
+      "tests": 6,
+      "command": "node --test agent/handlers/__tests__/archive-files.nodetest.js"
+    },
+    "timezone_fixtures": {
+      "status": "passed",
+      "tests_each": 106,
+      "zones": [
+        "America/Los_Angeles",
+        "America/New_York"
+      ]
+    },
+    "new_files_lint": {
+      "status": "passed",
+      "files": 6
+    },
+    "full_type": {
+      "status": "failed_baseline",
+      "errors": 3,
+      "exact_baseline_output_match": true,
+      "locations": [
+        "src/router.tsx:63",
+        "src/routes/_app.email-monitor.tsx:21",
+        "src/routes/_app.inbox.tsx:24"
+      ]
+    },
+    "full_build": {
+      "status": "failed_baseline",
+      "reason": "Lovable MCP Vite plugin rejects Windows backslash routesDir against forward-slash root; identical on untouched source"
+    },
+    "full_lint": {
+      "status": "failed_baseline",
+      "current_errors": 73867,
+      "current_warnings": 49,
+      "baseline_errors": 73960,
+      "baseline_warnings": 49
+    },
+    "diff_check": {
+      "status": "passed"
+    },
+    "npm_ci": {
+      "status": "failed_baseline",
+      "reason": "Tracked package-lock.json does not match package.json"
+    },
+    "dependency_setup": "npm install --package-lock=false --ignore-scripts --no-audit --no-fund; tracked dependency files unchanged; Node 22.18.0, npm 11.12.1, Vitest 4.1.11"
+  },
+  "source_p21_findings": [
+    "Default orders SQL uses required_date/open remaining demand and item-master cube/weight, with no UOM/carton conversion in that query; it is not the agreed pick-ticket dispatch date rule. No default dispatch rule was changed.",
+    "Capacity ratio uses available pallet/cube/weight full-truck targets and max ratio, capped at 1.5. Live configured SQL, targets, equipment and dimension coverage were not inspected. No model tuning was performed."
+  ],
+  "remaining_evidence": [
+    "October 12 workbook and actual import path",
+    "Production stored rows including missing flags and historical forecast coverage",
+    "Configured targets, equipment assumptions, P21 cube/UOM/carton coverage",
+    "Deployed source SHA",
+    "Meaning of above-100% observations",
+    "Historical intraday forecast/cutoff timing cannot be reconstructed from date-only history"
+  ],
+  "release_decisions": [
+    "Review draft PR and exact revision before merge or production deployment",
+    "Validate build/type/lint in the supported deployment environment and resolve or explicitly accept baseline blockers",
+    "Establish units and source identity before allowing quarantined imports; any historical data repair requires separate approval"
+  ],
+  "boundaries": "No protected telemetry retries or alternate data routes, database repairs, snapshots, bridge jobs, retraining, production mutations, authentication/security changes, emails, merge or deployment. No guaranteed 80% result claimed."
+}

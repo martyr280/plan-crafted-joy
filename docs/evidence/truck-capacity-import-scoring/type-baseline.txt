@@ -1,0 +1,21 @@
+src/router.tsx(63,5): error TS2322: Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type 'ErrorRouteComponent | undefined'.
+  Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type '((props: ErrorComponentProps) => any) & { preload?: (() => Promise<void> | undefined) | undefined; }'.
+    Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type '(props: ErrorComponentProps) => any'.
+      Types of parameters '__0' and 'props' are incompatible.
+        Type 'ErrorComponentProps' is not assignable to type '{ error: Error; reset: () => void; }'.
+          Types of property 'error' are incompatible.
+            Type 'unknown' is not assignable to type 'Error'.
+src/routes/_app.email-monitor.tsx(21,3): error TS2322: Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type 'false | ErrorRouteComponent | null | undefined'.
+  Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type '((props: ErrorComponentProps) => any) & { preload?: (() => Promise<void> | undefined) | undefined; }'.
+    Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type '(props: ErrorComponentProps) => any'.
+      Types of parameters '__0' and 'props' are incompatible.
+        Type 'ErrorComponentProps' is not assignable to type '{ error: Error; reset: () => void; }'.
+          Types of property 'error' are incompatible.
+            Type 'unknown' is not assignable to type 'Error'.
+src/routes/_app.inbox.tsx(24,3): error TS2322: Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type 'false | ErrorRouteComponent | null | undefined'.
+  Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type '((props: ErrorComponentProps) => any) & { preload?: (() => Promise<void> | undefined) | undefined; }'.
+    Type '({ error, reset }: { error: Error; reset: () => void; }) => Element' is not assignable to type '(props: ErrorComponentProps) => any'.
+      Types of parameters '__0' and 'props' are incompatible.
+        Type 'ErrorComponentProps' is not assignable to type '{ error: Error; reset: () => void; }'.
+          Types of property 'error' are incompatible.
+            Type 'unknown' is not assignable to type 'Error'.
