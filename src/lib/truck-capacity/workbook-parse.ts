@@ -114,7 +114,7 @@ export function excelSerialToIso(serial: number): string | null {
  * seq is null when the cell carries no explicit run number; the caller then
  * assigns 1, 2, … in sheet order for repeated dates.
  */
-export function parseDateCell(v: any): { iso: string; seq: number | null } | null {
+export function parseDateCell(v: any, date1904 = false): { iso: string; seq: number | null } | null {
   const s = cellScalar(v);
   if (s == null || s === "") return null;
 
@@ -124,7 +124,7 @@ export function parseDateCell(v: any): { iso: string; seq: number | null } | nul
     return Number.isFinite(s.getTime()) ? { iso, seq: null } : null;
   }
   if (typeof s === "number") {
-    const iso = excelSerialToIso(s);
+    const iso = excelSerialToIso(s + (date1904 ? 1462 : 0));
     return iso ? { iso, seq: null } : null;
   }
 
@@ -155,7 +155,7 @@ export function parseDateCell(v: any): { iso: string; seq: number | null } | nul
 
   // Pure serial-as-text (some sheets store the date as a string).
   if (/^\d{5}(\.\d+)?$/.test(datePart)) {
-    const fromSerial = excelSerialToIso(Number(datePart));
+    const fromSerial = excelSerialToIso(Number(datePart) + (date1904 ? 1462 : 0));
     if (fromSerial) return { iso: fromSerial, seq };
   }
   return null;
@@ -272,9 +272,7 @@ export async function parseTruckCapacityWorkbook(
   await wb.xlsx.load(buffer as any);
   const workbookSha = createHash("sha256").update(Buffer.from(buffer as ArrayBuffer)).digest("hex");
   const parseSheetDate = (value: ExcelJS.CellValue) => {
-    const scalar = cellScalar(value);
-    const serial = typeof scalar === "number" ? scalar : typeof scalar === "string" && /^\d{5}(\.\d+)?$/.test(scalar.trim()) ? Number(scalar.trim()) : null;
-    return parseDateCell(wb.properties.date1904 && serial != null ? serial + 1462 : value);
+    return parseDateCell(value, !!wb.properties.date1904);
   };
   const headersFor = (ws: ExcelJS.Worksheet) => {
     const headers: Partial<Record<Field, number>> = {};
@@ -375,8 +373,22 @@ export async function parseTruckCapacityWorkbook(
       if (!parsedDate) {
         // A row with no date is not a run — formula-only tail rows land here.
         const rawDate = row.getCell(headers.date).value;
-        const invalidFormula = rawDate != null && typeof rawDate === "object" && ("formula" in rawDate || "sharedFormula" in rawDate || "error" in rawDate);
-        if (invalidFormula || cellText(rawDate) != null) { out.skipped_no_date += 1; quarantine("invalid date, formula result or departure label"); }
+        const populated = Object.entries(headers).some(([field, col]) => {
+          if (field === "date" || col == null) return false;
+          const value = row.getCell(col).value;
+          const scalar = cellScalar(value);
+          if (scalar == null) return value != null; // errors are populated, never blank data
+          return typeof scalar !== "string" || scalar.trim() !== "";
+        });
+        const scalarDate = cellScalar(rawDate);
+        const formulaCell = rawDate != null && typeof rawDate === "object" && ("formula" in rawDate || "sharedFormula" in rawDate);
+        const formulaError = rawDate != null && typeof rawDate === "object" && ("error" in rawDate || ("result" in rawDate && rawDate.result != null && typeof rawDate.result === "object" && "error" in rawDate.result));
+        // ExcelJS drops cached empty strings on XLSX load. An unresolved formula
+        // is only a template spacer when ALL recognized data cells are empty;
+        // explicit errors and populated/zero-load rows always require review.
+        const emptyTemplate = formulaCell && !populated && !formulaError && (!("result" in rawDate) || rawDate.result === undefined || (typeof scalarDate === "string" && scalarDate.trim() === ""));
+        const invalidFormula = rawDate != null && typeof rawDate === "object" && ("formula" in rawDate || "sharedFormula" in rawDate || "error" in rawDate) && !emptyTemplate;
+        if (!emptyTemplate && (invalidFormula || cellText(rawDate) != null || populated)) { out.skipped_no_date += 1; quarantine("invalid or missing date on populated row, formula result or departure label"); }
         continue;
       }
       const year = Number(parsedDate.iso.slice(0, 4));

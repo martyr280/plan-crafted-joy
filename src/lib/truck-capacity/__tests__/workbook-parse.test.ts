@@ -30,7 +30,7 @@ async function fixture(): Promise<Buffer> {
   okl.addRow(["2/12/2026 - Run 2", 0.4, 0.6, null, "bob o'neal", 9, "second run", null]);
   okl.addRow(["2/16/2026", null, 1, null, null, null, "Labor Day", null]);           // no-run marker
   okl.addRow(["2/17/2026", 4000, 0, null, "x", null, "bad", null]);                  // rejected: > 100
-  okl.addRow([null, 1, 0, null, null, null, null, null]);                            // formula tail, no date
+  okl.addRow([null, null, { formula: "1-B7", result: 1 }, null, null, null, null, null]); // empty spacer with ignored unused formula
 
   // Layout (b): Date | Driver | Capacity | Pallet Count | Notes | Returned Pallets
   const osr = wb.addWorksheet("Ocala Special Runs");

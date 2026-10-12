@@ -22,7 +22,7 @@
     "full_vitest": {
       "status": "passed",
       "files": 65,
-      "tests": 648,
+      "tests": 655,
       "version": "4.1.10",
       "command": "bun run test"
     },
@@ -74,12 +74,18 @@
       "check_runs": 0
     },
     "remote_ci_updated_head": {
+      "verified_head": "9741c3a683864299f59db8d4420ada30ebc28d67",
+      "linux_build_type_tests": "passed",
+      "full_lint": "failed",
+      "linux_lint_errors": 12975,
+      "linux_lint_warnings": 52,
+      "next_revision": "pending final Linux QA and apples-to-apples lint comparison"
+    },
+    "linux_lint_comparison": {
       "status": "pending",
-      "workflow": ".github/workflows/app-qa.yml",
-      "jobs": [
-        "Linux build, types and offline tests",
-        "Full lint (existing baseline backlog)"
-      ]
+      "workflow": ".github/workflows/lint-comparison.yml",
+      "base": "83fd68e03befad3c234dc5c0fbee71f0184bded7",
+      "method": "Same Linux runner, frozen installation, identical dependency manifests and lint/Prettier configuration. Exact diagnostics matched using diff-mapped unchanged lines; source suppressions reported separately. No rules disabled for comparison."
     }
   },
   "source_p21_findings": [
@@ -166,7 +172,7 @@
     }
   },
   "review": {
-    "status": "review fixes implemented; independent re-review pending",
+    "status": "additional safety fixes pass local QA; independent re-review pending",
     "fixed_findings": [
       "Missing/renamed Capacity header could clear prior actuals",
       "Invalid or uncached date formula could mark prior actual missing",
@@ -174,6 +180,15 @@
       "Workbook-global explicit label reservation",
       "Central date bounds versus route-zone cutoff instants, including DST"
     ],
-    "disclosure": "Range and timing checks cannot detect historical scaling or collapsed departures. These synthetic edge cases are not claimed to explain October 12 production accuracy."
+    "disclosure": "Range and timing checks cannot detect historical scaling or collapsed departures. These synthetic edge cases are not claimed to explain October 12 production accuracy.",
+    "confirmed_at_prior_head": {
+      "head": "9741c3a683864299f59db8d4420ada30ebc28d67",
+      "scope": "Independent re-review confirmed the original five fixes and exact-head Linux build/type/test evidence"
+    },
+    "additional_fixes": [
+      "1904 serial strings with Run suffix, including cached formula result, preserve date and run_seq",
+      "Populated undated rows, including zero and empty date formula, quarantine before writes or missing markers",
+      "Empty date formula templates are ignored only if all recognized data cells are empty and there is no explicit formula error; ExcelJS drops empty string caches on load"
+    ]
   }
 }

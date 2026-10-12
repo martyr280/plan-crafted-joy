@@ -105,6 +105,42 @@ describe("validated occupancy contract", () => {
     expect(parsed.rows[0].provenance).toMatchObject({ date1904: true, raw_date: 44727 });
     expect(parsed.rows[0].provenance?.workbook_sha256).toMatch(/^[a-f0-9]{64}$/);
   });
+  it.each(["44727 - Run 2", { formula: '"44727 - Run 2"', result: "44727 - Run 2" }])(
+    "preserves the 1904 epoch and sequence for labeled text serial %j",
+    async (value) => {
+      const wb = new ExcelJS.Workbook();
+      wb.properties.date1904 = true;
+      const ws = wb.addWorksheet("Dallas-Local");
+      ws.addRow(["Date", "Capacity"]);
+      ws.addRow([value, 0.5]);
+      const parsed = await parseManualWorkbook(
+        Buffer.from(await wb.xlsx.writeBuffer()),
+        new Set(["DAL-LOCAL"]),
+      );
+      expect(parsed.quarantine).toEqual([]);
+      expect(parsed.rows[0]).toMatchObject({ run_date: "2026-06-16", run_seq: 2 });
+    },
+  );
+  it("preserves empty/whitespace spacer rows and ignored unused-capacity formulas", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Dallas-Local");
+    ws.addRow(["Date", "Capacity", "Unused Capacity"]);
+    ws.addRow([null, null, { formula: "1-B2", result: 1 }]);
+    ws.addRow([" ", " "]);
+    ws.addRow([
+      { formula: 'IF(1=0,TODAY(),"")', result: "" },
+      null,
+      { formula: "1-B4", result: 1 },
+    ]);
+    ws.addRow(["9/14/2026", 0]);
+    const parsed = await parseManualWorkbook(
+      Buffer.from(await wb.xlsx.writeBuffer()),
+      new Set(["DAL-LOCAL"]),
+    );
+    expect(parsed.quarantine).toEqual([]);
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.rows[0].capacity_frac).toBe(0);
+  });
   it.each([false, true])(
     "reserves explicit labels workbook-wide regardless of sheet order (%s)",
     async (reverse) => {

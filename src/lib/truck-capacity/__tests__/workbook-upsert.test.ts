@@ -88,39 +88,47 @@ beforeEach(() => {
   state.writes = [];
 });
 describe("mocked persistence", () => {
-  it.each(["missing", "renamed", "date-error", "date-uncached"])(
-    "rejects %s before any actual writes or missing markers",
-    async (shape) => {
-      await applyWorkbookRows([row(1, 0.7)]);
-      state.writes = [];
-      const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet("Dallas-Local");
-      ws.addRow(
-        shape === "missing"
-          ? ["Date"]
-          : ["Date", shape === "renamed" ? "Wrong heading" : "Capacity"],
-      );
-      if (shape === "missing" || shape === "renamed") ws.addRow(["9/14/2026", 0.6]);
-      else {
-        ws.addRow(["9/1/2026", 0.6]);
-        ws.addRow([
-          shape === "date-error"
-            ? { formula: "1/0", result: { error: "#VALUE!" } }
-            : { formula: "TODAY()" },
-          0.7,
-        ]);
-        ws.addRow(["9/30/2026", 0.8]);
-      }
-      const outcome = await runWorkbookSync({
-        source: "upload",
-        fileBase64: Buffer.from(await wb.xlsx.writeBuffer()).toString("base64"),
-      });
-      expect(outcome).toMatchObject({ ok: false, status: "error" });
-      expect(state.writes).toEqual([]);
-      expect(state.rows).toHaveLength(1);
-      expect(state.rows[0]).toMatchObject({ capacity_frac: 0.7, missing_from_sheet: false });
-    },
-  );
+  it.each([
+    "missing",
+    "renamed",
+    "date-error",
+    "date-error-empty",
+    "date-uncached",
+    "blank-date",
+    "blank-date-zero",
+    "blank-date-formula",
+  ])("rejects %s before any actual writes or missing markers", async (shape) => {
+    await applyWorkbookRows([row(1, 0.7)]);
+    state.writes = [];
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Dallas-Local");
+    ws.addRow(
+      shape === "missing" ? ["Date"] : ["Date", shape === "renamed" ? "Wrong heading" : "Capacity"],
+    );
+    if (shape === "missing" || shape === "renamed") ws.addRow(["9/14/2026", 0.6]);
+    else {
+      ws.addRow(["9/1/2026", 0.6]);
+      ws.addRow([
+        shape === "blank-date-formula"
+          ? { formula: 'IF(1=0,TODAY(),"")', result: "" }
+          : shape.startsWith("blank-date")
+            ? null
+            : shape.startsWith("date-error")
+              ? { formula: "1/0", result: { error: "#VALUE!" } }
+              : { formula: "TODAY()" },
+        shape === "date-error-empty" ? null : shape === "blank-date-zero" ? 0 : 0.7,
+      ]);
+      ws.addRow(["9/30/2026", 0.8]);
+    }
+    const outcome = await runWorkbookSync({
+      source: "upload",
+      fileBase64: Buffer.from(await wb.xlsx.writeBuffer()).toString("base64"),
+    });
+    expect(outcome).toMatchObject({ ok: false, status: "error" });
+    expect(state.writes).toEqual([]);
+    expect(state.rows).toHaveLength(1);
+    expect(state.rows[0]).toMatchObject({ capacity_frac: 0.7, missing_from_sheet: false });
+  });
   it.each(["sharepoint", "import"] as const)(
     "repeated %s import is idempotent and preserves separate loads, zero and null",
     async (source) => {
