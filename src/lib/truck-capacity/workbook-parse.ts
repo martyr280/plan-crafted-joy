@@ -114,7 +114,10 @@ export function excelSerialToIso(serial: number): string | null {
  * seq is null when the cell carries no explicit run number; the caller then
  * assigns 1, 2, … in sheet order for repeated dates.
  */
-export function parseDateCell(v: any, date1904 = false): { iso: string; seq: number | null } | null {
+export function parseDateCell(
+  v: unknown,
+  date1904 = false,
+): { iso: string; seq: number | null } | null {
   const s = cellScalar(v);
   if (s == null || s === "") return null;
 
@@ -133,7 +136,10 @@ export function parseDateCell(v: any, date1904 = false): { iso: string; seq: num
   const runMatch = text.match(/[-–—]\s*run\s*(\d+)\s*$/i);
   const seq = runMatch ? Number(runMatch[1]) : null;
   if (seq != null && (!Number.isSafeInteger(seq) || seq < 1)) return null;
-  const datePart = (runMatch ? text.slice(0, runMatch.index) : text).trim().replace(/[-–—]\s*$/, "").trim();
+  const datePart = (runMatch ? text.slice(0, runMatch.index) : text)
+    .trim()
+    .replace(/[-–—]\s*$/, "")
+    .trim();
 
   const mdy = datePart.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
   if (mdy) {
@@ -150,7 +156,9 @@ export function parseDateCell(v: any, date1904 = false): { iso: string; seq: num
   if (iso) {
     const date = `${iso[1]}-${iso[2]}-${iso[3]}`;
     const parsed = new Date(`${date}T00:00:00Z`);
-    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date ? { iso: date, seq } : null;
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date
+      ? { iso: date, seq }
+      : null;
   }
 
   // Pure serial-as-text (some sheets store the date as a string).
@@ -173,14 +181,17 @@ export type CapacityResult =
  * Values above 100% and bare values above 1 require unit review.
  * Empty is a no-run marker, not a zero.
  */
-export function normalizeCapacity(v: any, numFmt = ""): CapacityResult {
+export function normalizeCapacity(v: unknown, numFmt = ""): CapacityResult {
   // Format is retained as evidence, never permission to rescale a bare value.
   void numFmt;
   const scalar = cellScalar(v);
-  if (scalar == null && v != null && typeof v === "object") return { kind: "rejected", value: null, raw: NaN };
-  if (scalar == null || (typeof scalar === "string" && scalar.trim() === "")) return { kind: "empty", value: null };
+  if (scalar == null && v != null && typeof v === "object")
+    return { kind: "rejected", value: null, raw: NaN };
+  if (scalar == null || (typeof scalar === "string" && scalar.trim() === ""))
+    return { kind: "empty", value: null };
   const text = typeof scalar === "string" ? scalar.trim() : null;
-  if (text != null && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*%?$/.test(text)) return { kind: "rejected", value: null, raw: NaN };
+  if (text != null && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*%?$/.test(text))
+    return { kind: "rejected", value: null, raw: NaN };
   const n = toNumber(v);
   if (n == null) return { kind: "rejected", value: null, raw: NaN };
   if (n < 0) return { kind: "rejected", value: null, raw: n };
@@ -221,7 +232,17 @@ export function normalizeDriver(v: any): string | null {
 /* --------------------------------- parsing ---------------------------------- */
 
 export type ParsedRow = {
-  provenance?: { workbook_sha256?: string; raw_date?: ExcelJS.CellValue; date1904?: boolean; sheet: string; excel_row: number; capacity: ExcelJS.CellValue; capacity_format: string; vendor: ExcelJS.CellValue; vendor_format: string };
+  provenance?: {
+    workbook_sha256?: string;
+    raw_date?: ExcelJS.CellValue;
+    date1904?: boolean;
+    sheet: string;
+    excel_row: number;
+    capacity: ExcelJS.CellValue;
+    capacity_format: string;
+    vendor: ExcelJS.CellValue;
+    vendor_format: string;
+  };
   route_id: string;
   run_date: string;
   run_seq: number;
@@ -248,7 +269,16 @@ export type ParsedSheet = {
 };
 
 export type ParseResult = {
-  quarantine: Array<{ sheet: string; excel_row: number; reason: string; raw_date: ExcelJS.CellValue; capacity: ExcelJS.CellValue; capacity_format: string; vendor: ExcelJS.CellValue; vendor_format: string }>;
+  quarantine: Array<{
+    sheet: string;
+    excel_row: number;
+    reason: string;
+    raw_date: ExcelJS.CellValue;
+    capacity: ExcelJS.CellValue;
+    capacity_format: string;
+    vendor: ExcelJS.CellValue;
+    vendor_format: string;
+  }>;
   sheets: ParsedSheet[];
   rows: ParsedRow[];
   unmatchedSheets: string[];
@@ -270,7 +300,9 @@ export async function parseTruckCapacityWorkbook(
 ): Promise<ParseResult> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as any);
-  const workbookSha = createHash("sha256").update(Buffer.from(buffer as ArrayBuffer)).digest("hex");
+  const workbookSha = createHash("sha256")
+    .update(Buffer.from(buffer as ArrayBuffer))
+    .digest("hex");
   const parseSheetDate = (value: ExcelJS.CellValue) => {
     return parseDateCell(value, !!wb.properties.date1904);
   };
@@ -283,7 +315,13 @@ export async function parseTruckCapacityWorkbook(
     return headers;
   };
 
-  const result: ParseResult = { sheets: [], rows: [], unmatchedSheets: [], warnings: [], quarantine: [] };
+  const result: ParseResult = {
+    sheets: [],
+    rows: [],
+    unmatchedSheets: [],
+    warnings: [],
+    quarantine: [],
+  };
   const sequenceUsed = new Map<string, Set<number>>();
   const departureKeys = new Set<string>();
   // Reserve labels across the entire workbook before assigning any unlabeled
@@ -291,13 +329,15 @@ export async function parseTruckCapacityWorkbook(
   wb.eachSheet((ws) => {
     const mapped = sheetMap.get(normalizeSheetName(ws.name));
     const headers = headersFor(ws);
-    if (!mapped?.active || !mapped.route_id || headers.date == null || headers.capacity == null) return;
+    if (!mapped?.active || !mapped.route_id || headers.date == null || headers.capacity == null)
+      return;
     for (let r = 2; r <= ws.rowCount; r++) {
       const date = parseSheetDate(ws.getRow(r).getCell(headers.date).value);
       if (!date || date.seq == null) continue;
       const key = `${mapped.route_id}|${date.iso}`;
       const used = sequenceUsed.get(key) ?? new Set<number>();
-      used.add(date.seq); sequenceUsed.set(key, used);
+      used.add(date.seq);
+      sequenceUsed.set(key, used);
     }
   });
 
@@ -337,7 +377,16 @@ export async function parseTruckCapacityWorkbook(
       out.status = "no_headers";
       const reason = "missing required Date or Capacity header";
       result.warnings.push(`${ws.name}: ${reason}; import blocked`);
-      result.quarantine.push({ sheet: ws.name, excel_row: 1, reason, raw_date: null, capacity: null, capacity_format: "", vendor: null, vendor_format: "" });
+      result.quarantine.push({
+        sheet: ws.name,
+        excel_row: 1,
+        reason,
+        raw_date: null,
+        capacity: null,
+        capacity_format: "",
+        vendor: null,
+        vendor_format: "",
+      });
       result.sheets.push(out);
       return;
     }
@@ -346,7 +395,10 @@ export async function parseTruckCapacityWorkbook(
     const nextSeq = (iso: string, explicit: number | null): number => {
       const key = `${mapped.route_id}|${iso}`;
       let used = seqUsed.get(key);
-      if (!used) { used = new Set(); seqUsed.set(key, used); }
+      if (!used) {
+        used = new Set();
+        seqUsed.set(key, used);
+      }
       if (explicit != null && explicit >= 1) {
         const s = Math.floor(explicit);
         used.add(s);
@@ -363,9 +415,23 @@ export async function parseTruckCapacityWorkbook(
       const row = ws.getRow(r);
       const capCell = headers.capacity != null ? row.getCell(headers.capacity) : null;
       const vendorCell = headers.vendor_pickup != null ? row.getCell(headers.vendor_pickup) : null;
-      const provenance = { workbook_sha256: workbookSha, raw_date: row.getCell(headers.date).value, date1904: !!wb.properties.date1904, sheet: ws.name, excel_row: r, capacity: capCell?.value ?? null, capacity_format: capCell?.numFmt ?? "", vendor: vendorCell?.value ?? null, vendor_format: vendorCell?.numFmt ?? "" };
+      const provenance = {
+        workbook_sha256: workbookSha,
+        raw_date: row.getCell(headers.date).value,
+        date1904: !!wb.properties.date1904,
+        sheet: ws.name,
+        excel_row: r,
+        capacity: capCell?.value ?? null,
+        capacity_format: capCell?.numFmt ?? "",
+        vendor: vendorCell?.value ?? null,
+        vendor_format: vendorCell?.numFmt ?? "",
+      };
       const quarantine = (reason: string) => {
-        result.quarantine.push({ ...provenance, raw_date: row.getCell(headers.date!).value, reason });
+        result.quarantine.push({
+          ...provenance,
+          raw_date: row.getCell(headers.date!).value,
+          reason,
+        });
         out.rejected_capacity += 1;
         result.warnings.push(`${ws.name} row ${r}: ${reason}; import blocked for review`);
       };
@@ -381,14 +447,37 @@ export async function parseTruckCapacityWorkbook(
           return typeof scalar !== "string" || scalar.trim() !== "";
         });
         const scalarDate = cellScalar(rawDate);
-        const formulaCell = rawDate != null && typeof rawDate === "object" && ("formula" in rawDate || "sharedFormula" in rawDate);
-        const formulaError = rawDate != null && typeof rawDate === "object" && ("error" in rawDate || ("result" in rawDate && rawDate.result != null && typeof rawDate.result === "object" && "error" in rawDate.result));
+        const formulaCell =
+          rawDate != null &&
+          typeof rawDate === "object" &&
+          ("formula" in rawDate || "sharedFormula" in rawDate);
+        const formulaError =
+          rawDate != null &&
+          typeof rawDate === "object" &&
+          ("error" in rawDate ||
+            ("result" in rawDate &&
+              rawDate.result != null &&
+              typeof rawDate.result === "object" &&
+              "error" in rawDate.result));
         // ExcelJS drops cached empty strings on XLSX load. An unresolved formula
         // is only a template spacer when ALL recognized data cells are empty;
         // explicit errors and populated/zero-load rows always require review.
-        const emptyTemplate = formulaCell && !populated && !formulaError && (!("result" in rawDate) || rawDate.result === undefined || (typeof scalarDate === "string" && scalarDate.trim() === ""));
-        const invalidFormula = rawDate != null && typeof rawDate === "object" && ("formula" in rawDate || "sharedFormula" in rawDate || "error" in rawDate) && !emptyTemplate;
-        if (!emptyTemplate && (invalidFormula || cellText(rawDate) != null || populated)) { out.skipped_no_date += 1; quarantine("invalid or missing date on populated row, formula result or departure label"); }
+        const emptyTemplate =
+          formulaCell &&
+          !populated &&
+          !formulaError &&
+          (!("result" in rawDate) ||
+            rawDate.result === undefined ||
+            (typeof scalarDate === "string" && scalarDate.trim() === ""));
+        const invalidFormula =
+          rawDate != null &&
+          typeof rawDate === "object" &&
+          ("formula" in rawDate || "sharedFormula" in rawDate || "error" in rawDate) &&
+          !emptyTemplate;
+        if (!emptyTemplate && (invalidFormula || cellText(rawDate) != null || populated)) {
+          out.skipped_no_date += 1;
+          quarantine("invalid or missing date on populated row, formula result or departure label");
+        }
         continue;
       }
       const year = Number(parsedDate.iso.slice(0, 4));
@@ -400,7 +489,10 @@ export async function parseTruckCapacityWorkbook(
 
       const runSeq = nextSeq(parsedDate.iso, parsedDate.seq);
       const explicitKey = `${mapped.route_id}|${parsedDate.iso}|${runSeq}`;
-      if (departureKeys.has(explicitKey)) { quarantine("duplicate departure identity; review explicit labels and mapped sheets"); continue; }
+      if (departureKeys.has(explicitKey)) {
+        quarantine("duplicate departure identity; review explicit labels and mapped sheets");
+        continue;
+      }
       departureKeys.add(explicitKey);
       let capacity: number | null = null;
       if (headers.capacity != null) {
@@ -415,7 +507,10 @@ export async function parseTruckCapacityWorkbook(
       let vendor: number | null = null;
       if (headers.vendor_pickup != null) {
         const v = normalizeCapacity(vendorCell!.value, vendorCell!.numFmt);
-        if (v.kind === "rejected") { quarantine("vendor capacity unit ambiguous or invalid"); continue; }
+        if (v.kind === "rejected") {
+          quarantine("vendor capacity unit ambiguous or invalid");
+          continue;
+        }
         vendor = v.kind === "ok" ? v.value : null;
       }
       if (capacity == null) out.no_run_rows += 1;
@@ -428,8 +523,14 @@ export async function parseTruckCapacityWorkbook(
         capacity_frac: capacity,
         vendor_pickup_frac: vendor,
         driver: headers.driver != null ? normalizeDriver(row.getCell(headers.driver).value) : null,
-        pallet_count: headers.pallet_count != null ? toIntOrNull(row.getCell(headers.pallet_count).value) : null,
-        returned_pallets: headers.returned_pallets != null ? toIntOrNull(row.getCell(headers.returned_pallets).value) : null,
+        pallet_count:
+          headers.pallet_count != null
+            ? toIntOrNull(row.getCell(headers.pallet_count).value)
+            : null,
+        returned_pallets:
+          headers.returned_pallets != null
+            ? toIntOrNull(row.getCell(headers.returned_pallets).value)
+            : null,
         notes: headers.notes != null ? cellText(row.getCell(headers.notes).value) : null,
         excel_row: r,
       });

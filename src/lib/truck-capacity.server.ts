@@ -806,9 +806,26 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
     for (const r of list) {
       const dateLabel = r.run_seq && r.run_seq > 1 ? `${r.run_date} - Run ${r.run_seq}` : r.run_date;
       if (withVendor) {
-        ws.addRow([dateLabel, r.capacity_frac == null ? null : Number(r.capacity_frac), { formula: `1-B${rowIdx}` }, r.vendor_pickup_frac != null ? Number(r.vendor_pickup_frac) : null, r.driver, r.pallet_count, r.notes, r.returned_pallets]);
+        ws.addRow([
+          dateLabel,
+          r.capacity_frac == null ? null : Number(r.capacity_frac),
+          { formula: `1-B${rowIdx}` },
+          r.vendor_pickup_frac != null ? Number(r.vendor_pickup_frac) : null,
+          r.driver,
+          r.pallet_count,
+          r.notes,
+          r.returned_pallets,
+        ]);
       } else {
-        ws.addRow([dateLabel, r.capacity_frac == null ? null : Number(r.capacity_frac), { formula: `1-B${rowIdx}` }, r.driver, r.pallet_count, r.notes, r.returned_pallets]);
+        ws.addRow([
+          dateLabel,
+          r.capacity_frac == null ? null : Number(r.capacity_frac),
+          { formula: `1-B${rowIdx}` },
+          r.driver,
+          r.pallet_count,
+          r.notes,
+          r.returned_pallets,
+        ]);
       }
       const row = ws.getRow(rowIdx);
       row.getCell(2).numFmt = "0.00%";
@@ -833,15 +850,23 @@ import { parseManualWorkbook, type ImportRow } from "./truck-capacity/import-con
 export async function parseImportWorkbook(fileBase64: string) {
   const { data: routes, error } = await supabaseAdmin.from("truck_capacity_routes").select("code");
   if (error) throw new Error(error.message);
-  return parseManualWorkbook(Buffer.from(fileBase64, "base64"), new Set((routes ?? []).map((r) => r.code)));
+  return parseManualWorkbook(
+    Buffer.from(fileBase64, "base64"),
+    new Set((routes ?? []).map((r) => r.code)),
+  );
 }
 
 export async function applyImportRows(rows: ImportRow[]): Promise<{ inserted: number }> {
-  const { data: routes, error } = await supabaseAdmin.from("truck_capacity_routes").select("id, code");
+  const { data: routes, error } = await supabaseAdmin
+    .from("truck_capacity_routes")
+    .select("id, code");
   if (error) throw new Error(error.message);
   const codeToId = new Map((routes ?? []).map((r) => [r.code, r.id]));
   if (rows.some((r) => !codeToId.has(r.route_code))) throw new Error("Unknown route in import");
   const { applyWorkbookRows } = await import("./truck-capacity/workbook-sync.server");
-  const counts = await applyWorkbookRows(rows.map(({ route_code, ...row }) => ({ ...row, route_id: codeToId.get(route_code)! })), { source: "import", markMissing: false });
+  const counts = await applyWorkbookRows(
+    rows.map(({ route_code, ...row }) => ({ ...row, route_id: codeToId.get(route_code)! })),
+    { source: "import", markMissing: false },
+  );
   return { inserted: counts.inserted + counts.updated };
 }

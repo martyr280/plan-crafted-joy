@@ -136,8 +136,16 @@ export function ForecastVsTracker() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Window</Label>
-            <Select value={preset} onValueChange={(v) => { setPreset(v as any); setPage(0); }}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <Select
+              value={preset}
+              onValueChange={(v) => {
+                setPreset(v as any);
+                setPage(0);
+              }}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="4">Last 4 weeks</SelectItem>
                 <SelectItem value="8">Last 8 weeks</SelectItem>
@@ -150,34 +158,67 @@ export function ForecastVsTracker() {
             <>
               <div className="space-y-1">
                 <Label className="text-xs">From</Label>
-                <Input type="date" className="w-40" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                <Input
+                  type="date"
+                  className="w-40"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">To</Label>
-                <Input type="date" className="w-40" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                <Input
+                  type="date"
+                  className="w-40"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                />
               </div>
             </>
           )}
           <div className="space-y-1">
             <Label className="text-xs">Forecasts made on or after</Label>
-            <Input type="date" className="w-40" value={madeOnFrom} onChange={(e) => setMadeOnFrom(e.target.value)} />
+            <Input
+              type="date"
+              className="w-40"
+              value={madeOnFrom}
+              onChange={(e) => setMadeOnFrom(e.target.value)}
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Hub</Label>
             <Select value={hub} onValueChange={setHub}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All hubs</SelectItem>
-                {HUB_ORDER.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                {HUB_ORDER.map((h) => (
+                  <SelectItem key={h} value={h}>
+                    {h}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div className="flex items-center gap-2 pb-1">
             <Switch id="fvt-special" checked={includeSpecial} onCheckedChange={setIncludeSpecial} />
-            <Label htmlFor="fvt-special" className="text-sm">Include special-run lanes</Label>
+            <Label htmlFor="fvt-special" className="text-sm">
+              Include special-run lanes
+            </Label>
           </div>
-          <Button variant="outline" size="sm" onClick={download} disabled={exporting} className="ml-auto">
-            {exporting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={download}
+            disabled={exporting}
+            className="ml-auto"
+          >
+            {exporting ? (
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-1" />
+            )}
             Export Excel
           </Button>
         </div>
@@ -189,9 +230,10 @@ export function ForecastVsTracker() {
       {/* Plain-language explainer */}
       <Card className="p-4 bg-muted/40">
         <p className="text-sm text-muted-foreground">
-          Capacity is measured as a percent of a full truck. A point is one percentage point of that scale:
-          if Nelson forecast 60% and the branch logged 77%, the miss is 17 points, with Nelson low.
-          Forecast at cutoff is the last forecast Nelson recorded on or before the route's order cutoff for that run.
+          Capacity is measured as a percent of a full truck. A point is one percentage point of that
+          scale: if Nelson forecast 60% and the branch logged 77%, the miss is 17 points, with
+          Nelson low. Forecast at cutoff is the last forecast Nelson recorded on or before the
+          route's order cutoff for that run.
         </p>
       </Card>
 
@@ -200,20 +242,48 @@ export function ForecastVsTracker() {
           <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading reconciliation…
         </Card>
       )}
-      {q.error && <Card className="p-4 text-sm text-destructive">{(q.error as any)?.message ?? "Failed to load"}</Card>}
+      {q.error && (
+        <Card className="p-4 text-sm text-destructive">
+          {(q.error as any)?.message ?? "Failed to load"}
+        </Card>
+      )}
 
-      {data?.strict && <Card className="p-4 space-y-2">
-        <div className="font-semibold">Conservative timing cohort (one recorded departure)</div>
-        <div>{hitsCell(data.strict.overall.within10N, data.strict.overall.n, data.strict.overall.within10)} within 10 points. <GateBadge status={data.strict.readiness.at10.status} /></div>
-        <div className="text-sm">Coverage: {data.strict.coverage.eligible} of {data.strict.coverage.denominator} route-days with actuals; {data.strict.coverage.excluded} excluded.</div>
-        <div className="text-xs text-muted-foreground">{data.strict.limitation} Forecast and actual are fractions of one full truck. Total truck equivalents are the sum of departures and are not scored as mean occupancy.</div>
-        <div className="text-xs">Exclusions (one reason per route-day): {Object.entries(data.strict.coverage.exclusions).map(([reason, n]) => reason.replaceAll("_", " ") + ": " + n).join("; ") || "none"}</div>
-        <div className="text-xs text-muted-foreground">Legacy comparison below retains mean departure occupancy and approximate cutoff choices for continuity.</div>
-      </Card>}
+      {data?.strict && (
+        <Card className="p-4 space-y-2">
+          <div className="font-semibold">Conservative timing cohort (one recorded departure)</div>
+          <div>
+            {hitsCell(
+              data.strict.overall.within10N,
+              data.strict.overall.n,
+              data.strict.overall.within10,
+            )}{" "}
+            within 10 points. <GateBadge status={data.strict.readiness.at10.status} />
+          </div>
+          <div className="text-sm">
+            Coverage: {data.strict.coverage.eligible} of {data.strict.coverage.denominator}{" "}
+            route-days with actuals; {data.strict.coverage.excluded} excluded.
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {data.strict.limitation} Forecast and actual are fractions of one full truck. Total
+            truck equivalents are the sum of departures and are not scored as mean occupancy.
+          </div>
+          <div className="text-xs">
+            Exclusions (one reason per route-day):{" "}
+            {Object.entries(data.strict.coverage.exclusions)
+              .map(([reason, n]) => reason.replaceAll("_", " ") + ": " + n)
+              .join("; ") || "none"}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Legacy comparison below retains mean departure occupancy and approximate cutoff choices
+            for continuity.
+          </div>
+        </Card>
+      )}
 
       {data && data.overall.n === 0 && (
         <Card className="p-8 text-center text-sm text-muted-foreground">
-          No scored runs in this window — upload the latest tracker in the Import tab or widen the window.
+          No scored runs in this window — upload the latest tracker in the Import tab or widen the
+          window.
         </Card>
       )}
 
@@ -221,33 +291,42 @@ export function ForecastVsTracker() {
         <>
           <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
             <KpiCard
-              label="Legacy scored route-days" value={data.overall.n}
+              label="Legacy scored route-days"
+              value={data.overall.n}
               sub={`of ${data.coverage.routeDaysWithActuals} route-days with tracker actuals`}
               icon={<Target className="w-5 h-5" />}
             />
             <KpiCard
-              label="Typical miss" value={`${pts(data.overall.mae, 1)} pts`}
-              sub="average distance from the tracker" icon={<Gauge className="w-5 h-5" />}
+              label="Typical miss"
+              value={`${pts(data.overall.mae, 1)} pts`}
+              sub="average distance from the tracker"
+              icon={<Gauge className="w-5 h-5" />}
             />
             <KpiCard
               label="Lean"
               value={`${pts(Math.abs(Number(data.overall.bias ?? 0)), 1)} pts ${Number(data.overall.bias ?? 0) >= 0 ? "high" : "low"}`}
-              sub="+ means Nelson forecast above the tracker" icon={<TrendingUp className="w-5 h-5" />}
+              sub="+ means Nelson forecast above the tracker"
+              icon={<TrendingUp className="w-5 h-5" />}
             />
             <KpiCard
-              label="Within 10 pts" value={pctOf(data.overall.within10)}
-              sub={`${data.overall.within10N} of ${data.overall.n} runs · gate 8 of 10`} icon={<Target className="w-5 h-5" />}
+              label="Within 10 pts"
+              value={pctOf(data.overall.within10)}
+              sub={`${data.overall.within10N} of ${data.overall.n} runs · gate 8 of 10`}
+              icon={<Target className="w-5 h-5" />}
             />
             <KpiCard
-              label="Route-week miss" value={`${pts(data.weekLevel.mae, 1)} pts`}
-              sub={`route-weeks with 2+ runs: ${data.weekLevel.n}`} icon={<CalendarRange className="w-5 h-5" />}
+              label="Route-week miss"
+              value={`${pts(data.weekLevel.mae, 1)} pts`}
+              sub={`route-weeks with 2+ runs: ${data.weekLevel.n}`}
+              icon={<CalendarRange className="w-5 h-5" />}
             />
           </div>
 
           <Card className="p-4">
             <h3 className="font-semibold mb-1">Legacy comparison by hub</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Legacy gate: 8 of every 10 scored route-days within 10 points of the tracker. The 5-point rate is shown alongside so a tighter gate can be chosen.
+              Legacy gate: 8 of every 10 scored route-days within 10 points of the tracker. The
+              5-point rate is shown alongside so a tighter gate can be chosen.
             </p>
             <Table>
               <TableHeader>
@@ -264,20 +343,32 @@ export function ForecastVsTracker() {
                 {[...data.readiness.byHub, data.readiness.overall].map((h) => {
                   const total = h === data.readiness.overall;
                   return (
-                    <TableRow key={total ? "__all" : h.hub} className={total ? "font-bold" : undefined}>
+                    <TableRow
+                      key={total ? "__all" : h.hub}
+                      className={total ? "font-bold" : undefined}
+                    >
                       <TableCell>{h.hub}</TableCell>
                       <TableCell className="text-right">{h.n}</TableCell>
-                      <TableCell className="text-right">{hitsCell(h.within5N, h.n, h.within5)}</TableCell>
-                      <TableCell className="text-right">{hitsCell(h.within10N, h.n, h.within10)}</TableCell>
-                      <TableCell><GateBadge status={h.at10.status} /></TableCell>
-                      <TableCell><GateBadge status={h.at5.status} /></TableCell>
+                      <TableCell className="text-right">
+                        {hitsCell(h.within5N, h.n, h.within5)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {hitsCell(h.within10N, h.n, h.within10)}
+                      </TableCell>
+                      <TableCell>
+                        <GateBadge status={h.at10.status} />
+                      </TableCell>
+                      <TableCell>
+                        <GateBadge status={h.at5.status} />
+                      </TableCell>
                     </TableRow>
                   );
                 })}
               </TableBody>
             </Table>
             <p className="text-xs text-muted-foreground mt-2">
-              Built from {data.coverage.runRowsFetched} tracker rows and {data.coverage.logRowsFetched} logged forecasts.
+              Built from {data.coverage.runRowsFetched} tracker rows and{" "}
+              {data.coverage.logRowsFetched} logged forecasts.
             </p>
           </Card>
 
@@ -295,24 +386,40 @@ export function ForecastVsTracker() {
                 <tr>
                   <th className="text-left sticky left-0 bg-card pr-3 pb-2 font-medium">Route</th>
                   {weeks.map((w) => (
-                    <th key={w} className="px-1 pb-2 font-medium text-muted-foreground whitespace-nowrap">{w.slice(5)}</th>
+                    <th
+                      key={w}
+                      className="px-1 pb-2 font-medium text-muted-foreground whitespace-nowrap"
+                    >
+                      {w.slice(5)}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {HUB_ORDER.concat(
-                  Array.from(new Set(gridRoutes.map((r) => r.hub ?? "").filter((h) => h && !HUB_ORDER.includes(h)))),
+                  Array.from(
+                    new Set(
+                      gridRoutes.map((r) => r.hub ?? "").filter((h) => h && !HUB_ORDER.includes(h)),
+                    ),
+                  ),
                 ).map((h) => {
                   const rs = gridRoutes.filter((r) => (r.hub ?? "") === h);
                   if (!rs.length) return null;
                   return (
                     <Fragment key={`hub-group-${h}`}>
                       <tr key={`hub-${h}`}>
-                        <td colSpan={weeks.length + 1} className="pt-3 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground sticky left-0 bg-card">{h}</td>
+                        <td
+                          colSpan={weeks.length + 1}
+                          className="pt-3 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground sticky left-0 bg-card"
+                        >
+                          {h}
+                        </td>
                       </tr>
                       {rs.map((r) => (
                         <tr key={r.route_id}>
-                          <td className="sticky left-0 bg-card pr-3 py-1 font-medium whitespace-nowrap">{r.code}</td>
+                          <td className="sticky left-0 bg-card pr-3 py-1 font-medium whitespace-nowrap">
+                            {r.code}
+                          </td>
                           {weeks.map((w) => {
                             const cell = cellByKey.get(`${r.route_id}|${w}`);
                             if (!cell) return <td key={w} className="px-1 py-1" />;
@@ -322,8 +429,13 @@ export function ForecastVsTracker() {
                                   className={`rounded px-1.5 py-1 text-center leading-tight ${varianceClass(cell.varianceMean)}`}
                                   title={`${r.code} · week of ${w} · ${cell.days} run${cell.days === 1 ? "" : "s"} scored`}
                                 >
-                                  <div className="whitespace-nowrap">F {pts(cell.forecastMean)} · T {pts(cell.actualMean)}</div>
-                                  <div className="font-semibold">{cell.varianceMean >= 0 ? "+" : "−"}{pts(Math.abs(cell.varianceMean))}</div>
+                                  <div className="whitespace-nowrap">
+                                    F {pts(cell.forecastMean)} · T {pts(cell.actualMean)}
+                                  </div>
+                                  <div className="font-semibold">
+                                    {cell.varianceMean >= 0 ? "+" : "−"}
+                                    {pts(Math.abs(cell.varianceMean))}
+                                  </div>
                                 </div>
                               </td>
                             );
@@ -336,9 +448,15 @@ export function ForecastVsTracker() {
               </tbody>
             </table>
             <div className="flex flex-wrap gap-3 mt-3 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-success/15 inline-block" /> within 10 pts</span>
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-warning/20 inline-block" /> within 20 pts</span>
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-destructive/15 inline-block" /> more than 20 pts</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-success/15 inline-block" /> within 10 pts
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-warning/20 inline-block" /> within 20 pts
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-destructive/15 inline-block" /> more than 20 pts
+              </span>
               <span>Blank = no scored runs. F = forecast at cutoff, T = tracker.</span>
             </div>
           </Card>
@@ -361,12 +479,17 @@ export function ForecastVsTracker() {
                   <TableRow key={r.route_id}>
                     <TableCell className="font-medium">
                       {r.code}
-                      {r.n < 3 && <Badge variant="outline" className="ml-2 text-[10px]">n&lt;3 · not yet meaningful</Badge>}
+                      {r.n < 3 && (
+                        <Badge variant="outline" className="ml-2 text-[10px]">
+                          n&lt;3 · not yet meaningful
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">{r.n}</TableCell>
                     <TableCell className="text-right">{pts(r.mae, 1)}</TableCell>
                     <TableCell className="text-right">
-                      {pts(Math.abs(Number(r.bias ?? 0)), 1)} {Number(r.bias ?? 0) >= 0 ? "high" : "low"}
+                      {pts(Math.abs(Number(r.bias ?? 0)), 1)}{" "}
+                      {Number(r.bias ?? 0) >= 0 ? "high" : "low"}
                     </TableCell>
                     <TableCell className="text-right">{pctOf(r.within15)}</TableCell>
                   </TableRow>
@@ -380,12 +503,21 @@ export function ForecastVsTracker() {
             <Card className="p-4">
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="px-0">
-                  <ChevronDown className={`w-4 h-4 mr-1 transition-transform ${runsOpen ? "rotate-180" : ""}`} />
+                  <ChevronDown
+                    className={`w-4 h-4 mr-1 transition-transform ${runsOpen ? "rotate-180" : ""}`}
+                  />
                   Runs detail ({runRows.length})
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-3 space-y-3">
-                <Button variant="outline" size="sm" onClick={() => { setSortByVariance((s) => !s); setPage(0); }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSortByVariance((s) => !s);
+                    setPage(0);
+                  }}
+                >
                   Sort by {sortByVariance ? "run date" : "variance"}
                 </Button>
                 <Table>
@@ -411,18 +543,35 @@ export function ForecastVsTracker() {
                         <TableCell>{r.run_date}</TableCell>
                         <TableCell>
                           {r.cutoff_date}
-                          {!r.cutoff_known && <span className="text-muted-foreground text-xs"> (est)</span>}
+                          {!r.cutoff_known && (
+                            <span className="text-muted-foreground text-xs"> (est)</span>
+                          )}
                         </TableCell>
                         <TableCell>
-                          {r.made_on} <span className="text-muted-foreground text-xs">({r.lead_days}d)</span>
-                          {r.after_cutoff && <Badge variant="outline" className="ml-1 text-[10px]">after cutoff</Badge>}
+                          {r.made_on}{" "}
+                          <span className="text-muted-foreground text-xs">({r.lead_days}d)</span>
+                          {r.after_cutoff && (
+                            <Badge variant="outline" className="ml-1 text-[10px]">
+                              after cutoff
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">{pts(r.forecast)}</TableCell>
                         <TableCell className="text-right">{pts(r.actual)}</TableCell>
-                        <TableCell>{r.runs} / {r.total_truck_equivalents == null ? "Unknown units" : Number(r.total_truck_equivalents).toFixed(2)}</TableCell>
-                        <TableCell className="text-xs">{r.strict_eligible ? `${pts(r.strict_forecast)}% made ${r.strict_made_on}` : String(r.strict_exclusion).replaceAll("_", " ")}</TableCell>
+                        <TableCell>
+                          {r.runs} /{" "}
+                          {r.total_truck_equivalents == null
+                            ? "Unknown units"
+                            : Number(r.total_truck_equivalents).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {r.strict_eligible
+                            ? `${pts(r.strict_forecast)}% made ${r.strict_made_on}`
+                            : String(r.strict_exclusion).replaceAll("_", " ")}
+                        </TableCell>
                         <TableCell className="text-right font-medium">
-                          {r.variance >= 0 ? "+" : "−"}{pts(Math.abs(r.variance))}
+                          {r.variance >= 0 ? "+" : "−"}
+                          {pts(Math.abs(r.variance))}
                         </TableCell>
                         <TableCell className="text-xs">{r.method ?? "—"}</TableCell>
                         <TableCell className="text-xs">{r.guard ? "Yes" : ""}</TableCell>
@@ -432,11 +581,25 @@ export function ForecastVsTracker() {
                 </Table>
                 {runRows.length > 50 && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page === 0}
+                      onClick={() => setPage((p) => p - 1)}
+                    >
+                      Previous
+                    </Button>
                     <span className="text-muted-foreground">
                       {page * 50 + 1}–{Math.min(runRows.length, page * 50 + 50)} of {runRows.length}
                     </span>
-                    <Button variant="outline" size="sm" disabled={(page + 1) * 50 >= runRows.length} onClick={() => setPage((p) => p + 1)}>Next</Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={(page + 1) * 50 >= runRows.length}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
                   </div>
                 )}
               </CollapsibleContent>

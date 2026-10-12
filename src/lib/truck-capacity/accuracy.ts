@@ -24,8 +24,8 @@ import { addDaysISO, dowOfISO, tzOffsetMinutes } from "./cutoffs";
 export const ACCURACY_DEFAULT_MADE_FROM = "2026-07-31";
 
 export type CutoffLite = {
-  cutoff_dow: number;      // 0=Sun..6=Sat
-  run_dows: number[];      // weekdays this cutoff feeds
+  cutoff_dow: number; // 0=Sun..6=Sat
+  run_dows: number[]; // weekdays this cutoff feeds
   active?: boolean;
   cutoff_time?: string | null;
   tz?: string | null;
@@ -93,7 +93,9 @@ export function pickForecastAtCutoff(
   cutoffDate: string,
   runDate: string,
 ): PickedForecast | null {
-  const before = logRows.filter((r) => r.made_on < runDate && r.served != null && Number.isFinite(Number(r.served)));
+  const before = logRows.filter(
+    (r) => r.made_on < runDate && r.served != null && Number.isFinite(Number(r.served)),
+  );
   if (!before.length) return null;
   const atCutoff = before.filter((r) => r.made_on <= cutoffDate);
   let chosen: LogRowLite;
@@ -279,7 +281,11 @@ export function metricsOf(variances: number[]): AccuracyMetrics {
   };
 }
 
-export const READINESS_GATE = { tolerancePts: 10, share: 0.8, label: "80% of scored route-days within 10 points" } as const;
+export const READINESS_GATE = {
+  tolerancePts: 10,
+  share: 0.8,
+  label: "80% of scored route-days within 10 points",
+} as const;
 
 // UNCONFIRMED — minimum sample for a verdict is Marty's call, not the customer's.
 export const READINESS_MIN_RUNS = 10;

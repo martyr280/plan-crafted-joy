@@ -173,7 +173,11 @@ describe("readinessOf", () => {
     expect(readinessOf(metricsOf([]), 5)).toEqual({ status: "insufficient", hits: 0, n: 0, rate: null });
   });
   it("gate constant", () => {
-    expect(READINESS_GATE).toEqual({ tolerancePts: 10, share: 0.8, label: "80% of scored route-days within 10 points" });
+    expect(READINESS_GATE).toEqual({
+      tolerancePts: 10,
+      share: 0.8,
+      label: "80% of scored route-days within 10 points",
+    });
   });
 });
 

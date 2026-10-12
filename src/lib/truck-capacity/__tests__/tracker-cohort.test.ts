@@ -1,9 +1,24 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- Local fluent query mocks model dynamic database responses. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const state = vi.hoisted(() => ({ tables: {} as Record<string, any[]> }));
+type Row = Record<string, unknown>;
+type Chain = {
+  middleware: () => Chain;
+  inputValidator: () => Chain;
+  handler: (fn: unknown) => unknown;
+};
+type Query = {
+  select: () => Query;
+  not: () => Query;
+  eq: () => Query;
+  gte: () => Query;
+  lte: () => Query;
+  order: () => Query;
+  limit: () => Promise<{ data: Row[]; error: null }>;
+  range: (from: number, to: number) => Promise<{ data: Row[]; error: null }>;
+};
+const state = vi.hoisted(() => ({ tables: {} as Record<string, Row[]> }));
 vi.mock("@tanstack/react-start", () => ({
   createServerFn: () => {
-    const chain: any = {
+    const chain: Chain = {
       middleware: () => chain,
       inputValidator: () => chain,
       handler: (fn: unknown) => fn,
@@ -37,7 +52,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: {
     rpc: () => Promise.resolve({ data: true }),
     from(table: string) {
-      const query: any = {
+      const query: Query = {
         select: () => query,
         not: () => query,
         eq: () => query,
