@@ -1,8 +1,7 @@
-import { ESLint } from "eslint";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { log } from "node:console";
 
 const root = process.cwd();
@@ -78,8 +77,25 @@ function flatten(results, cwd, suppressed = false) {
     })),
   );
 }
-const baseResults = await new ESLint({ cwd: baseRoot }).lintFiles(["."]);
-const headResults = await new ESLint({ cwd: root }).lintFiles(["."]);
+function runLint(cwd) {
+  // Isolate parser/config caches and use the exact CLI invocation of full lint.
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, "node_modules", "eslint", "bin", "eslint.js"), ".", "--format", "json"],
+    { cwd, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 },
+  );
+  if (result.error || ![0, 1].includes(result.status))
+    throw new Error(`Linter setup failed: ${result.error?.message ?? result.stderr}`);
+  const results = JSON.parse(result.stdout);
+  const fatal = results.filter((item) => item.fatalErrorCount > 0);
+  if (fatal.length)
+    throw new Error(
+      `Fatal parser/setup errors invalidate comparison: ${JSON.stringify(fatal.slice(0, 2))}`,
+    );
+  return results;
+}
+const baseResults = runLint(baseRoot);
+const headResults = runLint(root);
 const base = flatten(baseResults, baseRoot);
 const head = flatten(headResults, root);
 const key = (m, line = m.line) =>
