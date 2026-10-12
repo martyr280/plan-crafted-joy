@@ -139,7 +139,7 @@ export function ForecastVsTracker() {
             <Select
               value={preset}
               onValueChange={(v) => {
-                setPreset(v as any);
+                if (v === "4" || v === "8" || v === "12" || v === "custom") setPreset(v);
                 setPage(0);
               }}
             >
@@ -244,7 +244,7 @@ export function ForecastVsTracker() {
       )}
       {q.error && (
         <Card className="p-4 text-sm text-destructive">
-          {(q.error as any)?.message ?? "Failed to load"}
+          {q.error instanceof Error ? q.error.message : "Failed to load"}
         </Card>
       )}
 

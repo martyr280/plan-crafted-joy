@@ -953,7 +953,7 @@ export async function buildForecastVsTracker(
         .order("run_seq")
         .range(f, t),
     ),
-    fetchAllRows<any>((f, t) =>
+    fetchAllRows((f, t) =>
       supabaseAdmin
         .from("truck_capacity_forecast_log")
         .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied")
@@ -989,7 +989,7 @@ export async function buildForecastVsTracker(
         cutoff_dow: Number(c.cutoff_dow),
         cutoff_time: c.cutoff_time,
         tz: c.tz,
-        run_dows: ((c.run_dows ?? []) as any[]).map(Number),
+        run_dows: (c.run_dows ?? []).map(Number),
         active: c.active !== false,
       },
     ]);

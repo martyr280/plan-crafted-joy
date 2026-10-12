@@ -111,7 +111,22 @@ const matched = new Set();
 for (const m of head) {
   const oldLine = originalLine(m.file, m.line);
   const candidates = oldLine == null ? [] : (available.get(key(m, oldLine)) ?? []);
-  const index = candidates.find((i) => !matched.has(i));
+  let index = candidates.find((i) => !matched.has(i));
+  // Prettier's whole-file diff grouping can change the wording of a diagnostic
+  // on an untouched line when another block is edited. The same mapped source
+  // line, rule and severity already violated the rule; retain that baseline
+  // violation even if the whole-file diff groups its columns differently.
+  if (index == null && oldLine != null && m.rule === "prettier/prettier") {
+    index = base.findIndex(
+      (candidate, i) =>
+        !matched.has(i) &&
+        candidate.file === m.file &&
+        candidate.line === oldLine &&
+        candidate.rule === m.rule &&
+        candidate.severity === m.severity,
+    );
+    if (index < 0) index = undefined;
+  }
   if (index != null) {
     matched.add(index);
     inherited.push(m);
@@ -190,7 +205,7 @@ const summary = {
     ".prettierignore",
   ],
   method:
-    "Same installed frozen dependencies, Linux runner and unchanged configuration. Existing diagnostics match by rule, severity, exact message, column and diff-mapped unchanged source line. Unmatched added/modified-line or changed-context findings are PR-associated; these can replace baseline violations, so totals alone are not a regression test.",
+    "Same installed frozen dependencies, Linux runner and unchanged configuration. Existing diagnostics match by rule, severity, message, column and diff-mapped unchanged source line. Prettier additionally matches existing same-rule violations on the same unchanged line because its whole-file diff grouping can alter wording/columns. Added/modified source remains unmatched. Unmatched changed-context findings are reported separately; totals alone are not a regression test.",
   noComparisonSuppressions: true,
   base: totals(base),
   head: totals(head),

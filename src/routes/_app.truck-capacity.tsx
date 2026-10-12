@@ -105,7 +105,7 @@ function TruckCapacityPage() {
   const scopeQ = useQuery({ queryKey: ["tc-rep-scope"], queryFn: () => scopeFn() });
   const mapsFn = useServerFn(listRouteSalespeople);
   const mapsQ = useQuery({ queryKey: ["tc-route-reps"], queryFn: () => mapsFn() });
-  const mappings = useMemo(() => mapsQ.data?.mappings ?? [], [mapsQ.data?.mappings]);
+  const mappings = mapsQ.data?.mappings ?? [];
 
   const [viewAsRep, setViewAsRep] = useState<string>("");
   const scoped = scopeQ.data?.scoped ?? false;
@@ -1998,7 +1998,7 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
     retry: false,
   });
 
-  const mappings = mapsQ.data?.mappings ?? [];
+  const mappings = useMemo(() => mapsQ.data?.mappings ?? [], [mapsQ.data?.mappings]);
 
   const repOptions = useMemo(() => {
     const m = new Map<string, string | null>();
