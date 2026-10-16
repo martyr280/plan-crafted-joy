@@ -1308,3 +1308,12 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
     const buf = Buffer.from(await wb.xlsx.writeBuffer());
     return { base64: buf.toString("base64"), filename: `forecast-vs-tracker-${new Date().toISOString().slice(0, 10)}.xlsx` };
   });
+
+/** Read-only fixed scoreboard v1. The shadow median appears ONLY here, labeled as shadow; it is never served. */
+export const getTruckScoreboardV1 = createServerFn({ method: "GET" })
+  .middleware([denyLegacyBranchAccess])
+  .handler(async () => {
+    const { data, error } = await supabaseAdmin.from("tc_scoreboard_v1").select("*").limit(200);
+    if (error) throw new Error(error.message);
+    return { rows: data ?? [] };
+  });

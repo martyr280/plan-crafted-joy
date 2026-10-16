@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { ChevronDown, Download, Loader2, Target, TrendingUp, Gauge, CalendarRange } from "lucide-react";
+import { ScoreboardV1Card } from "./ScoreboardV1Card";
 import { getForecastVsTracker, exportForecastVsTracker } from "@/lib/truck-capacity.functions";
 import {
   ACCURACY_DEFAULT_MADE_FROM, weekStartSunday, READINESS_LABEL, type ReadinessStatus,
@@ -131,6 +132,7 @@ export function ForecastVsTracker() {
 
   return (
     <div className="space-y-4">
+      <ScoreboardV1Card />
       {/* Controls */}
       <Card className="p-4 space-y-3">
         <div className="flex flex-wrap items-end gap-3">
