@@ -4398,6 +4398,50 @@ export type Database = {
         }
         Relationships: []
       }
+      truck_capacity_shadow_forecast_log: {
+        Row: {
+          created_at: string
+          forecast_date: string
+          id: string
+          made_on: string
+          method: string
+          n_history: number
+          predicted: number | null
+          route_id: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          forecast_date: string
+          id?: string
+          made_on: string
+          method?: string
+          n_history: number
+          predicted?: number | null
+          route_id: string
+          source: string
+        }
+        Update: {
+          created_at?: string
+          forecast_date?: string
+          id?: string
+          made_on?: string
+          method?: string
+          n_history?: number
+          predicted?: number | null
+          route_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_capacity_shadow_forecast_log_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       truck_capacity_sheet_map: {
         Row: {
           active: boolean
@@ -4726,7 +4770,61 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      tc_scoreboard_v1: {
+        Row: {
+          excluded_no_live: number | null
+          excluded_no_shadow: number | null
+          hub: string | null
+          live_bias_pts: number | null
+          live_mae_pts: number | null
+          live_w10: number | null
+          live_w10_pct: number | null
+          live_w5: number | null
+          live_w5_pct: number | null
+          median_bias_pts: number | null
+          median_mae_pts: number | null
+          median_w10: number | null
+          median_w10_pct: number | null
+          median_w5: number | null
+          median_w5_pct: number | null
+          newest_actual: string | null
+          paired: number | null
+          route_days: number | null
+          score_window: string | null
+        }
+        Relationships: []
+      }
+      tc_scoreboard_v1_pairs: {
+        Row: {
+          actual: number | null
+          code: string | null
+          exclusion_reason: string | null
+          hub: string | null
+          live_abs_err: number | null
+          live_err: number | null
+          live_made_on: string | null
+          live_value: number | null
+          n_runs: number | null
+          paired: boolean | null
+          route_id: string | null
+          run_date: string | null
+          score_window: string | null
+          shadow_abs_err: number | null
+          shadow_err: number | null
+          shadow_made_on: string | null
+          shadow_source: string | null
+          shadow_value: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_capacity_runs_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "truck_capacity_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       backfill_sku_crossref_from_formerly: { Args: never; Returns: number }
@@ -4789,6 +4887,18 @@ export type Database = {
       }
       is_capacity_alert_manager: { Args: never; Returns: boolean }
       is_driver_time_viewer: { Args: never; Returns: boolean }
+      tc_shadow_log_daily: { Args: never; Returns: number }
+      tc_shadow_log_for: {
+        Args: { p_known_before: string; p_made_on: string; p_source: string }
+        Returns: number
+      }
+      tc_shadow_route_median: {
+        Args: { p_known_before: string; p_made_on: string; p_route: string }
+        Returns: {
+          n_history: number
+          predicted: number
+        }[]
+      }
     }
     Enums: {
       app_role:
