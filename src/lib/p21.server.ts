@@ -237,7 +237,7 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
 
 export async function applyPricerSync(
   timeoutMs = 120000
-): Promise<{ imported: number; removed: number; families_updated: number }> {
+): Promise<{ imported: number; removed: number; families_updated: number; cleanup_skipped?: string }> {
   const { result } = await runJob("pricer.sync", {}, timeoutMs);
   const rows = ((result as any)?.rows ?? []) as Array<Record<string, any>>;
 
@@ -301,6 +301,17 @@ export async function applyPricerSync(
   const toDelete = (existing ?? [])
     .map((r) => r.item as string)
     .filter((it) => !keepSet.has(it));
+  // Safety guard: an empty or truncated pull must never wipe the price list.
+  let cleanup_skipped: string | undefined;
+  if (dedup.length === 0) {
+    cleanup_skipped = `pull returned 0 usable items; ${existing.length} existing p21_sql rows left untouched`;
+  } else if (existing.length > 0 && toDelete.length > existing.length * 0.1) {
+    cleanup_skipped = `pull would remove ${toDelete.length} of ${existing.length} p21_sql rows (>10%); cleanup skipped`;
+  }
+  if (cleanup_skipped) {
+    console.warn(`[pricer.sync] ${cleanup_skipped}`);
+    toDelete.length = 0;
+  }
   for (let i = 0; i < toDelete.length; i += 500) {
     const batch = toDelete.slice(i, i + 500);
     const { error } = await supabaseAdmin
@@ -321,7 +332,9 @@ export async function applyPricerSync(
     metadata: { imported, removed, families_updated },
   });
 
-  return { imported, removed, families_updated };
+  return cleanup_skipped
+    ? { imported, removed: 0, families_updated, cleanup_skipped }
+    : { imported, removed, families_updated };
 }
 
 
