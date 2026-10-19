@@ -108,8 +108,11 @@ export const listFamilyImages = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ filter: z.enum(["all", "missing"]).default("all") }).parse)
   .handler(async ({ data }) => {
-    const { data: rows } = await supabaseAdmin
-      .from("price_list").select("item,item_short").not("item_short", "is", null).limit(20000);
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const rows = await fetchAllRows<any>(
+      () => supabaseAdmin.from("price_list").select("item,item_short", { count: "exact" }).not("item_short", "is", null) as any,
+      { label: "listFamilyImages price_list", orderBy: [{ column: "id" }], concurrency: 4 },
+    );
     const families = new Map<string, string[]>();
     for (const r of rows ?? []) {
       const fs = r.item_short as string;
@@ -217,7 +220,11 @@ export const listPricerPublications = createServerFn({ method: "POST" })
 export const listPricerFilters = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .handler(async () => {
-    const { data } = await supabaseAdmin.from("price_list").select("category,mfg").limit(20000);
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const data = await fetchAllRows<any>(
+      () => supabaseAdmin.from("price_list").select("category,mfg", { count: "exact" }) as any,
+      { label: "listPricerFilters price_list", orderBy: [{ column: "id" }], concurrency: 4 },
+    );
     const cats = new Set<string>(), mfgs = new Set<string>();
     for (const r of data ?? []) {
       if (r.category) cats.add(r.category as string);

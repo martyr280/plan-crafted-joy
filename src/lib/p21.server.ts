@@ -292,11 +292,11 @@ export async function applyPricerSync(
   let removed = 0;
   // Fetch existing p21_sql rows in pages, compute diff client-side (item count
   // is moderate; this avoids huge .not("item", "in", "(...)") expressions).
-  const { data: existing } = await supabaseAdmin
-    .from("price_list")
-    .select("item")
-    .eq("source", "p21_sql")
-    .limit(50000);
+  const { fetchAllRows } = await import("./supabase-fetch-all");
+  const existing = await fetchAllRows<{ id: string; item: string }>(
+    () => supabaseAdmin.from("price_list").select("id, item", { count: "exact" }).eq("source", "p21_sql") as any,
+    { label: "p21_sql cleanup price_list", orderBy: [{ column: "id" }], concurrency: 4 },
+  );
   const keepSet = new Set(keepItems);
   const toDelete = (existing ?? [])
     .map((r) => r.item as string)
