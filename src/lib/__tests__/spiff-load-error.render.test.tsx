@@ -77,7 +77,7 @@ describe("SPIFF run detail load failure (rendered)", () => {
     await screen.findByRole("alert", {}, { timeout: 10000 });
     expect(toastMock.error.mock.calls.filter((c) => c[1]?.id === "spiff-load-error")).toHaveLength(1);
     toastMock.dismiss.mockClear();
-    const select = container.querySelector("select") as HTMLSelectElement;
+    const select = Array.from(container.querySelectorAll("select")).find((el) => el.querySelector('option[value="run-2"]')) as HTMLSelectElement;
     expect(select).not.toBeNull();
     fireEvent.change(select, { target: { value: "run-2" } });
     await waitFor(() => expect(toastMock.dismiss).toHaveBeenCalledWith("spiff-load-error"));
