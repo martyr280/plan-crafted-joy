@@ -9,9 +9,15 @@ const toastMock = vi.hoisted(() => ({
 }));
 
 vi.mock("sonner", () => ({ toast: toastMock }));
-vi.mock("@tanstack/react-router", () => ({
-  createFileRoute: () => (opts: any) => ({ options: opts }),
-}));
+vi.mock("@tanstack/react-router", async () => {
+  const R = await import("react");
+  return {
+    createFileRoute: () => (opts: any) => ({ options: opts }),
+    // The router Vite plugin may code-split the route component into lazyRouteComponent.
+    lazyRouteComponent: (imp: () => Promise<any>, name = "default") =>
+      R.lazy(() => imp().then((m) => ({ default: m[name] }))),
+  };
+});
 vi.mock("@tanstack/react-start", () => ({
   useServerFn: () => () => { throw new Error("server functions are never called in this test"); },
 }));
@@ -46,7 +52,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); st.fail = true; });
 describe("SPIFF run detail load failure (rendered)", () => {
   it("failed load shows the alert card, disables actions, one keyed toast; Retry clears both", async () => {
     const Page = (Route as any).options.component as React.ComponentType;
-    render(<Page />);
+    render(<React.Suspense fallback={null}><Page /></React.Suspense>);
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Couldn't load the full run");
