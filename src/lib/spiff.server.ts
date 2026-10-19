@@ -24,7 +24,7 @@ import { parseWritingRep } from "./spiff/parser";
 import { fetchAllRunLines, fetchAllRows } from "./spiff/fetch-all.server";
 import { applyCarryover, type CarryoverLine, type CarriedCounts, type UnmatchedEdit, type IncludedEdit } from "./spiff/carryover";
 import { lineKey } from "./spiff/line-key";
-import { computeLineSpiff, isCreditLine } from "./spiff/amount";
+import { amountForIncludeChange, computeLineSpiff } from "./spiff/amount";
 
 const SCHEMA_TIMEOUT_MS = 30_000;
 
@@ -277,22 +277,23 @@ async function fetchAging(customerIds: string[]): Promise<{
   }
 }
 
-// When carry-over flips `included` (manual include/exclude), recompute the
-// line amount with the same helper the toggle uses, so a regenerate yields the
-// same spiff_amount as the screen. Mutates `lines` in place.
+// When carry-over flips `included`, apply the same helper the toggle uses
+// (amountForIncludeChange) so regenerate and the screen agree. Mutates `lines`
+// and returns spiff_amount audit edits for every amount that changed.
 export function recomputeCarriedAmounts(
-  lines: Array<{ program_id?: string; included: boolean; extended_price?: number | string | null; flags?: unknown; spiff_amount: number }>,
+  lines: Array<{ included: boolean; extended_price?: number | string | null; flags?: unknown; spiff_amount: number }>,
   edits: Array<{ lineIndex: number; field: string }>,
-  programs: Array<{ id: string; rate: number | string }>,
-) {
-  const rates = new Map(programs.map((p) => [p.id, p.rate]));
+): Array<{ lineIndex: number; field: "spiff_amount"; old_value: string | null; new_value: string | null }> {
+  const out: Array<{ lineIndex: number; field: "spiff_amount"; old_value: string | null; new_value: string | null }> = [];
   const flipped = new Set(edits.filter((e) => e.field === "included").map((e) => e.lineIndex));
   for (const index of flipped) {
     const line = lines[index];
-    const rate = rates.get(line.program_id ?? "");
-    if (rate === undefined) throw new Error(`No program rate for carried line ${index}`);
-    line.spiff_amount = computeLineSpiff({ included: line.included, extended_price: line.extended_price, isCredit: isCreditLine(line) }, rate);
+    const next = amountForIncludeChange(line, line.included);
+    if (next === undefined || next === Number(line.spiff_amount)) continue;
+    out.push({ lineIndex: index, field: "spiff_amount", old_value: line.spiff_amount == null ? null : String(line.spiff_amount), new_value: String(next) });
+    line.spiff_amount = next;
   }
+  return out;
 }
 
 export function buildChecksForProgram(
@@ -468,6 +469,9 @@ export async function generateSpiffRunCore(opts: {
         }
         if (notInvoiced) flags.not_invoiced = true;
         if (isReturnCredit) flags.return_credit = true;
+        // Generate-time rate/amount so later toggles never use today's rate.
+        flags.gen_rate = Number(program.rate);
+        flags.gen_amount = computeLineSpiff({ included: true, extended_price: extForRow, isCredit: isReturnCredit }, program.rate);
 
         if (exclusion_reason) {
           perProgramExcl[exclusion_reason] = (perProgramExcl[exclusion_reason] ?? 0) + 1;
@@ -520,7 +524,7 @@ export async function generateSpiffRunCore(opts: {
   }
 
   const carryover = applyCarryover(snapshot, prepared.flatMap((p) => p.rows), editHistory);
-  recomputeCarriedAmounts(carryover.lines, carryover.edits, prepared.map((p) => p.program));
+  const amountEdits = recomputeCarriedAmounts(carryover.lines, carryover.edits);
   // Build the entire replacement before making a single atomic RPC.
   const allChecks = prepared.flatMap(({ program, perProgramExcl, missingProductGroup }) => {
     const toInsert = carryover.lines.filter((line) => line.program_id === program.id);
@@ -538,7 +542,7 @@ export async function generateSpiffRunCore(opts: {
     } as any;
     return buildChecksForProgram(program, checkInputs).map((c) => ({ ...c, run_id: runId, status: "pending" }));
   });
-  const audit = carryover.edits.map((edit) => {
+  const audit = [...carryover.edits, ...amountEdits].map((edit) => {
     const line = carryover.lines[edit.lineIndex];
     return {
       run_id: runId, line_id: line.id, line_key: lineKey(line),
