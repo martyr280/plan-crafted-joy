@@ -22,6 +22,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { buttonVariants } from "@/components/ui/button";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -280,6 +291,9 @@ function SpiffPage() {
     return Array.from(s).sort();
   }, [lines]);
 
+  const [confirmGenerateOpen, setConfirmGenerateOpen] = useState(false);
+  const quarterHasRun = runs.some((r: any) => r.quarter_label === quarterLabel);
+
   async function handleGenerate() {
     if (!user) return;
     setGenerating(true);
@@ -490,7 +504,7 @@ function SpiffPage() {
               onChange={(e) => setDateTo(e.target.value)}
               className="w-[150px]"
             />
-            <Button onClick={handleGenerate} disabled={generating}>
+            <Button onClick={() => setConfirmGenerateOpen(true)} disabled={generating}>
               {generating ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
@@ -498,6 +512,33 @@ function SpiffPage() {
               )}
               Generate from P21
             </Button>
+            <AlertDialog open={confirmGenerateOpen} onOpenChange={setConfirmGenerateOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {quarterHasRun ? `Regenerate ${quarterLabel}?` : `Generate ${quarterLabel}?`}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {quarterHasRun
+                      ? `Regenerating ${quarterLabel} deletes and rebuilds every line and check for this run. Any manual include/exclude changes and rep reassignments will be lost. This cannot be undone.`
+                      : `This pulls ${quarterLabel} (${dateFrom} → ${dateTo}) from P21 and creates a new SPIFF run.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  {/* Radix AlertDialog focuses Cancel by default. */}
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className={quarterHasRun ? buttonVariants({ variant: "destructive" }) : undefined}
+                    onClick={() => {
+                      setConfirmGenerateOpen(false);
+                      handleGenerate();
+                    }}
+                  >
+                    {quarterHasRun ? "Regenerate and wipe edits" : "Generate"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <select
               className="border rounded-md px-3 py-1.5 text-sm bg-card"
               value={currentRunId ?? ""}
