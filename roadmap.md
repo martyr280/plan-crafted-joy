@@ -1,6 +1,7 @@
 # Roadmap
 
 ## SPIFF edit preservation
+- [ ] Follow-up: legacy-key fallback with exact-first consumption, audit grant tightening, metadata scope review, and full safe tests.
 - [x] Add audit migration, pure exact-key carry-over, generation integration, confirmation and unmatched warning; verify without running live mutations.
 
 ## Open

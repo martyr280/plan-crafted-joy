@@ -46,10 +46,11 @@ function overrides(line: CarryoverLine, fresh?: CarryoverLine): Override[] {
 // Within each exact key, sort BOTH sides by non-editable P21 attributes, then
 // original input ordinal for indistinguishable ties. Never sort by random UUID,
 // PO, description, rep, included state or amount. Non-overrides consume ordinals too.
-function grouped(lines: CarryoverLine[]) {
+function grouped(lines: CarryoverLine[], keyFor: (line: CarryoverLine) => string = lineKey, eligible: (index: number) => boolean = () => true) {
   const groups = new Map<string, number[]>();
   lines.forEach((line, index) => {
-    const key = lineKey(line);
+    if (!eligible(index)) return;
+    const key = keyFor(line);
     groups.set(key, [...(groups.get(key) ?? []), index]);
   });
   const rank = (line: CarryoverLine) => JSON.stringify([
@@ -71,10 +72,33 @@ export function applyCarryover<T extends CarryoverLine>(snapshot: CarryoverLine[
   const edits: CarriedField[] = [];
   let snapshot_overrides = 0;
   const newGroups = grouped(fresh);
+  const matches = new Map<number, number>();
+  const consumed = new Set<number>();
+  // Reserve ALL exact matches before legacy matching, including non-overrides.
   for (const [key, indices] of grouped(snapshot)) {
     indices.forEach((oldIndex, ordinal) => {
-      const old = snapshot[oldIndex];
       const newIndex = newGroups.get(key)?.[ordinal];
+      if (newIndex === undefined) return;
+      matches.set(oldIndex, newIndex);
+      consumed.add(newIndex);
+    });
+  }
+  const legacyKey = (line: CarryoverLine) => lineKey({ ...line, flags: {} });
+  const hasLineNumber = (line: CarryoverLine) => lineKey(line) !== legacyKey(line);
+  const remainingFresh = grouped(fresh, legacyKey, (index) => !consumed.has(index));
+  const legacySnapshots = grouped(snapshot, legacyKey, (index) => !matches.has(index) && !hasLineNumber(snapshot[index]));
+  for (const [key, indices] of legacySnapshots) {
+    indices.forEach((oldIndex, ordinal) => {
+      const newIndex = remainingFresh.get(key)?.[ordinal];
+      if (newIndex === undefined) return;
+      matches.set(oldIndex, newIndex);
+      consumed.add(newIndex);
+    });
+  }
+  for (const [key, indices] of grouped(snapshot)) {
+    indices.forEach((oldIndex) => {
+      const old = snapshot[oldIndex];
+      const newIndex = matches.get(oldIndex);
       const types = overrides(old, newIndex === undefined ? undefined : fresh[newIndex]);
       snapshot_overrides += types.length;
       if (newIndex === undefined) {
