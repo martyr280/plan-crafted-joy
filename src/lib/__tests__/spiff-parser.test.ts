@@ -24,3 +24,20 @@ describe("parseWritingRep", () => {
     });
   }
 });
+
+describe("parseWritingRep — multi-letter glued PO prefixes", () => {
+  const more: Array<[string, string, string]> = [
+    ["ERIC WEAVER EEW12614", "Eric Weaver", "3-letter glued prefix dropped"],
+    ["LAURA BORMAN CR726NDI", "Laura Borman", "2-letter glued prefix dropped"],
+    ["Laura Borman CR726NDI", "Laura Borman", "mixed case, 2-letter glued prefix dropped"],
+    ["LISA WAGNERL4471", "Lisa Wagnerl", "intentionally left unsplit (handled as data alias)"],
+    ["Steven Finckel15863", "Steven Finckel", "glued surname >3 letters kept"],
+    ["John Smith JR 6470", "John Smith Jr", "space before digits keeps suffix"],
+    ["ERIC EEW12614", "Eric Eew", "unchanged pre-fix behaviour: only one word would remain"],
+  ];
+  for (const [input, expected, why] of more) {
+    it(`${input} -> ${expected} (${why})`, () => {
+      expect(parseWritingRep(input)).toEqual({ rep: expected, confidence: "parsed" });
+    });
+  }
+});

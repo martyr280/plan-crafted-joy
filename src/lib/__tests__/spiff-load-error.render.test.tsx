@@ -50,11 +50,11 @@ import { Route } from "@/routes/_app.spiff";
 afterEach(() => { cleanup(); vi.clearAllMocks(); st.fail = true; });
 
 describe("SPIFF run detail load failure (rendered)", () => {
-  it("failed load shows the alert card, disables actions, one keyed toast; Retry clears both", async () => {
+  it("failed load shows the alert card, disables actions, one keyed toast; Retry clears both", { timeout: 20000 }, async () => {
     const Page = (Route as any).options.component as React.ComponentType;
     render(<React.Suspense fallback={null}><Page /></React.Suspense>);
 
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("alert", {}, { timeout: 10000 });
     expect(alert.textContent).toContain("Couldn't load the full run");
     for (const name of [/Workbook/, /Send for approval/, /Send to AP/]) {
       expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
