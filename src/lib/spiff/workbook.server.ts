@@ -158,8 +158,9 @@ function addCustomerSheet(
       r.getCell(8).numFmt = "#,##0.00;(#,##0.00)";
       r.getCell(9).value = Number(l.extended_price ?? 0);
       r.getCell(9).numFmt = "#,##0.00;(#,##0.00)";
-      // SPIFF as a live Excel formula so AP can audit it.
-      r.getCell(10).value = { formula: `I${row}*${program.rate}` } as any;
+      // Stored spiff_amount (credits/negatives already 0) so the sheet, its
+      // SUM totals and the checks all use the same number.
+      r.getCell(10).value = Number(l.spiff_amount ?? 0);
       r.getCell(10).numFmt = "#,##0.00;(#,##0.00)";
       row++;
     }
