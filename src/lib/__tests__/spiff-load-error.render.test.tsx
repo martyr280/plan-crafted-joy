@@ -9,8 +9,7 @@ const toastMock = vi.hoisted(() => ({
 }));
 
 vi.mock("sonner", () => ({ toast: toastMock }));
-vi.mock("@tanstack/react-router", async (importOriginal) => ({
-  ...(await importOriginal<any>()),
+vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (opts: any) => ({ options: opts }),
 }));
 vi.mock("@tanstack/react-start", () => ({
