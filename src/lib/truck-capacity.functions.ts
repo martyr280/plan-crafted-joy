@@ -289,12 +289,16 @@ export const exportTruckWorkbook = createServerFn({ method: "GET" })
   });
 
 async function buildSnapshotReadout(startedAt: Date) {
-  const { data: rows } = await supabaseAdmin
-    .from("truck_capacity_p21_demand")
-    .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, total_weight_lbs, est_pallets, order_count")
-    .gte("snapshot_at", startedAt.toISOString())
-    .limit(50000);
-  const list = rows ?? [];
+  const { fetchAllRows } = await import("./supabase-fetch-all");
+  const rows = await fetchAllRows<any>(
+    () =>
+      supabaseAdmin
+        .from("truck_capacity_p21_demand")
+        .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, total_weight_lbs, est_pallets, order_count", { count: "exact" })
+        .gte("snapshot_at", startedAt.toISOString()) as any,
+    { label: "snapshot readout truck_capacity_p21_demand", orderBy: [{ column: "id" }] },
+  );
+  const list = rows;
   const withFrac = list.filter((r) => r.projected_capacity_frac != null);
   const fracs = withFrac.map((r) => Number(r.projected_capacity_frac));
   const min = fracs.length ? Math.min(...fracs) : null;
@@ -600,14 +604,16 @@ export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
     const since = new Date(); since.setUTCDate(since.getUTCDate() - days);
     const sinceIso = since.toISOString().slice(0, 10);
 
-    // Fetch demand rows in window. Cap defensive limit at 100k to avoid
-    // runaway queries; realistic 30-day snapshot volume is < 5k rows.
-    const { data: demand, error: dErr } = await supabaseAdmin
-      .from("truck_capacity_p21_demand")
-      .select("route_id, projected_capacity_frac, ship_date")
-      .gte("ship_date", sinceIso)
-      .limit(100000);
-    if (dErr) throw new Error(dErr.message);
+    // Fetch every demand row in window (complete-or-throw paging).
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const demand = await fetchAllRows<any>(
+      () =>
+        supabaseAdmin
+          .from("truck_capacity_p21_demand")
+          .select("route_id, projected_capacity_frac, ship_date", { count: "exact" })
+          .gte("ship_date", sinceIso) as any,
+      { label: "coverage truck_capacity_p21_demand", orderBy: [{ column: "id" }] },
+    );
 
     const { data: routes, error: rErr } = await supabaseAdmin
       .from("truck_capacity_routes")
@@ -800,29 +806,33 @@ export const getForecastVsActual = createServerFn({ method: "POST" })
     const days = data.days ?? 365;
     const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 
-    const [logRes, runRes] = await Promise.all([
-      supabaseAdmin
-        .from("truck_capacity_forecast_log")
-        .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied")
-        .gte("forecast_date", since)
-        .order("forecast_date", { ascending: true })
-        .limit(50000),
-      supabaseAdmin
-        .from("truck_capacity_runs")
-        .select("route_id, run_date, capacity_frac")
-        // No-run markers (NULL capacity) are not actuals — exclude from scoring.
-        .not("capacity_frac", "is", null)
-        .gte("run_date", since)
-        .limit(50000),
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const [logRows, runRows] = await Promise.all([
+      fetchAllRows<any>(
+        () =>
+          supabaseAdmin
+            .from("truck_capacity_forecast_log")
+            .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied", { count: "exact" })
+            .gte("forecast_date", since) as any,
+        { label: "getForecastVsActual forecast_log", orderBy: [{ column: "forecast_date" }, { column: "id" }], concurrency: 4 },
+      ),
+      fetchAllRows<any>(
+        () =>
+          supabaseAdmin
+            .from("truck_capacity_runs")
+            .select("route_id, run_date, capacity_frac", { count: "exact" })
+            // No-run markers (NULL capacity) are not actuals — exclude from scoring.
+            .not("capacity_frac", "is", null)
+            .gte("run_date", since) as any,
+        { label: "getForecastVsActual runs", orderBy: [{ column: "run_date" }, { column: "id" }] },
+      ),
     ]);
-    if (logRes.error) throw new Error(logRes.error.message);
-    if (runRes.error) throw new Error(runRes.error.message);
 
     // One row per (route, forecast_date, made_on): once more than one method is
     // logged for a key, scoring every row would double-count the same forecast.
     const { dedupeLogRows } = await import("./truck-capacity/forecast-log");
-    const logs = dedupeLogRows((logRes.data ?? []) as any[]);
-    const runs = runRes.data ?? [];
+    const logs = dedupeLogRows(logRows);
+    const runs = runRows;
     const actuals = actualsByRouteDay(runs as any);
 
     const scored = logs
@@ -940,30 +950,27 @@ export async function buildForecastVsTracker(
       .from("truck_capacity_routes")
       .select("id, code, name, hub, active, sort_order")
       .limit(2000),
-    fetchAllRows<TrackerActual>((f, t) =>
-      supabaseAdmin
-        .from("truck_capacity_runs")
-        .select("route_id, run_date, capacity_frac, missing_from_sheet")
-        // No-run markers (NULL capacity) are not tracker actuals — exclude them.
-        .not("capacity_frac", "is", null)
-        .gte("run_date", from)
-        .lte("run_date", to)
-        .order("route_id")
-        .order("run_date")
-        .order("run_seq")
-        .range(f, t),
+    fetchAllRows<TrackerActual>(
+      () =>
+        supabaseAdmin
+          .from("truck_capacity_runs")
+          .select("route_id, run_date, capacity_frac, missing_from_sheet", { count: "exact" })
+          // No-run markers (NULL capacity) are not tracker actuals — exclude them.
+          .not("capacity_frac", "is", null)
+          .gte("run_date", from)
+          .lte("run_date", to) as any,
+      { label: "scoreboard truck_capacity_runs", orderBy: [{ column: "route_id" }, { column: "run_date" }, { column: "run_seq" }, { column: "id" }] },
     ),
-    fetchAllRows((f, t) =>
-      supabaseAdmin
-        .from("truck_capacity_forecast_log")
-        .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied")
-        .gte("forecast_date", from)
-        .lte("forecast_date", to)
-        .gte("made_on", madeOnFrom)
-        .order("route_id")
-        .order("forecast_date")
-        .order("made_on")
-        .range(f, t),
+    // (route_id, forecast_date, made_on) is NOT unique (method is part of the key): id tail.
+    fetchAllRows<any>(
+      () =>
+        supabaseAdmin
+          .from("truck_capacity_forecast_log")
+          .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied", { count: "exact" })
+          .gte("forecast_date", from)
+          .lte("forecast_date", to)
+          .gte("made_on", madeOnFrom) as any,
+      { label: "scoreboard truck_capacity_forecast_log", orderBy: [{ column: "route_id" }, { column: "forecast_date" }, { column: "made_on" }, { column: "id" }], concurrency: 4 },
     ),
     supabaseAdmin
       .from("route_cutoffs")
