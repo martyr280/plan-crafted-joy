@@ -12,7 +12,7 @@ type IncludeState = {
 };
 export function manualIncludePatch(
   line: IncludeState, patch: Partial<IncludeState>, rate?: number | string,
-): Partial<IncludeState> {
+): Partial<Omit<IncludeState, "extended_price">> {
   if (patch.included === undefined) return patch;
   const flags = { ...line.flags, ...patch.flags };
   if (patch.included && !line.included) flags.manual_include = true;
