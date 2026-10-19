@@ -25,7 +25,7 @@ describe("SPIFF client safety", () => {
     expect(screen).toContain('import { pageAll } from "@/lib/spiff/page-all"');
     expect(screen).toMatch(/pageAll<Line>[\s\S]*?from\("spiff_run_lines"\)[\s\S]*?range\(from, to\)/);
     expect(screen).toMatch(/pageAll<Check>[\s\S]*?from\("spiff_checks"\)[\s\S]*?range\(from, to\)/);
-    expect(screen).toContain("patch = manualIncludePatch(line, patch)");
+    expect(screen).toContain("patch = manualIncludePatch(line, patch, {");
     expect(helper).toMatch(/function fetchAllRunLines[\s\S]*?return fetchAllRows<T>/);
     expect(helper).toMatch(/function fetchAllRunChecks[\s\S]*?return fetchAllRows<T>/);
   });
