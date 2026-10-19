@@ -1,6 +1,7 @@
 # Roadmap
 
 ## SPIFF edit preservation
+- [ ] QA follow-up: explicit include markers, unambiguous legacy carry-over, atomic replacement RPC, append-only audit grants, and safe full-suite verification. No live SPIFF actions or data writes.
 - [x] Follow-up: legacy-key fallback with exact-first consumption, audit grant tightening, metadata scope review, and full safe tests. Route head retained because platform instructions require leaf metadata; TypeScript checked by the automatic harness, not a manual tsc invocation.
 - [x] Add audit migration, pure exact-key carry-over, generation integration, confirmation and unmatched warning; verify without running live mutations.
 
