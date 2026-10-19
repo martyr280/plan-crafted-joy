@@ -1,10 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-const ports = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn(), bridge: vi.fn(), lines: vi.fn(), history: vi.fn(), activity: vi.fn() }));
+const ports = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn(), bridge: vi.fn(), lines: vi.fn(), history: vi.fn(), activity: vi.fn(), legacyFresh: false }));
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: { from: ports.from, rpc: ports.rpc } }));
 vi.mock("../p21.server", () => ({ runJob: ports.bridge }));
 vi.mock("../spiff/fetch-all.server", () => ({ fetchAllRunLines: ports.lines, fetchAllRows: ports.history }));
-import { computeLineSpiff, isCreditLine } from "../spiff/amount";
+vi.mock("../spiff/carryover", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../spiff/carryover")>();
+  return { ...actual, applyCarryover: (...args: Parameters<typeof actual.applyCarryover>) => {
+    const result = actual.applyCarryover(...args);
+    if (ports.legacyFresh) for (const line of result.lines) {
+      const flags = { ...(line.flags as Record<string, unknown>) };
+      delete flags.gen_amount; delete flags.gen_rate; line.flags = flags;
+    }
+    return result;
+  } };
+});
+import { amountForIncludeChange, computeLineSpiff, isCreditLine, LEGACY_AMOUNT_BLOCK_REASON } from "../spiff/amount";
 import { manualIncludePatch } from "../spiff/manual-include";
 import { buildChecksForProgram, generateSpiffRunCore, recomputeCarriedAmounts } from "../spiff.server";
 
@@ -23,7 +34,7 @@ describe("SPIFF amount on include/exclude (gen_amount)", () => {
     expect(ex.spiff_amount).toBe(0);
     expect(back.spiff_amount).toBe(61.7285);
     expect(back.flags).toMatchObject({ gen_amount: 61.7285, gen_rate: RATE, manual_include: true });
-    expect(manualIncludePatch.length).toBe(2); // no rate argument any more
+    expect(manualIncludePatch.length).toBe(3); // optional recovery context, not blind repricing
   });
   it("(b) legacy Q1 negative-ext unflagged line (-12.34): round-trip leaves amount, patch has no spiff_amount", () => {
     const legacy = { ...line, flags: { oe_line_no: "1" }, extended_price: -246.8, spiff_amount: -12.34 };
@@ -76,6 +87,7 @@ describe("(f) carry-over of a manual include recomputes the amount in Generate",
   const old = { id: "old", ...raw, program_id: "program", invoice_date: raw.last_invoice_date, included: true, exclusion_reason: null, writing_rep: null, rep_parse_confidence: "unmatched", spiff_amount: 0, flags: { oe_line_no: "1", manual_include: true } };
   beforeEach(() => {
     vi.clearAllMocks();
+    ports.legacyFresh = false;
     ports.from.mockImplementation((table: string) => {
       if (table === "activity_events") return { insert: ports.activity };
       if (table === "spiff_programs") { const q: any = { select: () => q, eq: () => q, order: async () => ({ data: [{ ...program, payout_mode: "single_check" }], error: null }) }; return q; }
@@ -115,6 +127,66 @@ describe("(f) carry-over of a manual include recomputes the amount in Generate",
     expect(args.p_lines[0]).toMatchObject({ included: true, spiff_amount: 5, flags: { manual_include: true } });
     expect(args.p_checks[0]).toMatchObject({ amount: 5, line_count: 1 });
   });
+  it("legacy carry-over block continues mocked regeneration with unchanged amount, blocked audit and result count", async () => {
+    // Fresh Generate always supplies gen_amount. Inject the rare legacy branch
+    // at the carry-over seam; every persistence/bridge port remains mocked.
+    ports.legacyFresh = true;
+    const result = await generateSpiffRunCore({ quarterLabel: "Q3-2026", dateFrom: "2026-07-01", dateTo: "2026-10-01", userId: "mock-admin" });
+    const args = ports.rpc.mock.calls[0][1];
+    expect(result.amount_blocked).toBe(1);
+    expect(args.p_lines[0]).toMatchObject({ included: true, spiff_amount: 0 });
+    expect(args.p_checks[0].amount).toBe(0);
+    const audit = args.p_audit.find((a: any) => a.field === "spiff_amount_blocked");
+    expect(audit).toMatchObject({ old_value: "0", new_value: null, source: "generate_carryover", changed_by: "mock-admin" });
+    expect(Object.keys(audit).sort()).toEqual(Object.keys(args.p_audit[0]).sort());
+    expect(args.p_totals.amount_blocked).toBe(1);
+  });
+});
+
+describe("legacy inclusion recovery gate", () => {
+  const legacy = { ...line, included: false, exclusion_reason: "not_invoiced", flags: { oe_line_no: "1" }, extended_price: 200, spiff_amount: 0 };
+  const ctx = { rate: "0.05", programUpdatedAt: "2026-09-01T00:00:00Z", runGeneratedAt: "2026-10-01T00:00:00Z" };
+  it("Q3 zero positive legacy re-include writes amount and generation flags in the same inclusion patch", () => {
+    expect(manualIncludePatch(legacy, { included: true, exclusion_reason: null }, ctx)).toEqual({ included: true, exclusion_reason: null, spiff_amount: 10, flags: { oe_line_no: "1", manual_include: true, gen_rate: 0.05, gen_amount: 10 } });
+  });
+  it("equal program and generation timestamps allow recovery", () => {
+    expect(amountForIncludeChange(legacy, true, { ...ctx, programUpdatedAt: ctx.runGeneratedAt })).toMatchObject({ kind: "set", amount: 10 });
+  });
+  it.each([{ return_credit: true }, {}])("legacy credit flag or negative extension leaves stored zero untouched (%j)", (flags) => {
+    const credit = { ...legacy, flags, extended_price: flags.return_credit ? 200 : -200 };
+    expect(amountForIncludeChange(credit, true, ctx)).toEqual({ kind: "leave" });
+    expect(manualIncludePatch(credit, { included: true }, ctx)).not.toHaveProperty("spiff_amount");
+  });
+  it.each([
+    { ...ctx, programUpdatedAt: "2026-10-02T00:00:00Z" },
+    { ...ctx, runGeneratedAt: null },
+    { ...ctx, programUpdatedAt: null },
+    { ...ctx, runGeneratedAt: "invalid" },
+  ])("unsafe or missing timestamps block without producing a patch (%j)", (context) => {
+    expect(amountForIncludeChange(legacy, true, context)).toEqual({ kind: "block", reason: LEGACY_AMOUNT_BLOCK_REASON });
+    expect(() => manualIncludePatch(legacy, { included: true }, context)).toThrow(LEGACY_AMOUNT_BLOCK_REASON);
+  });
+  it("non-zero legacy round-trip writes no amount even if the program changed", () => {
+    const stored = { ...legacy, included: true, spiff_amount: 3 };
+    const off = manualIncludePatch(stored, { included: false }, ctx);
+    const on = manualIncludePatch({ ...stored, ...off }, { included: true }, { ...ctx, programUpdatedAt: "2026-10-02T00:00:00Z" });
+    expect(off).not.toHaveProperty("spiff_amount"); expect(on).not.toHaveProperty("spiff_amount");
+  });
+  it("legacy exclusion and zero/non-positive extension never recover", () => {
+    expect(amountForIncludeChange(legacy, false)).toEqual({ kind: "leave" });
+    expect(amountForIncludeChange({ ...legacy, extended_price: 0 }, true)).toEqual({ kind: "leave" });
+  });
+  it("carry-over recovery merges flags and records the amount audit", () => {
+    const rows = [{ ...legacy, program_id: "program", included: true, flags: { oe_line_no: "1", manual_include: true } }];
+    const edits = recomputeCarriedAmounts(rows, [{ lineIndex: 0, field: "included" }], (id) => id === "program" ? ctx : undefined);
+    expect(rows[0]).toMatchObject({ spiff_amount: 10, flags: { oe_line_no: "1", manual_include: true, gen_rate: 0.05, gen_amount: 10 } });
+    expect(edits).toEqual([{ lineIndex: 0, field: "spiff_amount", old_value: "0", new_value: "10" }]);
+  });
+  it("stored gen_amount ignores recovery timestamps and current rate", () => {
+    expect(amountForIncludeChange(line, true)).toEqual({ kind: "set", amount: 61.7285 });
+    expect(amountForIncludeChange(line, false)).toEqual({ kind: "set", amount: 0 });
+    expect(amountForIncludeChange({ ...line, extended_price: -1 }, true)).toEqual({ kind: "set", amount: 0 });
+  });
 });
 
 describe("(g) wiring", () => {
@@ -122,12 +194,12 @@ describe("(g) wiring", () => {
     const screen = readFileSync("src/routes/_app.spiff.tsx", "utf8");
     const patch = readFileSync("src/lib/spiff/manual-include.ts", "utf8");
     const server = readFileSync("src/lib/spiff.server.ts", "utf8");
-    expect(screen).toContain("patch = manualIncludePatch(line, patch);");
+    expect(screen).toContain("patch = manualIncludePatch(line, patch, {");
     expect(screen).not.toContain("Program rate not loaded");
     expect(screen).toMatch(/async function toggleIncluded[\s\S]*?updateLine\(/);
     expect(patch).toContain("amountForIncludeChange(");
     expect(server).toMatch(/const spiff = computeLineSpiff\(\{ included, extended_price: extForRow, isCredit: isReturnCredit \}, program\.rate\)/);
-    expect(server).toContain("recomputeCarriedAmounts(carryover.lines, carryover.edits)");
+    expect(server).toContain("recomputeCarriedAmounts(carryover.lines, carryover.edits,");
     expect(server).toMatch(/flags\.gen_amount = computeLineSpiff\(\{ included: true, extended_price: extForRow, isCredit: isReturnCredit \}, program\.rate\)/);
     for (const src of [screen, patch, server]) expect(src).not.toMatch(/toFixed\(6\)/);
   });
