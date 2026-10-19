@@ -3,6 +3,7 @@
 
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { fetchAllRunChecks, fetchAllRunLines } from "./fetch-all.server";
 
 type Program = {
   id: string;
@@ -229,39 +230,35 @@ function addCustomerSheet(
 }
 
 async function fetchRunBundle(runId: string, customerIds?: string[]) {
-  const { data: run } = await supabaseAdmin
+  const { data: run, error: runErr } = await supabaseAdmin
     .from("spiff_runs")
     .select("id, quarter_label, totals")
     .eq("id", runId)
     .single();
+  if (runErr) throw new Error(`spiff_runs read failed: ${runErr.message}`);
   if (!run) throw new Error("Run not found");
 
+  // Complete-or-throw reads (PostgREST caps responses at 1,000 rows).
+  const lines = await fetchAllRunLines<Line>(runId, "*", customerIds);
+  const checks = await fetchAllRunChecks<Check>(runId, "*", customerIds);
 
+  // One sheet per ACTIVE program, plus any inactive program that still has
+  // lines in this run so no data is ever dropped.
+  const progIdsWithLines = Array.from(new Set(lines.map((l) => l.program_id)));
   let progQ = supabaseAdmin.from("spiff_programs").select("*");
   if (customerIds && customerIds.length) progQ = progQ.in("customer_id", customerIds);
-  const { data: programs } = await progQ.order("customer_name");
-
-  let lineQ = supabaseAdmin
-    .from("spiff_run_lines")
-    .select("*")
-    .eq("run_id", runId)
-    .limit(50000);
-  if (customerIds && customerIds.length) lineQ = lineQ.in("customer_id", customerIds);
-  const { data: lines } = await lineQ;
-
-  let checkQ = supabaseAdmin
-    .from("spiff_checks")
-    .select("*")
-    .eq("run_id", runId)
-    .limit(5000);
-  if (customerIds && customerIds.length) checkQ = checkQ.in("customer_id", customerIds);
-  const { data: checks } = await checkQ;
+  const { data: allPrograms, error: progErr } = await progQ.order("customer_name");
+  if (progErr) throw new Error(`spiff_programs read failed: ${progErr.message}`);
+  const withLines = new Set(progIdsWithLines);
+  const programs = ((allPrograms ?? []) as Array<Program & { active: boolean }>).filter(
+    (p) => p.active || withLines.has(p.id),
+  );
 
   return {
     run: run as RunRow,
-    programs: (programs ?? []) as Program[],
-    lines: (lines ?? []) as Line[],
-    checks: (checks ?? []) as Check[],
+    programs: programs as Program[],
+    lines,
+    checks,
   };
 }
 
