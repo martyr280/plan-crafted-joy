@@ -45,8 +45,8 @@ describe("recomputeFamilies reads the full price list", () => {
 
   it("a row beyond 1,000 is grouped: two same-price rows on separate pages share a family", async () => {
     st.rows = Array.from({ length: 1500 }, (_, i) => ({ id: `id-${i}`, item: `U${i}`, mfg: `M${i}`, item_short: `U${i}` }));
-    st.rows[10] = { id: "id-10", item: "ABC-RED", mfg: "X", list_price: 5, item_short: "ABC-RED" };
-    st.rows[1400] = { id: "id-1400", item: "ABC-BLU", mfg: "X", list_price: 5, item_short: "ABC-BLU" };
+    st.rows[10] = { id: "id-10", item: "ABCD-RED", mfg: "X", list_price: 5, item_short: "ABCD-RED" };
+    st.rows[1400] = { id: "id-1400", item: "ABCD-BLU", mfg: "X", list_price: 5, item_short: "ABCD-BLU" };
     const res = await recomputeFamilies();
     expect(res.updated).toBe(2);
   });

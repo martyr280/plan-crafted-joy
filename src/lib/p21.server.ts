@@ -237,7 +237,7 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
 
 export async function applyPricerSync(
   timeoutMs = 120000
-): Promise<{ imported: number; removed: number; families_updated: number; cleanup_skipped?: string }> {
+): Promise<{ imported: number; removed: number; families_updated: number; cleanup_skipped?: string; families_skipped?: string }> {
   const { result } = await runJob("pricer.sync", {}, timeoutMs);
   const rows = ((result as any)?.rows ?? []) as Array<Record<string, any>>;
 
