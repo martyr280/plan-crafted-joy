@@ -1,3 +1,5 @@
+import { pageAll } from "@/lib/spiff/page-all";
+import { manualIncludePatch } from "@/lib/spiff/manual-include";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -126,28 +128,6 @@ const QUARTERS: Array<{ label: string; from: string; toExclusive: string }> = ((
   }
   return out;
 })();
-
-// Client-side complete-or-throw pager (the server helper is server-only).
-export async function pageAll<T>(
-  q: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any; count: number | null }>,
-): Promise<T[]> {
-  const PAGE = 1000;
-  const out: T[] = [];
-  let total: number | null = null;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error, count } = await q(from, from + PAGE - 1);
-    if (error) throw new Error(error.message ?? String(error));
-    if (typeof count === "number") total = count;
-    const rows = (data ?? []) as T[];
-    out.push(...rows);
-    if (rows.length < PAGE || (total !== null && out.length >= total)) break;
-  }
-  if (total === null) throw new Error("no exact row count returned — aborting to avoid a truncated result");
-  if (out.length !== total) {
-    throw new Error(`fetched ${out.length} of ${total} rows`);
-  }
-  return out;
-}
 
 function fetchRunChecksClient(runId: string) {
   return pageAll<Check>((from, to) =>
@@ -348,13 +328,7 @@ function SpiffPage() {
     if (patch.included !== undefined) {
       const line = lines.find((l) => l.id === lineId);
       if (!line) return;
-      const flags = { ...line.flags, ...patch.flags };
-      if (patch.included && !line.included) flags.manual_include = true;
-      if (!patch.included) {
-        delete flags.manual_include;
-        patch.exclusion_reason = "manual";
-      }
-      patch = { ...patch, flags };
+      patch = manualIncludePatch(line, patch);
     }
     const { error } = await supabase.from("spiff_run_lines").update(patch).eq("id", lineId);
     if (error) {
