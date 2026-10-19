@@ -123,7 +123,7 @@ describe("applyPricerSync cleanup guard", () => {
 describe("applyPricerSync family relabel wiring", () => {
   it("passes no force and records families_skipped / cleanup_skipped in pricer.synced metadata", async () => {
     st.existing = items(100).map((item, i) => ({ id: String(i), item }));
-    st.famResult = { updated: 0, failed: 0, changed: 900, skipped: "family relabel would change 900 of 1000 rows (cap 500); nothing written" };
+    st.famResult = { updated: 0, failed: 0, changed: 900, cap: 500, skipped: "family relabel would change 900 of 1000 rows (cap 500); nothing written" };
     const res = await applyPricerSync();
     expect(st.famArgs).toEqual([[]]);
     expect(res.families_skipped).toMatch(/900 of 1000/);
