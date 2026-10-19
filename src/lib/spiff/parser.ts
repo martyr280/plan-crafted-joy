@@ -29,6 +29,12 @@ export function parseWritingRep(poNo: string | null | undefined): ParsedRep {
   // Take everything before the first digit or '/'.
   const m = raw.match(/^([A-Za-z][A-Za-z .'`-]*?)(?=\s*[\d/])/);
   let name = m ? m[1] : "";
+  // A PO number like "A38551-1" glued to the name: the trailing single letter is
+  // part of the PO, not an initial. Drop it only when a digit IMMEDIATELY follows it.
+  if (m && /\d/.test(raw.charAt(m[1].length))) {
+    const glued = name.match(/^(.*\S)\s+[A-Za-z]$/);
+    if (glued) name = glued[1];
+  }
   // If no digit/slash present, the whole leading alphabetic chunk counts.
   if (!name) {
     const m2 = raw.match(/^([A-Za-z][A-Za-z .'`-]*)/);
