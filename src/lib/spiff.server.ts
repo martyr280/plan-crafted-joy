@@ -173,11 +173,13 @@ export async function findOrCreateDraftRun(opts: {
   if (existing && existing.status === "draft") {
     // Complete-or-throw BEFORE any deletion or run update. Keep the current
     // draft intact while pulling and preparing its replacement from P21.
-    const snapshot = await fetchAllRunLines<CarryoverLine>(existing.id, "*");
     const editHistory = await fetchAllRows<IncludedEdit>(
       () => supabaseAdmin.from("spiff_line_edits").select("id, line_id, source, field, new_value, changed_at", { count: "exact" }).eq("run_id", existing.id),
       { label: `spiff_line_edits(run ${existing.id})` },
     );
+    // History first: edits arriving during either read change the expected
+    // edit count and force the replacement RPC to reject this snapshot.
+    const snapshot = await fetchAllRunLines<CarryoverLine>(existing.id, "*");
     return { id: existing.id, isNew: false, snapshot, editHistory };
   }
 

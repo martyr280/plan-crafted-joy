@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
   snapshot: vi.fn(),
+  history: vi.fn(),
   mutation: vi.fn(),
   lookup: { data: { id: "draft-run", status: "draft" }, error: null as { message: string } | null },
 }));
-vi.mock("../spiff/fetch-all.server", () => ({ fetchAllRunLines: ports.snapshot }));
+vi.mock("../spiff/fetch-all.server", () => ({ fetchAllRunLines: ports.snapshot, fetchAllRows: ports.history }));
 vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: {
     from: () => {
@@ -21,7 +22,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({
 import { findOrCreateDraftRun } from "../spiff.server";
 
 describe("SPIFF draft snapshot safety", () => {
-  beforeEach(() => { vi.clearAllMocks(); ports.lookup.error = null; });
+  beforeEach(() => { vi.clearAllMocks(); ports.lookup.error = null; ports.history.mockResolvedValue([]); });
   const opts = { quarterLabel: "Q3-2026", dateFrom: "2026-07-01", dateTo: "2026-10-01", userId: "fake-admin" };
   it("aborts failed snapshot before any deletion or update", async () => {
     ports.snapshot.mockRejectedValueOnce(new Error("fetched 1000 of 1550 rows"));
@@ -31,8 +32,13 @@ describe("SPIFF draft snapshot safety", () => {
   it("keeps all 1550 snapshot rows and does not mutate during preparation", async () => {
     const rows = Array.from({ length: 1550 }, (_, id) => ({ id }));
     ports.snapshot.mockResolvedValueOnce(rows);
-    expect(await findOrCreateDraftRun(opts)).toEqual({ id: "draft-run", isNew: false, snapshot: rows });
+    expect(await findOrCreateDraftRun(opts)).toEqual({ id: "draft-run", isNew: false, snapshot: rows, editHistory: [] });
     expect(ports.snapshot).toHaveBeenCalledWith("draft-run", "*");
+    expect(ports.mutation).not.toHaveBeenCalled();
+  });
+  it("aborts failed edit-history paging before any mutation", async () => {
+    ports.history.mockRejectedValueOnce(new Error("edits incomplete"));
+    await expect(findOrCreateDraftRun(opts)).rejects.toThrow("edits incomplete");
     expect(ports.mutation).not.toHaveBeenCalled();
   });
   it("fails a lookup error rather than creating a replacement run", async () => {
