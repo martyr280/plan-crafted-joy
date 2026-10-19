@@ -484,7 +484,7 @@ function SpiffPage() {
   }
 
   async function handleSendApproval() {
-    if (!currentRunId) return;
+    if (!currentRunId || runUnavailable) return;
     if (!confirm(`Email approval requests to each rep org's contacts for ${currentRun?.quarter_label}?`)) return;
     try {
       const res = await sendApprovalFn({ data: { runId: currentRunId } });
