@@ -3,6 +3,7 @@
 
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { fetchAllRunChecks, fetchAllRunLines } from "./fetch-all.server";
 
 type Program = {
   id: string;
@@ -32,6 +33,7 @@ type Line = {
   spiff_amount: number;
   writing_rep: string | null;
   included: boolean;
+  exclusion_reason?: string | null;
   flags: any;
 };
 
@@ -229,43 +231,49 @@ function addCustomerSheet(
 }
 
 async function fetchRunBundle(runId: string, customerIds?: string[]) {
-  const { data: run } = await supabaseAdmin
+  const { data: run, error: runErr } = await supabaseAdmin
     .from("spiff_runs")
     .select("id, quarter_label, totals")
     .eq("id", runId)
     .single();
+  if (runErr) throw new Error(`spiff_runs read failed: ${runErr.message}`);
   if (!run) throw new Error("Run not found");
 
+  // Complete-or-throw reads (PostgREST caps responses at 1,000 rows).
+  const lines = await fetchAllRunLines<Line>(runId, "*", customerIds);
+  const checks = await fetchAllRunChecks<Check>(runId, "*", customerIds);
 
+  // One sheet per ACTIVE program, plus any inactive program that still has
+  // lines in this run so no data is ever dropped.
+  const progIdsWithLines = Array.from(new Set(lines.map((l) => l.program_id)));
   let progQ = supabaseAdmin.from("spiff_programs").select("*");
   if (customerIds && customerIds.length) progQ = progQ.in("customer_id", customerIds);
-  const { data: programs } = await progQ.order("customer_name");
-
-  let lineQ = supabaseAdmin
-    .from("spiff_run_lines")
-    .select("*")
-    .eq("run_id", runId)
-    .limit(50000);
-  if (customerIds && customerIds.length) lineQ = lineQ.in("customer_id", customerIds);
-  const { data: lines } = await lineQ;
-
-  let checkQ = supabaseAdmin
-    .from("spiff_checks")
-    .select("*")
-    .eq("run_id", runId)
-    .limit(5000);
-  if (customerIds && customerIds.length) checkQ = checkQ.in("customer_id", customerIds);
-  const { data: checks } = await checkQ;
+  const { data: allPrograms, error: progErr } = await progQ.order("customer_name");
+  if (progErr) throw new Error(`spiff_programs read failed: ${progErr.message}`);
+  const withLines = new Set(progIdsWithLines);
+  const programs = ((allPrograms ?? []) as Array<Program & { active: boolean }>).filter(
+    (p) => p.active || withLines.has(p.id),
+  );
 
   return {
     run: run as RunRow,
-    programs: (programs ?? []) as Program[],
-    lines: (lines ?? []) as Line[],
-    checks: (checks ?? []) as Check[],
+    programs: programs as Program[],
+    lines,
+    checks,
   };
 }
 
-function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
+export function countExclusions(lines: Array<{ included: boolean; exclusion_reason?: string | null }>) {
+  const counts: Record<string, number> = {};
+  for (const l of lines) {
+    if (l.included) continue;
+    const k = l.exclusion_reason ?? "unspecified";
+    counts[k] = (counts[k] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow, lines: Line[], sheetCount: number) {
   const ws = wb.addWorksheet("Summary");
   ws.getColumn(1).width = 8;
   ws.getColumn(2).width = 70;
@@ -278,7 +286,9 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
 
   const totals = run.totals ?? {};
   const rules: Array<{ code: string; label: string; where?: string }> = totals.exclusion_rules ?? [];
-  const counts: Record<string, number> = totals.exclusion_counts ?? {};
+  // Counted from the CURRENT lines at export time (stored totals go stale
+  // after manual include/exclude edits).
+  const counts = countExclusions(lines);
 
   ws.getRow(3).values = ["#", "Rule", "Excluded"];
   ws.getRow(3).font = { bold: true };
@@ -297,6 +307,15 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
     ws.getRow(r).values = [i + 1, rule.label, val];
     r++;
   });
+  if ((counts.manual ?? 0) > 0) {
+    ws.getRow(r).values = [rules.length + 1, "Manually excluded", counts.manual];
+    r++;
+  }
+  const included = lines.filter((l) => l.included).length;
+  r++;
+  ws.getCell(`B${r}`).value = `Lines in run: ${lines.length} · Included: ${included} · Customer sheets: ${sheetCount}`;
+  ws.getCell(`B${r}`).font = { bold: true };
+  r++;
 
   r++;
   ws.getCell(`A${r}`).value = "Notes:";
@@ -330,12 +349,12 @@ export async function buildSpiffWorkbook(
 
   // Summary/rules sheet first so AP + reps see exactly which selection
   // rules were applied to this run (client requirement).
-  addSummarySheet(wb, run);
+  addSummarySheet(wb, run, lines, programs.length);
 
-  // Order sheets by customer_name for consistency with the manual workbook
+  // One sheet per program (ordered by customer_name), even with zero lines —
+  // addCustomerSheet prints "(No included lines)" for empty ones.
   for (const p of programs) {
     const pl = lines.filter((l) => l.program_id === p.id);
-    if (pl.length === 0) continue; // skip customers with zero lines
     addCustomerSheet(wb, p, pl, checks, run.quarter_label);
   }
 

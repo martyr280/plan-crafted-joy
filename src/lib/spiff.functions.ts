@@ -43,14 +43,21 @@ export const rebuildSpiffChecks = createServerFn({ method: "POST" })
       throw new Error("Run is approved; create a new run to make changes.");
     }
 
-    const { data: programs } = await supabaseAdmin.from("spiff_programs").select("*");
-    const { data: lines } = await supabaseAdmin
-      .from("spiff_run_lines")
-      .select("program_id, spiff_amount, writing_rep, included, rep_parse_confidence")
-      .eq("run_id", data.runId)
-      .limit(50000);
+    const { data: programs, error: progErr } = await supabaseAdmin.from("spiff_programs").select("*");
+    if (progErr) throw new Error(`spiff_programs read failed: ${progErr.message}`);
+    // Complete-or-throw read; must succeed BEFORE the delete below so a fetch
+    // failure never leaves the run with zero checks.
+    const { fetchAllRunLines } = await import("./spiff/fetch-all.server");
+    const lines = await fetchAllRunLines<{
+      program_id: string;
+      spiff_amount: number;
+      writing_rep: string | null;
+      included: boolean;
+      rep_parse_confidence: string | null;
+    }>(data.runId, "id, program_id, spiff_amount, writing_rep, included, rep_parse_confidence");
 
-    await supabaseAdmin.from("spiff_checks").delete().eq("run_id", data.runId);
+    const { error: delErr } = await supabaseAdmin.from("spiff_checks").delete().eq("run_id", data.runId);
+    if (delErr) throw new Error(`spiff_checks delete failed: ${delErr.message}`);
 
     const UNASSIGNED_PAYEE = "(Unassigned)";
     const byProgram = new Map<string, typeof lines>();

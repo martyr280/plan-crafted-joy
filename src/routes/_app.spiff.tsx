@@ -22,6 +22,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { buttonVariants } from "@/components/ui/button";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -107,6 +118,38 @@ const QUARTERS: Array<{ label: string; from: string; toExclusive: string }> = ((
   return out;
 })();
 
+// Client-side complete-or-throw pager (the server helper is server-only).
+async function pageAll<T>(
+  q: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any; count: number | null }>,
+): Promise<T[]> {
+  const PAGE = 1000;
+  const out: T[] = [];
+  let total: number | null = null;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error, count } = await q(from, from + PAGE - 1);
+    if (error) throw new Error(error.message ?? String(error));
+    if (typeof count === "number") total = count;
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE || (total !== null && out.length >= total)) break;
+  }
+  if (total !== null && out.length !== total) {
+    throw new Error(`fetched ${out.length} of ${total} rows`);
+  }
+  return out;
+}
+
+function fetchRunChecksClient(runId: string) {
+  return pageAll<Check>((from, to) =>
+    supabase
+      .from("spiff_checks")
+      .select("*", { count: "exact" })
+      .eq("run_id", runId)
+      .order("id")
+      .range(from, to),
+  );
+}
+
 function money(n: number | null | undefined) {
   const v = Number(n ?? 0);
   return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -147,38 +190,33 @@ function SpiffPage() {
   }
 
   async function loadRunDetail(runId: string) {
-    // PostgREST caps a single response at ~1000 rows on Lovable Cloud regardless
-    // of .limit(); paginate with .range() so we always get every line in the run.
-    // Without this, customers that sort past the first 1000 rows (e.g. 14493
-    // Anderson & Worth) render as "No lines for this customer" with $0 total
-    // even though the DB has their SPIFF lines.
-    const PAGE = 1000;
-    const allLines: Line[] = [];
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
-        .from("spiff_run_lines")
-        .select("*")
-        .eq("run_id", runId)
-        .order("customer_id")
-        .order("order_date")
-        .range(from, from + PAGE - 1);
-      if (error) {
-        console.error("[spiff] loadRunDetail lines page failed", error);
-        break;
+    // PostgREST caps a single response at 1000 rows regardless of .limit();
+    // page with .range() and a unique `id` tiebreaker so pages never skip or
+    // duplicate rows. On any page error, refuse to show a partial run.
+    try {
+      const [allLines, cks] = await Promise.all([
+        pageAll<Line>((from, to) =>
+          supabase
+            .from("spiff_run_lines")
+            .select("*", { count: "exact" })
+            .eq("run_id", runId)
+            .order("customer_id")
+            .order("order_date")
+            .order("id")
+            .range(from, to),
+        ),
+        fetchRunChecksClient(runId),
+      ]);
+      setLines(allLines);
+      setChecks(cks);
+      if (!selectedCustomer && allLines.length > 0) {
+        setSelectedCustomer(allLines[0].customer_id);
       }
-      const rows = (data ?? []) as Line[];
-      allLines.push(...rows);
-      if (rows.length < PAGE) break;
-    }
-    const { data: cks } = await supabase
-      .from("spiff_checks")
-      .select("*")
-      .eq("run_id", runId)
-      .limit(5000);
-    setLines(allLines);
-    setChecks((cks ?? []) as Check[]);
-    if (!selectedCustomer && allLines.length > 0) {
-      setSelectedCustomer(allLines[0].customer_id);
+    } catch (e: any) {
+      console.error("[spiff] loadRunDetail failed", e);
+      setLines([]);
+      setChecks([]);
+      toast.error(`Could not load the full SPIFF run: ${e?.message ?? e}. Nothing is shown to avoid a partial result — reload to retry.`);
     }
   }
 
@@ -253,6 +291,9 @@ function SpiffPage() {
     return Array.from(s).sort();
   }, [lines]);
 
+  const [confirmGenerateOpen, setConfirmGenerateOpen] = useState(false);
+  const quarterHasRun = runs.some((r: any) => r.quarter_label === quarterLabel);
+
   async function handleGenerate() {
     if (!user) return;
     setGenerating(true);
@@ -281,12 +322,7 @@ function SpiffPage() {
       try {
         await rebuild({ data: { runId: currentRunId } });
         // Re-fetch just the checks (cheap) so the payee card updates.
-        const { data: cks } = await supabase
-          .from("spiff_checks")
-          .select("*")
-          .eq("run_id", currentRunId)
-          .limit(5000);
-        setChecks((cks ?? []) as Check[]);
+        setChecks(await fetchRunChecksClient(currentRunId));
       } catch (e: any) {
         toast.error(e?.message ?? "Auto-rebuild failed");
       }
@@ -468,7 +504,7 @@ function SpiffPage() {
               onChange={(e) => setDateTo(e.target.value)}
               className="w-[150px]"
             />
-            <Button onClick={handleGenerate} disabled={generating}>
+            <Button onClick={() => setConfirmGenerateOpen(true)} disabled={generating}>
               {generating ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
@@ -476,6 +512,33 @@ function SpiffPage() {
               )}
               Generate from P21
             </Button>
+            <AlertDialog open={confirmGenerateOpen} onOpenChange={setConfirmGenerateOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {quarterHasRun ? `Regenerate ${quarterLabel}?` : `Generate ${quarterLabel}?`}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {quarterHasRun
+                      ? `Regenerating ${quarterLabel} deletes and rebuilds every line and check for this run. Any manual include/exclude changes and rep reassignments will be lost. This cannot be undone.`
+                      : `This pulls ${quarterLabel} (${dateFrom} → ${dateTo}) from P21 and creates a new SPIFF run.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  {/* Radix AlertDialog focuses Cancel by default. */}
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className={quarterHasRun ? buttonVariants({ variant: "destructive" }) : undefined}
+                    onClick={() => {
+                      setConfirmGenerateOpen(false);
+                      handleGenerate();
+                    }}
+                  >
+                    {quarterHasRun ? "Regenerate and wipe edits" : "Generate"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <select
               className="border rounded-md px-3 py-1.5 text-sm bg-card"
               value={currentRunId ?? ""}
