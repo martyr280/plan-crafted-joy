@@ -3767,6 +3767,63 @@ export type Database = {
         }
         Relationships: []
       }
+      spiff_line_edits: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          customer_id: string | null
+          extended_price: number | null
+          field: string
+          id: string
+          invoice_date: string | null
+          item_id: string | null
+          line_id: string | null
+          line_key: string
+          new_value: string | null
+          old_value: string | null
+          order_no: string | null
+          qty_ordered: number | null
+          run_id: string
+          source: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          customer_id?: string | null
+          extended_price?: number | null
+          field: string
+          id?: string
+          invoice_date?: string | null
+          item_id?: string | null
+          line_id?: string | null
+          line_key: string
+          new_value?: string | null
+          old_value?: string | null
+          order_no?: string | null
+          qty_ordered?: number | null
+          run_id: string
+          source?: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          customer_id?: string | null
+          extended_price?: number | null
+          field?: string
+          id?: string
+          invoice_date?: string | null
+          item_id?: string | null
+          line_id?: string | null
+          line_key?: string
+          new_value?: string | null
+          old_value?: string | null
+          order_no?: string | null
+          qty_ordered?: number | null
+          run_id?: string
+          source?: string
+        }
+        Relationships: []
+      }
       spiff_programs: {
         Row: {
           active: boolean

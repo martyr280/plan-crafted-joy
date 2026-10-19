@@ -32,7 +32,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { buttonVariants } from "@/components/ui/button";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -45,7 +44,17 @@ import {
   sendSpiffToAp,
 } from "@/lib/spiff.functions";
 
-export const Route = createFileRoute("/_app/spiff")({ component: SpiffPage });
+export const Route = createFileRoute("/_app/spiff")({
+  head: () => ({ meta: [
+    { title: "SPIFF Review | Nelson AI" },
+    { name: "description", content: "Review NDI SPIFF lines, manual edits, and quarterly payee checks." },
+    { property: "og:title", content: "SPIFF Review | Nelson AI" },
+    { property: "og:description", content: "Review NDI SPIFF lines, manual edits, and quarterly payee checks." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
+  component: SpiffPage,
+});
 
 type Program = {
   id: string;
@@ -174,6 +183,7 @@ function SpiffPage() {
   const [dateFrom, setDateFrom] = useState("2026-04-01");
   const [dateTo, setDateTo] = useState("2026-07-01");
   const [generating, setGenerating] = useState(false);
+  const [dismissedCarryoverRun, setDismissedCarryoverRun] = useState<string | null>(null);
 
   async function loadProgramsAndRuns() {
     const [{ data: pr }, { data: rs }] = await Promise.all([
@@ -304,6 +314,9 @@ function SpiffPage() {
         `Generated SPIFF run for ${quarterLabel}` +
           (Object.keys(res.errors).length ? ` (${Object.keys(res.errors).length} customer errors)` : "")
       );
+      const carriedCount = Object.values(res.carried).reduce((sum, count) => sum + count, 0);
+      toast.success(`Carried over ${carriedCount} manual edits; ${res.unmatched.length} could not be matched (listed on the run)`);
+      setDismissedCarryoverRun(null);
       await loadProgramsAndRuns();
       setCurrentRunId(res.runId);
     } catch (e: any) {
@@ -520,7 +533,7 @@ function SpiffPage() {
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     {quarterHasRun
-                      ? `Regenerating ${quarterLabel} deletes and rebuilds every line and check for this run. Any manual include/exclude changes and rep reassignments will be lost. This cannot be undone.`
+                      ? "This re-pulls every line from P21. Your manual include/exclude changes and rep reassignments will be carried over to matching lines; any that no longer match P21 will be listed after the run."
                       : `This pulls ${quarterLabel} (${dateFrom} → ${dateTo}) from P21 and creates a new SPIFF run.`}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -528,13 +541,12 @@ function SpiffPage() {
                   {/* Radix AlertDialog focuses Cancel by default. */}
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
-                    className={quarterHasRun ? buttonVariants({ variant: "destructive" }) : undefined}
                     onClick={() => {
                       setConfirmGenerateOpen(false);
                       handleGenerate();
                     }}
                   >
-                    {quarterHasRun ? "Regenerate and wipe edits" : "Generate"}
+                    {quarterHasRun ? "Regenerate" : "Generate"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -588,6 +600,21 @@ function SpiffPage() {
       ) : (
         <>
         <ExclusionRulesCard totals={currentRun.totals} />
+        {currentRun.totals?.carryover?.unmatched?.length > 0 && dismissedCarryoverRun !== currentRun.id && (
+          <section role="alert" className="border border-warning rounded-md p-3 text-sm space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-warning-text">Manual edits could not be matched to P21</span>
+              <Button variant="ghost" size="sm" onClick={() => setDismissedCarryoverRun(currentRun.id)}>Dismiss</Button>
+            </div>
+            <ul className="max-h-48 overflow-auto space-y-1">
+              {currentRun.totals.carryover.unmatched.map((edit: { line_key: string; customer_id: string | null; order_no: string | null; item_id: string | null; override: string }, index: number) => (
+                <li key={`${edit.line_key}-${edit.override}-${index}`} className="break-words">
+                  Customer {edit.customer_id ?? "—"} · Order {edit.order_no ?? "—"} · Item {edit.item_id ?? "—"} · {edit.override}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <Tabs defaultValue="review">
           <TabsList>
