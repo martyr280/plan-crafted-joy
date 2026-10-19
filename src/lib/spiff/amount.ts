@@ -39,6 +39,10 @@ export const LEGACY_AMOUNT_BLOCK_REASON = "This run predates a change to its SPI
 
 // Stored generation amounts win. Recover only zero-valued, positive, non-credit
 // legacy inclusions whose program was unchanged since totals.generated_at.
+// Other legacy amounts are left untouched rather than restored from edit history:
+// history can be incomplete (SQL batches, pre-trigger edits). Checks sum only
+// included lines, so excluded stored amounts do not affect payouts, and a
+// non-zero legacy round-trip preserves the original amount exactly.
 export function amountForIncludeChange(
   line: { flags?: unknown; extended_price?: number | string | null; spiff_amount?: number | string | null },
   included: boolean,
