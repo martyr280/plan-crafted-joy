@@ -72,7 +72,7 @@
   --accent: oklch(0.71 0.185 47);
   --accent-foreground: oklch(0.18 0.04 252);
   --accent-glow: oklch(0.78 0.17 55);
-  --destructive: oklch(0.62 0.23 27);
+  --destructive: oklch(0.55 0.22 27);
   --destructive-foreground: oklch(0.99 0.005 250);
   --success: oklch(0.7 0.17 152);
   --success-foreground: oklch(0.18 0.04 252);
@@ -125,7 +125,7 @@
   --accent: oklch(0.71 0.185 47);
   --accent-foreground: oklch(0.15 0.03 252);
   --accent-glow: oklch(0.78 0.17 55);
-  --destructive: oklch(0.65 0.22 27);
+  --destructive: oklch(0.55 0.22 27);
   --destructive-foreground: oklch(0.99 0.005 250);
   --success: oklch(0.72 0.17 152);
   --success-foreground: oklch(0.15 0.03 252);
@@ -161,4 +161,8 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
+}
+
+[data-sonner-toaster][data-theme="light"] {
+  --error-text: hsl(360 100% 40%);
 }

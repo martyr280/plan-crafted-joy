@@ -1,4 +1,5 @@
 import { pageAll } from "@/lib/spiff/page-all";
+import { generateDialogCopy, inclusiveRangeLabel } from "@/lib/spiff/generate-dialog";
 import { manualIncludePatch } from "@/lib/spiff/manual-include";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -33,6 +34,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Play, AlertTriangle, Loader2, Pencil, Download, Send, Mail, Plus } from "lucide-react";
@@ -165,6 +167,11 @@ function SpiffPage() {
   const [dateTo, setDateTo] = useState("2026-07-01");
   const [generating, setGenerating] = useState(false);
   const [dismissedCarryoverRun, setDismissedCarryoverRun] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingRunId, setLoadingRunId] = useState<string | null>(null);
+  const currentRunIdRef = useRef<string | null>(null);
+  currentRunIdRef.current = currentRunId;
+  const generatingRef = useRef(false);
 
   async function loadProgramsAndRuns() {
     const [{ data: pr }, { data: rs }] = await Promise.all([
@@ -184,6 +191,7 @@ function SpiffPage() {
     // PostgREST caps a single response at 1000 rows regardless of .limit();
     // page with .range() and a unique `id` tiebreaker so pages never skip or
     // duplicate rows. On any page error, refuse to show a partial run.
+    setLoadingRunId(runId);
     try {
       const [allLines, cks] = await Promise.all([
         pageAll<Line>((from, to) =>
@@ -198,16 +206,29 @@ function SpiffPage() {
         ),
         fetchRunChecksClient(runId),
       ]);
+      // Stale-response guard: ignore results for a run no longer selected.
+      if (currentRunIdRef.current !== runId) return;
       setLines(allLines);
       setChecks(cks);
+      setLoadError(null);
       if (!selectedCustomer && allLines.length > 0) {
         setSelectedCustomer(allLines[0].customer_id);
       }
     } catch (e: any) {
+      if (currentRunIdRef.current !== runId) return;
       console.error("[spiff] loadRunDetail failed", e);
+      const message = String(e?.message ?? e);
       setLines([]);
       setChecks([]);
-      toast.error(`Could not load the full SPIFF run: ${e?.message ?? e}. Nothing is shown to avoid a partial result — reload to retry.`);
+      setLoadError(message);
+      toast.error("Couldn't load the full SPIFF run, so nothing is shown.", {
+        description: message,
+        duration: Infinity,
+        closeButton: true,
+        action: { label: "Retry", onClick: () => loadRunDetail(runId) },
+      });
+    } finally {
+      if (currentRunIdRef.current === runId) setLoadingRunId(null);
     }
   }
 
@@ -216,7 +237,13 @@ function SpiffPage() {
   }, []);
 
   useEffect(() => {
-    if (currentRunId) loadRunDetail(currentRunId);
+    setLoadError(null);
+    if (currentRunId) {
+      // Never show the previous run's lines while the next run loads.
+      setLines([]);
+      setChecks([]);
+      loadRunDetail(currentRunId);
+    }
   }, [currentRunId]);
 
   // Default quarter date range from picker
@@ -283,10 +310,19 @@ function SpiffPage() {
   }, [lines]);
 
   const [confirmGenerateOpen, setConfirmGenerateOpen] = useState(false);
-  const quarterHasRun = runs.some((r: any) => r.quarter_label === quarterLabel);
+  const dialog = generateDialogCopy({
+    runs,
+    quarterLabel,
+    currentRunId,
+    lines,
+    rangeLabel: inclusiveRangeLabel(dateFrom, dateTo),
+  });
+  const runUnavailable = !!loadError || loadingRunId !== null;
 
   async function handleGenerate() {
     if (!user) return;
+    if (generatingRef.current) return; // in-flight guard
+    generatingRef.current = true;
     setGenerating(true);
     try {
       const res = await generate({ data: { quarterLabel, dateFrom, dateTo } });
@@ -303,6 +339,7 @@ function SpiffPage() {
     } catch (e: any) {
       toast.error(e?.message ?? "Generate failed");
     } finally {
+      generatingRef.current = false;
       setGenerating(false);
     }
   }
@@ -381,7 +418,7 @@ function SpiffPage() {
   }
 
   async function handleRebuildChecks() {
-    if (!currentRunId) return;
+    if (!currentRunId || runUnavailable) return;
     try {
       const res = await rebuild({ data: { runId: currentRunId } });
       toast.success(`Checks rebuilt (${res.rebuilt} payees)`);
@@ -410,7 +447,7 @@ function SpiffPage() {
   }
 
   async function markRunApproved() {
-    if (!currentRunId) return;
+    if (!currentRunId || runUnavailable) return;
     const unassigned = checks.some((c) => c.payee === "(Unassigned)");
     if (unassigned) {
       toast.error("Resolve (Unassigned) payees before approving the run.");
@@ -427,7 +464,7 @@ function SpiffPage() {
   }
 
   async function handleDownload() {
-    if (!currentRunId) return;
+    if (!currentRunId || runUnavailable) return;
     try {
       const res = await downloadFn({ data: { runId: currentRunId } });
       logUsage("feature_action", "spiff", "spiff_report_export", { runId: currentRunId });
@@ -447,7 +484,7 @@ function SpiffPage() {
   }
 
   async function handleSendApproval() {
-    if (!currentRunId) return;
+    if (!currentRunId || runUnavailable) return;
     if (!confirm(`Email approval requests to each rep org's contacts for ${currentRun?.quarter_label}?`)) return;
     try {
       const res = await sendApprovalFn({ data: { runId: currentRunId } });
@@ -503,40 +540,47 @@ function SpiffPage() {
               onChange={(e) => setDateTo(e.target.value)}
               className="w-[150px]"
             />
-            <Button onClick={() => setConfirmGenerateOpen(true)} disabled={generating}>
-              {generating ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4 mr-2" />
-              )}
-              Generate from P21
-            </Button>
             <AlertDialog open={confirmGenerateOpen} onOpenChange={setConfirmGenerateOpen}>
+              <AlertDialogTrigger asChild>
+                <Button disabled={generating}>
+                  {generating ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4 mr-2" />
+                  )}
+                  Generate from P21
+                </Button>
+              </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {quarterHasRun ? `Regenerate ${quarterLabel}?` : `Generate ${quarterLabel}?`}
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {quarterHasRun
-                      ? "This re-pulls every line from P21. Your manual include/exclude changes and rep reassignments will be carried over to matching lines; any that no longer match P21 will be listed after the run."
-                      : `This pulls ${quarterLabel} (${dateFrom} → ${dateTo}) from P21 and creates a new SPIFF run.`}
-                  </AlertDialogDescription>
+                  <AlertDialogTitle>{dialog.title}</AlertDialogTitle>
+                  <AlertDialogDescription>{dialog.body}</AlertDialogDescription>
+                  {dialog.warning && (
+                    <p className="text-sm font-medium text-warning-text">{dialog.warning}</p>
+                  )}
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  {/* Radix AlertDialog focuses Cancel by default. */}
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  {/* Radix AlertDialog focuses Cancel by default and returns focus to the trigger. */}
+                  <AlertDialogCancel className="focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                    Cancel
+                  </AlertDialogCancel>
                   <AlertDialogAction
+                    className="focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     onClick={() => {
                       setConfirmGenerateOpen(false);
                       handleGenerate();
                     }}
                   >
-                    {quarterHasRun ? "Regenerate" : "Generate"}
+                    {dialog.action}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            {generating && (
+              <span role="status" aria-live="polite" className="text-xs text-muted-foreground">
+                Pulling from P21…
+              </span>
+            )}
             <select
               className="border rounded-md px-3 py-1.5 text-sm bg-card"
               value={currentRunId ?? ""}
@@ -552,14 +596,14 @@ function SpiffPage() {
             {currentRun && (
               <>
                 <Badge variant={isLocked ? "default" : "secondary"}>{currentRun.status}</Badge>
-                <Button variant="outline" size="sm" onClick={handleDownload} title="Download workbook">
+                <Button variant="outline" size="sm" onClick={handleDownload} disabled={runUnavailable} title="Download workbook">
                   <Download className="w-4 h-4 mr-1" /> Workbook
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleSendApproval}
-                  disabled={currentRun.status === "approved" || currentRun.status === "sent_to_ap"}
+                  disabled={runUnavailable || currentRun.status === "approved" || currentRun.status === "sent_to_ap"}
                   title="Email each rep org their customer sheets"
                 >
                   <Mail className="w-4 h-4 mr-1" /> Send for approval
@@ -568,7 +612,7 @@ function SpiffPage() {
                   variant="outline"
                   size="sm"
                   onClick={handleSendAp}
-                  disabled={currentRun.status !== "approved"}
+                  disabled={runUnavailable || currentRun.status !== "approved"}
                   title="Email full workbook to AP (run must be approved)"
                 >
                   <Send className="w-4 h-4 mr-1" /> Send to AP
@@ -602,6 +646,21 @@ function SpiffPage() {
           </section>
         )}
 
+        {loadError ? (
+          <Card role="alert" className="p-6 space-y-3">
+            <p className="text-sm font-medium">
+              Couldn't load the full run. Nothing is shown so you don't act on partial data.
+            </p>
+            <p className="text-xs text-muted-foreground break-words">{loadError}</p>
+            <Button size="sm" variant="outline" onClick={() => currentRunId && loadRunDetail(currentRunId)}>
+              Retry
+            </Button>
+          </Card>
+        ) : loadingRunId !== null ? (
+          <Card role="status" aria-live="polite" className="p-6 text-sm text-muted-foreground flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading run…
+          </Card>
+        ) : (
         <Tabs defaultValue="review">
           <TabsList>
             <TabsTrigger value="review">Review</TabsTrigger>
@@ -756,6 +815,7 @@ function SpiffPage() {
             <AutomationCard />
           </TabsContent>
         </Tabs>
+        )}
         </>
       )}
 
