@@ -21,8 +21,8 @@ import {
   type SchemaMapping,
 } from "./spiff/constants";
 import { parseWritingRep } from "./spiff/parser";
-import { fetchAllRunLines } from "./spiff/fetch-all.server";
-import { applyCarryover, type CarryoverLine, type CarriedCounts, type UnmatchedEdit } from "./spiff/carryover";
+import { fetchAllRunLines, fetchAllRows } from "./spiff/fetch-all.server";
+import { applyCarryover, type CarryoverLine, type CarriedCounts, type UnmatchedEdit, type IncludedEdit } from "./spiff/carryover";
 import { lineKey } from "./spiff/line-key";
 
 const SCHEMA_TIMEOUT_MS = 30_000;
@@ -160,7 +160,7 @@ export async function findOrCreateDraftRun(opts: {
   dateFrom: string;
   dateTo: string;
   userId: string;
-}): Promise<{ id: string; isNew: boolean; snapshot: CarryoverLine[] }> {
+}): Promise<{ id: string; isNew: boolean; snapshot: CarryoverLine[]; editHistory: IncludedEdit[] }> {
   const { data: existing, error: lookupError } = await supabaseAdmin
     .from("spiff_runs")
     .select("id, status")
@@ -173,8 +173,14 @@ export async function findOrCreateDraftRun(opts: {
   if (existing && existing.status === "draft") {
     // Complete-or-throw BEFORE any deletion or run update. Keep the current
     // draft intact while pulling and preparing its replacement from P21.
+    const editHistory = await fetchAllRows<IncludedEdit>(
+      () => supabaseAdmin.from("spiff_line_edits").select("id, line_id, source, field, new_value, changed_at", { count: "exact" }).eq("run_id", existing.id),
+      { label: `spiff_line_edits(run ${existing.id})` },
+    );
+    // History first: edits arriving during either read change the expected
+    // edit count and force the replacement RPC to reject this snapshot.
     const snapshot = await fetchAllRunLines<CarryoverLine>(existing.id, "*");
-    return { id: existing.id, isNew: false, snapshot };
+    return { id: existing.id, isNew: false, snapshot, editHistory };
   }
 
   const { data: created, error } = await supabaseAdmin
@@ -190,7 +196,7 @@ export async function findOrCreateDraftRun(opts: {
     .select("id")
     .single();
   if (error || !created) throw new Error(error?.message ?? "Failed to create spiff run");
-  return { id: created.id, isNew: true, snapshot: [] };
+  return { id: created.id, isNew: true, snapshot: [], editHistory: [] };
 }
 
 async function fetchProgramLines(
@@ -333,7 +339,7 @@ export async function generateSpiffRunCore(opts: {
   if (programsError) throw new Error(programsError.message);
   const progs = (programs ?? []) as Program[];
 
-  const { id: runId, isNew, snapshot } = await findOrCreateDraftRun(opts);
+  const { id: runId, snapshot, editHistory } = await findOrCreateDraftRun(opts);
 
   const perCustomerSummary: Record<string, { rows: number; spiff: number; unmatched: number; missing_product_group?: number; error?: string }> = {};
   const errors: Record<string, string> = {};
@@ -346,17 +352,7 @@ export async function generateSpiffRunCore(opts: {
     mapping = await discoverSpiffSchema();
   } catch (e: any) {
     const msg = `schema discovery failed: ${e?.message ?? "unknown error"}`;
-    if (isNew) await supabaseAdmin
-      .from("spiff_runs")
-      .update({
-        totals: {
-          error: msg,
-          exclusion_rules: EXCLUSION_RULES,
-          generated_at: new Date().toISOString(),
-        },
-      })
-      .eq("id", runId);
-    return { runId, programsProcessed: 0, errors: { _schema: msg }, carried: { manual_exclude: 0, re_include: 0, rep: 0 }, unmatched: [] };
+    throw new Error(msg);
   }
 
   // ONE bridge call pulls every program's lines. Previously we polled the
@@ -504,98 +500,59 @@ export async function generateSpiffRunCore(opts: {
     }
   }
 
-  const carryover = applyCarryover(snapshot, prepared.flatMap((p) => p.rows));
-  // P21 preparation and the complete snapshot both succeeded. Overrides are
-  // now applied in memory before any inserts or check construction.
-  if (!isNew) {
-    const { error: lineDeleteError } = await supabaseAdmin.from("spiff_run_lines").delete().eq("run_id", runId);
-    if (lineDeleteError) throw new Error(lineDeleteError.message);
-    const { error: checkDeleteError } = await supabaseAdmin.from("spiff_checks").delete().eq("run_id", runId);
-    if (checkDeleteError) throw new Error(checkDeleteError.message);
-  }
-
-  for (const { program, perProgramExcl, missingProductGroup } of prepared) {
-    try {
-      const toInsert = carryover.lines.filter((line) => line.program_id === program.id);
-      const spiffSum = toInsert.filter((line) => line.included).reduce((sum, line) => sum + Number(line.spiff_amount), 0);
-      const unmatched = toInsert.filter((line) => line.included && line.rep_parse_confidence === "unmatched").length;
-      for (let i = 0; i < toInsert.length; i += 500) {
-        const slice = toInsert.slice(i, i + 500);
-        const { error } = await supabaseAdmin.from("spiff_run_lines").insert(slice);
-        if (error) throw new Error(error.message);
-      }
-
-      const audit = carryover.edits.filter((edit) => carryover.lines[edit.lineIndex].program_id === program.id).map((edit) => {
-        const line = carryover.lines[edit.lineIndex];
-        return {
-          run_id: runId, line_id: line.id, line_key: lineKey(line),
-          customer_id: line.customer_id, order_no: line.order_no, item_id: line.item_id,
-          invoice_date: line.last_invoice_date ?? line.invoice_date,
-          qty_ordered: line.qty_ordered, extended_price: line.extended_price,
-          field: edit.field, old_value: edit.old_value, new_value: edit.new_value,
-          changed_by: opts.userId, source: "generate_carryover",
-        };
-      });
-      for (let i = 0; i < audit.length; i += 500) {
-        const { error } = await supabaseAdmin.from("spiff_line_edits").insert(audit.slice(i, i + 500));
-        if (error) throw new Error(`Carry-over audit failed: ${error.message}`);
-      }
-
-      const checkInputs = toInsert.map((l) => ({
-        spiff_amount: Number(l.spiff_amount) || 0,
-        writing_rep: l.writing_rep,
-        included: l.included,
-        rep_parse_confidence: l.rep_parse_confidence,
-      }));
-      const checks = buildChecksForProgram(program, checkInputs);
-      if (checks.length) {
-        const { error } = await supabaseAdmin
-          .from("spiff_checks")
-          .insert(checks.map((c) => ({ ...c, run_id: runId, status: "pending" })));
-        if (error) throw new Error(error.message);
-      }
-
-      perCustomerSummary[program.customer_id] = {
-        rows: toInsert.length,
-        spiff: spiffSum,
-        unmatched,
-        missing_product_group: missingProductGroup,
-        excluded: perProgramExcl,
-      } as any;
-    } catch (e: any) {
-      const msg = e?.message ?? "unknown error";
-      errors[program.customer_id] = msg;
-      perCustomerSummary[program.customer_id] = {
-        rows: 0,
-        spiff: 0,
-        unmatched: 0,
-        error: msg,
-      };
-    }
-  }
+  const carryover = applyCarryover(snapshot, prepared.flatMap((p) => p.rows), editHistory);
+  // Build the entire replacement before making a single atomic RPC.
+  const allChecks = prepared.flatMap(({ program, perProgramExcl, missingProductGroup }) => {
+    const toInsert = carryover.lines.filter((line) => line.program_id === program.id);
+    const spiffSum = toInsert.filter((line) => line.included).reduce((sum, line) => sum + Number(line.spiff_amount), 0);
+    const unmatched = toInsert.filter((line) => line.included && line.rep_parse_confidence === "unmatched").length;
+    const checkInputs = toInsert.map((l) => ({
+      spiff_amount: Number(l.spiff_amount) || 0,
+      writing_rep: l.writing_rep,
+      included: l.included,
+      rep_parse_confidence: l.rep_parse_confidence,
+    }));
+    perCustomerSummary[program.customer_id] = {
+      rows: toInsert.length, spiff: spiffSum, unmatched,
+      missing_product_group: missingProductGroup, excluded: perProgramExcl,
+    } as any;
+    return buildChecksForProgram(program, checkInputs).map((c) => ({ ...c, run_id: runId, status: "pending" }));
+  });
+  const audit = carryover.edits.map((edit) => {
+    const line = carryover.lines[edit.lineIndex];
+    return {
+      run_id: runId, line_id: line.id, line_key: lineKey(line),
+      customer_id: line.customer_id, order_no: line.order_no, item_id: line.item_id,
+      invoice_date: line.last_invoice_date ?? line.invoice_date,
+      qty_ordered: line.qty_ordered, extended_price: line.extended_price,
+      field: edit.field, old_value: edit.old_value, new_value: edit.new_value,
+      changed_by: opts.userId, source: "generate_carryover",
+    };
+  });
 
   const customerIds = progs.map((p) => p.customer_id);
   const aging = await fetchAging(customerIds);
 
-  const { error: totalsError } = await supabaseAdmin
-    .from("spiff_runs")
-    .update({
-      date_from: opts.dateFrom,
-      date_to: opts.dateTo,
-      totals: {
-        carryover: { snapshot_overrides: carryover.snapshot_overrides, carried: carryover.carried, unmatched: carryover.unmatched },
-        per_customer: perCustomerSummary,
-        aging: aging.error ? { error: aging.error } : aging.byCustomer,
-        errors,
-        exclusion_counts: exclusionCounts,
-        exclusion_rules: EXCLUSION_RULES,
-        schema_mapping: mapping,
-        linkage_mode: mapping.linkage_mode,
-        generated_at: new Date().toISOString(),
-      },
-    })
-    .eq("id", runId);
-  if (totalsError) throw new Error(totalsError.message);
+  const { error: replaceError } = await supabaseAdmin.rpc("replace_spiff_run", {
+    p_run_id: runId,
+    p_expected_line_count: snapshot.length,
+    p_expected_edit_count: editHistory.length,
+    p_lines: carryover.lines,
+    p_checks: allChecks,
+    p_audit: audit,
+    p_date_from: opts.dateFrom,
+    p_date_to: opts.dateTo,
+    p_actor: opts.userId,
+    p_totals: {
+      carryover: { snapshot_overrides: carryover.snapshot_overrides, carried: carryover.carried, unmatched: carryover.unmatched },
+      per_customer: perCustomerSummary,
+      aging: aging.error ? { error: aging.error } : aging.byCustomer,
+      errors, exclusion_counts: exclusionCounts, exclusion_rules: EXCLUSION_RULES,
+      schema_mapping: mapping, linkage_mode: mapping.linkage_mode,
+      generated_at: new Date().toISOString(),
+    },
+  });
+  if (replaceError) throw new Error(replaceError.message);
 
   await supabaseAdmin.from("activity_events").insert({
     event_type: "spiff.generated",
