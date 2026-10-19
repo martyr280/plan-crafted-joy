@@ -1,5 +1,8 @@
 # Roadmap
 
+## SPIFF edit preservation
+- [ ] Add audit migration, pure exact-key carry-over, generation integration, confirmation and unmatched warning; verify without running live mutations.
+
 ## Open
 
 - [ ] **Bridge agent TLS trust failure (NDI P21 server)** — v1.2.0 compiled agent
