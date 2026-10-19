@@ -33,6 +33,7 @@ type Line = {
   spiff_amount: number;
   writing_rep: string | null;
   included: boolean;
+  exclusion_reason?: string | null;
   flags: any;
 };
 
@@ -262,7 +263,17 @@ async function fetchRunBundle(runId: string, customerIds?: string[]) {
   };
 }
 
-function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
+export function countExclusions(lines: Array<{ included: boolean; exclusion_reason?: string | null }>) {
+  const counts: Record<string, number> = {};
+  for (const l of lines) {
+    if (l.included) continue;
+    const k = l.exclusion_reason ?? "unspecified";
+    counts[k] = (counts[k] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow, lines: Line[], sheetCount: number) {
   const ws = wb.addWorksheet("Summary");
   ws.getColumn(1).width = 8;
   ws.getColumn(2).width = 70;
@@ -275,7 +286,9 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
 
   const totals = run.totals ?? {};
   const rules: Array<{ code: string; label: string; where?: string }> = totals.exclusion_rules ?? [];
-  const counts: Record<string, number> = totals.exclusion_counts ?? {};
+  // Counted from the CURRENT lines at export time (stored totals go stale
+  // after manual include/exclude edits).
+  const counts = countExclusions(lines);
 
   ws.getRow(3).values = ["#", "Rule", "Excluded"];
   ws.getRow(3).font = { bold: true };
@@ -294,6 +307,15 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow) {
     ws.getRow(r).values = [i + 1, rule.label, val];
     r++;
   });
+  if ((counts.manual ?? 0) > 0) {
+    ws.getRow(r).values = [rules.length + 1, "Manually excluded", counts.manual];
+    r++;
+  }
+  const included = lines.filter((l) => l.included).length;
+  r++;
+  ws.getCell(`B${r}`).value = `Lines in run: ${lines.length} · Included: ${included} · Customer sheets: ${sheetCount}`;
+  ws.getCell(`B${r}`).font = { bold: true };
+  r++;
 
   r++;
   ws.getCell(`A${r}`).value = "Notes:";
@@ -327,12 +349,12 @@ export async function buildSpiffWorkbook(
 
   // Summary/rules sheet first so AP + reps see exactly which selection
   // rules were applied to this run (client requirement).
-  addSummarySheet(wb, run);
+  addSummarySheet(wb, run, lines, programs.length);
 
-  // Order sheets by customer_name for consistency with the manual workbook
+  // One sheet per program (ordered by customer_name), even with zero lines —
+  // addCustomerSheet prints "(No included lines)" for empty ones.
   for (const p of programs) {
     const pl = lines.filter((l) => l.program_id === p.id);
-    if (pl.length === 0) continue; // skip customers with zero lines
     addCustomerSheet(wb, p, pl, checks, run.quarter_label);
   }
 
