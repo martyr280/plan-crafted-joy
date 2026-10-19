@@ -134,6 +134,13 @@
       "when": 1792421648049,
       "tag": "0018_tighten_spiff_line_edit_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792422078825,
+      "tag": "0019_spiff_atomic_replace_append_only",
+      "breakpoints": true
     }
   ]
 }

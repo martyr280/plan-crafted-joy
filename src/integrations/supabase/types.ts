@@ -4944,6 +4944,21 @@ export type Database = {
       }
       is_capacity_alert_manager: { Args: never; Returns: boolean }
       is_driver_time_viewer: { Args: never; Returns: boolean }
+      replace_spiff_run: {
+        Args: {
+          p_actor: string
+          p_audit: Json
+          p_checks: Json
+          p_date_from: string
+          p_date_to: string
+          p_expected_edit_count: number
+          p_expected_line_count: number
+          p_lines: Json
+          p_run_id: string
+          p_totals: Json
+        }
+        Returns: Json
+      }
       tc_shadow_log_daily: { Args: never; Returns: number }
       tc_shadow_log_for: {
         Args: { p_known_before: string; p_made_on: string; p_source: string }
