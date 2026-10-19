@@ -1,6 +1,7 @@
 import { pageAll } from "@/lib/spiff/page-all";
 import { createInFlightGuard, generateDialogCopy, inclusiveRangeLabel } from "@/lib/spiff/generate-dialog";
 import { manualIncludePatch } from "@/lib/spiff/manual-include";
+import { LEGACY_AMOUNT_BLOCK_REASON } from "@/lib/spiff/amount";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -64,6 +65,7 @@ export const Route = createFileRoute("/_app/spiff")({
 
 type Program = {
   id: string;
+  updated_at: string | null;
   customer_id: string;
   customer_name: string;
   rep_org: string;
@@ -371,9 +373,22 @@ function SpiffPage() {
     if (patch.included !== undefined) {
       const line = lines.find((l) => l.id === lineId);
       if (!line) return;
-      // spiff_amount comes from flags.gen_amount (amountForIncludeChange via
-      // manualIncludePatch), written in the SAME UPDATE as included.
-      patch = manualIncludePatch(line, patch);
+      const program = programs.find((p) => p.id === line.program_id);
+      if (!program) {
+        toast.error(LEGACY_AMOUNT_BLOCK_REASON);
+        return;
+      }
+      try {
+        // Recovery flags, amount, and inclusion are persisted in one UPDATE.
+        patch = manualIncludePatch(line, patch, {
+          rate: program.rate,
+          programUpdatedAt: program.updated_at,
+          runGeneratedAt: typeof currentRun?.totals?.generated_at === "string" ? currentRun.totals.generated_at : null,
+        });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : LEGACY_AMOUNT_BLOCK_REASON);
+        return;
+      }
     }
     const { error } = await supabase.from("spiff_run_lines").update(patch).eq("id", lineId);
     if (error) {

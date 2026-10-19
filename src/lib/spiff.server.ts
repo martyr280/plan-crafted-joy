@@ -24,7 +24,7 @@ import { parseWritingRep } from "./spiff/parser";
 import { fetchAllRunLines, fetchAllRows } from "./spiff/fetch-all.server";
 import { applyCarryover, type CarryoverLine, type CarriedCounts, type UnmatchedEdit, type IncludedEdit } from "./spiff/carryover";
 import { lineKey } from "./spiff/line-key";
-import { amountForIncludeChange, computeLineSpiff } from "./spiff/amount";
+import { amountForIncludeChange, computeLineSpiff, type IncludeAmountContext } from "./spiff/amount";
 
 const SCHEMA_TIMEOUT_MS = 30_000;
 
@@ -112,6 +112,7 @@ const UNASSIGNED_PAYEE = "(Unassigned)";
 
 type Program = {
   id: string;
+  updated_at: string | null;
   customer_id: string;
   customer_name: string;
   rep_org: string;
@@ -161,10 +162,10 @@ export async function findOrCreateDraftRun(opts: {
   dateFrom: string;
   dateTo: string;
   userId: string;
-}): Promise<{ id: string; isNew: boolean; snapshot: CarryoverLine[]; editHistory: IncludedEdit[] }> {
+}): Promise<{ id: string; isNew: boolean; snapshot: CarryoverLine[]; editHistory: IncludedEdit[]; runGeneratedAt: string | null }> {
   const { data: existing, error: lookupError } = await supabaseAdmin
     .from("spiff_runs")
-    .select("id, status")
+    .select("id, status, totals")
     .eq("quarter_label", opts.quarterLabel)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -181,7 +182,8 @@ export async function findOrCreateDraftRun(opts: {
     // History first: edits arriving during either read change the expected
     // edit count and force the replacement RPC to reject this snapshot.
     const snapshot = await fetchAllRunLines<CarryoverLine>(existing.id, "*");
-    return { id: existing.id, isNew: false, snapshot, editHistory };
+    const totals = existing.totals as { generated_at?: unknown } | null;
+    return { id: existing.id, isNew: false, snapshot, editHistory, runGeneratedAt: typeof totals?.generated_at === "string" ? totals.generated_at : null };
   }
 
   const { data: created, error } = await supabaseAdmin
@@ -197,7 +199,7 @@ export async function findOrCreateDraftRun(opts: {
     .select("id")
     .single();
   if (error || !created) throw new Error(error?.message ?? "Failed to create spiff run");
-  return { id: created.id, isNew: true, snapshot: [], editHistory: [] };
+  return { id: created.id, isNew: true, snapshot: [], editHistory: [], runGeneratedAt: null };
 }
 
 async function fetchProgramLines(
@@ -281,17 +283,24 @@ async function fetchAging(customerIds: string[]): Promise<{
 // (amountForIncludeChange) so regenerate and the screen agree. Mutates `lines`
 // and returns spiff_amount audit edits for every amount that changed.
 export function recomputeCarriedAmounts(
-  lines: Array<{ included: boolean; extended_price?: number | string | null; flags?: unknown; spiff_amount: number }>,
+  lines: Array<{ program_id?: string; included: boolean; extended_price?: number | string | null; flags?: unknown; spiff_amount: number }>,
   edits: Array<{ lineIndex: number; field: string }>,
-): Array<{ lineIndex: number; field: "spiff_amount"; old_value: string | null; new_value: string | null }> {
-  const out: Array<{ lineIndex: number; field: "spiff_amount"; old_value: string | null; new_value: string | null }> = [];
+  contextFor?: (programId: string | undefined) => IncludeAmountContext | undefined,
+): Array<{ lineIndex: number; field: "spiff_amount" | "spiff_amount_blocked"; old_value: string | null; new_value: string | null }> {
+  const out: Array<{ lineIndex: number; field: "spiff_amount" | "spiff_amount_blocked"; old_value: string | null; new_value: string | null }> = [];
   const flipped = new Set(edits.filter((e) => e.field === "included").map((e) => e.lineIndex));
   for (const index of flipped) {
     const line = lines[index];
-    const next = amountForIncludeChange(line, line.included);
-    if (next === undefined || next === Number(line.spiff_amount)) continue;
-    out.push({ lineIndex: index, field: "spiff_amount", old_value: line.spiff_amount == null ? null : String(line.spiff_amount), new_value: String(next) });
-    line.spiff_amount = next;
+    const next = amountForIncludeChange(line, line.included, contextFor?.(line.program_id));
+    if (next.kind === "leave") continue;
+    if (next.kind === "block") {
+      out.push({ lineIndex: index, field: "spiff_amount_blocked", old_value: String(line.spiff_amount), new_value: null });
+      continue;
+    }
+    if (next.flags) line.flags = { ...(line.flags as Record<string, unknown> ?? {}), ...next.flags };
+    if (next.amount === Number(line.spiff_amount)) continue;
+    out.push({ lineIndex: index, field: "spiff_amount", old_value: line.spiff_amount == null ? null : String(line.spiff_amount), new_value: String(next.amount) });
+    line.spiff_amount = next.amount;
   }
   return out;
 }
@@ -350,7 +359,7 @@ export async function generateSpiffRunCore(opts: {
   dateFrom: string; // YYYY-MM-DD
   dateTo: string;   // YYYY-MM-DD (EXCLUSIVE)
   userId: string;
-}): Promise<{ runId: string; programsProcessed: number; errors: Record<string, string>; carried: CarriedCounts; unmatched: UnmatchedEdit[] }> {
+}): Promise<{ runId: string; programsProcessed: number; errors: Record<string, string>; carried: CarriedCounts; unmatched: UnmatchedEdit[]; amount_blocked: number }> {
   const { data: programs, error: programsError } = await supabaseAdmin
     .from("spiff_programs")
     .select("*")
@@ -359,7 +368,7 @@ export async function generateSpiffRunCore(opts: {
   if (programsError) throw new Error(programsError.message);
   const progs = (programs ?? []) as Program[];
 
-  const { id: runId, snapshot, editHistory } = await findOrCreateDraftRun(opts);
+  const { id: runId, snapshot, editHistory, runGeneratedAt } = await findOrCreateDraftRun(opts);
 
   const perCustomerSummary: Record<string, { rows: number; spiff: number; unmatched: number; missing_product_group?: number; error?: string }> = {};
   const errors: Record<string, string> = {};
@@ -524,7 +533,12 @@ export async function generateSpiffRunCore(opts: {
   }
 
   const carryover = applyCarryover(snapshot, prepared.flatMap((p) => p.rows), editHistory);
-  const amountEdits = recomputeCarriedAmounts(carryover.lines, carryover.edits);
+  const programById = new Map(progs.map((p) => [p.id, p]));
+  const amountEdits = recomputeCarriedAmounts(carryover.lines, carryover.edits, (programId) => {
+    const program = programId ? programById.get(programId) : undefined;
+    return program ? { rate: program.rate, programUpdatedAt: program.updated_at, runGeneratedAt } : undefined;
+  });
+  const amount_blocked = amountEdits.filter((edit) => edit.field === "spiff_amount_blocked").length;
   // Build the entire replacement before making a single atomic RPC.
   const allChecks = prepared.flatMap(({ program, perProgramExcl, missingProductGroup }) => {
     const toInsert = carryover.lines.filter((line) => line.program_id === program.id);
@@ -568,6 +582,7 @@ export async function generateSpiffRunCore(opts: {
     p_date_to: opts.dateTo,
     p_actor: opts.userId,
     p_totals: {
+      amount_blocked,
       carryover: { snapshot_overrides: carryover.snapshot_overrides, carried: carryover.carried, unmatched: carryover.unmatched },
       per_customer: perCustomerSummary,
       aging: aging.error ? { error: aging.error } : aging.byCustomer,
@@ -584,10 +599,10 @@ export async function generateSpiffRunCore(opts: {
     entity_id: runId,
     actor_id: opts.userId,
     message: `SPIFF run generated for ${opts.quarterLabel}`,
-    metadata: { programs: progs.length, errors: Object.keys(errors).length, exclusions: exclusionCounts, carryover: { snapshot_overrides: carryover.snapshot_overrides, carried: carryover.carried, unmatched: carryover.unmatched.length } },
+    metadata: { programs: progs.length, errors: Object.keys(errors).length, exclusions: exclusionCounts, amount_blocked, carryover: { snapshot_overrides: carryover.snapshot_overrides, carried: carryover.carried, unmatched: carryover.unmatched.length } },
   });
 
-  return { runId, programsProcessed: progs.length, errors, carried: carryover.carried, unmatched: carryover.unmatched };
+  return { runId, programsProcessed: progs.length, errors, carried: carryover.carried, unmatched: carryover.unmatched, amount_blocked };
 }
 
 

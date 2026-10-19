@@ -1,4 +1,5 @@
 # Agent rules
+- SPIFF inclusion amount decisions live in amountForIncludeChange; manualIncludePatch rejects blocks before persistence, while carry-over audits blocks and continues, using program.updated_at and the replaced run's totals.generated_at. Why: one recovery gate prevents unsafe legacy repricing without aborting regeneration.
 - SPIFF line identity is defined in spiff/line-key.ts and mirrored in log_spiff_line_edit; carry-over uses explicit user markers, reserves numbered exact matches, and accepts duplicate legacy groups only with identical overrides and equal sizes; generation prepares lines/checks/audit before one count-guarded replace_spiff_run RPC. Why: prevents inferred overrides, ambiguous pairing, and partial replacement without changing payout math.
 - Dispatch run dates come from src/lib/dispatch/assign.ts (date basis in truck_capacity_settings.dispatch_date_basis), never from vw_route_dispatch.ship_date — ship_date is NULL in the view.
 - Dispatch date basis is pick_ticket_print (confirmed by Joe Green, NDI, 2026-09-29). Do not change the default.

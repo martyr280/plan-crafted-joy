@@ -25,21 +25,35 @@ export function computeLineSpiff(input: LineSpiffInput, rate: number | string): 
   return +(Number(input.extended_price ?? 0) * Number(rate)).toFixed(6);
 }
 
-// Amount to write when a line's `included` changes (toggle AND carry-over).
-// - flags.gen_amount numeric (runs generated after this change): exclude -> 0;
-//   include -> 0 for credits, else the stored gen_amount. Never uses the
-//   current program rate, so a later rate change cannot rewrite the line.
-// - gen_amount missing (legacy runs, e.g. Q1/Q2): return undefined = leave
-//   spiff_amount untouched. We chose this over restoring from edit history
-//   because history can be incomplete (SQL batches, pre-trigger edits); checks
-//   only sum included lines, so an excluded line keeping its stored amount does
-//   not affect payouts, and a round-trip leaves the amount exactly as it was.
+export type IncludeAmountContext = {
+  rate: number | string;
+  programUpdatedAt: string | null;
+  runGeneratedAt: string | null;
+};
+export type IncludeAmountResult =
+  | { kind: "set"; amount: number; flags?: { gen_rate: number; gen_amount: number } }
+  | { kind: "leave" }
+  | { kind: "block"; reason: string };
+
+export const LEGACY_AMOUNT_BLOCK_REASON = "This run predates a change to its SPIFF program, so the amount can't be recovered safely. Nothing was changed. Ask the Builder.";
+
+// Stored generation amounts win. Recover only zero-valued, positive, non-credit
+// legacy inclusions whose program was unchanged since totals.generated_at.
 export function amountForIncludeChange(
-  line: { flags?: unknown; extended_price?: number | string | null },
+  line: { flags?: unknown; extended_price?: number | string | null; spiff_amount?: number | string | null },
   included: boolean,
-): number | undefined {
+  ctx?: IncludeAmountContext,
+): IncludeAmountResult {
   const gen = ((line.flags ?? {}) as Record<string, unknown>).gen_amount;
-  if (typeof gen !== "number" || !Number.isFinite(gen)) return undefined;
-  if (!included) return 0;
-  return isCreditLine(line) ? 0 : gen;
+  if (typeof gen === "number" && Number.isFinite(gen)) {
+    return { kind: "set", amount: !included || isCreditLine(line) ? 0 : gen };
+  }
+  if (!included || isCreditLine(line) || !(Number(line.extended_price) > 0) || Number(line.spiff_amount) !== 0) return { kind: "leave" };
+  const updated = ctx?.programUpdatedAt ? Date.parse(ctx.programUpdatedAt) : NaN;
+  const generated = ctx?.runGeneratedAt ? Date.parse(ctx.runGeneratedAt) : NaN;
+  if (!ctx || !Number.isFinite(updated) || !Number.isFinite(generated) || updated > generated || !Number.isFinite(Number(ctx.rate))) {
+    return { kind: "block", reason: LEGACY_AMOUNT_BLOCK_REASON };
+  }
+  const amount = computeLineSpiff({ included: true, extended_price: line.extended_price, isCredit: false }, ctx.rate);
+  return { kind: "set", amount, flags: { gen_rate: Number(ctx.rate), gen_amount: amount } };
 }
