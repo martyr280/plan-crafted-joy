@@ -135,7 +135,9 @@ describe("in-flight guard", () => {
   });
   it("SPIFF screen wires the guard, trigger, load-error card and toast", () => {
     const src = readFileSync("src/routes/_app.spiff.tsx", "utf8");
-    expect(src).toMatch(/if \(generatingRef\.current\) return;[\s\S]*?finally \{\s*generatingRef\.current = false;/);
+    expect(src).toContain("useRef(createInFlightGuard()).current");
+    expect(src).toContain("await generateGuard.run(async () => {");
+    expect(src).not.toContain("generatingRef");
     expect(src).toMatch(/<AlertDialogTrigger asChild>\s*<Button disabled=\{generating\}>/);
     expect(src).not.toContain("onClick={() => setConfirmGenerateOpen(true)}");
     expect(src).toContain("Couldn't load the full run. Nothing is shown so you don't act on partial data.");

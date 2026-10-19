@@ -163,6 +163,7 @@
   }
 }
 
-[data-sonner-toaster][data-theme="light"] {
+/* Sonner 2.x marks its toaster with data-sonner-theme; :root wins specificity. */
+:root [data-sonner-toaster][data-sonner-theme="light"] {
   --error-text: hsl(360 100% 40%);
 }
