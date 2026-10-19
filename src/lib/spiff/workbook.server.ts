@@ -290,20 +290,17 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow, lines: Line[], sheet
   const rules: Array<{ code: string; label: string; where?: string }> = totals.exclusion_rules ?? [];
   // Counted from the CURRENT lines at export time (stored totals go stale
   // after manual include/exclude edits).
-  const counts = countExclusions(lines);
 
   ws.getRow(3).values = ["#", "Rule", "Excluded"];
   ws.getRow(3).font = { bold: true };
-  void counts;
 
   const included = lines.filter((l) => l.included).length;
   let r = 4;
   // Every excluded line lands in exactly one row; rows sum to Total excluded.
-  buildSummaryExclusionRows(rules, lines).forEach((row, i, all) => {
+  buildSummaryExclusionRows(rules, lines).forEach((row, i) => {
     const isTotal = row.key === "total";
     ws.getRow(r).values = [isTotal ? "" : i + 1, row.label, row.value];
     if (row.bold) ws.getRow(r).font = { bold: true };
-    void all;
     r++;
   });
   r++;
