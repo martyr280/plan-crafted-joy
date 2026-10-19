@@ -133,3 +133,20 @@ describe("applyPricerSync family relabel wiring", () => {
     expect(ev.metadata.cleanup_skipped).toMatch(/0 usable items/);
   });
 });
+
+describe("applyPricerSync family-skip message", () => {
+  it("skipped -> pricer.synced message contains exact phrase with en-US numbers", async () => {
+    st.famResult = { updated: 0, failed: 0, changed: 14210, cap: 809, skipped: "x" };
+    const res = await applyPricerSync();
+    const phrase = "Family relabel SKIPPED: 14,210 changes > cap 809, needs approved forced run";
+    expect(st.events.at(-1)!.message).toContain(phrase);
+    expect(res.families_skipped_message).toBe(phrase);
+  });
+  it("not skipped -> no skip phrase", async () => {
+    st.famResult = { updated: 3, failed: 0, changed: 3, cap: 809 };
+    const res = await applyPricerSync();
+    expect(st.events.at(-1)!.message).not.toContain("SKIPPED");
+    expect(res.families_skipped_message).toBeUndefined();
+  });
+});
+
