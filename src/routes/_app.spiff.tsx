@@ -371,7 +371,14 @@ function SpiffPage() {
     if (patch.included !== undefined) {
       const line = lines.find((l) => l.id === lineId);
       if (!line) return;
-      patch = manualIncludePatch(line, patch);
+      // Recompute spiff_amount with the program rate (computeLineSpiff via
+      // manualIncludePatch) so it is written in the SAME UPDATE as included.
+      const program = programs.find((p) => p.id === line.program_id);
+      if (!program) {
+        toast.error("Program rate not loaded; reload the page and try again");
+        return;
+      }
+      patch = manualIncludePatch(line, patch, program.rate);
     }
     const { error } = await supabase.from("spiff_run_lines").update(patch).eq("id", lineId);
     if (error) {

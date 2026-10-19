@@ -24,6 +24,7 @@ import { parseWritingRep } from "./spiff/parser";
 import { fetchAllRunLines, fetchAllRows } from "./spiff/fetch-all.server";
 import { applyCarryover, type CarryoverLine, type CarriedCounts, type UnmatchedEdit, type IncludedEdit } from "./spiff/carryover";
 import { lineKey } from "./spiff/line-key";
+import { computeLineSpiff, isCreditLine } from "./spiff/amount";
 
 const SCHEMA_TIMEOUT_MS = 30_000;
 
