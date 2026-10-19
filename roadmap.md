@@ -1,6 +1,7 @@
 # Roadmap
 
 ## SPIFF edit preservation
+- [x] Follow-up: legacy-key fallback with exact-first consumption, audit grant tightening, metadata scope review, and full safe tests. Route head retained because platform instructions require leaf metadata; TypeScript checked by the automatic harness, not a manual tsc invocation.
 - [x] Add audit migration, pure exact-key carry-over, generation integration, confirmation and unmatched warning; verify without running live mutations.
 
 ## Open

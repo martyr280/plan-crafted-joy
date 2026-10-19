@@ -59,11 +59,63 @@ describe("SPIFF carry-over", () => {
     const result = applyCarryover([base, { ...base, writing_rep: "Second", rep_parse_confidence: "manual" }], [base, base]);
     expect(result.lines.map((line) => line.writing_rep)).toEqual(["Kim", "Second"]);
   });
-  it("does not carry an old legacy key onto a new P21 line-number key", () => {
+  it("carries a legacy snapshot onto a fresh P21 line-number key", () => {
     const old = { ...base, flags: {}, included: false, exclusion_reason: "manual" };
     const result = applyCarryover([old], [base]);
-    expect(result.lines[0].included).toBe(true);
+    expect(result.lines[0].included).toBe(false);
+    expect(result.carried.manual_exclude).toBe(1);
+    expect(result.unmatched).toEqual([]);
+  });
+  it("maps two legacy snapshots to two fresh lines one-to-one by ordinal", () => {
+    const old = [
+      { ...base, flags: {}, included: false, exclusion_reason: "manual" },
+      { ...base, flags: {}, writing_rep: "Second", rep_parse_confidence: "manual" },
+    ];
+    const fresh = [base, { ...base, flags: { oe_line_no: "2" } }];
+    const result = applyCarryover(old, fresh);
+    expect(result.lines[0]).toMatchObject({ included: false, writing_rep: "Kim" });
+    expect(result.lines[1]).toMatchObject({ included: true, writing_rep: "Second" });
+    expect(result.carried).toEqual({ manual_exclude: 1, re_include: 0, rep: 1 });
+    expect(result.unmatched).toEqual([]);
+  });
+  it("requires exact matching when the snapshot has oe_line_no", () => {
+    const old = { ...base, included: false, exclusion_reason: "manual" };
+    const fresh = { ...base, flags: { oe_line_no: "2" } };
+    const result = applyCarryover([old], [fresh]);
+    expect(result.lines).toEqual([fresh]);
     expect(result.unmatched[0].line_key).toBe(lineKey(old));
+  });
+  it("reserves exact matches before fallback and never matches fresh lines twice", () => {
+    const legacy = { ...base, flags: {}, included: false, exclusion_reason: "manual" };
+    const exact = { ...base, writing_rep: "Exact", rep_parse_confidence: "manual" };
+    const result = applyCarryover([legacy, exact, legacy], [base, { ...base, flags: { oe_line_no: "2" } }]);
+    expect(result.lines[0]).toMatchObject({ included: true, writing_rep: "Exact" });
+    expect(result.lines[1]).toMatchObject({ included: false, writing_rep: "Kim" });
+    expect(result.carried).toEqual({ manual_exclude: 1, re_include: 0, rep: 1 });
+    expect(result.unmatched).toHaveLength(1);
+  });
+  it("carries all 1550 mixed legacy and exact overrides with concrete counts", () => {
+    const fresh = Array.from({ length: 1550 }, (_, index) => ({
+      ...base, order_no: String(index), flags: { oe_line_no: "1" },
+      included: index % 3 !== 1, exclusion_reason: index % 3 === 1 ? "out_of_scope" : null,
+    }));
+    const old = fresh.map((line, index) => ({
+      ...line, flags: index % 2 === 0 ? {} : line.flags,
+      included: index % 3 !== 0, exclusion_reason: index % 3 === 0 ? "manual" : null,
+      writing_rep: index % 3 === 2 ? `Rep ${index}` : line.writing_rep,
+      rep_parse_confidence: index % 3 === 2 ? "manual" : "parsed",
+    }));
+    const result = applyCarryover(old, fresh);
+    expect(result.lines).toHaveLength(1550);
+    expect(result.carried).toEqual({ manual_exclude: 517, re_include: 517, rep: 516 });
+    expect(result.snapshot_overrides).toBe(1550);
+    expect(result.unmatched).toEqual([]);
+    result.lines.forEach((line, index) => {
+      expect(line.included).toBe(index % 3 !== 0);
+      expect(line.writing_rep).toBe(index % 3 === 2 ? `Rep ${index}` : "Kim");
+      expect(line.spiff_amount).toBe(5);
+      expect(line.flags).toBe(fresh[index].flags);
+    });
   });
 });
 describe("SPIFF stable line identity", () => {

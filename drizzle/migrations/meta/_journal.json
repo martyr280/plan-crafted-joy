@@ -127,6 +127,13 @@
       "when": 1792421223734,
       "tag": "0017_spiff_line_edit_history",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792421648049,
+      "tag": "0018_tighten_spiff_line_edit_grants",
+      "breakpoints": true
     }
   ]
 }
