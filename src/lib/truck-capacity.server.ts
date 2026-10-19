@@ -203,18 +203,26 @@ export async function computeBaselineForecastForRoute(routeId: string, horizonDa
   if (!route) return { route: null, days: [] };
   const today = dateStrInTz(new Date());
   const from = addDaysISO(today, -84);
-  const { data: runsRaw } = await supabaseAdmin
-    .from("truck_capacity_runs").select("run_date, capacity_frac")
-    // NULL capacity = no-run marker; excluded from the baseline.
-    .not("capacity_frac", "is", null)
-    .eq("route_id", routeId).gte("run_date", from)
-    .order("run_date", { ascending: true }).limit(3000);
-  const routeRuns = (runsRaw ?? []).map((r) => ({ date: r.run_date, cap: Number(r.capacity_frac) }));
-  const { data: hubRuns } = await supabaseAdmin
-    .from("truck_capacity_runs")
-    .select("capacity_frac, truck_capacity_routes!inner(hub)")
-    .not("capacity_frac", "is", null)
-    .gte("run_date", from).eq("truck_capacity_routes.hub", route.hub).limit(20000);
+  const { fetchAllRows } = await import("./supabase-fetch-all");
+  const runsRaw = await fetchAllRows<any>(
+    () =>
+      supabaseAdmin
+        .from("truck_capacity_runs").select("run_date, capacity_frac", { count: "exact" })
+        // NULL capacity = no-run marker; excluded from the baseline.
+        .not("capacity_frac", "is", null)
+        .eq("route_id", routeId).gte("run_date", from) as any,
+    { label: "baseline route runs", orderBy: [{ column: "run_date" }, { column: "id" }] },
+  );
+  const routeRuns = (runsRaw ?? []).map((r: any) => ({ date: r.run_date, cap: Number(r.capacity_frac) }));
+  const hubRuns = await fetchAllRows<any>(
+    () =>
+      supabaseAdmin
+        .from("truck_capacity_runs")
+        .select("capacity_frac, truck_capacity_routes!inner(hub)", { count: "exact" })
+        .not("capacity_frac", "is", null)
+        .gte("run_date", from).eq("truck_capacity_routes.hub", route.hub) as any,
+    { label: "baseline hub runs", orderBy: [{ column: "run_date" }, { column: "id" }] },
+  );
   const days = baselineFromSnapshot(
     routeRuns, (hubRuns ?? []).map((r: any) => Number(r.capacity_frac)),
     today, horizonDays, route.typical_dow ?? [],
@@ -768,11 +776,14 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
     .from("truck_capacity_routes").select("*").eq("active", true)
     .order("hub", { ascending: true }).order("sort_order", { ascending: true });
 
-  const { data: runs } = await supabaseAdmin
-    .from("truck_capacity_runs")
-    .select("route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, driver, pallet_count, returned_pallets, notes")
-    .order("run_date", { ascending: true })
-    .limit(50000);
+  const { fetchAllRows } = await import("./supabase-fetch-all");
+  const runs = await fetchAllRows<any>(
+    () =>
+      supabaseAdmin
+        .from("truck_capacity_runs")
+        .select("route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, driver, pallet_count, returned_pallets, notes", { count: "exact" }) as any,
+    { label: "exportCapacityWorkbook runs", orderBy: [{ column: "run_date" }, { column: "id" }] },
+  );
   const byRoute = new Map<string, any[]>();
   for (const r of runs ?? []) {
     const arr = byRoute.get(r.route_id) ?? [];

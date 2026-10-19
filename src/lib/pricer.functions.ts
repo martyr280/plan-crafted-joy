@@ -23,18 +23,21 @@ export const listSkuFamilies = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ search: z.string().optional() }).parse)
   .handler(async ({ data }) => {
-    let q = supabaseAdmin
-      .from("price_list")
-      .select("item,item_short,description,mfg,category,list_price,price_l1,price_l2,price_l3,price_l4,price_l5")
-      .not("item_short", "is", null)
-      .order("item_short", { ascending: true })
-      .limit(20000);
-    if (data.search) {
-      const esc = data.search.replace(/[%,()]/g, " ");
-      q = q.or(`item.ilike.%${esc}%,item_short.ilike.%${esc}%,description.ilike.%${esc}%`);
-    }
-    const { data: rows, error } = await q;
-    if (error) throw new Error(error.message);
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const rows = await fetchAllRows<any>(
+      () => {
+        let q = supabaseAdmin
+          .from("price_list")
+          .select("item,item_short,description,mfg,category,list_price,price_l1,price_l2,price_l3,price_l4,price_l5", { count: "exact" })
+          .not("item_short", "is", null);
+        if (data.search) {
+          const esc = data.search.replace(/[%,()]/g, " ");
+          q = q.or(`item.ilike.%${esc}%,item_short.ilike.%${esc}%,description.ilike.%${esc}%`);
+        }
+        return q as any;
+      },
+      { label: "listSkuFamilies price_list", orderBy: [{ column: "item_short" }, { column: "id" }], concurrency: 4 },
+    );
     // Group by item_short
     const families = new Map<string, { item_short: string; rep: any; count: number; finishes: string[]; missingLevels: string[] }>();
     for (const r of rows ?? []) {
@@ -105,8 +108,11 @@ export const listFamilyImages = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator(z.object({ filter: z.enum(["all", "missing"]).default("all") }).parse)
   .handler(async ({ data }) => {
-    const { data: rows } = await supabaseAdmin
-      .from("price_list").select("item,item_short").not("item_short", "is", null).limit(20000);
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const rows = await fetchAllRows<any>(
+      () => supabaseAdmin.from("price_list").select("item,item_short", { count: "exact" }).not("item_short", "is", null) as any,
+      { label: "listFamilyImages price_list", orderBy: [{ column: "id" }], concurrency: 4 },
+    );
     const families = new Map<string, string[]>();
     for (const r of rows ?? []) {
       const fs = r.item_short as string;
@@ -214,7 +220,11 @@ export const listPricerPublications = createServerFn({ method: "POST" })
 export const listPricerFilters = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .handler(async () => {
-    const { data } = await supabaseAdmin.from("price_list").select("category,mfg").limit(20000);
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const data = await fetchAllRows<any>(
+      () => supabaseAdmin.from("price_list").select("category,mfg", { count: "exact" }) as any,
+      { label: "listPricerFilters price_list", orderBy: [{ column: "id" }], concurrency: 4 },
+    );
     const cats = new Set<string>(), mfgs = new Set<string>();
     for (const r of data ?? []) {
       if (r.category) cats.add(r.category as string);

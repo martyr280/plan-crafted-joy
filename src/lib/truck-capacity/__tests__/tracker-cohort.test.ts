@@ -13,7 +13,7 @@ type Query = {
   lte: () => Query;
   order: () => Query;
   limit: () => Promise<{ data: Row[]; error: null }>;
-  range: (from: number, to: number) => Promise<{ data: Row[]; error: null }>;
+  range: (from: number, to: number) => Promise<{ data: Row[]; error: null; count: number }>;
 };
 const state = vi.hoisted(() => ({ tables: {} as Record<string, Row[]> }));
 vi.mock("@tanstack/react-start", () => ({
@@ -61,7 +61,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({
         order: () => query,
         limit: () => Promise.resolve({ data: state.tables[table] ?? [], error: null }),
         range: (f: number, t: number) =>
-          Promise.resolve({ data: (state.tables[table] ?? []).slice(f, t + 1), error: null }),
+          Promise.resolve({ data: (state.tables[table] ?? []).slice(f, t + 1), error: null, count: (state.tables[table] ?? []).length }),
       };
       return query;
     },

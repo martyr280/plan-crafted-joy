@@ -1,39 +1,20 @@
-// Complete-or-throw paging for SPIFF server reads. PostgREST caps every
-// response at max-rows (1,000) regardless of .limit(), so any SPIFF read that
-// can exceed that must page. Ordering by the unique `id` keeps pages stable;
-// `count: 'exact'` lets us prove the result is complete before using it.
+// SPIFF server reads use the shared complete-or-throw pager
+// (src/lib/supabase-fetch-all.ts): order by unique `id`, count exact,
+// concurrency 1, never a partial set.
+import { fetchAllRows as sharedFetchAllRows, type PagedQuery } from "../supabase-fetch-all";
 
-type PageResult<T> = { data: T[] | null; error: { message?: string } | null; count: number | null };
-
-export interface PagedQuery<T> {
-  order(column: string, opts?: { ascending?: boolean }): PagedQuery<T>;
-  range(from: number, to: number): PromiseLike<PageResult<T>>;
-}
+export type { PagedQuery };
 
 export async function fetchAllRows<T>(
   buildQuery: () => PagedQuery<T>,
   opts?: { pageSize?: number; label?: string },
 ): Promise<T[]> {
-  const pageSize = opts?.pageSize ?? 1000;
-  const label = opts?.label ?? "fetchAllRows";
-  const out: T[] = [];
-  let total: number | null = null;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error, count } = await buildQuery()
-      .order("id", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) throw new Error(`${label}: page starting at ${from} failed: ${error.message ?? String(error)}`);
-    if (typeof count === "number") total = count;
-    const rows = data ?? [];
-    out.push(...rows);
-    if (rows.length < pageSize) break;
-    if (total !== null && out.length >= total) break;
-  }
-  if (total === null) throw new Error(`${label}: no exact row count returned — aborting to avoid a truncated result`);
-  if (out.length !== total) {
-    throw new Error(`${label}: fetched ${out.length} of ${total} rows — aborting to avoid a truncated result`);
-  }
-  return out;
+  return sharedFetchAllRows<T>(buildQuery, {
+    pageSize: opts?.pageSize,
+    label: opts?.label ?? "fetchAllRows",
+    orderBy: [{ column: "id", ascending: true }],
+    concurrency: 1,
+  });
 }
 
 function withId(columns: string): string {

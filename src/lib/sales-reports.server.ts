@@ -363,16 +363,14 @@ export async function runSalesReportForRep(opts: {
 export async function fetchRunRows(client: any, runId: string, repCode?: string | null): Promise<SalesReportRow[]> {
   // month_sales is heavily tied (most rows are 0), so id is the unique
   // tiebreaker that keeps page boundaries stable across .range() windows.
-  const rows = await fetchAllRows<SalesReportRow>((from, to) => {
-    let q = client
-      .from("sales_report_rows")
-      .select("*")
-      .eq("run_id", runId)
-      .order("month_sales", { ascending: false })
-      .order("id", { ascending: true });
-    if (repCode) q = q.eq("rep_code", repCode);
-    return q.range(from, to);
-  });
+  const rows = await fetchAllRows<SalesReportRow>(
+    () => {
+      let q = client.from("sales_report_rows").select("*", { count: "exact" }).eq("run_id", runId);
+      if (repCode) q = q.eq("rep_code", repCode);
+      return q as any;
+    },
+    { label: "sales_report_rows", orderBy: [{ column: "month_sales", ascending: false }, { column: "id", ascending: true }] },
+  );
   assertUniqueIds(rows);
   return rows;
 }
