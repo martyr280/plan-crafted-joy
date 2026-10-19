@@ -327,6 +327,9 @@ export async function executeSchedule(scheduleId: string): Promise<{
       // of stored SQL. The schedule row simply controls timing.
       const res = await applyPricerSync();
       rowCount = res.imported ?? 0;
+      // Run succeeded, but a cap-skipped relabel needs an operator: surface it.
+      // last_status stays "success" (UI badge keys on === "success").
+      if (res.families_skipped_message) lastError = res.families_skipped_message;
     } else {
       const renderedSql = interpolateScheduleTokens(schedule.sql, startedAt);
       validateSelectSql(renderedSql);

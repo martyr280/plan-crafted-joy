@@ -30,9 +30,10 @@ describe("parseWritingRep — multi-letter glued PO prefixes", () => {
     ["ERIC WEAVER EEW12614", "Eric Weaver", "3-letter glued prefix dropped"],
     ["LAURA BORMAN CR726NDI", "Laura Borman", "2-letter glued prefix dropped"],
     ["Laura Borman CR726NDI", "Laura Borman", "mixed case, 2-letter glued prefix dropped"],
-    ["LISA WAGNERL4471", "Lisa Wagnerl", "intentionally left unsplit (handled as data alias)"],
+    ["LISE WAGNERL4471", "Lise Wagnerl", "intentionally left unsplit (handled as data alias)"],
     ["Steven Finckel15863", "Steven Finckel", "glued surname >3 letters kept"],
     ["John Smith JR 6470", "John Smith Jr", "space before digits keeps suffix"],
+    ["MARY ANN LEE4471", "Mary Ann", "KNOWN LIMITATION: 3-letter real surname glued to digits is dropped"],
     ["ERIC EEW12614", "Eric Eew", "unchanged pre-fix behaviour: only one word would remain"],
   ];
   for (const [input, expected, why] of more) {

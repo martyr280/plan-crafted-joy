@@ -34,8 +34,9 @@ vi.mock("@/lib/spiff/page-all", () => ({
 }));
 vi.mock("@/integrations/supabase/client", () => {
   const RUN = { id: "run-1", quarter_label: "Q3-2026", status: "draft", created_at: "2026-10-01T00:00:00Z", totals: {} };
+  const RUN2 = { id: "run-2", quarter_label: "Q2-2026", status: "draft", created_at: "2026-07-01T00:00:00Z", totals: {} };
   const chain = (table: string): any => {
-    const result = { data: table === "spiff_runs" ? [RUN] : [], error: null, count: 0 };
+    const result = { data: table === "spiff_runs" ? [RUN, RUN2] : [], error: null, count: 0 };
     const q: any = new Proxy(() => {}, {
       get: (_t, p) => (p === "then" ? (res: any, rej: any) => Promise.resolve(result).then(res, rej) : () => q),
       apply: () => q,
@@ -68,5 +69,17 @@ describe("SPIFF run detail load failure (rendered)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(toastMock.dismiss).toHaveBeenCalledWith("spiff-load-error");
+  });
+
+  it("after a load error toast, changing the selected run calls toast.dismiss('spiff-load-error')", { timeout: 20000 }, async () => {
+    const Page = (Route as any).options.component as React.ComponentType;
+    const { container } = render(<React.Suspense fallback={null}><Page /></React.Suspense>);
+    await screen.findByRole("alert", {}, { timeout: 10000 });
+    expect(toastMock.error.mock.calls.filter((c) => c[1]?.id === "spiff-load-error")).toHaveLength(1);
+    toastMock.dismiss.mockClear();
+    const select = Array.from(container.querySelectorAll("select")).find((el) => el.querySelector('option[value="run-2"]')) as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    fireEvent.change(select, { target: { value: "run-2" } });
+    await waitFor(() => expect(toastMock.dismiss).toHaveBeenCalledWith("spiff-load-error"));
   });
 });

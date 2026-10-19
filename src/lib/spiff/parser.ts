@@ -34,6 +34,9 @@ export function parseWritingRep(poNo: string | null | undefined): ParsedRep {
   // Drop it only if at least two words remain; longer tokens may be real surnames.
   // Letters glued onto a surname with no space ("WAGNERL4471") are intentionally NOT
   // split — indistinguishable from a real name here; handle those as a data alias.
+  // KNOWN LIMITATION: a real surname of <=3 letters glued to digits in a 3+ word
+  // name is dropped ("MARY ANN LEE4471" -> "Mary Ann"). No live Q1–Q3 PO hits
+  // this (Design scan of 834 strings); pinned by a test, handle via data alias.
   if (m && /\d/.test(raw.charAt(m[1].length))) {
     const glued = name.match(/^(.*\S)\s+[A-Za-z]{1,3}$/);
     if (glued && /\S\s+\S/.test(glued[1].trim())) name = glued[1];

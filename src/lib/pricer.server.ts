@@ -131,7 +131,8 @@ export function computeFamilyLabels(rows: FamilyRow[]): Map<string, string> {
   return out;
 }
 
-export type RecomputeFamiliesResult = { updated: number; failed: number; changed: number; skipped?: string };
+export type RecomputeFamiliesResult = { updated: number; failed: number; changed: number; cap: number; skipped?: string };
+
 
 export async function recomputeFamilies(opts?: { force?: boolean }): Promise<RecomputeFamiliesResult> {
   // Complete-or-throw: every price_list row, not PostgREST's 1,000-row cap.
@@ -156,7 +157,7 @@ export async function recomputeFamilies(opts?: { force?: boolean }): Promise<Rec
   if (changed.length > cap && !opts?.force) {
     const skipped = `family relabel would change ${changed.length} of ${rows.length} rows (cap ${cap}); nothing written`;
     console.warn(`[pricer.families] ${skipped}`);
-    return { updated: 0, failed: 0, changed: changed.length, skipped };
+    return { updated: 0, failed: 0, changed: changed.length, cap, skipped };
   }
 
   let updated = 0;
@@ -181,7 +182,7 @@ export async function recomputeFamilies(opts?: { force?: boolean }): Promise<Rec
   if (failed > 0) {
     throw new Error(`recomputeFamilies: ${failed} of ${changed.length} updates failed (${updated} succeeded)`);
   }
-  return { updated, failed, changed: changed.length };
+  return { updated, failed, changed: changed.length, cap };
 }
 
 export async function probeImage(sku: string): Promise<"reachable" | "not_found" | "error"> {

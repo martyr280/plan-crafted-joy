@@ -74,19 +74,20 @@ export const listTruckRuns = createServerFn({ method: "POST" })
     limit: z.number().int().min(1).max(5000).optional(),
   }).parse(i))
   .handler(async ({ data }) => {
-    // Complete-or-throw read past PostgREST's 1,000-row cap, then slice to the limit.
-    const { fetchAllRows } = await import("./supabase-fetch-all");
-    const rows = await fetchAllRows<any>(
+    // Top-N read: only the first `limit` rows (default 500), never the whole table.
+    const { fetchFirstRows } = await import("./supabase-fetch-all");
+    const rows = await fetchFirstRows<any>(
       () => {
-        let q = supabaseAdmin.from("truck_capacity_runs").select("*", { count: "exact" });
+        let q = supabaseAdmin.from("truck_capacity_runs").select("*");
         if (data.routeId) q = q.eq("route_id", data.routeId);
         if (data.from) q = q.gte("run_date", data.from);
         if (data.to) q = q.lte("run_date", data.to);
         return q as any;
       },
-      { label: "listTruckRuns truck_capacity_runs", orderBy: [{ column: "run_date", ascending: false }, { column: "id" }], concurrency: 4 },
+      data.limit ?? 500,
+      { label: "listTruckRuns truck_capacity_runs", orderBy: [{ column: "run_date", ascending: false }, { column: "id" }] },
     );
-    return { rows: rows.slice(0, data.limit ?? 500) };
+    return { rows };
   });
 
 const UpsertRun = z.object({
