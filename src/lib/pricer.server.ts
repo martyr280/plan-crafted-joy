@@ -133,10 +133,6 @@ export function computeFamilyLabels(rows: FamilyRow[]): Map<string, string> {
 
 export type RecomputeFamiliesResult = { updated: number; failed: number; changed: number; cap: number; skipped?: string };
 
-/** Operator-facing text for a cap-skipped family relabel (activity feed + schedule last_error). */
-export function familySkipMessage(changed: number, cap: number): string {
-  return `Family relabel SKIPPED: ${changed.toLocaleString("en-US")} changes > cap ${cap.toLocaleString("en-US")}, needs approved forced run`;
-}
 
 export async function recomputeFamilies(opts?: { force?: boolean }): Promise<RecomputeFamiliesResult> {
   // Complete-or-throw: every price_list row, not PostgREST's 1,000-row cap.
