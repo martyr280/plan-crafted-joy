@@ -65,7 +65,7 @@ export const Route = createFileRoute("/_app/spiff")({
 
 type Program = {
   id: string;
-  updated_at: string | null;
+  updated_at: string;
   customer_id: string;
   customer_name: string;
   rep_org: string;
