@@ -43,14 +43,15 @@ function commonPrefix(items: string[]): string {
 export async function recomputeFamilies(): Promise<{ updated: number }> {
   // Pull every row's identifying fields + pricing tuple. Group within
   // mfg/category by identical 6-level price tuple, derive item_short.
-  const { data, error } = await supabaseAdmin
-    .from("price_list")
-    .select(
-      "id,item,mfg,category,list_price,price_l1,price_l2,price_l3,price_l4,price_l5,item_short"
-    )
-    .limit(20000);
-  if (error) throw new Error(error.message);
-  const rows = data ?? [];
+  // Complete-or-throw: every price_list row, not PostgREST's 1,000-row cap.
+  const { fetchAllRows } = await import("./supabase-fetch-all");
+  const rows = await fetchAllRows<any>(
+    () =>
+      supabaseAdmin
+        .from("price_list")
+        .select("id,item,mfg,category,list_price,price_l1,price_l2,price_l3,price_l4,price_l5,item_short", { count: "exact" }) as any,
+    { label: "recomputeFamilies price_list", orderBy: [{ column: "id" }], concurrency: 4 },
+  );
 
   const groups = new Map<string, { id: string; item: string }[]>();
   for (const r of rows) {
@@ -135,24 +136,23 @@ export async function loadPricerRows(filters: {
   mfg?: string | null;
   search?: string | null;
 }): Promise<PricerRow[]> {
-  let q = supabaseAdmin
-    .from("price_list")
-    .select(
-      "item,item_short,description,mfg,category,list_price,price_l1,price_l2,price_l3,price_l4,price_l5"
-    )
-    .not("item_short", "is", null)
-    .order("item_short", { ascending: true })
-    .order("item", { ascending: true })
-    .limit(20000);
-  if (filters.category) q = q.eq("category", filters.category);
-  if (filters.mfg) q = q.eq("mfg", filters.mfg);
-  if (filters.search) {
-    const esc = filters.search.replace(/[%,()]/g, " ");
-    q = q.or(`item.ilike.%${esc}%,item_short.ilike.%${esc}%,description.ilike.%${esc}%`);
-  }
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  const rows = data ?? [];
+  const { fetchAllRows } = await import("./supabase-fetch-all");
+  const rows = await fetchAllRows<any>(
+    () => {
+      let q = supabaseAdmin
+        .from("price_list")
+        .select("item,item_short,description,mfg,category,list_price,price_l1,price_l2,price_l3,price_l4,price_l5", { count: "exact" })
+        .not("item_short", "is", null);
+      if (filters.category) q = q.eq("category", filters.category);
+      if (filters.mfg) q = q.eq("mfg", filters.mfg);
+      if (filters.search) {
+        const esc = filters.search.replace(/[%,()]/g, " ");
+        q = q.or(`item.ilike.%${esc}%,item_short.ilike.%${esc}%,description.ilike.%${esc}%`);
+      }
+      return q as any;
+    },
+    { label: "loadPricerRows price_list", orderBy: [{ column: "item_short" }, { column: "item" }, { column: "id" }], concurrency: 4 },
+  );
 
   // Cached image lookups for all candidate SKUs
   const allSkus = rows.map((r) => r.item as string);
