@@ -624,10 +624,11 @@ export async function sendForApprovalCore(opts: {
     .single();
   if (!run) throw new Error("Run not found");
 
-  const { data: checks } = await supabaseAdmin
-    .from("spiff_checks")
-    .select("payee, customer_id")
-    .eq("run_id", opts.runId);
+  const { fetchAllRunChecks, fetchAllRunLines } = await import("./spiff/fetch-all.server");
+  const checks = await fetchAllRunChecks<{ payee: string; customer_id: string }>(
+    opts.runId,
+    "id, payee, customer_id",
+  );
   if ((checks ?? []).some((c) => c.payee === "(Unassigned)")) {
     throw new Error("Resolve all (Unassigned) payees before sending for approval.");
   }
@@ -661,12 +662,11 @@ export async function sendForApprovalCore(opts: {
     const customerIds = progs.map((p) => p.customer_id);
 
     // Per-customer totals (included only)
-    const { data: lines } = await supabaseAdmin
-      .from("spiff_run_lines")
-      .select("customer_id, spiff_amount, included")
-      .eq("run_id", opts.runId)
-      .in("customer_id", customerIds)
-      .limit(50000);
+    const lines = await fetchAllRunLines<{ customer_id: string; spiff_amount: number; included: boolean }>(
+      opts.runId,
+      "id, customer_id, spiff_amount, included",
+      customerIds,
+    );
     const totals = new Map<string, number>();
     for (const l of lines ?? []) {
       if (!l.included) continue;
@@ -745,11 +745,10 @@ export async function sendToApCore(opts: {
   const { data: programs } = await supabaseAdmin.from("spiff_programs").select("*");
   const progById = new Map((programs ?? []).map((p) => [p.id, p as any]));
 
-  const { data: checks } = await supabaseAdmin
-    .from("spiff_checks")
-    .select("*")
-    .eq("run_id", opts.runId)
-    .order("customer_id");
+  const { fetchAllRunChecks } = await import("./spiff/fetch-all.server");
+  const checks = (await fetchAllRunChecks<any>(opts.runId, "*")).sort((a, b) =>
+    String(a.customer_id).localeCompare(String(b.customer_id)),
+  );
 
   // Group by customer for HTML payee table
   const byCust = new Map<string, any[]>();
