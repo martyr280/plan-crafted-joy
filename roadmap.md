@@ -1,7 +1,7 @@
 # Roadmap
 
 ## SPIFF edit preservation
-- [ ] Add audit migration, pure exact-key carry-over, generation integration, confirmation and unmatched warning; verify without running live mutations.
+- [x] Add audit migration, pure exact-key carry-over, generation integration, confirmation and unmatched warning; verify without running live mutations.
 
 ## Open
 

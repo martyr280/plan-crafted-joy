@@ -50,6 +50,21 @@ describe("SPIFF carry-over", () => {
     expect(result.edits).toEqual([]);
     expect(fresh).toEqual(old);
   });
+  it("does not report ordinary included payable lines as unmatched manual edits", () => {
+    const result = applyCarryover([base], [{ ...base, extended_price: 101 }]);
+    expect(result.unmatched).toEqual([]);
+    expect(result.snapshot_overrides).toBe(0);
+  });
+  it("uses input ordinal for identical duplicate ties, including non-overrides", () => {
+    const result = applyCarryover([base, { ...base, writing_rep: "Second", rep_parse_confidence: "manual" }], [base, base]);
+    expect(result.lines.map((line) => line.writing_rep)).toEqual(["Kim", "Second"]);
+  });
+  it("does not carry an old legacy key onto a new P21 line-number key", () => {
+    const old = { ...base, flags: {}, included: false, exclusion_reason: "manual" };
+    const result = applyCarryover([old], [base]);
+    expect(result.lines[0].included).toBe(true);
+    expect(result.unmatched[0].line_key).toBe(lineKey(old));
+  });
 });
 describe("SPIFF stable line identity", () => {
   it("ignores editable free text and mirrors SQL numeric/date formatting", () => {
@@ -57,5 +72,6 @@ describe("SPIFF stable line identity", () => {
     expect(lineKey({ ...original, po_no: "PO2", item_desc: "Changed", writing_rep: "Marty" })).toBe(lineKey(original));
     expect(lineKey({ ...base, qty_ordered: "2.000", extended_price: "100.0000" })).toBe("C1|123|1|CHAIR|2026-09-01|2|100");
     expect(lineKey({ ...base, flags: {}, last_invoice_date: "2026-09-02" })).toBe("C1|123|CHAIR|2026-09-02|2|100");
+    expect(lineKey({ ...base, qty_ordered: 1e-7, extended_price: -0 })).toBe("C1|123|1|CHAIR|2026-09-01|0.0000001|0");
   });
 });
