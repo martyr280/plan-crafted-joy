@@ -469,9 +469,6 @@ export async function generateSpiffRunCore(opts: {
         }
         if (notInvoiced) flags.not_invoiced = true;
         if (isReturnCredit) flags.return_credit = true;
-        // Generate-time rate/amount so later toggles never use today's rate.
-        flags.gen_rate = Number(program.rate);
-        flags.gen_amount = computeLineSpiff({ included: true, extended_price: extForRow, isCredit: isReturnCredit }, program.rate);
 
         if (exclusion_reason) {
           perProgramExcl[exclusion_reason] = (perProgramExcl[exclusion_reason] ?? 0) + 1;
@@ -485,6 +482,9 @@ export async function generateSpiffRunCore(opts: {
         const qtyForRow = useOrdered ? qtyOrdered : invoicedQty;
         const extForRow = useOrdered ? extOrdered : invoicedAmt;
 
+        // Generate-time rate/amount so later toggles never use today's rate.
+        flags.gen_rate = Number(program.rate);
+        flags.gen_amount = computeLineSpiff({ included: true, extended_price: extForRow, isCredit: isReturnCredit }, program.rate);
         const spiff = computeLineSpiff({ included, extended_price: extForRow, isCredit: isReturnCredit }, program.rate);
         const parsed = parseWritingRep(r.po_no);
         if (parsed.confidence === "unmatched" && included) unmatched++;
