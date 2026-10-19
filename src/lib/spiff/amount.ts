@@ -24,3 +24,22 @@ export function computeLineSpiff(input: LineSpiffInput, rate: number | string): 
   if (!input.included || input.isCredit) return 0;
   return +(Number(input.extended_price ?? 0) * Number(rate)).toFixed(6);
 }
+
+// Amount to write when a line's `included` changes (toggle AND carry-over).
+// - flags.gen_amount numeric (runs generated after this change): exclude -> 0;
+//   include -> 0 for credits, else the stored gen_amount. Never uses the
+//   current program rate, so a later rate change cannot rewrite the line.
+// - gen_amount missing (legacy runs, e.g. Q1/Q2): return undefined = leave
+//   spiff_amount untouched. We chose this over restoring from edit history
+//   because history can be incomplete (SQL batches, pre-trigger edits); checks
+//   only sum included lines, so an excluded line keeping its stored amount does
+//   not affect payouts, and a round-trip leaves the amount exactly as it was.
+export function amountForIncludeChange(
+  line: { flags?: unknown; extended_price?: number | string | null },
+  included: boolean,
+): number | undefined {
+  const gen = ((line.flags ?? {}) as Record<string, unknown>).gen_amount;
+  if (typeof gen !== "number" || !Number.isFinite(gen)) return undefined;
+  if (!included) return 0;
+  return isCreditLine(line) ? 0 : gen;
+}

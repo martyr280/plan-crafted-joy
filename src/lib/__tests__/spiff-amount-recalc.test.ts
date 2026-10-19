@@ -9,44 +9,51 @@ import { manualIncludePatch } from "../spiff/manual-include";
 import { buildChecksForProgram, generateSpiffRunCore, recomputeCarriedAmounts } from "../spiff.server";
 
 const RATE = 0.05;
-const line = { included: true, exclusion_reason: null as string | null, flags: { oe_line_no: "1" } as Record<string, unknown>, extended_price: 1234.57, spiff_amount: 61.7285 };
+const GEN = { oe_line_no: "1", gen_rate: RATE, gen_amount: 61.7285 };
+const line = { included: true, exclusion_reason: null as string | null, flags: { ...GEN } as Record<string, unknown>, extended_price: 1234.57, spiff_amount: 61.7285 };
 const program = { id: "program", customer_id: "C1", customer_name: "Mock", product_scope: "all", rate: RATE, payout_mode: "per_writing_rep", payee_name: "Mock", min_check_amount: 0 };
+const roundTrip = <T extends typeof line>(l: T) => {
+  const ex = { ...l, ...manualIncludePatch(l, { included: false, exclusion_reason: "manual" }) } as T;
+  return { ex, back: { ...ex, ...manualIncludePatch(ex, { included: true, exclusion_reason: null }) } as T };
+};
 
-describe("SPIFF amount recalculation on include/exclude", () => {
-  it("(a) non-credit re-include gets ext*rate", () => {
-    const patch = manualIncludePatch({ ...line, included: false, exclusion_reason: "manual", spiff_amount: 0 }, { included: true, exclusion_reason: null }, RATE);
-    expect(patch.spiff_amount).toBe(61.7285);
-    expect(patch.flags).toMatchObject({ manual_include: true });
+describe("SPIFF amount on include/exclude (gen_amount)", () => {
+  it("(a) new-run round-trip restores flags.gen_amount exactly even if program rate changed to 3%", () => {
+    const { ex, back } = roundTrip(line);
+    expect(ex.spiff_amount).toBe(0);
+    expect(back.spiff_amount).toBe(61.7285);
+    expect(back.flags).toMatchObject({ gen_amount: 61.7285, gen_rate: RATE, manual_include: true });
+    expect(manualIncludePatch.length).toBe(2); // no rate argument any more
   });
-  it("(b) credit re-include via return_credit flag stays 0", () => {
-    const credit = { ...line, included: false, exclusion_reason: "return_credit", flags: { return_credit: true }, extended_price: 100, spiff_amount: 0 };
-    expect(manualIncludePatch(credit, { included: true, exclusion_reason: null }, RATE).spiff_amount).toBe(0);
+  it("(b) legacy Q1 negative-ext unflagged line (-12.34): round-trip leaves amount, patch has no spiff_amount", () => {
+    const legacy = { ...line, flags: { oe_line_no: "1" }, extended_price: -246.8, spiff_amount: -12.34 };
+    const p1 = manualIncludePatch(legacy, { included: false, exclusion_reason: "manual" });
+    expect("spiff_amount" in p1).toBe(false);
+    expect(p1).toMatchObject({ included: false, exclusion_reason: "manual" });
+    expect(roundTrip(legacy).back.spiff_amount).toBe(-12.34);
   });
-  it("(b) credit re-include via negative extended_price stays 0", () => {
-    const credit = { ...line, included: false, exclusion_reason: "return_credit", flags: {}, extended_price: -100, spiff_amount: 0 };
-    expect(isCreditLine(credit)).toBe(true);
-    expect(manualIncludePatch(credit, { included: true, exclusion_reason: null }, RATE).spiff_amount).toBe(0);
+  it("(b) legacy 1.5%-rate line with program now at 3%: round-trip leaves amount, patch has no spiff_amount", () => {
+    const legacy = { ...line, flags: { oe_line_no: "2" }, extended_price: 1000, spiff_amount: 15 };
+    const { ex, back } = roundTrip(legacy);
+    expect("spiff_amount" in manualIncludePatch(ex, { included: true, exclusion_reason: null })).toBe(false);
+    expect(back.spiff_amount).toBe(15);
   });
-  it("(c) exclude -> 0, same as Generate's excluded value", () => {
-    const patch = manualIncludePatch(line, { included: false, exclusion_reason: "manual" }, RATE);
-    expect(patch).toMatchObject({ included: false, exclusion_reason: "manual", spiff_amount: 0 });
-    expect(computeLineSpiff({ included: false, extended_price: 1234.57, isCredit: false }, RATE)).toBe(0);
+  it("(c) credit with gen_amount: include -> 0 (return_credit flag and negative ext)", () => {
+    for (const c of [{ ...line, flags: { return_credit: true, gen_amount: 0 }, extended_price: 100 }, { ...line, flags: { gen_amount: 5 }, extended_price: -100 }]) {
+      const off = { ...c, included: false, exclusion_reason: "return_credit", spiff_amount: 0 };
+      expect(isCreditLine(off)).toBe(true);
+      expect(manualIncludePatch(off, { included: true, exclusion_reason: null }).spiff_amount).toBe(0);
+    }
   });
-  it("(d) toggle exclude then include returns the original amount exactly", () => {
-    const excluded = { ...line, ...manualIncludePatch(line, { included: false, exclusion_reason: "manual" }, RATE) } as typeof line;
-    const back = { ...excluded, ...manualIncludePatch(excluded, { included: true, exclusion_reason: null }, RATE) };
-    expect(back.spiff_amount).toBe(line.spiff_amount);
-  });
-  it("(e) checks rebuilt from toggled lines sum to included spiff_amount", () => {
+  it("checks rebuilt from toggled lines sum to included spiff_amount", () => {
     let lines = [
       { ...line, writing_rep: "Kim", rep_parse_confidence: "parsed" },
-      { ...line, extended_price: 200, spiff_amount: 10, writing_rep: "Lee", rep_parse_confidence: "parsed" },
-      { ...line, extended_price: 80, included: false, exclusion_reason: "out_of_scope", spiff_amount: 0, writing_rep: "Kim", rep_parse_confidence: "parsed" },
+      { ...line, flags: { gen_amount: 10 }, extended_price: 200, spiff_amount: 10, writing_rep: "Lee", rep_parse_confidence: "parsed" },
+      { ...line, flags: { gen_amount: 4 }, extended_price: 80, included: false, exclusion_reason: "out_of_scope", spiff_amount: 0, writing_rep: "Kim", rep_parse_confidence: "parsed" },
     ];
-    lines = lines.map((l, i) => i === 0 ? { ...l, ...manualIncludePatch(l, { included: false, exclusion_reason: "manual" }, RATE) } as typeof l
-      : i === 2 ? { ...l, ...manualIncludePatch(l, { included: true, exclusion_reason: null }, RATE) } as typeof l : l);
-    const checks = buildChecksForProgram(program as any, lines as any);
-    const total = checks.reduce((s, c) => s + c.amount, 0);
+    lines = lines.map((l, i) => i === 0 ? { ...l, ...manualIncludePatch(l, { included: false, exclusion_reason: "manual" }) } as typeof l
+      : i === 2 ? { ...l, ...manualIncludePatch(l, { included: true, exclusion_reason: null }) } as typeof l : l);
+    const total = buildChecksForProgram(program as any, lines as any).reduce((s, c) => s + c.amount, 0);
     expect(total).toBe(lines.filter((l) => l.included).reduce((s, l) => s + l.spiff_amount, 0));
     expect(total).toBe(14);
   });
@@ -56,10 +63,11 @@ describe("SPIFF amount recalculation on include/exclude", () => {
       for (const included of [true, false]) expect(computeLineSpiff({ included, extended_price: ext, isCredit: false }, rate)).toBe(old(included, ext, rate));
     }
   });
-  it("recomputeCarriedAmounts only touches lines whose included was flipped", () => {
-    const lines = [{ ...line, program_id: "program", spiff_amount: 0 }, { ...line, program_id: "program", spiff_amount: 7 }];
-    recomputeCarriedAmounts(lines, [{ lineIndex: 0, field: "included" }, { lineIndex: 1, field: "writing_rep" }], [program]);
-    expect(lines.map((l) => l.spiff_amount)).toEqual([61.7285, 7]);
+  it("recomputeCarriedAmounts only touches flipped lines, skips legacy, and returns spiff_amount audit edits", () => {
+    const lines = [{ ...line, spiff_amount: 0 }, { ...line, spiff_amount: 7 }, { ...line, flags: {}, spiff_amount: -3 }];
+    const edits = recomputeCarriedAmounts(lines, [{ lineIndex: 0, field: "included" }, { lineIndex: 1, field: "writing_rep" }, { lineIndex: 2, field: "included" }]);
+    expect(lines.map((l) => l.spiff_amount)).toEqual([61.7285, 7, -3]);
+    expect(edits).toEqual([{ lineIndex: 0, field: "spiff_amount", old_value: "0", new_value: "61.7285" }]);
   });
 });
 
@@ -87,7 +95,21 @@ describe("(f) carry-over of a manual include recomputes the amount in Generate",
       throw new Error("Unexpected bridge call");
     });
   });
-  it("fresh not_invoiced line re-included by carry-over gets ext*rate and checks equal it", async () => {
+  it("(d) Generate writes gen_amount/gen_rate; excluded spiff_amount still 0", async () => {
+    ports.lines.mockResolvedValueOnce([]);
+    await generateSpiffRunCore({ quarterLabel: "Q3-2026", dateFrom: "2026-07-01", dateTo: "2026-10-01", userId: "mock-admin" });
+    expect(ports.rpc.mock.calls[0][1].p_lines[0]).toMatchObject({ included: false, exclusion_reason: "not_invoiced", spiff_amount: 0, flags: { gen_rate: RATE, gen_amount: 5, not_invoiced: true, oe_line_no: "1" } });
+  });
+  it("(e) carry-over keeps whole flags object and writes a spiff_amount audit row", async () => {
+    await generateSpiffRunCore({ quarterLabel: "Q3-2026", dateFrom: "2026-07-01", dateTo: "2026-10-01", userId: "mock-admin" });
+    const args = ports.rpc.mock.calls[0][1];
+    expect(args.p_lines[0].flags).toEqual({ oe_line_no: "1", not_invoiced: true, gen_rate: RATE, gen_amount: 5, manual_include: true });
+    const inc = args.p_audit.find((a: any) => a.field === "included");
+    const amt = args.p_audit.find((a: any) => a.field === "spiff_amount");
+    expect(amt).toMatchObject({ old_value: "0", new_value: "5", source: "generate_carryover", changed_by: "mock-admin" });
+    expect(Object.keys(amt).sort()).toEqual(Object.keys(inc).sort());
+  });
+  it("fresh not_invoiced line re-included by carry-over gets gen_amount and checks equal it", async () => {
     await generateSpiffRunCore({ quarterLabel: "Q3-2026", dateFrom: "2026-07-01", dateTo: "2026-10-01", userId: "mock-admin" });
     const args = ports.rpc.mock.calls[0][1];
     expect(args.p_lines[0]).toMatchObject({ included: true, spiff_amount: 5, flags: { manual_include: true } });
@@ -96,15 +118,17 @@ describe("(f) carry-over of a manual include recomputes the amount in Generate",
 });
 
 describe("(g) wiring", () => {
-  it("toggle path, manualIncludePatch and Generate all use computeLineSpiff; formula not duplicated", () => {
+  it("toggle and carry-over share amountForIncludeChange; Generate uses computeLineSpiff; formula not duplicated", () => {
     const screen = readFileSync("src/routes/_app.spiff.tsx", "utf8");
     const patch = readFileSync("src/lib/spiff/manual-include.ts", "utf8");
     const server = readFileSync("src/lib/spiff.server.ts", "utf8");
-    expect(screen).toContain("patch = manualIncludePatch(line, patch, program.rate)");
+    expect(screen).toContain("patch = manualIncludePatch(line, patch);");
+    expect(screen).not.toContain("Program rate not loaded");
     expect(screen).toMatch(/async function toggleIncluded[\s\S]*?updateLine\(/);
-    expect(patch).toContain("computeLineSpiff(");
+    expect(patch).toContain("amountForIncludeChange(");
     expect(server).toMatch(/const spiff = computeLineSpiff\(\{ included, extended_price: extForRow, isCredit: isReturnCredit \}, program\.rate\)/);
-    expect(server).toContain("recomputeCarriedAmounts(carryover.lines, carryover.edits");
+    expect(server).toContain("recomputeCarriedAmounts(carryover.lines, carryover.edits)");
+    expect(server).toMatch(/flags\.gen_amount = computeLineSpiff\(\{ included: true, extended_price: extForRow, isCredit: isReturnCredit \}, program\.rate\)/);
     for (const src of [screen, patch, server]) expect(src).not.toMatch(/toFixed\(6\)/);
   });
 });

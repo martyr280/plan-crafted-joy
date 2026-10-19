@@ -46,7 +46,7 @@ describe("SPIFF atomic replacement (mock ports only)", () => {
     expect(ports.rpc).toHaveBeenCalledTimes(1);
     const [name, args] = ports.rpc.mock.calls[0];
     expect(name).toBe("replace_spiff_run");
-    expect(args.p_lines).toHaveLength(1); expect(args.p_checks).toHaveLength(1); expect(args.p_audit).toHaveLength(2);
+    expect(args.p_lines).toHaveLength(1); expect(args.p_checks).toHaveLength(1); expect(args.p_audit).toHaveLength(3); expect(args.p_audit[2]).toMatchObject({ field: "spiff_amount", old_value: "5", new_value: "0", source: "generate_carryover" });
     expect(args.p_lines[0]).toMatchObject({ included: false, exclusion_reason: "manual", spiff_amount: 0 });
     expect(args.p_checks[0]).toMatchObject({ amount: 0, line_count: 0, run_id: "run" });
     expect(ports.from.mock.calls.map(([table]) => table)).toEqual(["spiff_programs", "spiff_runs", "activity_events"]);
