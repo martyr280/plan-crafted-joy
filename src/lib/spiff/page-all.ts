@@ -1,6 +1,6 @@
 // Browser-safe complete-or-throw pager; never accepts a missing exact count.
 export async function pageAll<T>(
-  q: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message?: string } | null; count: number | null }>,
+  q: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message?: string } | null; count: number | null }>,
 ): Promise<T[]> {
   const PAGE = 1000;
   const out: T[] = [];
@@ -11,7 +11,7 @@ export async function pageAll<T>(
     if (typeof count !== "number") throw new Error("no exact row count returned — aborting to avoid a truncated result");
     if (total !== null && total !== count) throw new Error("row count changed during paging");
     total = count;
-    const rows = data ?? [];
+    const rows = (data ?? []) as T[];
     out.push(...rows);
     if (rows.length < PAGE || out.length >= total) break;
   }

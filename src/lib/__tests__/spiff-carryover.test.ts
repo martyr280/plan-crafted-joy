@@ -30,7 +30,7 @@ describe("SPIFF carry-over", () => {
   });
   it("flags.manual_include carries re-include", () => {
     const fresh = { ...base, included: false, exclusion_reason: "out_of_scope", spiff_amount: 0 };
-    const result = applyCarryover([{ ...base, flags: { ...base.flags, manual_include: true } }], [fresh]);
+    const result = applyCarryover([{ ...base, flags: { oe_line_no: "1", manual_include: true } }], [fresh]);
     expect(result.lines[0]).toMatchObject({ included: true, flags: { oe_line_no: "1", manual_include: true }, spiff_amount: 0 });
     expect(result.carried.re_include).toBe(1);
   });
@@ -54,7 +54,7 @@ describe("SPIFF carry-over", () => {
     expect(result.carried.re_include).toBe(0);
   });
   it("unmatched included $0 line without marker is NOT reported unmatched", () => {
-    const result = applyCarryover([{ ...base, spiff_amount: 0, flags: { ...base.flags, return_credit: true } }], [{ ...base, extended_price: 101 }]);
+    const result = applyCarryover([{ ...base, spiff_amount: 0, flags: { oe_line_no: "1", return_credit: true } }], [{ ...base, extended_price: 101 }]);
     expect(result.unmatched).toEqual([]);
     expect(result.snapshot_overrides).toBe(0);
   });
