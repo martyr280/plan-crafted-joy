@@ -77,3 +77,36 @@ export async function fetchAllRows<T>(buildQuery: () => PagedQuery<T>, opts?: Fe
   }
   return out;
 }
+
+/**
+ * Top-N read: the first `limit` rows in a stable order, never reading past them.
+ * One request when limit <= pageSize; otherwise pages of pageSize until `limit`
+ * rows are collected or a short page ends the table. Throws on any page error.
+ */
+export async function fetchFirstRows<T>(
+  buildQuery: () => PagedQuery<T>,
+  limit: number,
+  opts?: { pageSize?: number; label?: string; orderBy?: OrderSpec[]; uniqueColumns?: string[] },
+): Promise<T[]> {
+  const pageSize = opts?.pageSize ?? 1000;
+  const label = opts?.label ?? "fetchFirstRows";
+  const orderBy = opts?.orderBy ?? [{ column: "id" }];
+  const unique = opts?.uniqueColumns ?? ["id"];
+  const tail = orderBy[orderBy.length - 1];
+  if (!tail || !unique.includes(tail.column)) {
+    throw new Error(`${label}: orderBy must end with a unique column (${unique.join("/")}) — got ${tail?.column ?? "nothing"}`);
+  }
+  const out: T[] = [];
+  while (out.length < limit) {
+    const from = out.length;
+    const want = Math.min(pageSize, limit - from);
+    let q = buildQuery();
+    for (const o of orderBy) q = q.order(o.column, { ascending: o.ascending ?? true });
+    const { data, error } = await q.range(from, from + want - 1);
+    if (error) throw new Error(`${label}: page starting at ${from} failed: ${error.message ?? String(error)}`);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < want) break;
+  }
+  return out.slice(0, limit);
+}
