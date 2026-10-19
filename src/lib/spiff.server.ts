@@ -24,6 +24,7 @@ import { parseWritingRep } from "./spiff/parser";
 import { fetchAllRunLines, fetchAllRows } from "./spiff/fetch-all.server";
 import { applyCarryover, type CarryoverLine, type CarriedCounts, type UnmatchedEdit, type IncludedEdit } from "./spiff/carryover";
 import { lineKey } from "./spiff/line-key";
+import { computeLineSpiff, isCreditLine } from "./spiff/amount";
 
 const SCHEMA_TIMEOUT_MS = 30_000;
 
@@ -276,7 +277,25 @@ async function fetchAging(customerIds: string[]): Promise<{
   }
 }
 
-function buildChecksForProgram(
+// When carry-over flips `included` (manual include/exclude), recompute the
+// line amount with the same helper the toggle uses, so a regenerate yields the
+// same spiff_amount as the screen. Mutates `lines` in place.
+export function recomputeCarriedAmounts(
+  lines: Array<{ program_id?: string; included: boolean; extended_price?: number | string | null; flags?: unknown; spiff_amount: number }>,
+  edits: Array<{ lineIndex: number; field: string }>,
+  programs: Array<{ id: string; rate: number | string }>,
+) {
+  const rates = new Map(programs.map((p) => [p.id, p.rate]));
+  const flipped = new Set(edits.filter((e) => e.field === "included").map((e) => e.lineIndex));
+  for (const index of flipped) {
+    const line = lines[index];
+    const rate = rates.get(line.program_id ?? "");
+    if (rate === undefined) throw new Error(`No program rate for carried line ${index}`);
+    line.spiff_amount = computeLineSpiff({ included: line.included, extended_price: line.extended_price, isCredit: isCreditLine(line) }, rate);
+  }
+}
+
+export function buildChecksForProgram(
   program: Program,
   lineRows: Array<{
     spiff_amount: number;
@@ -462,7 +481,7 @@ export async function generateSpiffRunCore(opts: {
         const qtyForRow = useOrdered ? qtyOrdered : invoicedQty;
         const extForRow = useOrdered ? extOrdered : invoicedAmt;
 
-        const spiff = included ? +(extForRow * Number(program.rate)).toFixed(6) : 0;
+        const spiff = computeLineSpiff({ included, extended_price: extForRow, isCredit: isReturnCredit }, program.rate);
         const parsed = parseWritingRep(r.po_no);
         if (parsed.confidence === "unmatched" && included) unmatched++;
         if (included) spiffSum += spiff;
@@ -501,6 +520,7 @@ export async function generateSpiffRunCore(opts: {
   }
 
   const carryover = applyCarryover(snapshot, prepared.flatMap((p) => p.rows), editHistory);
+  recomputeCarriedAmounts(carryover.lines, carryover.edits, prepared.map((p) => p.program));
   // Build the entire replacement before making a single atomic RPC.
   const allChecks = prepared.flatMap(({ program, perProgramExcl, missingProductGroup }) => {
     const toInsert = carryover.lines.filter((line) => line.program_id === program.id);

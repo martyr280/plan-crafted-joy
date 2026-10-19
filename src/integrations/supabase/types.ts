@@ -808,6 +808,258 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_spiff_checks_q3_kim1235: {
+        Row: {
+          amount: number | null
+          approved_at: string | null
+          approved_by: string | null
+          below_minimum: boolean | null
+          created_at: string | null
+          customer_id: string | null
+          id: string | null
+          line_count: number | null
+          payee: string | null
+          program_id: string | null
+          run_id: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          below_minimum?: boolean | null
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string | null
+          line_count?: number | null
+          payee?: string | null
+          program_id?: string | null
+          run_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          below_minimum?: boolean | null
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string | null
+          line_count?: number | null
+          payee?: string | null
+          program_id?: string | null
+          run_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      backup_spiff_checks_q3_rebuild1411: {
+        Row: {
+          amount: number | null
+          approved_at: string | null
+          approved_by: string | null
+          below_minimum: boolean | null
+          created_at: string | null
+          customer_id: string | null
+          id: string | null
+          line_count: number | null
+          payee: string | null
+          program_id: string | null
+          run_id: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          below_minimum?: boolean | null
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string | null
+          line_count?: number | null
+          payee?: string | null
+          program_id?: string | null
+          run_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          below_minimum?: boolean | null
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string | null
+          line_count?: number | null
+          payee?: string | null
+          program_id?: string | null
+          run_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      backup_spiff_run_lines_q3_kim1235: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          exclusion_reason: string | null
+          extended_price: number | null
+          first_invoice_date: string | null
+          flags: Json | null
+          id: string | null
+          included: boolean | null
+          invoice_date: string | null
+          item_desc: string | null
+          item_id: string | null
+          last_invoice_date: string | null
+          order_date: string | null
+          order_no: string | null
+          po_no: string | null
+          product_group_id: string | null
+          program_id: string | null
+          qty_ordered: number | null
+          rep_parse_confidence: string | null
+          run_id: string | null
+          spiff_amount: number | null
+          unit_price: number | null
+          writing_rep: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          exclusion_reason?: string | null
+          extended_price?: number | null
+          first_invoice_date?: string | null
+          flags?: Json | null
+          id?: string | null
+          included?: boolean | null
+          invoice_date?: string | null
+          item_desc?: string | null
+          item_id?: string | null
+          last_invoice_date?: string | null
+          order_date?: string | null
+          order_no?: string | null
+          po_no?: string | null
+          product_group_id?: string | null
+          program_id?: string | null
+          qty_ordered?: number | null
+          rep_parse_confidence?: string | null
+          run_id?: string | null
+          spiff_amount?: number | null
+          unit_price?: number | null
+          writing_rep?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          exclusion_reason?: string | null
+          extended_price?: number | null
+          first_invoice_date?: string | null
+          flags?: Json | null
+          id?: string | null
+          included?: boolean | null
+          invoice_date?: string | null
+          item_desc?: string | null
+          item_id?: string | null
+          last_invoice_date?: string | null
+          order_date?: string | null
+          order_no?: string | null
+          po_no?: string | null
+          product_group_id?: string | null
+          program_id?: string | null
+          qty_ordered?: number | null
+          rep_parse_confidence?: string | null
+          run_id?: string | null
+          spiff_amount?: number | null
+          unit_price?: number | null
+          writing_rep?: string | null
+        }
+        Relationships: []
+      }
+      backup_spiff_run_lines_q3_ratefix: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          exclusion_reason: string | null
+          extended_price: number | null
+          first_invoice_date: string | null
+          flags: Json | null
+          id: string | null
+          included: boolean | null
+          invoice_date: string | null
+          item_desc: string | null
+          item_id: string | null
+          last_invoice_date: string | null
+          order_date: string | null
+          order_no: string | null
+          po_no: string | null
+          product_group_id: string | null
+          program_id: string | null
+          qty_ordered: number | null
+          rep_parse_confidence: string | null
+          run_id: string | null
+          spiff_amount: number | null
+          unit_price: number | null
+          writing_rep: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          exclusion_reason?: string | null
+          extended_price?: number | null
+          first_invoice_date?: string | null
+          flags?: Json | null
+          id?: string | null
+          included?: boolean | null
+          invoice_date?: string | null
+          item_desc?: string | null
+          item_id?: string | null
+          last_invoice_date?: string | null
+          order_date?: string | null
+          order_no?: string | null
+          po_no?: string | null
+          product_group_id?: string | null
+          program_id?: string | null
+          qty_ordered?: number | null
+          rep_parse_confidence?: string | null
+          run_id?: string | null
+          spiff_amount?: number | null
+          unit_price?: number | null
+          writing_rep?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          exclusion_reason?: string | null
+          extended_price?: number | null
+          first_invoice_date?: string | null
+          flags?: Json | null
+          id?: string | null
+          included?: boolean | null
+          invoice_date?: string | null
+          item_desc?: string | null
+          item_id?: string | null
+          last_invoice_date?: string | null
+          order_date?: string | null
+          order_no?: string | null
+          po_no?: string | null
+          product_group_id?: string | null
+          program_id?: string | null
+          qty_ordered?: number | null
+          rep_parse_confidence?: string | null
+          run_id?: string | null
+          spiff_amount?: number | null
+          unit_price?: number | null
+          writing_rep?: string | null
+        }
+        Relationships: []
+      }
       branch_manager_invites: {
         Row: {
           attempt_count: number
