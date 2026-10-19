@@ -1,5 +1,5 @@
 import { pageAll } from "@/lib/spiff/page-all";
-import { generateDialogCopy, inclusiveRangeLabel } from "@/lib/spiff/generate-dialog";
+import { createInFlightGuard, generateDialogCopy, inclusiveRangeLabel } from "@/lib/spiff/generate-dialog";
 import { manualIncludePatch } from "@/lib/spiff/manual-include";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -47,6 +47,8 @@ import {
   sendSpiffForApproval,
   sendSpiffToAp,
 } from "@/lib/spiff.functions";
+
+const SPIFF_LOAD_ERROR_TOAST = "spiff-load-error";
 
 export const Route = createFileRoute("/_app/spiff")({
   head: () => ({ meta: [
@@ -171,7 +173,9 @@ function SpiffPage() {
   const [loadingRunId, setLoadingRunId] = useState<string | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
   currentRunIdRef.current = currentRunId;
-  const generatingRef = useRef(false);
+  // The same tested helper is the in-flight guard for Generate.
+  const generateGuard = useRef(createInFlightGuard()).current;
+  const [retrying, setRetrying] = useState(false);
 
   async function loadProgramsAndRuns() {
     const [{ data: pr }, { data: rs }] = await Promise.all([
@@ -211,6 +215,7 @@ function SpiffPage() {
       setLines(allLines);
       setChecks(cks);
       setLoadError(null);
+      toast.dismiss(SPIFF_LOAD_ERROR_TOAST);
       if (!selectedCustomer && allLines.length > 0) {
         setSelectedCustomer(allLines[0].customer_id);
       }
@@ -222,6 +227,7 @@ function SpiffPage() {
       setChecks([]);
       setLoadError(message);
       toast.error("Couldn't load the full SPIFF run, so nothing is shown.", {
+        id: SPIFF_LOAD_ERROR_TOAST,
         description: message,
         duration: Infinity,
         closeButton: true,
@@ -238,6 +244,7 @@ function SpiffPage() {
 
   useEffect(() => {
     setLoadError(null);
+    toast.dismiss(SPIFF_LOAD_ERROR_TOAST);
     if (currentRunId) {
       // Never show the previous run's lines while the next run loads.
       setLines([]);
@@ -321,8 +328,7 @@ function SpiffPage() {
 
   async function handleGenerate() {
     if (!user) return;
-    if (generatingRef.current) return; // in-flight guard
-    generatingRef.current = true;
+    await generateGuard.run(async () => {
     setGenerating(true);
     try {
       const res = await generate({ data: { quarterLabel, dateFrom, dateTo } });
@@ -339,9 +345,9 @@ function SpiffPage() {
     } catch (e: any) {
       toast.error(e?.message ?? "Generate failed");
     } finally {
-      generatingRef.current = false;
       setGenerating(false);
     }
+    });
   }
 
   // Debounced auto-rebuild of checks after line edits.
@@ -652,8 +658,22 @@ function SpiffPage() {
               Couldn't load the full run. Nothing is shown so you don't act on partial data.
             </p>
             <p className="text-xs text-muted-foreground break-words">{loadError}</p>
-            <Button size="sm" variant="outline" onClick={() => currentRunId && loadRunDetail(currentRunId)}>
-              Retry
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={retrying}
+              aria-busy={retrying}
+              onClick={async () => {
+                if (!currentRunId || retrying) return;
+                setRetrying(true);
+                try {
+                  await loadRunDetail(currentRunId);
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+            >
+              {retrying ? (<><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Retrying…</>) : "Retry"}
             </Button>
           </Card>
         ) : loadingRunId !== null ? (

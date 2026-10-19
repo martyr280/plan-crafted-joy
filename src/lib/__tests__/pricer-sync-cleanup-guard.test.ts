@@ -7,9 +7,14 @@ const st = vi.hoisted(() => ({
   existing: [] as Array<{ id: string; item: string }>,
   deletes: [] as Array<{ items: string[]; eq: Array<[string, any]> }>,
   ranges: [] as Array<[number, number]>,
+  famArgs: [] as unknown[][],
+  famResult: { updated: 0, failed: 0, changed: 0 } as Record<string, any>,
+  events: [] as Array<Record<string, any>>,
 }));
 
-vi.mock("../pricer.server", () => ({ recomputeFamilies: async () => ({ updated: 0 }) }));
+vi.mock("../pricer.server", () => ({
+  recomputeFamilies: async (...args: unknown[]) => { st.famArgs.push(args); return st.famResult; },
+}));
 vi.mock("@/integrations/supabase/client.server", () => {
   const from = (table: string) => {
     if (table === "p21_bridge_jobs") {
@@ -19,7 +24,7 @@ vi.mock("@/integrations/supabase/client.server", () => {
       };
       return q;
     }
-    if (table === "activity_events") return { insert: async () => ({ error: null }) };
+    if (table === "activity_events") return { insert: async (row: any) => { st.events.push(row); return { error: null }; } };
     // price_list
     let mode: "read" | "delete" | null = null;
     const del = { items: [] as string[], eq: [] as Array<[string, any]> };
@@ -49,7 +54,8 @@ const items = (n: number) => Array.from({ length: n }, (_, i) => `ITEM-${String(
 const pullOf = (list: string[]) => list.map((it) => ({ "Item #": it, "List Price": "1.00" }));
 
 beforeEach(() => {
-  st.pull = []; st.existing = []; st.deletes = []; st.ranges = [];
+  st.pull = []; st.existing = []; st.deletes = []; st.ranges = []; st.famArgs = []; st.events = [];
+  st.famResult = { updated: 0, failed: 0, changed: 0 };
   vi.spyOn(globalThis, "setTimeout").mockImplementation(((fn: () => void) => { fn(); return 0 as any; }) as any);
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -93,5 +99,37 @@ describe("applyPricerSync cleanup guard", () => {
     expect(st.ranges).toEqual([[0, 999], [1000, 1999]]);
     expect(res.removed).toBe(100);
     expect(st.deletes.flatMap((d) => d.items)).toEqual(all.slice(1400));
+  });
+
+  it("boundary: exactly 10% removed (1,502 of 15,026) deletes", async () => {
+    const all = items(15026);
+    st.existing = all.map((item, i) => ({ id: String(i), item }));
+    st.pull = pullOf(all.slice(0, 15026 - 1502));
+    const res = await applyPricerSync();
+    expect(res.cleanup_skipped).toBeUndefined();
+    expect(res.removed).toBe(1502);
+  });
+
+  it("boundary: 1,503 of 15,026 removed skips cleanup", async () => {
+    const all = items(15026);
+    st.existing = all.map((item, i) => ({ id: String(i), item }));
+    st.pull = pullOf(all.slice(0, 15026 - 1503));
+    const res = await applyPricerSync();
+    expect(st.deletes).toEqual([]);
+    expect(res.cleanup_skipped).toMatch(/1503 of 15026/);
+  });
+});
+
+describe("applyPricerSync family relabel wiring", () => {
+  it("passes no force and records families_skipped / cleanup_skipped in pricer.synced metadata", async () => {
+    st.existing = items(100).map((item, i) => ({ id: String(i), item }));
+    st.famResult = { updated: 0, failed: 0, changed: 900, skipped: "family relabel would change 900 of 1000 rows (cap 500); nothing written" };
+    const res = await applyPricerSync();
+    expect(st.famArgs).toEqual([[]]);
+    expect(res.families_skipped).toMatch(/900 of 1000/);
+    expect(res.cleanup_skipped).toMatch(/0 usable items/);
+    const ev = st.events.find((e) => e.event_type === "pricer.synced")!;
+    expect(ev.metadata.families_skipped).toMatch(/900 of 1000/);
+    expect(ev.metadata.cleanup_skipped).toMatch(/0 usable items/);
   });
 });

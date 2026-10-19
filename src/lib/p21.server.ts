@@ -237,7 +237,7 @@ export async function applyE2GSnapshot(timeoutMs = 90000): Promise<{ imported: n
 
 export async function applyPricerSync(
   timeoutMs = 120000
-): Promise<{ imported: number; removed: number; families_updated: number; cleanup_skipped?: string }> {
+): Promise<{ imported: number; removed: number; families_updated: number; cleanup_skipped?: string; families_skipped?: string }> {
   const { result } = await runJob("pricer.sync", {}, timeoutMs);
   const rows = ((result as any)?.rows ?? []) as Array<Record<string, any>>;
 
@@ -323,18 +323,29 @@ export async function applyPricerSync(
     removed += batch.length;
   }
 
-  const { updated: families_updated } = await recomputeFamilies();
+  // Default (unforced) run: a mass relabel is skipped by the change cap.
+  const fam = await recomputeFamilies();
+  const families_updated = fam.updated;
+  const families_skipped = fam.skipped;
 
   await supabaseAdmin.from("activity_events").insert({
     event_type: "pricer.synced",
     entity_type: "price_list",
-    message: `Pricer synced from P21: ${imported} upserted, ${removed} removed, ${families_updated} families updated`,
-    metadata: { imported, removed, families_updated },
+    message: `Pricer synced from P21: ${imported} upserted, ${cleanup_skipped ? 0 : removed} removed, ${families_updated} families updated`,
+    metadata: {
+      imported,
+      removed: cleanup_skipped ? 0 : removed,
+      families_updated,
+      families_skipped: families_skipped ?? null,
+      cleanup_skipped: cleanup_skipped ?? null,
+    },
   });
 
-  return cleanup_skipped
-    ? { imported, removed: 0, families_updated, cleanup_skipped }
-    : { imported, removed, families_updated };
+  const out: { imported: number; removed: number; families_updated: number; cleanup_skipped?: string; families_skipped?: string } =
+    { imported, removed: cleanup_skipped ? 0 : removed, families_updated };
+  if (cleanup_skipped) out.cleanup_skipped = cleanup_skipped;
+  if (families_skipped) out.families_skipped = families_skipped;
+  return out;
 }
 
 

@@ -40,9 +40,100 @@ function commonPrefix(items: string[]): string {
   return trimmed.length >= 2 ? trimmed : prefix;
 }
 
-export async function recomputeFamilies(): Promise<{ updated: number }> {
-  // Pull every row's identifying fields + pricing tuple. Group within
-  // mfg/category by identical 6-level price tuple, derive item_short.
+export type FamilyRow = {
+  id: string;
+  item: string;
+  mfg?: string | null;
+  category?: string | null;
+  list_price?: number | null;
+  price_l1?: number | null;
+  price_l2?: number | null;
+  price_l3?: number | null;
+  price_l4?: number | null;
+  price_l5?: number | null;
+};
+
+function priceTupleKey(r: FamilyRow): string {
+  return [
+    r.mfg ?? "",
+    r.category ?? "",
+    r.list_price ?? "",
+    r.price_l1 ?? "",
+    r.price_l2 ?? "",
+    r.price_l3 ?? "",
+    r.price_l4 ?? "",
+    r.price_l5 ?? "",
+  ].join("|");
+}
+
+/**
+ * Pure family labelling. Groups by (mfg, category, list, L1..L5). A multi-member
+ * group shares commonPrefix only if it is >= 4 chars and >= 60% of the group's
+ * shortest item; otherwise members keep their own item. Any label that ends up
+ * spanning more than one price group makes every member of those groups fall
+ * back to its own item. Returns id -> item_short.
+ */
+export function computeFamilyLabels(rows: FamilyRow[]): Map<string, string> {
+  const groups = new Map<string, FamilyRow[]>();
+  for (const r of rows) {
+    const k = priceTupleKey(r);
+    const arr = groups.get(k);
+    if (arr) arr.push(r);
+    else groups.set(k, [r]);
+  }
+
+  // Per group: one shared label, or null = members use their own item.
+  const shared = new Map<string, string | null>();
+  for (const [k, members] of groups) {
+    if (members.length === 1) { shared.set(k, null); continue; }
+    const items = members.map((m) => m.item);
+    const name = commonPrefix(items) || "";
+    const shortest = Math.min(...items.map((s) => s.length));
+    shared.set(k, name.length >= 4 && name.length >= 0.6 * shortest ? name : null);
+  }
+
+  const labelsOf = (k: string): string[] => {
+    const s = shared.get(k);
+    return s != null ? [s] : groups.get(k)!.map((m) => m.item);
+  };
+  const collisions = () => {
+    const owners = new Map<string, Set<string>>();
+    for (const k of groups.keys()) {
+      for (const l of labelsOf(k)) {
+        const set = owners.get(l) ?? new Set<string>();
+        set.add(k);
+        owners.set(l, set);
+      }
+    }
+    const bad = new Set<string>();
+    for (const set of owners.values()) if (set.size > 1) for (const k of set) bad.add(k);
+    return bad;
+  };
+
+  // Each pass only turns shared labels into own items, so this terminates
+  // within groups.size passes; own items are unique in price_list.
+  for (let pass = 0; pass <= groups.size; pass++) {
+    const bad = collisions();
+    const fixable = [...bad].filter((k) => shared.get(k) != null);
+    if (fixable.length === 0) break;
+    for (const k of fixable) shared.set(k, null);
+  }
+  const remaining = [...collisions()].filter((k) => shared.get(k) != null);
+  if (remaining.length > 0) {
+    throw new Error(`computeFamilyLabels: ${remaining.length} shared labels still span more than one price group`);
+  }
+
+  const out = new Map<string, string>();
+  for (const [k, members] of groups) {
+    const s = shared.get(k);
+    for (const m of members) out.set(m.id, s ?? m.item);
+  }
+  return out;
+}
+
+export type RecomputeFamiliesResult = { updated: number; failed: number; changed: number; skipped?: string };
+
+export async function recomputeFamilies(opts?: { force?: boolean }): Promise<RecomputeFamiliesResult> {
   // Complete-or-throw: every price_list row, not PostgREST's 1,000-row cap.
   const { fetchAllRows } = await import("./supabase-fetch-all");
   const rows = await fetchAllRows<any>(
@@ -53,42 +144,44 @@ export async function recomputeFamilies(): Promise<{ updated: number }> {
     { label: "recomputeFamilies price_list", orderBy: [{ column: "id" }], concurrency: 4 },
   );
 
-  const groups = new Map<string, { id: string; item: string }[]>();
+  const labels = computeFamilyLabels(rows as FamilyRow[]);
+  const changed: { id: string; item_short: string }[] = [];
   for (const r of rows) {
-    const key = [
-      r.mfg ?? "",
-      r.category ?? "",
-      r.list_price ?? "",
-      r.price_l1 ?? "",
-      r.price_l2 ?? "",
-      r.price_l3 ?? "",
-      r.price_l4 ?? "",
-      r.price_l5 ?? "",
-    ].join("|");
-    const arr = groups.get(key) ?? [];
-    arr.push({ id: r.id as string, item: r.item as string });
-    groups.set(key, arr);
+    const next = labels.get(r.id as string)!;
+    if ((r.item_short ?? null) !== next) changed.push({ id: r.id as string, item_short: next });
   }
 
-  const updates: { id: string; item_short: string }[] = [];
-  for (const [, members] of groups) {
-    const items = members.map((m) => m.item);
-    const family = members.length === 1 ? items[0] : commonPrefix(items) || items[0];
-    for (const m of members) updates.push({ id: m.id, item_short: family });
+  // Change cap: a mass relabel needs an explicitly approved forced run.
+  const cap = Math.max(500, Math.floor(rows.length * 0.05));
+  if (changed.length > cap && !opts?.force) {
+    const skipped = `family relabel would change ${changed.length} of ${rows.length} rows (cap ${cap}); nothing written`;
+    console.warn(`[pricer.families] ${skipped}`);
+    return { updated: 0, failed: 0, changed: changed.length, skipped };
   }
 
-  // Apply only where it changes, in batches.
-  const byId = new Map(rows.map((r) => [r.id as string, r.item_short as string | null]));
-  const changed = updates.filter((u) => byId.get(u.id) !== u.item_short);
+  let updated = 0;
+  let failed = 0;
+  const CONCURRENCY = 25;
   for (let i = 0; i < changed.length; i += 500) {
     const batch = changed.slice(i, i + 500);
-    await Promise.all(
-      batch.map((u) =>
-        supabaseAdmin.from("price_list").update({ item_short: u.item_short }).eq("id", u.id)
-      )
-    );
+    for (let j = 0; j < batch.length; j += CONCURRENCY) {
+      const results = await Promise.all(
+        batch.slice(j, j + CONCURRENCY).map(async (u) => {
+          try {
+            const { error } = await supabaseAdmin.from("price_list").update({ item_short: u.item_short }).eq("id", u.id);
+            return !error;
+          } catch {
+            return false;
+          }
+        }),
+      );
+      for (const ok of results) ok ? updated++ : failed++;
+    }
   }
-  return { updated: changed.length };
+  if (failed > 0) {
+    throw new Error(`recomputeFamilies: ${failed} of ${changed.length} updates failed (${updated} succeeded)`);
+  }
+  return { updated, failed, changed: changed.length };
 }
 
 export async function probeImage(sku: string): Promise<"reachable" | "not_found" | "error"> {
