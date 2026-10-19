@@ -32,10 +32,7 @@ export interface CarriedField {
 function overrides(line: CarryoverLine): Override[] {
   const out: Override[] = [];
   if (line.exclusion_reason === "manual") out.push("manual_exclude");
-  else if (line.included && (line.spiff_amount === 0 || (
-    line.flags && typeof line.flags === "object" &&
-    ["return_credit", "not_invoiced", "missing_product_group"].some((key) => key in (line.flags as object))
-  ))) out.push("re_include");
+  else if (line.included) out.push("re_include");
   if (line.rep_parse_confidence === "manual") out.push("rep");
   return out;
 }
