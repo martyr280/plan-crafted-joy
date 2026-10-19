@@ -128,7 +128,7 @@ const QUARTERS: Array<{ label: string; from: string; toExclusive: string }> = ((
 })();
 
 // Client-side complete-or-throw pager (the server helper is server-only).
-async function pageAll<T>(
+export async function pageAll<T>(
   q: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any; count: number | null }>,
 ): Promise<T[]> {
   const PAGE = 1000;
@@ -142,7 +142,8 @@ async function pageAll<T>(
     out.push(...rows);
     if (rows.length < PAGE || (total !== null && out.length >= total)) break;
   }
-  if (total !== null && out.length !== total) {
+  if (total === null) throw new Error("no exact row count returned — aborting to avoid a truncated result");
+  if (out.length !== total) {
     throw new Error(`fetched ${out.length} of ${total} rows`);
   }
   return out;
@@ -344,6 +345,17 @@ function SpiffPage() {
 
   async function updateLine(lineId: string, patch: Partial<Line>) {
     if (isLocked || !currentRunId) return;
+    if (patch.included !== undefined) {
+      const line = lines.find((l) => l.id === lineId);
+      if (!line) return;
+      const flags = { ...line.flags, ...patch.flags };
+      if (patch.included && !line.included) flags.manual_include = true;
+      if (!patch.included) {
+        delete flags.manual_include;
+        patch.exclusion_reason = "manual";
+      }
+      patch = { ...patch, flags };
+    }
     const { error } = await supabase.from("spiff_run_lines").update(patch).eq("id", lineId);
     if (error) {
       toast.error(error.message);
@@ -601,15 +613,15 @@ function SpiffPage() {
         <>
         <ExclusionRulesCard totals={currentRun.totals} />
         {currentRun.totals?.carryover?.unmatched?.length > 0 && dismissedCarryoverRun !== currentRun.id && (
-          <section role="alert" className="border border-warning rounded-md p-3 text-sm space-y-2">
+          <section role="status" aria-live="polite" className="border border-warning rounded-md p-3 text-sm space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium text-warning-text">Manual edits could not be matched to P21</span>
               <Button variant="ghost" size="sm" onClick={() => setDismissedCarryoverRun(currentRun.id)}>Dismiss</Button>
             </div>
             <ul className="max-h-48 overflow-auto space-y-1">
-              {currentRun.totals.carryover.unmatched.map((edit: { line_key: string; customer_id: string | null; order_no: string | null; item_id: string | null; override: string }, index: number) => (
+              {currentRun.totals.carryover.unmatched.map((edit: { line_key: string; customer_id: string | null; order_no: string | null; item_id: string | null; override: string; ambiguous?: boolean }, index: number) => (
                 <li key={`${edit.line_key}-${edit.override}-${index}`} className="break-words">
-                  Customer {edit.customer_id ?? "—"} · Order {edit.order_no ?? "—"} · Item {edit.item_id ?? "—"} · {edit.override}
+                  Customer {edit.customer_id ?? "—"} · Order {edit.order_no ?? "—"} · Item {edit.item_id ?? "—"} · {edit.override}{edit.ambiguous ? " · ambiguous" : ""}
                 </li>
               ))}
             </ul>
