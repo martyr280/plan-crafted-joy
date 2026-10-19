@@ -325,11 +325,12 @@ export async function generateSpiffRunCore(opts: {
   dateTo: string;   // YYYY-MM-DD (EXCLUSIVE)
   userId: string;
 }): Promise<{ runId: string; programsProcessed: number; errors: Record<string, string>; carried: CarriedCounts; unmatched: UnmatchedEdit[] }> {
-  const { data: programs } = await supabaseAdmin
+  const { data: programs, error: programsError } = await supabaseAdmin
     .from("spiff_programs")
     .select("*")
     .eq("active", true)
     .order("customer_name");
+  if (programsError) throw new Error(programsError.message);
   const progs = (programs ?? []) as Program[];
 
   const { id: runId, isNew, snapshot } = await findOrCreateDraftRun(opts);
@@ -576,9 +577,11 @@ export async function generateSpiffRunCore(opts: {
   const customerIds = progs.map((p) => p.customer_id);
   const aging = await fetchAging(customerIds);
 
-  await supabaseAdmin
+  const { error: totalsError } = await supabaseAdmin
     .from("spiff_runs")
     .update({
+      date_from: opts.dateFrom,
+      date_to: opts.dateTo,
       totals: {
         carryover: { snapshot_overrides: carryover.snapshot_overrides, carried: carryover.carried, unmatched: carryover.unmatched },
         per_customer: perCustomerSummary,
@@ -592,6 +595,7 @@ export async function generateSpiffRunCore(opts: {
       },
     })
     .eq("id", runId);
+  if (totalsError) throw new Error(totalsError.message);
 
   await supabaseAdmin.from("activity_events").insert({
     event_type: "spiff.generated",

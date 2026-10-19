@@ -15,7 +15,7 @@ export interface CarryoverLine extends LineIdentity {
 }
 export type Override = "manual_exclude" | "re_include" | "rep";
 export type CarriedCounts = Record<Override, number>;
-export interface UnmatchedEdit {
+export type UnmatchedEdit = {
   line_key: string;
   customer_id: string | null;
   order_no: string | null;
@@ -29,10 +29,16 @@ export interface CarriedField {
   new_value: string | null;
 }
 
-function overrides(line: CarryoverLine): Override[] {
+function overrides(line: CarryoverLine, fresh?: CarryoverLine): Override[] {
   const out: Override[] = [];
   if (line.exclusion_reason === "manual") out.push("manual_exclude");
-  else if (line.included) out.push("re_include");
+  // Matched re-inclusion is exactly old=true/fresh=false. For absent keys,
+  // zero computed amount or exclusion flags identify retained re-inclusions;
+  // an ordinary included payable line is not a manual override.
+  else if (line.included && (fresh ? !fresh.included : line.spiff_amount === 0 || (
+    line.flags && typeof line.flags === "object" &&
+    ["return_credit", "not_invoiced", "missing_product_group"].some((key) => key in (line.flags as object))
+  ))) out.push("re_include");
   if (line.rep_parse_confidence === "manual") out.push("rep");
   return out;
 }
@@ -68,9 +74,9 @@ export function applyCarryover<T extends CarryoverLine>(snapshot: CarryoverLine[
   for (const [key, indices] of grouped(snapshot)) {
     indices.forEach((oldIndex, ordinal) => {
       const old = snapshot[oldIndex];
-      const types = overrides(old);
-      snapshot_overrides += types.length;
       const newIndex = newGroups.get(key)?.[ordinal];
+      const types = overrides(old, newIndex === undefined ? undefined : fresh[newIndex]);
+      snapshot_overrides += types.length;
       if (newIndex === undefined) {
         for (const override of types) unmatched.push({
           line_key: key, customer_id: old.customer_id ?? null,
