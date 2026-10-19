@@ -66,14 +66,13 @@ export function buildSummaryExclusionRows(rules: SummaryRule[], lines: SummaryLi
   return rows;
 }
 
-const RESERVED = new Set(["history", "summary", "empty"]);
-
-/** Excel-safe, unique (case-insensitive), ≤31 chars; appends ~2, ~3… on collision. */
+/** Excel-safe, unique (case-insensitive, against `taken`), ≤31 chars; appends ~2, ~3… on
+ *  collision; never empty, never the Excel-reserved "History". Seed `taken` with "summary". */
 export function uniqueSheetName(raw: string, taken: Set<string>): string {
   let base = String(raw ?? "").replace(/[\\/?*[\]:]/g, "_").slice(0, 31).replace(/^'+|'+$/g, "");
   if (base === "" || base.toLowerCase() === "history") base = base === "" ? "Sheet" : "History_";
   let name = base;
-  for (let n = 2; taken.has(name.toLowerCase()) || (RESERVED.has(name.toLowerCase()) && name.toLowerCase() === "history"); n++) {
+  for (let n = 2; taken.has(name.toLowerCase()); n++) {
     const suffix = `~${n}`;
     name = base.slice(0, 31 - suffix.length).replace(/'+$/g, "") + suffix;
   }

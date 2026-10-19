@@ -2,6 +2,7 @@
 // "Q1 SPIFF 2026.xlsx" format AP is used to. One worksheet per customer.
 
 import ExcelJS from "exceljs";
+import { buildSummaryExclusionRows, uniqueSheetName } from "./workbook-summary";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { fetchAllRunChecks, fetchAllRunLines } from "./fetch-all.server";
 
@@ -82,10 +83,11 @@ function addCustomerSheet(
   program: Program,
   lines: Line[],
   checks: Check[],
-  quarterLabel: string
+  quarterLabel: string,
+  takenSheetNames: Set<string>,
 ) {
-  // Sheet name = customer_id (Excel max 31 chars, no special chars)
-  const sheetName = String(program.customer_id).replace(/[\\\/\?\*\[\]:]/g, "_").slice(0, 31);
+  // Sheet name = customer_id, Excel-safe and unique within the workbook.
+  const sheetName = uniqueSheetName(String(program.customer_id), takenSheetNames);
   const ws = wb.addWorksheet(sheetName);
 
   // Column widths
@@ -292,26 +294,18 @@ function addSummarySheet(wb: ExcelJS.Workbook, run: RunRow, lines: Line[], sheet
 
   ws.getRow(3).values = ["#", "Rule", "Excluded"];
   ws.getRow(3).font = { bold: true };
+  void counts;
 
+  const included = lines.filter((l) => l.included).length;
   let r = 4;
-  rules.forEach((rule, i) => {
-    const key =
-      rule.code === "invoiced_only" ? "not_invoiced"
-      : rule.code === "no_returns_credits" ? "return_credit"
-      : rule.code === "no_quotes" ? "quote"
-      : rule.code === "no_cancelled" ? "cancelled"
-      : rule.code === "no_samples" ? "sample"
-      : rule.code === "no_catalogs" ? "catalog"
-      : rule.code;
-    const val = rule.code === "quarter_basis_invoice_date" ? "n/a (basis rule)" : Number(counts[key] ?? 0);
-    ws.getRow(r).values = [i + 1, rule.label, val];
+  // Every excluded line lands in exactly one row; rows sum to Total excluded.
+  buildSummaryExclusionRows(rules, lines).forEach((row, i, all) => {
+    const isTotal = row.key === "total";
+    ws.getRow(r).values = [isTotal ? "" : i + 1, row.label, row.value];
+    if (row.bold) ws.getRow(r).font = { bold: true };
+    void all;
     r++;
   });
-  if ((counts.manual ?? 0) > 0) {
-    ws.getRow(r).values = [rules.length + 1, "Manually excluded", counts.manual];
-    r++;
-  }
-  const included = lines.filter((l) => l.included).length;
   r++;
   ws.getCell(`B${r}`).value = `Lines in run: ${lines.length} · Included: ${included} · Customer sheets: ${sheetCount}`;
   ws.getCell(`B${r}`).font = { bold: true };
@@ -353,9 +347,10 @@ export async function buildSpiffWorkbook(
 
   // One sheet per program (ordered by customer_name), even with zero lines —
   // addCustomerSheet prints "(No included lines)" for empty ones.
+  const taken = new Set<string>(["summary", "empty"]);
   for (const p of programs) {
     const pl = lines.filter((l) => l.program_id === p.id);
-    addCustomerSheet(wb, p, pl, checks, run.quarter_label);
+    addCustomerSheet(wb, p, pl, checks, run.quarter_label, taken);
   }
 
 
