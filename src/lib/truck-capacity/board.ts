@@ -138,13 +138,16 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
   const windowEnd = addDaysISO(todayUtc, HORIZON_DAYS);
 
   // Latest P21 demand per (route, ship_date) inside the board window.
-  const { data: demand } = await supabaseAdmin
-    .from("truck_capacity_p21_demand")
-    .select("route_id, ship_date, projected_capacity_frac, snapshot_at")
-    .gte("ship_date", addDaysISO(todayUtc, -2))
-    .lte("ship_date", windowEnd)
-    .order("snapshot_at", { ascending: false })
-    .limit(20000);
+  const { fetchAllRows } = await import("../supabase-fetch-all");
+  const demand = await fetchAllRows<any>(
+    () =>
+      supabaseAdmin
+        .from("truck_capacity_p21_demand")
+        .select("route_id, ship_date, projected_capacity_frac, snapshot_at", { count: "exact" })
+        .gte("ship_date", addDaysISO(todayUtc, -2))
+        .lte("ship_date", windowEnd) as any,
+    { label: "board truck_capacity_p21_demand", orderBy: [{ column: "snapshot_at", ascending: false }, { column: "id" }] },
+  );
   const demandLatest = new Map<string, number>();
   let snapshotAt: string | null = null;
   for (const d of demand ?? []) {
@@ -154,14 +157,16 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
   }
 
   // Most recent actual run per route.
-  const { data: runs } = await supabaseAdmin
-    .from("truck_capacity_runs")
-    .select("route_id, run_date, capacity_frac, driver")
-    // Skip no-run markers so "last run" never shows a blank day as 0%.
-    .not("capacity_frac", "is", null)
-    .gte("run_date", addDaysISO(todayUtc, -120))
-    .order("run_date", { ascending: false })
-    .limit(20000);
+  const runs = await fetchAllRows<any>(
+    () =>
+      supabaseAdmin
+        .from("truck_capacity_runs")
+        .select("route_id, run_date, capacity_frac, driver", { count: "exact" })
+        // Skip no-run markers so "last run" never shows a blank day as 0%.
+        .not("capacity_frac", "is", null)
+        .gte("run_date", addDaysISO(todayUtc, -120)) as any,
+    { label: "board truck_capacity_runs", orderBy: [{ column: "run_date", ascending: false }, { column: "id" }] },
+  );
   const lastRun = new Map<string, { date: string; capacity_frac: number; driver: string | null }>();
   for (const r of runs ?? []) {
     if (!routeIds.includes(r.route_id)) continue;
