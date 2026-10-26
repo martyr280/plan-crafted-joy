@@ -1,14 +1,14 @@
 /**
- * Order Mail classifier — a line-for-line port of Email Archiver v4.5.2
+ * Order Mail classifier — a line-for-line port of Email Archiver v4.5.3
  * (archiver-lib.ps1: Classify-Candidate, Get-BodyOriginators,
  * Resolve-AddressToCustomer, Get-SplitDomains, context votes, Find-MultiRoute,
- * New-FileStem). Pure: no I/O, no clock, no randomness.
+ * New-FileStem, Get-InternalDomains). Pure: no I/O, no clock, no randomness.
  *
  * WHY a literal port: the desktop engine is what NDI's teams trust today. The
  * web app must make the same decision on the same input before anything new
- * is layered on. Parity is proven by scripts/archiver-parity (differential run
- * against the PowerShell engine). Change behaviour here only with a parity
- * re-run and a note in docs/archiver-parity.md.
+ * is layered on. Parity is proven by a differential run against the
+ * PowerShell engine (docs/archiver-parity.md). Change behaviour here only with
+ * a parity re-run and a note in docs/archiver-parity.md.
  *
  * PowerShell semantics preserved deliberately:
  *  - hashtable lookups are case-insensitive (customer keys, learned keys);
@@ -17,7 +17,8 @@
  */
 
 export type MatchMode = "contains" | "word" | "regex";
-export type Scope = "any" | "subject" | "body" | "attachments";
+/** v4.5.3: "sender" = the sender's DISPLAY NAME (QuickBooks mail carries the vendor's name). */
+export type Scope = "any" | "subject" | "body" | "attachments" | "sender";
 
 export interface Candidate {
   /** Stable id of the message (Graph immutable id; EntryID on desktop). */
@@ -78,6 +79,8 @@ export interface ClassifyConfig {
   threshold: number; // confidence_threshold, 0.7 in production
   unroutedFolder: string; // "Unrouted"
   ignoredDomains: string[]; // ignored_domains (blank in production)
+  /** v4.5.3 Get-InternalDomains: own_domains (desktop internal_domains, default ndiof.com) + ignored_domains. */
+  internalDomains: string[];
   neverContext: string[]; // built-in list + never_context_domains
   margin: number; // context_margin, 1.35
   externalContextFloor: number; // external_context_floor, 0.85
@@ -85,6 +88,8 @@ export interface ClassifyConfig {
   stampMode: "suffix" | "prefix" | "none";
   stemMax: number; // filename_max_chars, 40..200
   skipInternalReplies: boolean;
+  /** v4.5.3 ignore_internal_replies (default true). */
+  ignoreInternalReplies: boolean;
   contentOnly: string[]; // content_only_senders
   autoIgnore: { patterns: string[]; folder: string } | null;
 }
@@ -218,6 +223,8 @@ function ruleHaystack(c: Candidate, scope: string): string {
       return String(c.body ?? "").toLowerCase();
     case "attachments":
       return (c.attachmentNames ?? []).join(" ").toLowerCase();
+    case "sender": // v4.5.3: display name, not the address
+      return String(c.senderName ?? "").trim().toLowerCase();
     default:
       return `${c.subject ?? ""} ${c.body ?? ""} ${(c.attachmentNames ?? []).join(" ")}`.toLowerCase();
   }
