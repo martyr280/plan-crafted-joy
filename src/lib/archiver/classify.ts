@@ -419,9 +419,26 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
   const senderAddr = String(c.senderAddress ?? "").trim().toLowerCase();
   const senderDomain = senderAddr.includes("@") ? senderAddr.split("@").pop()! : "";
   const senderIgnored = testDomainInList(senderDomain, cfg.ignoredDomains);
+  // v4.5.3: one of our own people (internal_domains), whether or not the domain
+  // is also on ignored_domains. See Get-InternalDomains.
+  const internalAll = [...(cfg.internalDomains ?? []), ...cfg.ignoredDomains].filter(Boolean);
+  const senderInternal = senderIgnored || testDomainInList(senderDomain, internalAll);
   const contentOnlySender = !!senderAddr && cfg.contentOnly.map((x) => x.toLowerCase()).includes(senderAddr);
   const stem = () => newFileStem(c, cfg.stampMode, cfg.stemMax);
   const base = { id: c.id, alsoCustomers: [] as string[], alsoDestinations: [] as string[] };
+
+  // ---- v4.5.3 ignore internal replies
+  // A colleague's RE: in a thread is not new work for a team queue. Filed to the
+  // Ignored folder like auto-ignore, never learned. Forwards (FW:) still route.
+  // A system sender (content_only_senders) is not a colleague.
+  if (cfg.ignoreInternalReplies && senderInternal && !contentOnlySender) {
+    const subjIR = String(c.subject ?? "").trim();
+    if (/^\s*(re|r|aw|sv|antw)\s*:/i.test(subjIR) && !/^\s*(fw|fwd|wg|tr)\s*:/i.test(subjIR)) {
+      const folderIR = cfg.autoIgnore && String(cfg.autoIgnore.folder ?? "") ? String(cfg.autoIgnore.folder) : "Ignored";
+      return { ...base, customerKey: "IGNORED", confidence: 1.0, destinationRelPath: folderIR, stem: stem(),
+        matchSource: "internal-reply", evidence: `reply from ${senderAddr}`, ambiguity: "", ruleId: "" };
+    }
+  }
 
   // ---- v4.4.3 skip internal replies
   if (cfg.skipInternalReplies && senderIgnored) {
