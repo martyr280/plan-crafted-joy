@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { chicagoDayBounds, isOwnAddress, previewPhrase, validateContentRule, validateInternalRoute, validateMultiRoute } from "../rules";
+import { chicagoDayBounds, domainListWarnings, isOwnAddress, previewPhrase, validateContentRule, validateInternalRoute, validateMultiRoute } from "../rules";
 
 vi.stubGlobal("fetch", vi.fn(() => { throw new Error("Network disabled in archiver tests"); }));
 const TEAMS = new Set(["TEAMTEXASLAMS", "E2G", "MIDWESTALPAN", "TEAMFLORIDAEASTC"]);
@@ -59,5 +59,14 @@ describe("helpers", () => {
   it("computes Chicago day bounds across DST", () => {
     expect(chicagoDayBounds(new Date("2026-10-08T15:00:00Z"))).toEqual({ start: "2026-10-08T05:00:00.000Z", end: "2026-10-09T05:00:00.000Z" });
     expect(chicagoDayBounds(new Date("2026-01-15T03:00:00Z"))).toEqual({ start: "2026-01-14T06:00:00.000Z", end: "2026-01-15T06:00:00.000Z" });
+  });
+});
+
+describe("v4.5.3 domain-list warnings", () => {
+  it("flags address-shaped entries in every domain list and nothing else", () => {
+    const w = domainListWarnings({ never_context_domains: "quickbooks@notification.intuit.com;fedex.com", excluded_domains: "a@b.com",
+      ignored_domains: "", multi_territory_domains: "azorinc.com", own_domains: "ndiof.com", content_only_senders: "ndiconnect@ndiof.com" });
+    expect(w.map((x) => x.split(":")[0])).toEqual(["never_context_domains", "excluded_domains"]);
+    expect(domainListWarnings({ own_domains: "x@ndiof.com" })[0]).toMatch(/^own_domains: 'x@ndiof.com' is an email address/);
   });
 });
