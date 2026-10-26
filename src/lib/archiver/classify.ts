@@ -654,7 +654,7 @@ export interface FiledResult {
 }
 
 /**
- * Update-LearnedFromResults (v4.5.2). Mutates `learned`; returns the number of
+ * Update-LearnedFromResults (v4.5.3). Mutates `learned`; returns the number of
  * emails that taught something. `now` is passed in to keep the module pure.
  */
 export function updateLearnedFromResults(
@@ -662,6 +662,8 @@ export function updateLearnedFromResults(
   results: FiledResult[],
   opts: {
     ignoredDomains: string[];
+    /** v4.5.3: colleagues are taught by a person, never auto-learned. */
+    internalDomains?: string[];
     minConf: number; // learn_min_confidence, 0.9
     neverLearn: string[]; // = never-context list on desktop
     multiTerritory: string[];
@@ -678,13 +680,14 @@ export function updateLearnedFromResults(
     if (!ck || ck === "UNROUTED" || ck === "IGNORED" || ck === "SKIPPED") continue;
     const src = String(r.matchSource ?? "");
     if (src.startsWith("context-") || src.startsWith("body-")) continue;
-    if (src === "multi-route" || src === "auto-ignore") continue;
+    if (src === "multi-route" || src === "auto-ignore" || src === "internal-reply") continue;
     if (Number(r.confidence) < opts.minConf) continue;
     const addr = String(r.senderAddress ?? "").trim().toLowerCase();
     if (!addr) continue;
     const dom = addr.includes("@") ? addr.split("@").pop()! : "";
     if (opts.contentOnly.map((x) => x.toLowerCase()).includes(addr)) continue;
     if (dom && testDomainInList(dom, opts.ignoredDomains)) continue;
+    if (dom && testDomainInList(dom, opts.internalDomains ?? [])) continue; // v4.5.3
     if (dom && testDomainInList(dom, opts.neverLearn)) continue;
     const cur = learnedLookup(learned.senders, addr);
     if (cur && ["taught", "corrected"].includes(String(cur.source)) && cur.customer.toLowerCase() !== ck.toLowerCase()) continue;
