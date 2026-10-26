@@ -559,7 +559,10 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
     const split = getSplitDomains(learned);
     if (senderMulti) {
       if (!best) ambiguous = `'${senderDomain}' is a multi-territory domain - only a known person or the message content can decide`;
-    } else if (senderDomain && senderDomain !== ambiguousDomain && !split.has(senderDomain)) {
+    }
+    // v4.5.3: our own domain never answers for a person - only that person's
+    // own learned entry (above), a route, or the content can.
+    else if (senderDomain && !senderInternal && senderDomain !== ambiguousDomain && !split.has(senderDomain)) {
       const ld = learnedLookup(learned.domains, senderDomain);
       if (ld && byKey.has(ld.customer) && 0.85 > bestScore) {
         best = byKey.get(ld.customer)!;
@@ -567,7 +570,7 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
         source = "learned-domain";
         evidence = senderDomain;
       }
-    } else if (senderDomain && split.has(senderDomain) && !best) {
+    } else if (senderDomain && !senderInternal && split.has(senderDomain) && !best) {
       ambiguous = `learned senders at '${senderDomain}' split across ${split.get(senderDomain)!.join(", ")} - no domain-level answer exists`;
     }
   } else if (senderMulti && !best) {
@@ -580,7 +583,9 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
     for (const o of getBodyOriginators(String(c.body ?? ""))) {
       if (o.addr === senderAddr) continue;
       const d2 = o.addr.split("@").pop()!;
-      if (testDomainInList(d2, cfg.ignoredDomains)) continue;
+      // other internal people in the thread (v4.5.3: internal_domains too -
+      // a Texas colleague quoted in Tracy's reply is not a Texas customer)
+      if (testDomainInList(d2, internalAll)) continue;
       if (testDomainInList(d2, cfg.neverContext)) continue;
       const r = resolveAddressToCustomer(o.addr, mapping, learned, byKey, cfg.multiTerritory);
       if (!r) continue;
@@ -598,10 +603,10 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
       const top = scored[0];
       const runner = scored.length > 1 ? scored[1].score : 0.0;
       let clear = runner <= 0 || top.score >= runner * cfg.margin;
-      if (!senderIgnored && top.score < cfg.externalContextFloor) {
+      if (!senderInternal && top.score < cfg.externalContextFloor) {
         ambiguous = `body names ${top.key} (${top.v.ev}) but only weakly - external sender, below the ${cfg.externalContextFloor} floor`;
         clear = false;
-      } else if (senderIgnored && !routed && top.score < cfg.externalContextFloor) {
+      } else if (senderInternal && !routed && top.score < cfg.externalContextFloor) {
         ambiguous = `internal sender ${senderAddr} has no route and the message only weakly names ${top.key} (${top.v.ev}) - route this address to its team`;
         clear = false;
       }
