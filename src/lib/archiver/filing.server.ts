@@ -223,7 +223,7 @@ async function maybePromote(domain: string, settings: Record<string, unknown>) {
   const mapping = (teams ?? []).map((t: any) => ({ customerKey: t.key, displayName: t.display_name, folderPath: t.folder_path,
     senderDomains: [...(t.sender_domains ?? [])], keywords: t.keywords ?? [] }));
   const r = promoteLearnedDomains(store, mapping, { promoteAfter: Number(settings.learn_promote_after ?? 3) || 3,
-    ignoredDomains: cfg.ignoredDomains, neverLearn: cfg.neverContext, multiTerritory: cfg.multiTerritory });
+    ignoredDomains: cfg.ignoredDomains, internalDomains: cfg.internalDomains, neverLearn: cfg.neverContext, multiTerritory: cfg.multiTerritory });
   for (const p of r.promoted) {
     const row = mapping.find((m: any) => m.customerKey === p.customer)!;
     await db.from("archiver_teams").update({ sender_domains: row.senderDomains, updated_at: new Date().toISOString() }).eq("key", p.customer);
@@ -237,7 +237,7 @@ async function applyAutoLearning(msg: any, settings: Record<string, unknown>, no
   const addr = String(msg.sender_address ?? "").toLowerCase();
   const { store, domain } = await loadLearnedFor(addr);
   const r = learnFromFiling(store, { senderAddress: addr, customerKey: msg.team_key, confidence: Number(msg.confidence), matchSource: msg.route_source },
-    { ignoredDomains: cfg.ignoredDomains, neverLearn: cfg.neverContext, multiTerritory: cfg.multiTerritory, contentOnly: cfg.contentOnly,
+    { ignoredDomains: cfg.ignoredDomains, internalDomains: cfg.internalDomains, neverLearn: cfg.neverContext, multiTerritory: cfg.multiTerritory, contentOnly: cfg.contentOnly,
       now: now.toISOString().slice(0, 19), runId: `web-${now.toISOString().slice(0, 10)}` });
   if (!r.changed) return false;
   await saveLearned(store);
@@ -291,7 +291,9 @@ export async function performAction(messageId: string, act: HumanAction | { acti
     const cfg = buildClassifyConfig(settings);
     const { store, domain } = await loadLearnedFor(String(msg.sender_address ?? "").toLowerCase());
     learned = learnFromHuman(store, msg.sender_address, act.toTeam, fromTeam === "UNROUTED" ? "taught" : "corrected",
-      { contentOnly: cfg.contentOnly, ignoredDomains: cfg.ignoredDomains, multiTerritory: cfg.multiTerritory, freeMail: isFreeMailDomain,
+      // v4.5.3: Wrong team? on a colleague's email moves it only - the colleague is not pinned.
+      { contentOnly: cfg.contentOnly, ignoredDomains: cfg.ignoredDomains, internalDomains: cfg.internalDomains, internalPerson: "none",
+        multiTerritory: cfg.multiTerritory, freeMail: isFreeMailDomain,
         now: now.toISOString().slice(0, 19) });
     if (learned.length) { await saveLearned(store); await maybePromote(domain, settings); }
   }

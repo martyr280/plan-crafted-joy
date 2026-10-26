@@ -773,6 +773,9 @@ export async function teachSender(p: Ports, a: Actor, i: { address: string; team
   const touched = learnFromHuman(store, addr, i.team, "taught", {
     contentOnly: cfg.contentOnly,
     ignoredDomains: cfg.ignoredDomains,
+    // v4.5.3: a colleague is taught as a PERSON (sender row only); the internal domain never.
+    internalDomains: cfg.internalDomains,
+    internalPerson: "sender",
     multiTerritory: cfg.multiTerritory,
     freeMail: isFreeMailDomain,
     now: (p.now?.() ?? new Date()).toISOString().slice(0, 19),
