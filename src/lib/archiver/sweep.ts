@@ -1,6 +1,6 @@
 /**
  * Order Mail sweep core. Reads new mail from a watched folder through Graph
- * delta, classifies each email with the v4.5.2 engine and records the
+ * delta, classifies each email with the v4.5.3 engine and records the
  * decision. Storage, Graph and the clock are injected (see SweepStore and
  * GraphClient) so this file is testable offline and has no Supabase import.
  *
@@ -13,7 +13,7 @@ import { buildClassifyConfig, classify, isExcluded, type Decision, type Knowledg
 import { ledgerKey } from "./import-desktop";
 import { isProcessedInOutlook, toChicagoLocal, type GraphClient, type GraphMessageMeta } from "./graph";
 
-export const ENGINE_VERSION = "web-1.0 (v4.5.2 parity)";
+export const ENGINE_VERSION = "web-1.1 (v4.5.3 parity)";
 
 export interface MailboxRow {
   id: string;
