@@ -141,6 +141,13 @@
       "when": 1792422078825,
       "tag": "0019_spiff_atomic_replace_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793025773432,
+      "tag": "0020_archiver_sender_scope_v453",
+      "breakpoints": true
     }
   ]
 }
