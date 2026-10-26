@@ -1,14 +1,14 @@
 /**
- * Order Mail classifier — a line-for-line port of Email Archiver v4.5.2
+ * Order Mail classifier — a line-for-line port of Email Archiver v4.5.3
  * (archiver-lib.ps1: Classify-Candidate, Get-BodyOriginators,
  * Resolve-AddressToCustomer, Get-SplitDomains, context votes, Find-MultiRoute,
- * New-FileStem). Pure: no I/O, no clock, no randomness.
+ * New-FileStem, Get-InternalDomains). Pure: no I/O, no clock, no randomness.
  *
  * WHY a literal port: the desktop engine is what NDI's teams trust today. The
  * web app must make the same decision on the same input before anything new
- * is layered on. Parity is proven by scripts/archiver-parity (differential run
- * against the PowerShell engine). Change behaviour here only with a parity
- * re-run and a note in docs/archiver-parity.md.
+ * is layered on. Parity is proven by a differential run against the
+ * PowerShell engine (docs/archiver-parity.md). Change behaviour here only with
+ * a parity re-run and a note in docs/archiver-parity.md.
  *
  * PowerShell semantics preserved deliberately:
  *  - hashtable lookups are case-insensitive (customer keys, learned keys);
@@ -17,7 +17,8 @@
  */
 
 export type MatchMode = "contains" | "word" | "regex";
-export type Scope = "any" | "subject" | "body" | "attachments";
+/** v4.5.3: "sender" = the sender's DISPLAY NAME (QuickBooks mail carries the vendor's name). */
+export type Scope = "any" | "subject" | "body" | "attachments" | "sender";
 
 export interface Candidate {
   /** Stable id of the message (Graph immutable id; EntryID on desktop). */
@@ -78,6 +79,8 @@ export interface ClassifyConfig {
   threshold: number; // confidence_threshold, 0.7 in production
   unroutedFolder: string; // "Unrouted"
   ignoredDomains: string[]; // ignored_domains (blank in production)
+  /** v4.5.3 Get-InternalDomains: own_domains (desktop internal_domains, default ndiof.com) + ignored_domains. */
+  internalDomains: string[];
   neverContext: string[]; // built-in list + never_context_domains
   margin: number; // context_margin, 1.35
   externalContextFloor: number; // external_context_floor, 0.85
@@ -85,6 +88,8 @@ export interface ClassifyConfig {
   stampMode: "suffix" | "prefix" | "none";
   stemMax: number; // filename_max_chars, 40..200
   skipInternalReplies: boolean;
+  /** v4.5.3 ignore_internal_replies (default true). */
+  ignoreInternalReplies: boolean;
   contentOnly: string[]; // content_only_senders
   autoIgnore: { patterns: string[]; folder: string } | null;
 }
@@ -218,6 +223,8 @@ function ruleHaystack(c: Candidate, scope: string): string {
       return String(c.body ?? "").toLowerCase();
     case "attachments":
       return (c.attachmentNames ?? []).join(" ").toLowerCase();
+    case "sender": // v4.5.3: display name, not the address
+      return String(c.senderName ?? "").trim().toLowerCase();
     default:
       return `${c.subject ?? ""} ${c.body ?? ""} ${(c.attachmentNames ?? []).join(" ")}`.toLowerCase();
   }
@@ -412,9 +419,26 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
   const senderAddr = String(c.senderAddress ?? "").trim().toLowerCase();
   const senderDomain = senderAddr.includes("@") ? senderAddr.split("@").pop()! : "";
   const senderIgnored = testDomainInList(senderDomain, cfg.ignoredDomains);
+  // v4.5.3: one of our own people (internal_domains), whether or not the domain
+  // is also on ignored_domains. See Get-InternalDomains.
+  const internalAll = [...(cfg.internalDomains ?? []), ...cfg.ignoredDomains].filter(Boolean);
+  const senderInternal = senderIgnored || testDomainInList(senderDomain, internalAll);
   const contentOnlySender = !!senderAddr && cfg.contentOnly.map((x) => x.toLowerCase()).includes(senderAddr);
   const stem = () => newFileStem(c, cfg.stampMode, cfg.stemMax);
   const base = { id: c.id, alsoCustomers: [] as string[], alsoDestinations: [] as string[] };
+
+  // ---- v4.5.3 ignore internal replies
+  // A colleague's RE: in a thread is not new work for a team queue. Filed to the
+  // Ignored folder like auto-ignore, never learned. Forwards (FW:) still route.
+  // A system sender (content_only_senders) is not a colleague.
+  if (cfg.ignoreInternalReplies && senderInternal && !contentOnlySender) {
+    const subjIR = String(c.subject ?? "").trim();
+    if (/^\s*(re|r|aw|sv|antw)\s*:/i.test(subjIR) && !/^\s*(fw|fwd|wg|tr)\s*:/i.test(subjIR)) {
+      const folderIR = cfg.autoIgnore && String(cfg.autoIgnore.folder ?? "") ? String(cfg.autoIgnore.folder) : "Ignored";
+      return { ...base, customerKey: "IGNORED", confidence: 1.0, destinationRelPath: folderIR, stem: stem(),
+        matchSource: "internal-reply", evidence: `reply from ${senderAddr}`, ambiguity: "", ruleId: "" };
+    }
+  }
 
   // ---- v4.4.3 skip internal replies
   if (cfg.skipInternalReplies && senderIgnored) {
@@ -535,7 +559,10 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
     const split = getSplitDomains(learned);
     if (senderMulti) {
       if (!best) ambiguous = `'${senderDomain}' is a multi-territory domain - only a known person or the message content can decide`;
-    } else if (senderDomain && senderDomain !== ambiguousDomain && !split.has(senderDomain)) {
+    }
+    // v4.5.3: our own domain never answers for a person - only that person's
+    // own learned entry (above), a route, or the content can.
+    else if (senderDomain && !senderInternal && senderDomain !== ambiguousDomain && !split.has(senderDomain)) {
       const ld = learnedLookup(learned.domains, senderDomain);
       if (ld && byKey.has(ld.customer) && 0.85 > bestScore) {
         best = byKey.get(ld.customer)!;
@@ -543,7 +570,7 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
         source = "learned-domain";
         evidence = senderDomain;
       }
-    } else if (senderDomain && split.has(senderDomain) && !best) {
+    } else if (senderDomain && !senderInternal && split.has(senderDomain) && !best) {
       ambiguous = `learned senders at '${senderDomain}' split across ${split.get(senderDomain)!.join(", ")} - no domain-level answer exists`;
     }
   } else if (senderMulti && !best) {
@@ -556,7 +583,9 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
     for (const o of getBodyOriginators(String(c.body ?? ""))) {
       if (o.addr === senderAddr) continue;
       const d2 = o.addr.split("@").pop()!;
-      if (testDomainInList(d2, cfg.ignoredDomains)) continue;
+      // other internal people in the thread (v4.5.3: internal_domains too -
+      // a Texas colleague quoted in Tracy's reply is not a Texas customer)
+      if (testDomainInList(d2, internalAll)) continue;
       if (testDomainInList(d2, cfg.neverContext)) continue;
       const r = resolveAddressToCustomer(o.addr, mapping, learned, byKey, cfg.multiTerritory);
       if (!r) continue;
@@ -574,10 +603,10 @@ export function classify(c: Candidate, k: Knowledge, cfg: ClassifyConfig): Decis
       const top = scored[0];
       const runner = scored.length > 1 ? scored[1].score : 0.0;
       let clear = runner <= 0 || top.score >= runner * cfg.margin;
-      if (!senderIgnored && top.score < cfg.externalContextFloor) {
+      if (!senderInternal && top.score < cfg.externalContextFloor) {
         ambiguous = `body names ${top.key} (${top.v.ev}) but only weakly - external sender, below the ${cfg.externalContextFloor} floor`;
         clear = false;
-      } else if (senderIgnored && !routed && top.score < cfg.externalContextFloor) {
+      } else if (senderInternal && !routed && top.score < cfg.externalContextFloor) {
         ambiguous = `internal sender ${senderAddr} has no route and the message only weakly names ${top.key} (${top.v.ev}) - route this address to its team`;
         clear = false;
       }
@@ -625,7 +654,7 @@ export interface FiledResult {
 }
 
 /**
- * Update-LearnedFromResults (v4.5.2). Mutates `learned`; returns the number of
+ * Update-LearnedFromResults (v4.5.3). Mutates `learned`; returns the number of
  * emails that taught something. `now` is passed in to keep the module pure.
  */
 export function updateLearnedFromResults(
@@ -633,6 +662,8 @@ export function updateLearnedFromResults(
   results: FiledResult[],
   opts: {
     ignoredDomains: string[];
+    /** v4.5.3: colleagues are taught by a person, never auto-learned. */
+    internalDomains?: string[];
     minConf: number; // learn_min_confidence, 0.9
     neverLearn: string[]; // = never-context list on desktop
     multiTerritory: string[];
@@ -649,13 +680,14 @@ export function updateLearnedFromResults(
     if (!ck || ck === "UNROUTED" || ck === "IGNORED" || ck === "SKIPPED") continue;
     const src = String(r.matchSource ?? "");
     if (src.startsWith("context-") || src.startsWith("body-")) continue;
-    if (src === "multi-route" || src === "auto-ignore") continue;
+    if (src === "multi-route" || src === "auto-ignore" || src === "internal-reply") continue;
     if (Number(r.confidence) < opts.minConf) continue;
     const addr = String(r.senderAddress ?? "").trim().toLowerCase();
     if (!addr) continue;
     const dom = addr.includes("@") ? addr.split("@").pop()! : "";
     if (opts.contentOnly.map((x) => x.toLowerCase()).includes(addr)) continue;
     if (dom && testDomainInList(dom, opts.ignoredDomains)) continue;
+    if (dom && testDomainInList(dom, opts.internalDomains ?? [])) continue; // v4.5.3
     if (dom && testDomainInList(dom, opts.neverLearn)) continue;
     const cur = learnedLookup(learned.senders, addr);
     if (cur && ["taught", "corrected"].includes(String(cur.source)) && cur.customer.toLowerCase() !== ck.toLowerCase()) continue;
@@ -708,11 +740,12 @@ export function setLearnedEntry(
  * Invoke-LearnedPromotion (v4.5.2): learned domains seen `promoteAfter`+ times
  * become mapping domain rules, unless senders at that domain file to more than
  * one team. Mutates `mapping`; returns { promoted, blocked } as text lines.
+ * v4.5.3: an internal domain (Get-InternalDomains) is never promoted.
  */
 export function promoteLearnedDomains(
   learned: LearnedStore,
   mapping: MappingRow[],
-  opts: { promoteAfter: number; ignoredDomains: string[]; neverLearn: string[]; multiTerritory: string[] },
+  opts: { promoteAfter: number; ignoredDomains: string[]; internalDomains?: string[]; neverLearn: string[]; multiTerritory: string[] },
 ): { promoted: Array<{ domain: string; customer: string }>; blocked: string[] } {
   const promoteAfter = opts.promoteAfter < 1 ? 3 : opts.promoteAfter;
   const promoted: Array<{ domain: string; customer: string }> = [];
@@ -733,6 +766,7 @@ export function promoteLearnedDomains(
   for (const k of Object.keys(learned.domains)) {
     const e = learned.domains[k];
     if (testDomainInList(k, opts.ignoredDomains)) continue;
+    if (testDomainInList(k, opts.internalDomains ?? [])) continue; // v4.5.3
     if (testDomainInList(k, opts.neverLearn)) continue;
     if (testDomainInList(k, opts.multiTerritory)) continue;
     if (isFreeMailDomain(k)) continue;
@@ -754,6 +788,29 @@ export function promoteLearnedDomains(
 
 // ----------------------------------------------------- config from settings
 
+function boolSetting(v: unknown, d: boolean): boolean {
+  if (v === undefined || v === null) return d;
+  return ["true", "1", "yes", "on"].includes(String(v).toLowerCase());
+}
+
+/**
+ * Get-InternalDomains (v4.5.3). The web app's one setting is `own_domains`
+ * (the desktop's `internal_domains` is mapped onto it on import), falling back
+ * to `internal_domains`, then to ndiof.com. ignored_domains always count too.
+ *
+ * One deliberate difference: a BLANK own_domains also means ndiof.com (the
+ * desktop treats an explicit "" as none). The web Settings form always sends
+ * the field, so a blank box must not silently turn every colleague into an
+ * outside sender; it matches ownDomains() in rules.ts. Production sets
+ * internal_domains = "ndiof.com", so decisions are identical.
+ */
+export function internalDomainsFrom(s: Record<string, unknown>): string[] {
+  let own = splitList(s.own_domains);
+  if (!own.length) own = splitList(s.internal_domains);
+  if (!own.length) own = ["ndiof.com"];
+  return Array.from(new Set([...own, ...splitList(s.ignored_domains)]));
+}
+
 export function buildClassifyConfig(s: Record<string, unknown>): ClassifyConfig {
   const num = (v: unknown, d: number) => {
     const n = Number(v);
@@ -770,18 +827,19 @@ export function buildClassifyConfig(s: Record<string, unknown>): ClassifyConfig 
     .filter((p) => compileDotNetRegex(p, true) !== null);
   const folder = String(s.ignored_folder ?? "Ignored").trim() || "Ignored";
   const never = Array.from(new Set([...NEVER_CONTEXT_BUILT_IN, ...splitList(s.never_context_domains)]));
-  const sir = s.skip_internal_replies;
   return {
     threshold: num(s.confidence_threshold, 0.7),
     unroutedFolder: String(s.unrouted_folder ?? "Unrouted"),
     ignoredDomains: splitList(s.ignored_domains),
+    internalDomains: internalDomainsFrom(s),
     neverContext: never,
     margin: margin > 1 ? margin : 1.35,
     externalContextFloor: floor > 0 ? floor : 0.85,
     multiTerritory: splitList(s.multi_territory_domains),
     stampMode: (["suffix", "prefix", "none"].includes(stamp) ? stamp : "suffix") as ClassifyConfig["stampMode"],
     stemMax,
-    skipInternalReplies: sir === undefined || sir === null ? true : ["true", "1", "yes", "on"].includes(String(sir).toLowerCase()),
+    skipInternalReplies: boolSetting(s.skip_internal_replies, true),
+    ignoreInternalReplies: boolSetting(s.ignore_internal_replies, true),
     contentOnly: splitList(s.content_only_senders),
     autoIgnore: { patterns: pats, folder },
   };

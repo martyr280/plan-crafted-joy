@@ -715,7 +715,7 @@ export async function previewRule(
 ) {
   const { data, error } = await p.db
     .from("archiver_messages")
-    .select("subject, body_text, attachment_names, team_key")
+    .select("subject, body_text, attachment_names, sender_name, team_key")
     .order("received_at", { ascending: false })
     .limit(500);
   if (error) throw new Error(`mail read failed: ${error.message}`);
@@ -723,6 +723,7 @@ export async function previewRule(
     subject: m.subject ?? "",
     body: m.body_text ?? "",
     attachmentNames: m.attachment_names ?? [],
+    senderName: m.sender_name ?? "",
     team_key: m.team_key,
   }));
   return { scanned: recent.length, ...previewPhrase(rule, recent as any) };
@@ -773,6 +774,9 @@ export async function teachSender(p: Ports, a: Actor, i: { address: string; team
   const touched = learnFromHuman(store, addr, i.team, "taught", {
     contentOnly: cfg.contentOnly,
     ignoredDomains: cfg.ignoredDomains,
+    // v4.5.3: a colleague is taught as a PERSON (sender row only); the internal domain never.
+    internalDomains: cfg.internalDomains,
+    internalPerson: "sender",
     multiTerritory: cfg.multiTerritory,
     freeMail: isFreeMailDomain,
     now: (p.now?.() ?? new Date()).toISOString().slice(0, 19),
@@ -839,6 +843,7 @@ const SETTING_KEYS = new Set([
   "own_domains",
   "content_only_senders",
   "ignore_subject_patterns",
+  "ignore_internal_replies",
 ]);
 
 export function validateSettingsPatch(
@@ -850,7 +855,7 @@ export function validateSettingsPatch(
   const bool = (k: string) => {
     if (k in patch && typeof patch[k] !== "boolean") e.push(`${k} must be true or false.`);
   };
-  ["filing_enabled", "paused", "learning_enabled", "ledger_sync_enabled"].forEach(bool);
+  ["filing_enabled", "paused", "learning_enabled", "ledger_sync_enabled", "ignore_internal_replies"].forEach(bool);
   const str = (k: string) => {
     if (k in patch && typeof patch[k] !== "string") e.push(`${k} must be text.`);
   };

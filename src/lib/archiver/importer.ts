@@ -5,6 +5,8 @@
  * nothing. Used twice: now (shadow mode, from a copy) and on cutover day (from
  * the live O: folder, after the desktop service is stopped).
  */
+import { internalDomainsFrom, testDomainInList } from "./classify";
+import { domainListWarnings } from "./rules";
 import {
   ledgerKey, parseContextRules, parseInternalRoutes, parseLearned, parseLedger, parseMailNotes, parseMappingCsv,
   parseMultiRoutes, pickImportedSettings,
@@ -37,7 +39,21 @@ export function noteKeyToLedgerKey(k: string): string {
   return s; // received|subject fallback key — kept verbatim
 }
 
+/**
+ * v4.5.3: a learned DOMAIN row for one of our own domains (own_domains /
+ * internal_domains + ignored_domains) or any Microsoft tenant domain
+ * (*.onmicrosoft.com) must never exist - teaching one colleague must not send
+ * every colleague to that team. Person (sender) rows are kept.
+ */
+export function isBlockedLearnedDomain(key: string, internalDomains: string[]): boolean {
+  const k = String(key ?? "").trim().toLowerCase();
+  if (!k) return false;
+  return testDomainInList(k, internalDomains) || k === "onmicrosoft.com" || k.endsWith(".onmicrosoft.com");
+}
+
 export function buildImportPlan(f: DesktopFiles, opts: ImportOptions = {}) {
+  const settings = { ...(f.configJson ? pickImportedSettings(f.configJson) : {}), ...(opts.settingsOverride ?? {}) };
+  const internalDomains = internalDomainsFrom(settings);
   const teams = f.mappingCsv
     ? parseMappingCsv(f.mappingCsv).map((m, i) => ({
         key: m.customerKey, display_name: m.displayName, folder_path: m.folderPath, kind: "team" as const,
@@ -72,12 +88,17 @@ export function buildImportPlan(f: DesktopFiles, opts: ImportOptions = {}) {
   const removed = new Set((opts.removeLearned ?? []).map((r) => `${r.bucket}|${r.key.toLowerCase()}`));
   const learned: Array<{ bucket: "sender" | "domain"; key: string; team_key: string; count: number; source: string;
     first_at: string; last_at: string; root: string; run: string }> = [];
+  const blockedDomains: string[] = [];
   if (f.learnedJson) {
     const l = parseLearned(f.learnedJson);
     for (const [bucket, store] of [["sender", l.senders], ["domain", l.domains]] as const) {
       for (const [k, e] of Object.entries(store)) {
         const key = k.toLowerCase();
         if (removed.has(`${bucket}|${key}`)) continue;
+        if (bucket === "domain" && isBlockedLearnedDomain(key, internalDomains)) {
+          blockedDomains.push(`${key} -> ${e.customer}`);
+          continue;
+        }
         learned.push({ bucket, key, team_key: e.customer, count: e.count, source: LEARN_SOURCES.has(e.source) ? e.source : "legacy",
           first_at: e.first ?? "", last_at: e.last ?? "", root: e.root ?? "", run: e.run ?? "" });
       }
@@ -100,8 +121,6 @@ export function buildImportPlan(f: DesktopFiles, opts: ImportOptions = {}) {
   // Last line wins for a repeated key (re-filed emails).
   const ledgerByKey = new Map(ledger.map((r) => [r.key, r]));
 
-  const settings = { ...(f.configJson ? pickImportedSettings(f.configJson) : {}), ...(opts.settingsOverride ?? {}) };
-
   const unknownTeamRules = [
     ...contentRules.filter((r) => !teamKeys.has(r.team_key)).map((r) => `content rule ${r.id} -> ${r.team_key}`),
     ...internalRoutes.filter((r) => !teamKeys.has(r.team_key)).map((r) => `internal route ${r.address} -> ${r.team_key}`),
@@ -110,11 +129,19 @@ export function buildImportPlan(f: DesktopFiles, opts: ImportOptions = {}) {
 
   return {
     teams, contentRules, internalRoutes, multiRoutes, learned, notes, ledger: Array.from(ledgerByKey.values()), settings,
-    warnings: unknownTeamRules.length && teams.length ? unknownTeamRules : [],
+    /** Learned domain keys left out (own domain / Microsoft tenant); the writer marks any existing row forgotten. */
+    blockedLearnedDomains: blockedDomains.map((b) => b.split(" -> ")[0]),
+    internalDomains,
+    warnings: [
+      ...(unknownTeamRules.length && teams.length ? unknownTeamRules : []),
+      ...blockedDomains.map((b) => `learned domain ${b} not imported - own domain or Microsoft tenant domain; senders there are kept as people`),
+      ...(f.configJson ? domainListWarnings(settings) : []),
+    ],
     counts: {
       teams: teams.length, content_rules: contentRules.length, internal_routes: internalRoutes.length,
       multi_routes: multiRoutes.length, learned_senders: learned.filter((x) => x.bucket === "sender").length,
       learned_domains: learned.filter((x) => x.bucket === "domain").length, learned_removed: removed.size,
+      learned_domains_blocked: blockedDomains.length,
       notes: notes.length, ledger: ledgerByKey.size, settings: Object.keys(settings).length,
     },
   };

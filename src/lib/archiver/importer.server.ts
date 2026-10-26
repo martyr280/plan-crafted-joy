@@ -5,7 +5,10 @@
  * caller decides; see removeLearned in buildImportPlan).
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { withoutProtected, type ImportPlan, type ProtectedKeys } from "./importer";
+import { isBlockedLearnedDomain, withoutProtected, type ImportPlan, type ProtectedKeys } from "./importer";
+
+/** An import never switches Order Mail live: these keys are never written by it. */
+export const IMPORT_NEVER_WRITES = ["mode", "filing_enabled"] as const;
 
 /** 'yyyy-MM-ddTHH:mm:ss' wall-clock in America/Chicago -> ISO UTC. Empty/invalid -> null. */
 export function chicagoLocalToIso(local: string): string | null {
@@ -84,6 +87,26 @@ export async function applyImportPlan(
     if (error) throw new Error(`learned delete failed for ${r.bucket} ${r.key}: ${error.message}`);
     learnedDeleted += (data ?? []).length;
   }
+  // v4.5.3: no learned DOMAIN row may stay usable for an own domain or a Microsoft tenant.
+  // Existing rows are marked forgotten (kept for history; a re-import will not bring them back).
+  let learnedDomainsForgotten = 0;
+  {
+    const existing: Array<{ key: string }> = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await (supabaseAdmin as any).from("archiver_learned").select("key")
+        .eq("bucket", "domain").neq("source", "forgotten").order("key").range(from, from + 999);
+      if (error) throw new Error(`learned read failed: ${error.message}`);
+      existing.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
+    const internal = plan.internalDomains ?? [];
+    for (const r of existing.filter((x) => isBlockedLearnedDomain(x.key, internal))) {
+      const { data, error } = await (supabaseAdmin as any).from("archiver_learned")
+        .update({ source: "forgotten", updated_at: now }).eq("bucket", "domain").eq("key", r.key).select("key");
+      if (error) throw new Error(`learned forget failed for ${r.key}: ${error.message}`);
+      learnedDomainsForgotten += (data ?? []).length;
+    }
+  }
   if (plan.notes.length) {
     await upsertBatches("archiver_notes", plan.notes.map(({ done_at_local, ...n }) => ({
       ...n, done_at: chicagoLocalToIso(done_at_local), updated_at: now,
@@ -92,13 +115,14 @@ export async function applyImportPlan(
   if (plan.ledger.length) {
     await upsertBatches("archiver_ledger", plan.ledger, "key");
   }
-  if (Object.keys(plan.settings).length) {
+  const settings = Object.fromEntries(Object.entries(plan.settings).filter(([k]) => !(IMPORT_NEVER_WRITES as readonly string[]).includes(k)));
+  if (Object.keys(settings).length) {
     const { data: cur } = await (supabaseAdmin as any).from("app_settings").select("value").eq("key", "archiver").maybeSingle();
-    const value = { ...(cur?.value ?? {}), ...plan.settings };
+    const value = { ...(cur?.value ?? {}), ...settings };
     const { error } = await (supabaseAdmin as any).from("app_settings").upsert({ key: "archiver", value, updated_at: now }, { onConflict: "key" });
     if (error) throw new Error(`settings upsert failed: ${error.message}`);
   }
-  const counts = { ...plan.counts, learned_deleted: learnedDeleted, skipped_protected: guarded.skipped };
+  const counts = { ...plan.counts, learned_deleted: learnedDeleted, learned_domains_forgotten: learnedDomainsForgotten, skipped_protected: guarded.skipped };
   await (supabaseAdmin as any).from("archiver_actions").insert({
     action: "import", user_id: actor.userId ?? null, user_name: actor.userName,
     detail: { source: actor.source, counts, warnings: plan.warnings },

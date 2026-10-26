@@ -233,11 +233,20 @@ export const IMPORTED_SETTING_KEYS = [
   "ignore_subject_patterns", "filename_stamp", "filename_max_chars", "skip_internal_replies",
   "learning_enabled", "learn_promote_after", "learn_min_confidence", "context_margin",
   "external_context_floor", "body_chars", "processed_category", "watched_folder",
+  "ignore_internal_replies", // v4.5.3
 ] as const;
+
+/**
+ * v4.5.3 internal_domains has ONE home in the web app: own_domains (also used
+ * by internal-route validation). Mapped on import so there is never a second
+ * setting with the same meaning.
+ */
+export const RENAMED_SETTING_KEYS: Record<string, string> = { internal_domains: "own_domains" };
 
 export function pickImportedSettings(configText: string): Record<string, unknown> {
   const cfg = parseJsonFile<Record<string, unknown>>(configText);
   const out: Record<string, unknown> = {};
   for (const k of IMPORTED_SETTING_KEYS) if (k in cfg) out[k] = cfg[k];
+  for (const [from, to] of Object.entries(RENAMED_SETTING_KEYS)) if (from in cfg) out[to] = cfg[from];
   return out;
 }

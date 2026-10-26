@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import {
@@ -16,6 +17,29 @@ import {
   useOmRules,
 } from "@/hooks/useOrderMail";
 import { ConfirmButton, Empty, Errors, errorsOf, SourceBadge, type Mode } from "./shared";
+
+/** v4.5.3: "sender" looks in the sender's display name (e.g. the vendor name on QuickBooks mail). */
+export const RULE_SCOPES = [
+  { value: "any", label: "Anywhere (subject, body, attachments)" },
+  { value: "subject", label: "Subject" },
+  { value: "body", label: "Body" },
+  { value: "attachments", label: "Attachment names" },
+  { value: "sender", label: "Sender name" },
+] as const;
+const MATCHES = ["contains", "word", "regex"] as const;
+
+function Choice({ label, value, onChange, options, disabled }: {
+  label: string; value: string; onChange: (v: string) => void; disabled: boolean;
+  options: ReadonlyArray<{ value: string; label: string }>;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="h-8 w-44 text-xs" aria-label={label}><SelectValue /></SelectTrigger>
+      <SelectContent>{options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+    </Select>
+  );
+}
+const matchOptions = MATCHES.map((m) => ({ value: m, label: m }));
 
 const status = (on: boolean) => <Badge variant={on ? "default" : "secondary"}>{on ? "enabled" : "disabled"}</Badge>;
 
@@ -52,7 +76,7 @@ export function RulesTab({ mode, isAdmin }: { mode: Mode; isAdmin: boolean }) {
   const dc = useOmDisableContent(), di = useOmDisableInternal(), dm = useOmDisableMulti();
   const [c, setC] = useState({ phrase: "", team: "", scope: "subject", match: "contains", weight: "1", note: "" });
   const [i, setI] = useState({ address: "", team: "", note: "" });
-  const [mr, setMr] = useState({ kind: "sender", value: "", teams: "", note: "" });
+  const [mr, setMr] = useState({ kind: "sender", value: "", teams: "", scope: "any", match: "contains", note: "" });
   const cc = useSubmit(useOmCreateContent(), () => setC({ ...c, phrase: "", note: "" }));
   const ci = useSubmit(useOmCreateInternal(), () => setI({ address: "", team: "", note: "" }));
   const cm = useSubmit(useOmCreateMulti(), () => setMr({ ...mr, value: "", teams: "", note: "" }));
@@ -67,8 +91,8 @@ export function RulesTab({ mode, isAdmin }: { mode: Mode; isAdmin: boolean }) {
         <div className="flex flex-wrap gap-2">
           {field(c.phrase, (v) => setC({ ...c, phrase: v }), "Phrase", "w-56")}
           {field(c.team, (v) => setC({ ...c, team: v }), "Team key")}
-          {field(c.scope, (v) => setC({ ...c, scope: v }), "Scope (subject/body/any)")}
-          {field(c.match, (v) => setC({ ...c, match: v }), "Match (contains/word/regex)")}
+          <Choice label="Look in" value={c.scope} onChange={(v) => setC({ ...c, scope: v })} options={RULE_SCOPES} disabled={!canEdit} />
+          <Choice label="Match" value={c.match} onChange={(v) => setC({ ...c, match: v })} options={matchOptions} disabled={!canEdit} />
           {field(c.weight, (v) => setC({ ...c, weight: v }), "Weight", "w-20")}
           {field(c.note, (v) => setC({ ...c, note: v }), "Note")}
           <Button size="sm" variant="outline" disabled={!c.phrase || preview.isPending} onClick={() => preview.mutate({ phrase: c.phrase, scope: c.scope, match: c.match })}>Preview</Button>
@@ -107,6 +131,10 @@ export function RulesTab({ mode, isAdmin }: { mode: Mode; isAdmin: boolean }) {
           {field(mr.kind, (v) => setMr({ ...mr, kind: v }), "Kind (sender/domain/phrase)")}
           {field(mr.value, (v) => setMr({ ...mr, value: v }), "Value", "w-56")}
           {field(mr.teams, (v) => setMr({ ...mr, teams: v }), "Teams, comma separated", "w-56")}
+          {mr.kind === "phrase" && <>
+            <Choice label="Look in" value={mr.scope} onChange={(v) => setMr({ ...mr, scope: v })} options={RULE_SCOPES} disabled={!canEdit} />
+            <Choice label="Match" value={mr.match} onChange={(v) => setMr({ ...mr, match: v })} options={matchOptions} disabled={!canEdit} />
+          </>}
           {field(mr.note, (v) => setMr({ ...mr, note: v }), "Note")}
           <Button size="sm" disabled={!canEdit} onClick={() => cm.submit({ ...mr, teams: mr.teams.split(",").map((s) => s.trim()).filter(Boolean) })}>Add rule</Button>
         </div>

@@ -126,37 +126,52 @@ export function ledgerDestination(primaryFolder: string, copyFolders: string[]):
 /**
  * Learning after a filing is confirmed (live mode). Returns the learned rows that
  * changed, for upsert. Same rules as the desktop: confident, non-context,
- * not content-only, not IGNORED/UNROUTED.
+ * not content-only, not IGNORED/UNROUTED, never a colleague (v4.5.3).
  */
 export function learnFromFiling(
   learned: LearnedStore,
   filed: { senderAddress: string; customerKey: string; confidence: number; matchSource: string },
-  opts: { ignoredDomains: string[]; neverLearn: string[]; multiTerritory: string[]; contentOnly: string[]; now: string; runId: string },
+  opts: { ignoredDomains: string[]; internalDomains?: string[]; neverLearn: string[]; multiTerritory: string[]; contentOnly: string[]; now: string; runId: string },
 ) {
   const before = JSON.stringify(learned);
   const n = updateLearnedFromResults(learned, [{ ...filed, filed: true }], { ...opts, minConf: 0.9, root: "web" });
   return { taught: n, changed: before !== JSON.stringify(learned) };
 }
 
-/** Wrong team? / Teach: a human correction. Content-only senders move the email only. */
+/**
+ * Wrong team? / Teach: a human correction. Content-only senders move the email only.
+ *
+ * v4.5.3 internal domains (own_domains): the DOMAIN is never learned or taught -
+ * teaching one colleague must not send every colleague to that team (how
+ * ndiof.com -> Texas got in). For a colleague's address:
+ *  - internalPerson "sender" (explicit Teach sender): the person is taught, sender row only;
+ *  - internalPerson "none" (Wrong team? on a colleague's email, which also covers the
+ *    Unrouted "teach by moving" flow): the email moves, nothing is learned.
+ * Internal routes are the deliberate way to pin a colleague to a team.
+ */
 export function learnFromHuman(
   learned: LearnedStore,
   senderAddress: string,
   toTeam: string,
   source: "corrected" | "taught",
-  opts: { contentOnly: string[]; ignoredDomains: string[]; multiTerritory: string[]; freeMail: (d: string) => boolean; now: string },
+  opts: {
+    contentOnly: string[]; ignoredDomains: string[]; internalDomains?: string[]; internalPerson?: "sender" | "none";
+    multiTerritory: string[]; freeMail: (d: string) => boolean; now: string;
+  },
 ): Array<{ bucket: "sender" | "domain"; key: string }> {
   const addr = String(senderAddress ?? "").trim().toLowerCase();
   if (!addr || !addr.includes("@")) return [];
   if (opts.contentOnly.map((x) => x.toLowerCase()).includes(addr)) return [];
   const dom = addr.split("@").pop()!;
-  const ignored = opts.ignoredDomains.some((d) => dom === d || dom.endsWith("." + d));
-  if (ignored) return [];
+  const inList = (list: string[]) => list.some((d) => dom === d || dom.endsWith("." + d));
+  if (inList(opts.ignoredDomains)) return [];
+  const internal = inList(opts.internalDomains ?? []);
+  if (internal && (opts.internalPerson ?? "sender") === "none") return [];
   const touched: Array<{ bucket: "sender" | "domain"; key: string }> = [];
   setLearnedEntry(learned, "senders", addr, toTeam, source, opts.now, "web", "");
   touched.push({ bucket: "sender", key: addr });
-  const multi = opts.multiTerritory.some((d) => dom === d || dom.endsWith("." + d));
-  if (!multi && !opts.freeMail(dom)) {
+  if (internal) return touched; // never the domain
+  if (!inList(opts.multiTerritory) && !opts.freeMail(dom)) {
     setLearnedEntry(learned, "domains", dom, toTeam, source, opts.now, "web", "");
     touched.push({ bucket: "domain", key: dom });
   }

@@ -45,3 +45,10 @@
 - [ ] Live SFTP delivery test to `files.ndiofficefurniture.net/Charlston_OF`.
 - [ ] Let admins download the generated CSV from the Website Export page to verify contents
       (currently only a 3-line preview is stored).
+
+## Order Mail v4.5.3 (2026-10-26)
+
+- [x] Port v4.5.3 (own domains, ignore colleagues' replies, sender-name scope, multi-folder phrase guard); PowerShell-generated golden.
+- [x] Import desktop copy of 22 Oct 2026 (shadow kept, filing off); retire 5 senders + 1 rule the desktop no longer has.
+- [ ] Fix production never_context_domains (address, not a domain) — needs NDI's decision on the desktop config.
+- [ ] Cutover-day import must also retire rows missing from the live O: copy (done by hand this time).

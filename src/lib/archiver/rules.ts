@@ -44,7 +44,7 @@ export function validateContentRule(
   if (phrase.length > 200) errors.push("Phrase is too long (max 200 characters).");
   if (!team) errors.push("Customer is required.");
   else if (!teamKeys.has(team)) errors.push(`Unknown customer '${team}'.`);
-  if (!["any", "subject", "body", "attachments"].includes(scope)) errors.push("Scope must be any, subject, body or attachments.");
+  if (!["any", "subject", "body", "attachments", "sender"].includes(scope)) errors.push("Scope must be any, subject, body, attachments or sender.");
   if (!["contains", "word", "regex"].includes(match)) errors.push("Match must be contains, word or regex.");
   if (w < 0.5 || w > 0.99) errors.push("Weight must be between 0.50 and 0.99.");
   if (match === "regex" && !compileDotNetRegex(phrase, true)) errors.push("Regex does not compile.");
@@ -78,8 +78,14 @@ export function validateMultiRoute(
     }
   } else if (kind === "phrase") {
     if (value.length < 3) errors.push("Phrase must be at least 3 characters.");
+    // v4.5.3: a multi-folder phrase copies the email to EVERY listed team, so a
+    // greeting is a disaster - "Team," matched sales pitches and freight mail.
+    // Plain phrases need two words and 8+ characters; regex is the escape hatch.
+    else if (match !== "regex" && (value.length < 8 || (value.match(/[A-Za-z0-9]+/g) ?? []).length < 2)) {
+      errors.push(`'${value}' is too general for a multi-folder rule - it would copy ordinary emails to every team. Use a longer phrase that only appears in these emails (two or more words, e.g. 'TREMAIN CUT OFF DATES').`);
+    }
     if (value.length > 200) errors.push("Phrase is too long (max 200 characters).");
-    if (!["any", "subject", "body", "attachments"].includes(scope)) errors.push("Look in must be any, subject, body or attachments.");
+    if (!["any", "subject", "body", "attachments", "sender"].includes(scope)) errors.push("Look in must be any, subject, body, attachments or sender.");
     if (!["contains", "word", "regex"].includes(match)) errors.push("Match must be contains, word or regex.");
     if (match === "regex" && !compileDotNetRegex(value, true)) errors.push("Regex does not compile.");
   }
@@ -113,7 +119,7 @@ export function validateInternalRoute(
 /** Rule preview: how many of these recent emails would a phrase have caught, and where did they go? */
 export function previewPhrase(
   rule: { phrase: string; scope?: string; match?: string },
-  recent: Array<Pick<Candidate, "subject" | "body" | "attachmentNames"> & { team_key: string | null }>,
+  recent: Array<Pick<Candidate, "subject" | "body" | "attachmentNames"> & { senderName?: string; team_key: string | null }>,
 ): { matched: number; byTeam: Record<string, number> } {
   const byTeam: Record<string, number> = {};
   let matched = 0;
@@ -124,6 +130,28 @@ export function previewPhrase(
     byTeam[k] = (byTeam[k] ?? 0) + 1;
   }
   return { matched, byTeam };
+}
+
+/** ;-list settings whose entries must be DOMAINS. An entry with "@" matches nothing there. */
+export const DOMAIN_LIST_SETTINGS = ["never_context_domains", "ignored_domains", "excluded_domains", "multi_territory_domains", "own_domains"] as const;
+
+/**
+ * Warnings (never changes the data) for address-shaped entries in a domain list,
+ * e.g. production never_context_domains = quickbooks@notification.intuit.com.
+ * Pass `internal_domains` too when checking a desktop config.json.
+ */
+export function domainListWarnings(settings: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const keys: string[] = [...DOMAIN_LIST_SETTINGS];
+  if ("internal_domains" in settings && !("own_domains" in settings)) keys.push("internal_domains");
+  for (const k of keys) {
+    for (const e of splitList(settings[k])) {
+      if (e.includes("@")) {
+        out.push(`${k}: '${e}' is an email address, not a domain - this entry has no effect. Use the domain (e.g. '${e.split("@").pop()}') or remove it.`);
+      }
+    }
+  }
+  return out;
 }
 
 /** Chicago calendar-day bounds (UTC ISO) for "today" counts on the Overview. */

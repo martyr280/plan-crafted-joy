@@ -17,6 +17,7 @@ import {
   useOmUpdateSettings,
 } from "@/hooks/useOrderMail";
 import { ConfirmButton, Empty, Errors, errorsOf, fmt, SourceBadge } from "./shared";
+import { domainListWarnings } from "@/lib/archiver/rules";
 
 export function LearningTab({ isAdmin }: { isAdmin: boolean }) {
   const [text, setText] = useState("");
@@ -57,7 +58,9 @@ export function LearningTab({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-const BOOL_KEYS = ["filing_enabled", "paused", "learning_enabled", "ledger_sync_enabled"] as const;
+const BOOL_KEYS = ["filing_enabled", "paused", "learning_enabled", "ledger_sync_enabled", "ignore_internal_replies"] as const;
+/** Desktop defaults when the key was never set (v4.5.3 ignore_internal_replies defaults to on). */
+const BOOL_DEFAULT_ON = new Set<string>(["ignore_internal_replies"]);
 const TEXT_KEYS = ["processed_category", "own_domains", "content_only_senders"] as const;
 
 export function SettingsTab({ mailboxes }: { mailboxes: any[] }) {
@@ -73,13 +76,14 @@ export function SettingsTab({ mailboxes }: { mailboxes: any[] }) {
         retention_days: s.retention_days ?? 90,
         processed_marker: s.processed_marker ?? "none",
         ignore_subject_patterns: Array.isArray(s.ignore_subject_patterns) ? s.ignore_subject_patterns.join("\n") : (s.ignore_subject_patterns ?? ""),
-        ...Object.fromEntries(BOOL_KEYS.map((k) => [k, s[k] === true])),
+        ...Object.fromEntries(BOOL_KEYS.map((k) => [k, BOOL_DEFAULT_ON.has(k) ? s[k] !== false : s[k] === true])),
         ...Object.fromEntries(TEXT_KEYS.map((k) => [k, s[k] ?? ""])),
       });
     }
   }, [q.data]);
   if (!q.data) return <p className="text-sm text-muted-foreground">Loading…</p>;
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  const listWarnings = domainListWarnings({ ...(q.data as Record<string, unknown>), ...form });
   return (
     <div className="space-y-4">
       <Card className="space-y-3 p-4">
@@ -93,9 +97,12 @@ export function SettingsTab({ mailboxes }: { mailboxes: any[] }) {
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>{["flag", "category", "both", "none"].map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
             </Select></div>
-          {TEXT_KEYS.map((k) => <div key={k}><Label htmlFor={`om-${k}`}>{k}</Label><Input id={`om-${k}`} className="h-8 text-xs" value={form[k] ?? ""} onChange={(e) => set(k, e.target.value)} /></div>)}
+          {TEXT_KEYS.map((k) => <div key={k}><Label htmlFor={`om-${k}`}>{k}</Label><Input id={`om-${k}`} className="h-8 text-xs" placeholder={k === "own_domains" ? "ndiof.com (default when empty)" : undefined} value={form[k] ?? ""} onChange={(e) => set(k, e.target.value)} /></div>)}
           <div className="md:col-span-2"><Label htmlFor="om-isp">ignore_subject_patterns (one per line)</Label><Textarea id="om-isp" value={form.ignore_subject_patterns ?? ""} onChange={(e) => set("ignore_subject_patterns", e.target.value)} /></div>
         </div>
+        {listWarnings.length > 0 && (
+          <ul className="space-y-1 text-xs text-warning-text" aria-label="Setting warnings">{listWarnings.map((w) => <li key={w}>{w}</li>)}</ul>
+        )}
         <Errors list={errs} />
         <ConfirmButton variant="default" label="Save settings" title="Save Order Mail settings?" description={<p>The server checks every value; switching to live is refused until the mailbox and file agent are ready.</p>}
           onConfirm={async () => {
