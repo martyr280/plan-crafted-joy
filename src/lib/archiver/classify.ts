@@ -740,11 +740,12 @@ export function setLearnedEntry(
  * Invoke-LearnedPromotion (v4.5.2): learned domains seen `promoteAfter`+ times
  * become mapping domain rules, unless senders at that domain file to more than
  * one team. Mutates `mapping`; returns { promoted, blocked } as text lines.
+ * v4.5.3: an internal domain (Get-InternalDomains) is never promoted.
  */
 export function promoteLearnedDomains(
   learned: LearnedStore,
   mapping: MappingRow[],
-  opts: { promoteAfter: number; ignoredDomains: string[]; neverLearn: string[]; multiTerritory: string[] },
+  opts: { promoteAfter: number; ignoredDomains: string[]; internalDomains?: string[]; neverLearn: string[]; multiTerritory: string[] },
 ): { promoted: Array<{ domain: string; customer: string }>; blocked: string[] } {
   const promoteAfter = opts.promoteAfter < 1 ? 3 : opts.promoteAfter;
   const promoted: Array<{ domain: string; customer: string }> = [];
@@ -765,6 +766,7 @@ export function promoteLearnedDomains(
   for (const k of Object.keys(learned.domains)) {
     const e = learned.domains[k];
     if (testDomainInList(k, opts.ignoredDomains)) continue;
+    if (testDomainInList(k, opts.internalDomains ?? [])) continue; // v4.5.3
     if (testDomainInList(k, opts.neverLearn)) continue;
     if (testDomainInList(k, opts.multiTerritory)) continue;
     if (isFreeMailDomain(k)) continue;
@@ -786,6 +788,24 @@ export function promoteLearnedDomains(
 
 // ----------------------------------------------------- config from settings
 
+function boolSetting(v: unknown, d: boolean): boolean {
+  if (v === undefined || v === null) return d;
+  return ["true", "1", "yes", "on"].includes(String(v).toLowerCase());
+}
+
+/**
+ * Get-InternalDomains (v4.5.3). The web app's one setting is `own_domains`
+ * (the desktop's `internal_domains` is mapped onto it on import). When the key
+ * is absent the default is ndiof.com; an explicit empty value means none.
+ * ignored_domains always count too.
+ */
+export function internalDomainsFrom(s: Record<string, unknown>): string[] {
+  const raw = s.own_domains !== undefined && s.own_domains !== null
+    ? s.own_domains
+    : s.internal_domains !== undefined && s.internal_domains !== null ? s.internal_domains : "ndiof.com";
+  return Array.from(new Set([...splitList(raw), ...splitList(s.ignored_domains)]));
+}
+
 export function buildClassifyConfig(s: Record<string, unknown>): ClassifyConfig {
   const num = (v: unknown, d: number) => {
     const n = Number(v);
@@ -802,18 +822,19 @@ export function buildClassifyConfig(s: Record<string, unknown>): ClassifyConfig 
     .filter((p) => compileDotNetRegex(p, true) !== null);
   const folder = String(s.ignored_folder ?? "Ignored").trim() || "Ignored";
   const never = Array.from(new Set([...NEVER_CONTEXT_BUILT_IN, ...splitList(s.never_context_domains)]));
-  const sir = s.skip_internal_replies;
   return {
     threshold: num(s.confidence_threshold, 0.7),
     unroutedFolder: String(s.unrouted_folder ?? "Unrouted"),
     ignoredDomains: splitList(s.ignored_domains),
+    internalDomains: internalDomainsFrom(s),
     neverContext: never,
     margin: margin > 1 ? margin : 1.35,
     externalContextFloor: floor > 0 ? floor : 0.85,
     multiTerritory: splitList(s.multi_territory_domains),
     stampMode: (["suffix", "prefix", "none"].includes(stamp) ? stamp : "suffix") as ClassifyConfig["stampMode"],
     stemMax,
-    skipInternalReplies: sir === undefined || sir === null ? true : ["true", "1", "yes", "on"].includes(String(sir).toLowerCase()),
+    skipInternalReplies: boolSetting(s.skip_internal_replies, true),
+    ignoreInternalReplies: boolSetting(s.ignore_internal_replies, true),
     contentOnly: splitList(s.content_only_senders),
     autoIgnore: { patterns: pats, folder },
   };
