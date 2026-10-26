@@ -250,8 +250,3 @@ export function pickImportedSettings(configText: string): Record<string, unknown
   for (const [from, to] of Object.entries(RENAMED_SETTING_KEYS)) if (from in cfg) out[to] = cfg[from];
   return out;
 }
-
-/** The raw config.json, for validation warnings only (never written). */
-export function readConfigForWarnings(configText: string): Record<string, unknown> {
-  return parseJsonFile<Record<string, unknown>>(configText);
-}
