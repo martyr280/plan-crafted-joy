@@ -795,15 +795,20 @@ function boolSetting(v: unknown, d: boolean): boolean {
 
 /**
  * Get-InternalDomains (v4.5.3). The web app's one setting is `own_domains`
- * (the desktop's `internal_domains` is mapped onto it on import). When the key
- * is absent the default is ndiof.com; an explicit empty value means none.
- * ignored_domains always count too.
+ * (the desktop's `internal_domains` is mapped onto it on import), falling back
+ * to `internal_domains`, then to ndiof.com. ignored_domains always count too.
+ *
+ * One deliberate difference: a BLANK own_domains also means ndiof.com (the
+ * desktop treats an explicit "" as none). The web Settings form always sends
+ * the field, so a blank box must not silently turn every colleague into an
+ * outside sender; it matches ownDomains() in rules.ts. Production sets
+ * internal_domains = "ndiof.com", so decisions are identical.
  */
 export function internalDomainsFrom(s: Record<string, unknown>): string[] {
-  const raw = s.own_domains !== undefined && s.own_domains !== null
-    ? s.own_domains
-    : s.internal_domains !== undefined && s.internal_domains !== null ? s.internal_domains : "ndiof.com";
-  return Array.from(new Set([...splitList(raw), ...splitList(s.ignored_domains)]));
+  let own = splitList(s.own_domains);
+  if (!own.length) own = splitList(s.internal_domains);
+  if (!own.length) own = ["ndiof.com"];
+  return Array.from(new Set([...own, ...splitList(s.ignored_domains)]));
 }
 
 export function buildClassifyConfig(s: Record<string, unknown>): ClassifyConfig {
