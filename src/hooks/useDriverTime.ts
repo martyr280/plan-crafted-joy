@@ -8,7 +8,8 @@ import {
   getDriverTimeConfig,
   saveDriverTimeConfig,
   listDriverPayRates,
-  importDriverPayRates,
+  addDriverPayRate,
+  updateDriverPayRate,
   getSamsaraDiagnostics,
   saveWarehouseActual,
 } from "@/lib/driver-time.functions";
@@ -88,21 +89,30 @@ export function useSaveDriverTimeConfig() {
   });
 }
 
+/** Admin only: callers must pass enabled=false for anyone else. */
 export function useDriverPayRates(enabled = true) {
   const fn = useServerFn(listDriverPayRates);
   return useQuery({ queryKey: ["driver-pay-rates"], queryFn: () => fn(), enabled });
 }
 
-export function useImportDriverPayRates() {
-  const fn = useServerFn(importDriverPayRates);
+function useRateMutation<V>(serverFn: any) {
+  const fn = useServerFn(serverFn) as (a: { data: V }) => Promise<unknown>;
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { text: string; effectiveDate?: string }) => fn({ data: vars }),
+    mutationFn: (vars: V) => fn({ data: vars }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["driver-pay-rates"] });
       qc.invalidateQueries({ queryKey: ["driver-time-week"] });
     },
   });
+}
+
+export function useAddDriverPayRate() {
+  return useRateMutation<{ driverId: string; driverName: string | null; hourlyRate: number; effectiveDate: string }>(addDriverPayRate);
+}
+
+export function useUpdateDriverPayRate() {
+  return useRateMutation<{ id: string; hourlyRate: number; effectiveDate: string; expectedUpdatedAt: string }>(updateDriverPayRate);
 }
 
 export function useSamsaraDiagnostics() {

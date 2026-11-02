@@ -5,6 +5,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dateStrInTz } from "@/lib/driver-time/tz";
 import { actualSchema, validateActual, buildReconciledDrivers, weekday } from "@/lib/driver-time/reconciliation";
+import { isValidDateStr, isValidHourlyRate } from "@/lib/driver-time/rates";
 
 const db = () => supabaseAdmin as any;
 
@@ -86,16 +87,11 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
 
     if (overrideError) throw new Error(overrideError.message);
     if ((events?.length ?? 0) >= 5000 || (overrides?.length ?? 0) >= 2000) throw new Error("Report exceeds safe row limit; narrow the window.");
+    // Rates are admin-only. Non-admins never load them, so their cost stays
+    // null ("no rate") and the card hides it. Only rows dated on or before
+    // the week end can apply to any day of this week.
     let rates: any[] = [];
-    if (isAdmin) {
-      const { data: r } = await db()
-        .from("driver_pay_rates")
-        .select("driver_id, driver_name, hourly_rate, effective_date")
-        .lte("effective_date", weekEnd)
-        .order("effective_date", { ascending: false })
-        .limit(2000);
-      rates = r ?? [];
-    }
+    if (isAdmin) rates = await loadPayRates({ onOrBefore: weekEnd });
 
     const { data: runs } = await db()
       .from("driver_warehouse_runs")
@@ -104,8 +100,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       .limit(10);
 
     const { estimateCost } = await import("@/lib/driver-time/cost");
-    const rateFor = (driverId: string) =>
-      rates.find((r) => String(r.driver_id) === String(driverId))?.hourly_rate ?? null;
+    const { estimateCostWithRates, flaggedMinutesByDay } = await import("@/lib/driver-time/rates");
     const paycomFor = (driverId: string) =>
       (overrides ?? []).find((o: any) => String(o.driver_id) === String(driverId))?.paycom_hours ?? null;
 
@@ -116,9 +111,19 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
     const driverRows = buildReconciledDrivers(scopedEvents, overrides ?? [], data.includeWeekends).map(b => {
       const flaggedHours = b.flaggedMinutes / 60;
       const paidHours = paycomFor(b.driverId);
-      const cost = estimateCost({ driverId:b.driverId,driverName:b.driverName,
-        samsaraWeekHours:0,paycomHours:paidHours,flaggedHours,
-        hourlyRate:isAdmin ? Number(rateFor(b.driverId) ?? 0) || null : null });
+      const base = { driverId:b.driverId,driverName:b.driverName,samsaraWeekHours:0,paycomHours:paidHours,flaggedHours };
+      let cost: any;
+      if (isAdmin) {
+        const split = flaggedMinutesByDay(b);
+        const splitTotal = Object.values(split.byDay).reduce((s, m) => s + m, 0) + split.unsplitMinutes;
+        // Defensive: if the day split ever disagrees with the reported total,
+        // price the whole week as one unsplit block (refuses mid-week changes).
+        const byDay = splitTotal === b.flaggedMinutes ? split.byDay : {};
+        const unsplitMinutes = splitTotal === b.flaggedMinutes ? split.unsplitMinutes : b.flaggedMinutes;
+        cost = estimateCostWithRates({ ...base, byDay, unsplitMinutes, weekStart, weekEnd, rates });
+      } else {
+        cost = estimateCost({ ...base, hourlyRate: null });
+      }
       // This module does not fetch total weekly paid hours. Never label zero
       // as real Samsara hours or infer an overtime multiplier from it.
       if (paidHours == null) { cost.cost = null; cost.multiplier = null; cost.note = "Enter Paycom paid hours to estimate cost"; }
@@ -302,72 +307,108 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
   });
 
 /* --------------------------------------------------------------- pay rates */
+// Admin-only. The table's RLS is admin-only plus the branch-manager restrictive
+// deny; these handlers also check the admin role before touching it (the same
+// pattern as every other admin-only Driver Time function). Rates are never
+// deleted and adding never overwrites: a new raise is a new row.
 
+async function loadPayRates(opts: { onOrBefore?: string } = {}): Promise<any[]> {
+  const { fetchAllRows } = await import("@/lib/supabase-fetch-all");
+  return fetchAllRows<any>(() => {
+    let q = db()
+      .from("driver_pay_rates")
+      .select("id, driver_id, driver_name, hourly_rate, effective_date, created_at, updated_at", { count: "exact" });
+    if (opts.onOrBefore) q = q.lte("effective_date", opts.onOrBefore);
+    return q;
+  }, { label: "driver_pay_rates", orderBy: [{ column: "driver_id" }, { column: "effective_date", ascending: false }, { column: "id" }] });
+}
+
+/** Licensed drivers known to Driver Time + every rate row (admin only). */
 export const listDriverPayRates = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireAdmin(context.userId);
-    const { data, error } = await db()
-      .from("driver_pay_rates")
-      .select("*")
-      .order("driver_name", { ascending: true })
-      .limit(2000);
-    if (error) throw new Error(error.message);
-    return { rates: data ?? [] };
+    const rates = await loadPayRates();
+    const { getDriverTimeSettings, filterRoster } = await import("@/lib/driver-time.server");
+    const { isExcludedDriver } = await import("@/lib/driver-time/detect");
+    const { fetchAllRows } = await import("@/lib/supabase-fetch-all");
+    const settings = await getDriverTimeSettings();
+
+    const drivers = new Map<string, { id: string; name: string; source: "roster" | "events" | "rates" }>();
+    // 1) The same licensed roster the sweep scans (read-only Samsara list call,
+    //    the one the Settings tab already makes).
+    let rosterError: string | null = null;
+    try {
+      const { fetchDrivers } = await import("@/lib/samsara/hos.server");
+      for (const d of filterRoster(await fetchDrivers(), settings).roster) drivers.set(d.id, { id: d.id, name: d.name, source: "roster" });
+    } catch (e: any) {
+      rosterError = e?.message ?? String(e);
+    }
+    // 2) Drivers the sweep has already stored events for.
+    const events = await fetchAllRows<any>(
+      () => db().from("driver_warehouse_events").select("id, driver_id, driver_name", { count: "exact" }),
+      { label: "driver_warehouse_events(drivers)" },
+    );
+    for (const ev of events) {
+      const id = String(ev.driver_id);
+      if (drivers.has(id) || isExcludedDriver({ id, name: ev.driver_name }, settings)) continue;
+      drivers.set(id, { id, name: ev.driver_name ?? id, source: "events" });
+    }
+    // 3) Anyone who already has a rate, so no history is ever hidden.
+    for (const r of rates) {
+      const id = String(r.driver_id);
+      if (!drivers.has(id)) drivers.set(id, { id, name: r.driver_name ?? id, source: "rates" });
+    }
+    return {
+      drivers: Array.from(drivers.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      rates,
+      rosterError,
+    };
   });
 
-/** Paste import: "driver id or name, rate" per line. */
-export const importDriverPayRates = createServerFn({ method: "POST" })
+const rateInput = z.object({
+  hourlyRate: z.number().refine(isValidHourlyRate, "Hourly rate must be more than $0, at most $500, with at most 2 decimals"),
+  effectiveDate: z.string().refine(isValidDateStr, "Effective date must be a real YYYY-MM-DD date"),
+});
+
+function duplicateDateError(e: any, date: string): Error {
+  return e?.code === "23505"
+    ? new Error(`This driver already has a rate starting ${date}. Edit that row instead.`)
+    : new Error(e?.message ?? String(e));
+}
+
+/** Adds a new rate row. Never upserts, so existing history is untouched. */
+export const addDriverPayRate = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
-    z
-      .object({
-        text: z.string().max(50_000),
-        effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-      })
-      .parse(i),
+    rateInput.extend({ driverId: z.string().trim().min(1).max(200), driverName: z.string().trim().max(200).nullable() }).parse(i),
   )
   .handler(async ({ data, context }) => {
     await requireAdmin(context.userId);
-    const effective = data.effectiveDate ?? new Date().toISOString().slice(0, 10);
+    const { data: row, error } = await db()
+      .from("driver_pay_rates")
+      .insert({ driver_id: data.driverId, driver_name: data.driverName, hourly_rate: data.hourlyRate, effective_date: data.effectiveDate })
+      .select("id")
+      .single();
+    if (error) throw duplicateDateError(error, data.effectiveDate);
+    return { ok: true as const, id: row.id as string };
+  });
 
-    let roster: Array<{ id: string; name: string }> = [];
-    try {
-      const { fetchDrivers } = await import("@/lib/samsara/hos.server");
-      roster = (await fetchDrivers()).map((d) => ({ id: d.id, name: d.name }));
-    } catch {
-      roster = [];
-    }
-
-    const rows: any[] = [];
-    const unmatched: string[] = [];
-    for (const raw of data.text.split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line) continue;
-      const parts = line.split(/[,\t;]/).map((p) => p.trim());
-      if (parts.length < 2) { unmatched.push(line); continue; }
-      const rate = Number(parts[parts.length - 1].replace(/[$\s]/g, ""));
-      const key = parts.slice(0, -1).join(" ").trim();
-      if (!Number.isFinite(rate) || rate <= 0 || !key) { unmatched.push(line); continue; }
-      const match =
-        roster.find((d) => d.id === key) ??
-        roster.find((d) => d.name.toLowerCase() === key.toLowerCase());
-      if (!match && roster.length) { unmatched.push(line); continue; }
-      rows.push({
-        driver_id: match?.id ?? key,
-        driver_name: match?.name ?? key,
-        hourly_rate: rate,
-        effective_date: effective,
-      });
-    }
-
-    if (rows.length) {
-      const { error } = await db()
-        .from("driver_pay_rates")
-        .upsert(rows, { onConflict: "driver_id,effective_date" });
-      if (error) throw new Error(error.message);
-    }
-    return { ok: true as const, imported: rows.length, unmatched };
+/** Edits one row's amount/date (UI confirms first). Compare-and-set on updated_at. */
+export const updateDriverPayRate = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
+  .inputValidator((i) => rateInput.extend({ id: z.string().uuid(), expectedUpdatedAt: z.string().min(1) }).parse(i))
+  .handler(async ({ data, context }) => {
+    await requireAdmin(context.userId);
+    const { data: changed, error } = await db()
+      .from("driver_pay_rates")
+      .update({ hourly_rate: data.hourlyRate, effective_date: data.effectiveDate })
+      .eq("id", data.id)
+      .eq("updated_at", data.expectedUpdatedAt)
+      .select("id");
+    if (error) throw duplicateDateError(error, data.effectiveDate);
+    if (!changed?.length) throw new Error("This rate changed since you opened it. Refresh and try again.");
+    return { ok: true as const };
   });
 
 /* ------------------------------------------------------------ diagnostics */
