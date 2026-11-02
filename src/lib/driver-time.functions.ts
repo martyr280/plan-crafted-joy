@@ -5,6 +5,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dateStrInTz } from "@/lib/driver-time/tz";
 import { actualSchema, validateActual, buildReconciledDrivers, weekday } from "@/lib/driver-time/reconciliation";
+import { isValidDateStr, isValidHourlyRate } from "@/lib/driver-time/rates";
 
 const db = () => supabaseAdmin as any;
 
