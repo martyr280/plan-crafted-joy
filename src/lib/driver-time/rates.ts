@@ -47,13 +47,15 @@ export function parseHourlyRate(raw: string): { ok: true; value: number } | { ok
   if (!/^\d+(\.\d{1,2})?$/.test(s)) return { ok: false, error: "Enter a dollar amount with at most 2 decimals, for example 24.50." };
   const value = Number(s);
   if (!(value > 0)) return { ok: false, error: "The hourly rate must be more than $0." };
-  if (value > MAX_HOURLY_RATE) return { ok: false, error: `The hourly rate must be $${MAX_HOURLY_RATE} or less.` };
+  if (value > MAX_HOURLY_RATE) return { ok: false, error: `The hourly rate must be more than $0, up to $${MAX_HOURLY_RATE}.` };
   return { ok: true, value };
 }
 
 /** Same rule for the server validator (numbers arrive already parsed). */
 export function isValidHourlyRate(n: number): boolean {
-  return Number.isFinite(n) && n > 0 && n <= MAX_HOURLY_RATE && Math.round(n * 100) === n * 100;
+  if (!Number.isFinite(n) || !(n > 0) || n > MAX_HOURLY_RATE) return false;
+  const cents = n * 100;
+  return Math.abs(cents - Math.round(cents)) < 1e-6;
 }
 
 export function isValidDateStr(s: string): boolean {

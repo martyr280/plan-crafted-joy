@@ -51,6 +51,18 @@ describe("rate entry validation (USD, > 0, max 2 decimals)", () => {
     expect(isValidHourlyRate(0)).toBe(false);
     expect(isValidHourlyRate(24.505)).toBe(false);
   });
+  it("server check accepts every cent from $0.01 to $500.00 (no floating-point rejects)", () => {
+    const rejected: number[] = [];
+    for (let c = 1; c <= 50000; c++) {
+      const value = Number((c / 100).toFixed(2));
+      if (!isValidHourlyRate(value)) rejected.push(value);
+    }
+    expect(rejected).toEqual([]);
+    for (const v of [18.15, 20.10, 16.10, 39.95]) expect(isValidHourlyRate(v)).toBe(true);
+  });
+  it("server check rejects 0, -1, 500.01, 24.505, 0.001, NaN and Infinity", () => {
+    for (const v of [0, -1, 500.01, 24.505, 0.001, NaN, Infinity]) expect(isValidHourlyRate(v)).toBe(false);
+  });
 });
 
 const base = { driverId: "d1", samsaraWeekHours: 0, weekStart: "2026-10-05", weekEnd: "2026-10-09", rates };

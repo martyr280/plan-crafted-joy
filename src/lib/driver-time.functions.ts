@@ -367,7 +367,7 @@ export const listDriverPayRates = createServerFn({ method: "GET" })
   });
 
 const rateInput = z.object({
-  hourlyRate: z.number().refine(isValidHourlyRate, "Hourly rate must be more than $0, at most $500, with at most 2 decimals"),
+  hourlyRate: z.number().refine(isValidHourlyRate, "Hourly rate must be more than $0, up to $500, with at most 2 decimals"),
   effectiveDate: z.string().refine(isValidDateStr, "Effective date must be a real YYYY-MM-DD date"),
 });
 
