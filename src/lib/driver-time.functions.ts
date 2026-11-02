@@ -86,16 +86,11 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
 
     if (overrideError) throw new Error(overrideError.message);
     if ((events?.length ?? 0) >= 5000 || (overrides?.length ?? 0) >= 2000) throw new Error("Report exceeds safe row limit; narrow the window.");
+    // Rates are admin-only. Non-admins never load them, so their cost stays
+    // null ("no rate") and the card hides it. Only rows dated on or before
+    // the week end can apply to any day of this week.
     let rates: any[] = [];
-    if (isAdmin) {
-      const { data: r } = await db()
-        .from("driver_pay_rates")
-        .select("driver_id, driver_name, hourly_rate, effective_date")
-        .lte("effective_date", weekEnd)
-        .order("effective_date", { ascending: false })
-        .limit(2000);
-      rates = r ?? [];
-    }
+    if (isAdmin) rates = await loadPayRates({ onOrBefore: weekEnd });
 
     const { data: runs } = await db()
       .from("driver_warehouse_runs")
@@ -104,8 +99,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       .limit(10);
 
     const { estimateCost } = await import("@/lib/driver-time/cost");
-    const rateFor = (driverId: string) =>
-      rates.find((r) => String(r.driver_id) === String(driverId))?.hourly_rate ?? null;
+    const { estimateCostWithRates, flaggedMinutesByDay } = await import("@/lib/driver-time/rates");
     const paycomFor = (driverId: string) =>
       (overrides ?? []).find((o: any) => String(o.driver_id) === String(driverId))?.paycom_hours ?? null;
 
@@ -116,9 +110,19 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
     const driverRows = buildReconciledDrivers(scopedEvents, overrides ?? [], data.includeWeekends).map(b => {
       const flaggedHours = b.flaggedMinutes / 60;
       const paidHours = paycomFor(b.driverId);
-      const cost = estimateCost({ driverId:b.driverId,driverName:b.driverName,
-        samsaraWeekHours:0,paycomHours:paidHours,flaggedHours,
-        hourlyRate:isAdmin ? Number(rateFor(b.driverId) ?? 0) || null : null });
+      const base = { driverId:b.driverId,driverName:b.driverName,samsaraWeekHours:0,paycomHours:paidHours,flaggedHours };
+      let cost: any;
+      if (isAdmin) {
+        const split = flaggedMinutesByDay(b);
+        const splitTotal = Object.values(split.byDay).reduce((s, m) => s + m, 0) + split.unsplitMinutes;
+        // Defensive: if the day split ever disagrees with the reported total,
+        // price the whole week as one unsplit block (refuses mid-week changes).
+        const byDay = splitTotal === b.flaggedMinutes ? split.byDay : {};
+        const unsplitMinutes = splitTotal === b.flaggedMinutes ? split.unsplitMinutes : b.flaggedMinutes;
+        cost = estimateCostWithRates({ ...base, byDay, unsplitMinutes, weekStart, weekEnd, rates });
+      } else {
+        cost = estimateCost({ ...base, hourlyRate: null });
+      }
       // This module does not fetch total weekly paid hours. Never label zero
       // as real Samsara hours or infer an overtime multiplier from it.
       if (paidHours == null) { cost.cost = null; cost.multiplier = null; cost.note = "Enter Paycom paid hours to estimate cost"; }
