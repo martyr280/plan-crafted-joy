@@ -19,13 +19,14 @@ import { useAuth } from "@/lib/auth";
 import { useModuleView } from "@/lib/usage-log";
 import {
   useDriverTimeWeek, useUpdateDriverTimeEvent, useRunDriverTimeSweep,
-  useDriverTimeConfig, useSaveDriverTimeConfig, useDriverPayRates, useImportDriverPayRates,
+  useDriverTimeConfig, useSaveDriverTimeConfig,
   useSamsaraDiagnostics,
 } from "@/hooks/useDriverTime";
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
 import { formatMinutes, hubTimezone, reconciliationCsv } from "@/lib/driver-time/reconciliation";
 import { WarehouseActualEditor } from "@/components/driver-time/WarehouseActualEditor";
 import { DriverCard, money, hm, clock, dayLabel, STATUS_STYLE } from "@/components/driver-time/DriverCard";
+import { DriverRatesPanel } from "@/components/driver-time/DriverRatesPanel";
 
 export const Route = createFileRoute("/_app/driver-time")({
   head: () => ({
@@ -276,14 +277,11 @@ function DriverTimePage() {
 function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
   const cfgQ = useDriverTimeConfig();
   const save = useSaveDriverTimeConfig();
-  const ratesQ = useDriverPayRates(isAdmin);
-  const importRates = useImportDriverPayRates();
 
   const settings = cfgQ.data?.settings;
   const [threshold, setThreshold] = useState<string>("");
   const [mergeGap, setMergeGap] = useState<string>("");
   const [patterns, setPatterns] = useState<string>("");
-  const [ratesText, setRatesText] = useState("");
 
   const selected = new Set<string>(settings?.warehouseAddressIds ?? []);
 
@@ -454,49 +452,8 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
         )}
       </Card>
 
-      {isAdmin && (
-        <Card className="p-4 space-y-3">
-          <div className="font-semibold text-sm">Driver pay rates (admin only)</div>
-          <Textarea
-            rows={5}
-            placeholder={"Driver Name, 24.50\nAnother Driver, 26"}
-            value={ratesText}
-            onChange={(e) => setRatesText(e.target.value)}
-          />
-          <Button
-            size="sm"
-            disabled={importRates.isPending || !ratesText.trim()}
-            onClick={() =>
-              importRates.mutate(
-                { text: ratesText },
-                {
-                  onSuccess: (r: any) => {
-                    toast.success(`Imported ${r.imported} rate(s)`);
-                    if (r.unmatched?.length) toast.error(`${r.unmatched.length} line(s) unmatched`);
-                    setRatesText("");
-                  },
-                  onError: (e: any) => toast.error(e?.message),
-                },
-              )
-            }
-          >
-            Import rates
-          </Button>
-          <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
-            {(ratesQ.data?.rates ?? []).map((r: any) => (
-              <div key={r.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span>{r.driver_name ?? r.driver_id}</span>
-                <span className="text-muted-foreground text-xs">
-                  {money(Number(r.hourly_rate))}/hr from {r.effective_date}
-                </span>
-              </div>
-            ))}
-            {!(ratesQ.data?.rates ?? []).length && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">No rates on file.</div>
-            )}
-          </div>
-        </Card>
-      )}
+      {/* Admin-only: the panel checks the role itself and renders nothing otherwise. */}
+      {isAdmin && <DriverRatesPanel />}
     </div>
   );
 }
