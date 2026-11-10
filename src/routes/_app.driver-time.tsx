@@ -206,19 +206,6 @@ function DriverTimePage() {
       </div>
 
       <label className="flex gap-2 items-center mb-4 text-sm"><input type="checkbox" checked={includeWeekends} onChange={e=>setIncludeWeekends(e.target.checked)} /> Include weekend automated events</label>
-      <DriverTimeReport
-        isError={weekQ.isError}
-        isLoading={weekQ.isLoading}
-        isFetching={weekQ.isFetching}
-        hasData={weekQ.data != null}
-        errorMessage={(weekQ.error as Error | null)?.message}
-        onRetry={() => void weekQ.refetch()}
-        totals={report.showReport ? totals : null}
-        canManageDriverPay={!!data?.canManageDriverPay}
-        hubGroups={hubGroups}
-        thresholdMinutes={Number(data?.thresholdMinutes ?? 90)}
-        isAdmin={!!data?.isAdmin}
-      />
 
       <Tabs defaultValue="report">
         <TabsList>
@@ -230,6 +217,20 @@ function DriverTimePage() {
 
 
         <TabsContent value="report" className="mt-4 space-y-4">
+          <DriverTimeReport
+            isError={weekQ.isError}
+            isLoading={weekQ.isLoading}
+            isFetching={weekQ.isFetching}
+            hasData={weekQ.data != null}
+            errorMessage={(weekQ.error as Error | null)?.message}
+            onRetry={() => void weekQ.refetch()}
+            totals={report.showReport ? totals : null}
+            canManageDriverPay={!!data?.canManageDriverPay}
+            drivers={drivers}
+            hubGroups={hubGroups}
+            thresholdMinutes={Number(data?.thresholdMinutes ?? 90)}
+            isAdmin={!!data?.isAdmin}
+          />
           {report.showReport && (
             <WarehouseActualEditor key={weekStart} weekStart={weekStart} drivers={drivers} />
           )}

@@ -6,7 +6,7 @@ import { KpiCard } from "@/components/shared/KpiCard";
 import { destructiveTextClass } from "@/components/driver-time/text-classes";
 import { driverTimeReportPanels } from "@/lib/driver-time/report-panels";
 import { formatMinutes } from "@/lib/driver-time/reconciliation";
-import { DriverCard, hm } from "@/components/driver-time/DriverCard";
+import { DriverCard, hm, money } from "@/components/driver-time/DriverCard";
 
 type Totals = {
   drivers: number;
@@ -27,6 +27,7 @@ export function DriverTimeReport({
   totals,
   canManageDriverPay,
   hubGroups,
+  drivers,
   thresholdMinutes,
   isAdmin,
 }: {
@@ -43,6 +44,7 @@ export function DriverTimeReport({
     drivers: Array<{ driverId: string; flaggedMinutes: number } & Record<string, unknown>>;
     flaggedMinutes: number;
   }>;
+  drivers?: Array<{ cost?: { cost: number | null } | null }>;
   thresholdMinutes?: number;
   isAdmin?: boolean;
 }) {
@@ -102,7 +104,9 @@ export function DriverTimeReport({
         <KpiCard
           label="Estimated cost"
           value={figure(
-            canManageDriverPay && totals?.estimatedCost != null ? `$${totals.estimatedCost}` : "—",
+            canManageDriverPay && (drivers ?? []).some((d) => d.cost?.cost != null)
+              ? money(totals?.estimatedCost ?? 0)
+              : "—",
           )}
           icon={<CheckCircle2 className="h-5 w-5" />}
         />

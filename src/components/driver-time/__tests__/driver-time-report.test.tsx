@@ -87,6 +87,56 @@ describe("DriverTimeReport", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
+  it("shows an em dash when every driver cost is unknown", () => {
+    render(
+      <DriverTimeReport
+        isError={false}
+        isLoading={false}
+        hasData
+        onRetry={vi.fn()}
+        canManageDriverPay
+        totals={{ ...emptyTotals, drivers: 2, estimatedCost: 0 }}
+        drivers={[{ cost: { cost: null } }, { cost: { cost: null } }]}
+        hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
+      />,
+    );
+    expect(kpi("Estimated cost")).toMatch(/—/);
+    expect(kpi("Estimated cost")).not.toMatch(/\$0/);
+  });
+
+  it("formats a known cost in USD and ignores the unknown drivers in a mixed week", () => {
+    render(
+      <DriverTimeReport
+        isError={false}
+        isLoading={false}
+        hasData
+        onRetry={vi.fn()}
+        canManageDriverPay
+        totals={{ ...emptyTotals, drivers: 2, estimatedCost: 40 }}
+        drivers={[{ cost: { cost: null } }, { cost: { cost: 40 } }]}
+        hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
+      />,
+    );
+    expect(kpi("Estimated cost")).toMatch(/\$40/);
+    expect(kpi("Estimated cost")).not.toMatch(/\$0/);
+  });
+
+  it("formats every known cost in USD", () => {
+    render(
+      <DriverTimeReport
+        isError={false}
+        isLoading={false}
+        hasData
+        onRetry={vi.fn()}
+        canManageDriverPay
+        totals={{ ...emptyTotals, drivers: 2, estimatedCost: 1250 }}
+        drivers={[{ cost: { cost: 250 } }, { cost: { cost: 1000 } }]}
+        hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
+      />,
+    );
+    expect(kpi("Estimated cost")).toMatch(/\$1,250/);
+  });
+
   it("hides cached counts when a later refresh fails", () => {
     render(
       <DriverTimeReport
