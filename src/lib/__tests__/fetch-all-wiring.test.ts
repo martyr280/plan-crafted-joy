@@ -11,7 +11,33 @@ const SITES: Array<{ file: string; label: string; table: string; order: string }
   { file: "src/lib/truck-capacity.functions.ts", label: "scoreboard truck_capacity_runs", table: "truck_capacity_runs", order: '[{ column: "route_id" }, { column: "run_date" }, { column: "run_seq" }, { column: "id" }]' },
   { file: "src/lib/truck-capacity.functions.ts", label: "scoreboard truck_capacity_forecast_log", table: "truck_capacity_forecast_log", order: '[{ column: "route_id" }, { column: "forecast_date" }, { column: "made_on" }, { column: "id" }], concurrency: 4' },
   { file: "src/lib/truck-capacity/board.ts", label: "board truck_capacity_p21_demand", table: "truck_capacity_p21_demand", order: '[{ column: "snapshot_at", ascending: false }, { column: "id" }]' },
-  { file: "src/lib/truck-capacity/serve.ts", label: "forecast p21 cubes", table: "truck_capacity_p21_demand", order: '[{ column: "snapshot_at", ascending: false }, { column: "id", ascending: false }]' },
+  {
+    file: "src/lib/truck-capacity/serve.ts",
+    label: "forecast p21 cubes",
+    table: "truck_capacity_p21_demand",
+    order: `[
+        { column: "snapshot_at", ascending: false },
+        { column: "id", ascending: false },
+      ]`,
+  },
+  {
+    file: "src/lib/dispatch.functions.ts",
+    label: "dispatch stop cubes",
+    table: "dispatch_stops",
+    order: '[{ column: "created_at" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/dispatch.functions.ts",
+    label: "dispatch run detail stops",
+    table: "dispatch_stops",
+    order: '[{ column: "position" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/dispatch.server.ts",
+    label: "dispatch run plan stops",
+    table: "dispatch_stops",
+    order: '[{ column: "position" }, { column: "id" }]',
+  },
   { file: "src/lib/truck-capacity/board.ts", label: "board truck_capacity_runs", table: "truck_capacity_runs", order: '[{ column: "run_date", ascending: false }, { column: "id" }]' },
   { file: "src/lib/pricer.functions.ts", label: "listSkuFamilies price_list", table: "price_list", order: '[{ column: "item_short" }, { column: "id" }]' },
   { file: "src/lib/pricer.functions.ts", label: "listFamilyImages price_list", table: "price_list", order: '[{ column: "id" }]' },
@@ -38,7 +64,7 @@ describe("fixed call sites use the shared pager", () => {
     it(`${s.file} — ${s.label}`, () => {
       const b = block(s.file, s.label);
       expect(b).toContain(`from("${s.table}")`);
-      expect(b).toContain('{ count: "exact" }');
+      expect(b).toMatch(/\{\s*count:\s*"exact"/);
       expect(b).toContain(`orderBy: ${s.order}`);
       expect(b).not.toMatch(/\.limit\(/);
       expect(b).not.toMatch(/\.range\(/);

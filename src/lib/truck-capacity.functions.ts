@@ -314,8 +314,19 @@ async function buildSnapshotReadout(startedAt: Date) {
   const capped = fracs.filter((f) => f >= 1.499999).length;
   const routeIds = Array.from(new Set(withFrac.map((r) => r.route_id)));
   const { data: routeRows } = routeIds.length
-    ? await supabaseAdmin.from("truck_capacity_routes").select("id, code, hub, cube_full_truck_ft3, pallets_full_truck").in("id", routeIds)
-    : { data: [] as { id: string; code: string; hub: string; cube_full_truck_ft3: number | null; pallets_full_truck: number | null }[] };
+    ? await supabaseAdmin
+        .from("truck_capacity_routes")
+        .select("id, code, hub, cube_full_truck_ft3, pallets_full_truck")
+        .in("id", routeIds)
+    : {
+        data: [] as {
+          id: string;
+          code: string;
+          hub: string;
+          cube_full_truck_ft3: number | null;
+          pallets_full_truck: number | null;
+        }[],
+      };
   const codeById = new Map((routeRows ?? []).map((r) => [r.id, `${r.code} · ${r.hub}`]));
   const capById = new Map((routeRows ?? []).map((r) => [r.id, r]));
   const top5 = [...withFrac]

@@ -2,7 +2,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { EST_PALLETS_UNAVAILABLE, formatEstPallets } from "@/lib/truck-capacity/est-pallets";
 
 /** Keyboard-focusable explanation of the cube pallet formula. Does not navigate the row. */
-export function EstPalletsTrigger({ code, estPallets }: { code: string; estPallets: number | null }) {
+export function EstPalletsTrigger({
+  code,
+  estPallets,
+}: {
+  code: string;
+  estPallets: number | null;
+}) {
   const shown = formatEstPallets(estPallets);
   const text = shown === EST_PALLETS_UNAVAILABLE ? "pallets unavailable" : `${shown} est. pallets`;
   return (
@@ -20,7 +26,9 @@ export function EstPalletsTrigger({ code, estPallets }: { code: string; estPalle
           </button>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">
-          Estimated pallets = cube ÷ (cube per full truck ÷ pallets per full truck), from this route&apos;s Truck Capacity settings. Missing, zero, or negative cube or capacity shows as unavailable. A previously saved pallet count is not reused.
+          Estimated pallets = cube ÷ (cube per full truck ÷ pallets per full truck), from this
+          route&apos;s Truck Capacity settings. Missing, zero, or negative cube or capacity shows as
+          unavailable. A previously saved pallet count is not reused.
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

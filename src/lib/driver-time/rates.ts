@@ -182,10 +182,14 @@ export function duplicatePayRateMessage(date: string): string {
   return `This driver already has a rate starting ${date}. Edit that row instead.`;
 }
 
-export const STALE_PAY_RATE_MESSAGE = "This rate changed since you opened it. Refresh and try again.";
+export const STALE_PAY_RATE_MESSAGE =
+  "This rate changed since you opened it. Refresh and try again.";
 
 /** Map a Postgres write failure to the message the rate dialog shows. */
-export function payRateWriteError(e: { code?: string; message?: string } | null | undefined, date: string): Error {
+export function payRateWriteError(
+  e: { code?: string; message?: string } | null | undefined,
+  date: string,
+): Error {
   if (e?.code === "23505") return new Error(duplicatePayRateMessage(date));
   return new Error(e?.message || "Could not save the rate");
 }

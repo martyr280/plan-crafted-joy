@@ -36,7 +36,44 @@ export function thresholdLabel(minutes: number): string {
   return `${Number((minutes / 60).toFixed(2))} h`;
 }
 
-export function DriverCard({ driver, isAdmin, canViewPay = false, thresholdMinutes }: { driver: any; weekStart: string; isAdmin: boolean; canViewPay?: boolean; thresholdMinutes: number }) {
+export function DriverCard({
+  driver,
+  isAdmin,
+  canViewPay = false,
+  thresholdMinutes,
+}: {
+  driver: {
+    driverName: string;
+    hub?: string | null;
+    flaggedMinutes: number;
+    automatedMinutes: number;
+    officialMinutes: number;
+    varianceMinutes: number;
+    official: {
+      source?: string;
+      reason?: string;
+      intervals?: Array<{
+        date: string;
+        start: string;
+        end: string;
+        minutes: number;
+        note?: string | null;
+      }>;
+    } | null;
+    cost: {
+      cost: number | null;
+      note?: string | null;
+      multiplier?: number | null;
+      hoursSource?: string;
+    };
+    history: Array<{ at: string; after?: { minutes: number; reason?: string } | null }>;
+    events: Array<{ event_date: string }>;
+  };
+  weekStart: string;
+  isAdmin: boolean;
+  canViewPay?: boolean;
+  thresholdMinutes: number;
+}) {
   const update = useUpdateDriverTimeEvent();
 
   const byDay = useMemo(() => {

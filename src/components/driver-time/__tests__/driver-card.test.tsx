@@ -17,7 +17,15 @@ const driver = {
 };
 
 const render = (isAdmin: boolean, t = 90, canViewPay = false) =>
-  renderToStaticMarkup(<DriverCard driver={driver} weekStart="2026-09-21" isAdmin={isAdmin} canViewPay={canViewPay} thresholdMinutes={t} />);
+  renderToStaticMarkup(
+    <DriverCard
+      driver={driver}
+      weekStart="2026-09-21"
+      isAdmin={isAdmin}
+      canViewPay={canViewPay}
+      thresholdMinutes={t}
+    />,
+  );
 
 describe("DriverCard (Joe Green 2026-09-30 clean-up)", () => {
   it("non-admin: no Paycom input, no official box, no duty status, no pay; shows week total over threshold", () => {

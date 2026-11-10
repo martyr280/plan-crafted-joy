@@ -391,16 +391,18 @@ async function upsertRun(routeId: string, run: DispatchPlanRun, bridgeJobId: str
 
 /** Re-hydrate a persisted dispatch_run back into the plan shape diff.ts wants. */
 async function loadRunAsPlan(runId: string): Promise<{ run: DispatchPlanRun; row: any } | null> {
-  const { data: row, error: runErr } = await db().from("dispatch_runs").select("*").eq("id", runId).maybeSingle();
+  const { data: row, error: runErr } = await db()
+    .from("dispatch_runs")
+    .select("*")
+    .eq("id", runId)
+    .maybeSingle();
   if (runErr) throw new Error(`Dispatch run unavailable: ${runErr.message}`);
   if (!row) return null;
-  const { data: stops, error: stopErr } = await db()
-    .from("dispatch_stops")
-    .select("*")
-    .eq("dispatch_run_id", runId)
-    .order("position", { ascending: true })
-    .limit(5000);
-  if (stopErr) throw new Error(`Dispatch stops unavailable: ${stopErr.message}`);
+  const { fetchAllRows } = await import("./supabase-fetch-all");
+  const stops = await fetchAllRows<Record<string, unknown>>(
+    () => db().from("dispatch_stops").select("*", { count: "exact" }).eq("dispatch_run_id", runId),
+    { orderBy: [{ column: "position" }, { column: "id" }], label: "dispatch run plan stops" },
+  );
   const { data: route, error: routeErr } = row.route_id
     ? await db()
         .from("truck_capacity_routes")
@@ -415,23 +417,24 @@ async function loadRunAsPlan(runId: string): Promise<{ run: DispatchPlanRun; row
     palletsFullTruck: route?.pallets_full_truck,
   });
 
-  const mapped = fresh.stops.map((s: any) => ({
-    position: s.position,
-    runDay: s.run_day,
-    pickTicketNo: s.pick_ticket_no,
-    orderNo: s.order_no,
-    customerId: s.customer_id,
-    customerName: s.customer_name,
-    p21ShipToId: s.p21_ship_to_id,
-    samsaraAddressId: s.samsara_address_id,
-    scheduledArrival: s.scheduled_arrival,
-    stopNotes: s.stop_notes,
+  const text = (v: unknown): string | null => (v == null ? null : String(v));
+  const mapped = fresh.stops.map((s) => ({
+    position: Number(s.position),
+    runDay: text(s.run_day) ?? "",
+    pickTicketNo: text(s.pick_ticket_no),
+    orderNo: text(s.order_no),
+    customerId: text(s.customer_id),
+    customerName: text(s.customer_name),
+    p21ShipToId: text(s.p21_ship_to_id),
+    samsaraAddressId: text(s.samsara_address_id),
+    scheduledArrival: text(s.scheduled_arrival) ?? "",
+    stopNotes: text(s.stop_notes),
     estPallets: s.est_pallets,
     estCubeFt: Number(s.est_cube_ft ?? 0),
     estWeightLbs: Number(s.est_weight_lbs ?? 0),
     hold: Boolean(s.hold),
-    holdReason: s.hold_reason,
-    state: s.state,
+    holdReason: text(s.hold_reason),
+    state: text(s.state),
     unslotted: false,
   }));
 

@@ -5,7 +5,12 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dateStrInTz } from "@/lib/driver-time/tz";
 import { actualSchema, validateActual, buildReconciledDrivers, weekday } from "@/lib/driver-time/reconciliation";
-import { isValidDateStr, isValidHourlyRate, payRateWriteError, STALE_PAY_RATE_MESSAGE } from "@/lib/driver-time/rates";
+import {
+  isValidDateStr,
+  isValidHourlyRate,
+  payRateWriteError,
+  STALE_PAY_RATE_MESSAGE,
+} from "@/lib/driver-time/rates";
 
 const db = () => supabaseAdmin as any;
 
@@ -122,12 +127,25 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       const paidHours = paycomFor(b.driverId);
       const base = { driverId:b.driverId,driverName:b.driverName,samsaraWeekHours:0,paycomHours:paidHours,flaggedHours };
       const split = canManageDriverPay ? flaggedMinutesByDay(b) : { byDay: {}, unsplitMinutes: 0 };
-      const splitTotal = Object.values(split.byDay).reduce((s, m) => s + m, 0) + split.unsplitMinutes;
+      const splitTotal =
+        Object.values(split.byDay).reduce((s, m) => s + m, 0) + split.unsplitMinutes;
       // Defensive: if the day split ever disagrees with the reported total,
       // price the whole week as one unsplit block (refuses mid-week changes).
       const byDay = canManageDriverPay && splitTotal === b.flaggedMinutes ? split.byDay : {};
-      const unsplitMinutes = canManageDriverPay && splitTotal === b.flaggedMinutes ? split.unsplitMinutes : (canManageDriverPay ? b.flaggedMinutes : 0);
-      const cost = priceDriverWeek(canManageDriverPay, { ...base, byDay, unsplitMinutes, weekStart, weekEnd, rates: canManageDriverPay ? rates : [] });
+      const unsplitMinutes =
+        canManageDriverPay && splitTotal === b.flaggedMinutes
+          ? split.unsplitMinutes
+          : canManageDriverPay
+            ? b.flaggedMinutes
+            : 0;
+      const cost = priceDriverWeek(canManageDriverPay, {
+        ...base,
+        byDay,
+        unsplitMinutes,
+        weekStart,
+        weekEnd,
+        rates: canManageDriverPay ? rates : [],
+      });
       // This module does not fetch total weekly paid hours. Never label zero
       // as real Samsara hours or infer an overtime multiplier from it.
       if (paidHours == null) { cost.cost = null; cost.multiplier = null; cost.note = "Enter Paycom paid hours to estimate cost"; }
@@ -167,8 +185,12 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
         unresolvedMinutes: driverRows.reduce((s,d)=>s+d.unresolvedMinutes,0),
         flaggedHours: Math.round((driverRows.reduce((s, d) => s + d.flaggedMinutes, 0) / 60) * 100) / 100,
         needsReview: scopedEvents.filter((e: any) => e.needs_review && !e.superseded_at && e.status !== "excused").length,
-        estimatedCost: canManageDriverPay ? driverRows.reduce((s, d) => s + (d.cost.cost ?? 0), 0) : null,
-        driversWithoutRate: canManageDriverPay ? driverRows.filter((d) => d.cost.hourlyRate === null).length : 0,
+        estimatedCost: canManageDriverPay
+          ? driverRows.reduce((s, d) => s + (d.cost.cost ?? 0), 0)
+          : null,
+        driversWithoutRate: canManageDriverPay
+          ? driverRows.filter((d) => d.cost.hourlyRate === null).length
+          : 0,
       },
       runs: runs ?? [],
     };

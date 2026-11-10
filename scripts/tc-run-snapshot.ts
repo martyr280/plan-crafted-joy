@@ -56,7 +56,9 @@ async function main() {
   // Map route_id → code for readability.
   const routeIds = Array.from(new Set(withFrac.map((r) => r.route_id)));
   const { data: routeRows } = await supabaseAdmin
-    .from("truck_capacity_routes").select("id, code, hub, cube_full_truck_ft3, pallets_full_truck").in("id", routeIds);
+    .from("truck_capacity_routes")
+    .select("id, code, hub, cube_full_truck_ft3, pallets_full_truck")
+    .in("id", routeIds);
   const codeById = new Map((routeRows ?? []).map((r) => [r.id, `${r.code} · ${r.hub}`]));
   const capById = new Map((routeRows ?? []).map((r) => [r.id, r]));
 

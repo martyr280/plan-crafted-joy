@@ -169,7 +169,11 @@ function DriverTimePage() {
         <KpiCard label="Needs review" value={String(totals?.needsReview ?? 0)} icon={<AlertTriangle className="w-5 h-5" />} />
         <KpiCard
           label="Estimated cost"
-          value={!!data?.canManageDriverPay && drivers.some(d=>d.cost.cost != null) ? money(totals?.estimatedCost ?? 0) : "—"}
+          value={
+            !!data?.canManageDriverPay && drivers.some((d) => d.cost.cost != null)
+              ? money(totals?.estimatedCost ?? 0)
+              : "—"
+          }
           icon={<CheckCircle2 className="w-5 h-5" />}
         />
 
@@ -214,7 +218,14 @@ function DriverTimePage() {
               </div>
               <div className="space-y-4 p-3">
                 {g.drivers.map((d: any) => (
-                  <DriverCard key={d.driverId} driver={d} weekStart={weekStart} isAdmin={!!data?.isAdmin} canViewPay={!!data?.canManageDriverPay} thresholdMinutes={Number((data as any)?.thresholdMinutes ?? 90)} />
+                  <DriverCard
+                    key={d.driverId}
+                    driver={d}
+                    weekStart={weekStart}
+                    isAdmin={!!data?.isAdmin}
+                    canViewPay={!!data?.canManageDriverPay}
+                    thresholdMinutes={Number(data?.thresholdMinutes ?? 90)}
+                  />
                 ))}
               </div>
             </Card>

@@ -20,6 +20,8 @@ import { useModuleView } from "@/lib/usage-log";
 import { buildLoadSheet } from "@/lib/dispatch/loadsheet";
 import { formatEstPallets, formatPalletTotal } from "@/lib/truck-capacity/est-pallets";
 import { TicketBoard } from "@/components/dispatch/TicketBoard";
+import { RunDetailAlert } from "@/components/dispatch/RunDetailAlert";
+import { dispatchRunPanels } from "@/components/dispatch/run-detail-panels";
 import { DATE_BASES, DATE_BASIS_LABEL } from "@/lib/dispatch/assign";
 import {
   useAddressQueue, useApproveAndPush, useBuildRunNow, useCancelRun, useDispatchRun, useDispatchRuns,
@@ -56,7 +58,8 @@ function showRunPallets(run: {
       unknownCount: 1,
     });
   }
-  if (run.est_pallets_status === "unavailable" || run.est_pallets == null) return formatEstPallets(null);
+  if (run.est_pallets_status === "unavailable" || run.est_pallets == null)
+    return formatEstPallets(null);
   return formatEstPallets(run.est_pallets);
 }
 
@@ -300,6 +303,11 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
       ),
     [stops],
   );
+  const panels = dispatchRunPanels({
+    isError: q.isError,
+    isLoading: q.isLoading,
+    hasData: Boolean(q.data),
+  });
 
   return (
     <Dialog open={Boolean(runId)} onOpenChange={(o) => !o && onClose()}>
@@ -310,9 +318,16 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
           </DialogTitle>
         </DialogHeader>
 
-        {q.isLoading && <div className="text-sm text-muted-foreground">Loading run…</div>}
+        {panels.showLoading && <div className="text-sm text-muted-foreground">Loading run…</div>}
+        {panels.showError && (
+          <RunDetailAlert
+            message={(q.error as Error)?.message ?? "The run could not be loaded."}
+            stale={panels.showStaleNote}
+            onRetry={() => void q.refetch()}
+          />
+        )}
 
-        {q.data && (
+        {panels.showRun && q.data && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <StatusBadge status={q.data.run.status} />
@@ -324,10 +339,22 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
             </div>
 
             <div className="grid gap-3 sm:grid-cols-4 text-sm">
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Stops</div><div className="font-semibold">{num(q.data.run.stops_total)}</div></Card>
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Held</div><div className="font-semibold">{num(q.data.run.stops_held)}</div></Card>
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Pallets</div><div className="font-semibold">{showRunPallets(q.data.run)}</div></Card>
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Weight (lbs)</div><div className="font-semibold">{num(q.data.run.est_weight_lbs)}</div></Card>
+              <Card className="p-3">
+                <div className="text-muted-foreground text-xs">Stops</div>
+                <div className="font-semibold">{num(q.data.run.stops_total)}</div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-muted-foreground text-xs">Held</div>
+                <div className="font-semibold">{num(q.data.run.stops_held)}</div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-muted-foreground text-xs">Pallets</div>
+                <div className="font-semibold">{showRunPallets(q.data.run)}</div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-muted-foreground text-xs">Weight (lbs)</div>
+                <div className="font-semibold">{num(q.data.run.est_weight_lbs)}</div>
+              </Card>
             </div>
 
             {q.data.exception && (
@@ -428,7 +455,9 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                           <TableCell className="truncate">{s.customerName ?? "—"}</TableCell>
                           <TableCell>{s.state ?? "—"}</TableCell>
                           <TableCell className="truncate">{s.orderNo ?? "—"}</TableCell>
-                          <TableCell className="text-right">{formatEstPallets(s.estPallets)}</TableCell>
+                          <TableCell className="text-right">
+                            {formatEstPallets(s.estPallets)}
+                          </TableCell>
                         </TableRow>
                       ))
                     : stops.map((s) => (
@@ -438,7 +467,9 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                           <TableCell>{s.state ?? "—"}</TableCell>
                           <TableCell className="truncate">{s.order_no ?? "—"}</TableCell>
                           <TableCell>{timeLocal(s.scheduled_arrival)}</TableCell>
-                          <TableCell className="text-right">{formatEstPallets(s.est_pallets)}</TableCell>
+                          <TableCell className="text-right">
+                            {formatEstPallets(s.est_pallets)}
+                          </TableCell>
                           <TableCell className="text-xs">
                             {s.hold ? (
                               <span className="text-amber-600 inline-flex items-center gap-1">
@@ -457,8 +488,8 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
             </Card>
             {showLoadSheet && (
               <p className="text-xs text-muted-foreground">
-                Load sheet is delivery order reversed — last stop loads first. Held stops are excluded.
-                Pallet total: {formatPalletTotal(loadSheet.totals.palletTotal)}.
+                Load sheet is delivery order reversed — last stop loads first. Held stops are
+                excluded. Pallet total: {formatPalletTotal(loadSheet.totals.palletTotal)}.
               </p>
             )}
           </div>

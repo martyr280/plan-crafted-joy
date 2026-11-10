@@ -59,7 +59,13 @@ export type UpcomingRun = {
   missing_cube: number;
   est_weight_lbs: number;
   missing_weight: number;
-  demand: { order_count: number | null; total_cube_ft: number | null; projected_capacity_frac: number | null; snapshot_at: string | null; est_pallets: number | null } | null;
+  demand: {
+    order_count: number | null;
+    total_cube_ft: number | null;
+    projected_capacity_frac: number | null;
+    snapshot_at: string | null;
+    est_pallets: number | null;
+  } | null;
   ticketList: TicketView[];
   exception: RunException | null;
 };
@@ -121,18 +127,20 @@ export function buildDispatchBoard(
       run = {
         route_code: code, route_id: routeId, run_date: runDate, tickets: 0, orders: 0, held: 0,
         est_cube_ft: 0, missing_cube: 0, est_weight_lbs: 0, missing_weight: 0,
-        demand: dm ? {
-          order_count: dm.order_count,
-          total_cube_ft: numOrNull(dm.total_cube_ft),
-          projected_capacity_frac: numOrNull(dm.projected_capacity_frac),
-          snapshot_at: dm.snapshot_at,
-          est_pallets: resolveDisplayedEstPallets({
-            cube: dm.total_cube_ft,
-            cubeFullTruckFt3: dm.cube_full_truck_ft3,
-            palletsFullTruck: dm.pallets_full_truck,
-            storedEstPallets: dm.est_pallets,
-          }),
-        } : null,
+        demand: dm
+          ? {
+              order_count: dm.order_count,
+              total_cube_ft: numOrNull(dm.total_cube_ft),
+              projected_capacity_frac: numOrNull(dm.projected_capacity_frac),
+              snapshot_at: dm.snapshot_at,
+              est_pallets: resolveDisplayedEstPallets({
+                cube: dm.total_cube_ft,
+                cubeFullTruckFt3: dm.cube_full_truck_ft3,
+                palletsFullTruck: dm.pallets_full_truck,
+                storedEstPallets: dm.est_pallets,
+              }),
+            }
+          : null,
         ticketList: [],
         exception: excByKey.get(key) ?? null,
       };

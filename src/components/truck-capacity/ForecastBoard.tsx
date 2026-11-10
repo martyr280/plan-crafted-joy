@@ -13,7 +13,6 @@ import { cutoffSortKey } from "@/lib/truck-capacity/cutoffs";
 import { UtilizationBar } from "./UtilizationBar";
 import { EstPalletsTrigger } from "./EstPalletsTrigger";
 
-
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function fmtRunDates(dates: string[]) {

@@ -6,7 +6,11 @@
 //
 // No I/O; deterministic. Identical inputs must produce a byte-identical plan.
 
-import { estimatePallets, sumEstPallets, type PalletTotalStatus } from "@/lib/truck-capacity/est-pallets";
+import {
+  estimatePallets,
+  sumEstPallets,
+  type PalletTotalStatus,
+} from "@/lib/truck-capacity/est-pallets";
 import { isGeocodable, normalizeAddress, type RawAddress } from "./address-match";
 import {
   sequenceStops,

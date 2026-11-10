@@ -53,7 +53,9 @@ function DriverRatesPanelInner() {
     <Card className="p-4 space-y-3" data-testid="driver-rates-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="font-semibold text-sm" data-testid="driver-rates-heading">Driver rates</div>
+          <div className="font-semibold text-sm" data-testid="driver-rates-heading">
+            Driver rates
+          </div>
           <p className="text-xs text-muted-foreground">
             Each day's cost uses the newest rate that started on or before that day. Adding a rate keeps all earlier rates.
           </p>

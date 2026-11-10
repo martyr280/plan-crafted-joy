@@ -836,7 +836,7 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
             <TableHeader><TableRow>
               <TableHead>Date</TableHead><TableHead>DoW</TableHead><TableHead>Baseline</TableHead>
               <TableHead>Model</TableHead><TableHead>Blend</TableHead><TableHead>P21</TableHead>
-              <TableHead>Est. pallets</TableHead>
+                <TableHead>Est. pallets</TableHead>
               <TableHead>Final</TableHead><TableHead>Method</TableHead><TableHead>Drivers</TableHead>
             </TableRow></TableHeader>
             <TableBody>
@@ -848,7 +848,9 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
                   <TableCell>{pct(d.model)}</TableCell>
                   <TableCell>{pct(d.blend)}</TableCell>
                   <TableCell>{pct(d.p21)}</TableCell>
-                  <TableCell data-testid={`forecast-pallets-${d.date}`}>{formatEstPallets(d.est_pallets)}</TableCell>
+                  <TableCell data-testid={`forecast-pallets-${d.date}`}>
+                    {formatEstPallets(d.est_pallets)}
+                  </TableCell>
                   <TableCell className="font-medium">{pct(d.final)}</TableCell>
                   <TableCell><Badge variant="outline" className="text-xs">{d.method}</Badge></TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[320px]">{d.driverSummary ?? "—"}</TableCell>
@@ -1961,10 +1963,28 @@ function SnapshotResultView({ result }: { result: any }) {
             <div>
               <div className="font-medium mt-1">Top 5 route-days by projected fraction</div>
               <table className="w-full text-[11px] mt-1">
-                <thead className="text-muted-foreground"><tr><th className="text-left">Route</th><th className="text-left">Ship date</th><th className="text-right">Frac</th><th className="text-right">Cube ft³</th><th className="text-right">Weight lb</th><th className="text-right">Est. pallets</th><th className="text-right">Orders</th></tr></thead>
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="text-left">Route</th>
+                    <th className="text-left">Ship date</th>
+                    <th className="text-right">Frac</th>
+                    <th className="text-right">Cube ft³</th>
+                    <th className="text-right">Weight lb</th>
+                    <th className="text-right">Est. pallets</th>
+                    <th className="text-right">Orders</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {readout.top5ByProjectedFrac.map((t: any, i: number) => (
-                    <tr key={i} className="border-t"><td>{t.route}</td><td>{t.ship_date}</td><td className="text-right">{Number(t.projected_capacity_frac).toFixed(3)}</td><td className="text-right">{t.total_cube_ft ?? "—"}</td><td className="text-right">{t.total_weight_lbs ?? "—"}</td><td className="text-right">{formatEstPallets(t.est_pallets)}</td><td className="text-right">{t.order_count ?? "—"}</td></tr>
+                    <tr key={i} className="border-t">
+                      <td>{t.route}</td>
+                      <td>{t.ship_date}</td>
+                      <td className="text-right">{Number(t.projected_capacity_frac).toFixed(3)}</td>
+                      <td className="text-right">{t.total_cube_ft ?? "—"}</td>
+                      <td className="text-right">{t.total_weight_lbs ?? "—"}</td>
+                      <td className="text-right">{formatEstPallets(t.est_pallets)}</td>
+                      <td className="text-right">{t.order_count ?? "—"}</td>
+                    </tr>
                   ))}
                 </tbody>
               </table>

@@ -146,7 +146,9 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
     () =>
       supabaseAdmin
         .from("truck_capacity_p21_demand")
-        .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, snapshot_at", { count: "exact" })
+        .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, snapshot_at", {
+          count: "exact",
+        })
         .gte("ship_date", addDaysISO(todayUtc, -2))
         .lte("ship_date", windowEnd) as any,
     { label: "board truck_capacity_p21_demand", orderBy: [{ column: "snapshot_at", ascending: false }, { column: "id" }] },
@@ -156,7 +158,8 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
   for (const d of demand ?? []) {
     const key = `${d.route_id}|${d.ship_date}`;
     if (!demandLatest.has(key)) {
-      const cubeN = d.total_cube_ft == null || d.total_cube_ft === "" ? null : Number(d.total_cube_ft);
+      const cubeN =
+        d.total_cube_ft == null || d.total_cube_ft === "" ? null : Number(d.total_cube_ft);
       demandLatest.set(key, {
         frac: Number(d.projected_capacity_frac ?? 0),
         cube: cubeN != null && Number.isFinite(cubeN) ? cubeN : null,
@@ -198,7 +201,8 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
       for (const d of dates) {
         const v = demandLatest.get(`${route.id}|${d}`);
         if (v == null) continue;
-        if (current == null) current = v.frac; else current = Math.max(current, v.frac);
+        if (current == null) current = v.frac;
+        else current = Math.max(current, v.frac);
         booked.push({ cube: v.cube });
       }
     }

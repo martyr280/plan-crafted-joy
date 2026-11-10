@@ -13,6 +13,7 @@ import {
 import { groupContributions, driverSummary } from "./explain";
 import { forecastLogRowsFromDays } from "./forecast-log";
 import { estimatePallets, latestDemandCube } from "./est-pallets";
+import type { PagedQuery } from "../supabase-fetch-all";
 
 export type ServingMethod = "auto" | "baseline" | "model";
 
@@ -122,18 +123,31 @@ async function loadP21Latest(routeId: string, from: string, to: string): Promise
  * cap cannot drop a newer snapshot. A failed read throws; it is not an empty
  * route. The stored est_pallets column is not selected.
  */
-async function loadP21Cubes(routeId: string, from: string, to: string): Promise<Map<string, number | null>> {
+async function loadP21Cubes(
+  routeId: string,
+  from: string,
+  to: string,
+): Promise<Map<string, number | null>> {
   const { fetchAllRows } = await import("../supabase-fetch-all");
-  const rows = await fetchAllRows<{ id: string; ship_date: string; total_cube_ft: number | null; snapshot_at: string | null }>(
+  type CubeRow = {
+    id: string;
+    ship_date: string;
+    total_cube_ft: number | null;
+    snapshot_at: string | null;
+  };
+  const rows = await fetchAllRows<CubeRow>(
     () =>
       supabaseAdmin
         .from("truck_capacity_p21_demand")
         .select("id, ship_date, total_cube_ft, snapshot_at", { count: "exact" })
         .eq("route_id", routeId)
         .gte("ship_date", from)
-        .lte("ship_date", to) as any,
+        .lte("ship_date", to) as unknown as PagedQuery<CubeRow>,
     {
-      orderBy: [{ column: "snapshot_at", ascending: false }, { column: "id", ascending: false }],
+      orderBy: [
+        { column: "snapshot_at", ascending: false },
+        { column: "id", ascending: false },
+      ],
       label: "forecast p21 cubes",
     },
   );
@@ -292,11 +306,14 @@ export async function computeForecastForRoute(
     const p21Suffix = p21 != null ? ` · P21 ${p21.toFixed(2)}${guardApplied ? " (guard)" : ""}` : "";
     const lowConfidence = b.low_confidence || (saturated && b.forecast == null);
     const cube = p21Cubes.get(b.date);
-    const est_pallets = cube === undefined ? null : estimatePallets({
-      cube,
-      cubeFullTruckFt3: route.cube_full_truck_ft3,
-      palletsFullTruck: route.pallets_full_truck,
-    });
+    const est_pallets =
+      cube === undefined
+        ? null
+        : estimatePallets({
+            cube,
+            cubeFullTruckFt3: route.cube_full_truck_ft3,
+            palletsFullTruck: route.pallets_full_truck,
+          });
     return {
       date: b.date, dow: b.dow, baseline: b.baseline, seasonal: b.seasonal,
       forecast: b.forecast, model: modelPred, model_raw: modelRaw,

@@ -690,7 +690,8 @@ export async function runP21Snapshot(
       agg.set(key, {
         route_id: route.id, ship_date: rolled,
         order_count: oc, total_weight_lbs: weight,
-        total_cube_ft: cube, est_pallets: null,
+        total_cube_ft: cube,
+        est_pallets: null,
         pallets_full_truck: route.pallets_full_truck,
         cube_full_truck_ft3: route.cube_full_truck_ft3 == null ? null : Number(route.cube_full_truck_ft3),
         weight_full_truck_lbs: route.weight_full_truck_lbs == null ? null : Number(route.weight_full_truck_lbs),
