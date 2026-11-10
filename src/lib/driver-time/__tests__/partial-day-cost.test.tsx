@@ -130,3 +130,114 @@ describe("partial-day rate from the pricer through the report and card", () => {
     expect(screen.queryByText(/At least \$40/)).toBeNull();
   });
 });
+
+describe("week coverage sums minutes for every driver", () => {
+  const bounds = {
+    weekStart: "2026-11-09",
+    weekEnd: "2026-11-13",
+    samsaraWeekHours: 0,
+    paycomHours: 39,
+    unsplitMinutes: 0,
+  };
+
+  function priced(driverId: string, byDay: Record<string, number>, effective: string | null) {
+    const minutes = Object.values(byDay).reduce((sum, m) => sum + m, 0);
+    return estimateCostWithRates({
+      ...bounds,
+      driverId,
+      flaggedHours: minutes / 60,
+      byDay,
+      rates: effective
+        ? [{ id: driverId, driver_id: driverId, hourly_rate: 20, effective_date: effective }]
+        : [],
+    });
+  }
+
+  const full = priced("full", { "2026-11-10": 120 }, "2026-11-01");
+  const partial = priced("part", { "2026-11-09": 120, "2026-11-10": 120 }, "2026-11-10");
+  const unpriced = priced("none", { "2026-11-09": 120 }, null);
+
+  it("prices the fixtures the pricer will aggregate", () => {
+    expect(full).toMatchObject({ cost: 40, pricedMinutes: 120, excludedMinutes: 0 });
+    expect(partial).toMatchObject({ cost: 40, pricedMinutes: 120, excludedMinutes: 120 });
+    expect(unpriced.cost).toBeNull();
+    expect(unpriced).toMatchObject({ pricedMinutes: 0, excludedMinutes: 120 });
+  });
+
+  it("full plus partial counts both drivers' priced hours against the $80", () => {
+    const drivers = [{ cost: full }, { cost: partial }];
+    const coverage = driverCostCoverage(drivers);
+    expect(coverage).toMatchObject({
+      fullyPriced: 1,
+      partlyPriced: 1,
+      unpriced: 0,
+      pricedMinutes: 240,
+      excludedMinutes: 120,
+      sum: 80,
+    });
+    expect(estimatedCostFigure(true, drivers).text).toBe("At least $80 (4h priced, 2h not costed)");
+  });
+
+  it("full plus unpriced keeps the priced hours and the unpriced driver's excluded hours", () => {
+    const drivers = [{ cost: full }, { cost: unpriced }];
+    const coverage = driverCostCoverage(drivers);
+    expect(coverage).toMatchObject({
+      fullyPriced: 1,
+      partlyPriced: 0,
+      unpriced: 1,
+      pricedMinutes: 120,
+      excludedMinutes: 120,
+      sum: 40,
+    });
+    expect(estimatedCostFigure(true, drivers).text).toBe(
+      "At least $40 (2h priced, 2h not costed; 1 unpriced)",
+    );
+  });
+
+  it("partial plus unpriced adds the unpriced driver's excluded hours", () => {
+    const drivers = [{ cost: partial }, { cost: unpriced }];
+    const coverage = driverCostCoverage(drivers);
+    expect(coverage).toMatchObject({
+      fullyPriced: 0,
+      partlyPriced: 1,
+      unpriced: 1,
+      pricedMinutes: 120,
+      excludedMinutes: 240,
+      sum: 40,
+    });
+    expect(estimatedCostFigure(true, drivers).text).toBe(
+      "At least $40 (2h priced, 4h not costed; 1 unpriced)",
+    );
+  });
+
+  it("all three together keep 4h priced for the $80 and 4h not costed", () => {
+    const drivers = [{ cost: full }, { cost: partial }, { cost: unpriced }];
+    const coverage = driverCostCoverage(drivers);
+    expect(coverage).toMatchObject({
+      fullyPriced: 1,
+      partlyPriced: 1,
+      unpriced: 1,
+      pricedMinutes: 240,
+      excludedMinutes: 240,
+      sum: 80,
+    });
+    const figure = estimatedCostFigure(true, drivers);
+    expect(figure.partial).toBe(true);
+    expect(figure.text).toBe("At least $80 (4h priced, 4h not costed; 1 unpriced)");
+    render(
+      <DriverTimeReport
+        isError={false}
+        isLoading={false}
+        hasData
+        onRetry={vi.fn()}
+        canManageDriverPay
+        totals={{ drivers: 3, flaggedMinutes: 480, needsReview: 0, officialDrivers: 0 }}
+        drivers={drivers}
+        hubGroups={[]}
+      />,
+    );
+    expect(screen.getByText(figure.text).className).toMatch(/text-warning-text/);
+    expect(screen.getByText(/1 fully priced, 1 partly priced, 1 unpriced/)).toBeTruthy();
+    expect(screen.getAllByText(/4h priced, 4h not costed/).length).toBeGreaterThan(0);
+  });
+});

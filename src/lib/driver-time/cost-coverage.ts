@@ -35,21 +35,18 @@ export function driverCostCoverage(drivers: ReportDriver[] | undefined): CostCov
   let excludedMinutes = 0;
   let sum = 0;
   for (const driver of included) {
+    const priced = driver.cost?.pricedMinutes ?? 0;
+    const excluded = driver.cost?.excludedMinutes ?? 0;
+    pricedMinutes += priced;
+    excludedMinutes += excluded;
     const cost = driver.cost?.cost;
     if (cost == null) {
       unpriced += 1;
       continue;
     }
-    const excluded = driver.cost?.excludedMinutes ?? 0;
-    const priced = driver.cost?.pricedMinutes ?? 0;
     sum += cost;
-    if (excluded > 0) {
-      partlyPriced += 1;
-      pricedMinutes += priced;
-      excludedMinutes += excluded;
-    } else {
-      fullyPriced += 1;
-    }
+    if (excluded > 0) partlyPriced += 1;
+    else fullyPriced += 1;
   }
   return {
     included: included.length,
@@ -69,7 +66,9 @@ export function estimatedCostFigure(
   if (!canManage) return { partial: false, text: "—" };
   const coverage = driverCostCoverage(drivers);
   if (coverage.fullyPriced + coverage.partlyPriced === 0) return { partial: false, text: "—" };
-  if (coverage.partlyPriced > 0) {
+  const hoursMatter =
+    coverage.partlyPriced > 0 || coverage.excludedMinutes > 0 || coverage.pricedMinutes > 0;
+  if (hoursMatter && (coverage.partlyPriced > 0 || coverage.unpriced > 0)) {
     const unpricedNote = coverage.unpriced > 0 ? `; ${coverage.unpriced} unpriced` : "";
     const priced = hoursLabel(coverage.pricedMinutes);
     const excluded = hoursLabel(coverage.excludedMinutes);
@@ -91,8 +90,8 @@ export function costCoverageNotice(coverage: CostCoverage): string | null {
   if (coverage.partlyPriced === 0 && coverage.unpriced === 0) return null;
   const counts = `${coverage.fullyPriced} fully priced, ${coverage.partlyPriced} partly priced, ${coverage.unpriced} unpriced.`;
   const subtotal =
-    coverage.partlyPriced > 0
-      ? ` ${hoursLabel(coverage.excludedMinutes)} not costed, so this is a known subtotal, not the full week.`
+    coverage.excludedMinutes > 0 || (coverage.partlyPriced > 0 && coverage.pricedMinutes > 0)
+      ? ` ${hoursLabel(coverage.pricedMinutes)} priced, ${hoursLabel(coverage.excludedMinutes)} not costed, so this is a known subtotal, not the full week.`
       : "";
   const missing =
     coverage.unpriced > 0
