@@ -6,6 +6,7 @@
 //
 // No I/O; deterministic. Identical inputs must produce a byte-identical plan.
 
+import { estimatePallets, sumEstPallets, type PalletTotalStatus } from "@/lib/truck-capacity/est-pallets";
 import { isGeocodable, normalizeAddress, type RawAddress } from "./address-match";
 import {
   sequenceStops,
@@ -93,7 +94,7 @@ export type DispatchPlanStop = {
   samsaraAddressId: string | null;
   scheduledArrival: string;
   stopNotes: string | null;
-  estPallets: number;
+  estPallets: number | null;
   estCubeFt: number;
   estWeightLbs: number;
   hold: boolean;
@@ -115,7 +116,10 @@ export type DispatchPlanRun = {
     ordersTotal: number;
     stopsTotal: number;
     stopsHeld: number;
-    estPallets: number;
+    estPallets: number | null;
+    /** known only when every stop estimated. partial/unavailable never store a silent zero. */
+    palletStatus: PalletTotalStatus;
+    palletKnown: number | null;
     estCubeFt: number;
     estWeightLbs: number;
   };
@@ -123,7 +127,12 @@ export type DispatchPlanRun = {
 
 export type DispatchPlan = { runs: DispatchPlanRun[] };
 
-export type BuildConfig = SequenceConfig & { runSeq?: number };
+export type BuildConfig = SequenceConfig & {
+  runSeq?: number;
+  /** Current route capacity. Omitted or non-positive → pallet estimates stay unavailable. */
+  cubeFullTruckFt3?: number | string | null;
+  palletsFullTruck?: number | string | null;
+};
 
 export function externalIdFor(routeCode: string, runDate: string, runSeq: number): string {
   return `nelsonDispatch:${routeCode}:${runDate}:${runSeq}`;
@@ -256,7 +265,11 @@ export function buildDispatchPlanFromRows(
       samsaraAddressId: s.samsaraAddressId,
       scheduledArrival: s.scheduledArrival,
       stopNotes: s.stopNotes,
-      estPallets: num(s.row.est_pallets),
+      estPallets: estimatePallets({
+        cube: s.row.est_cube_ft,
+        cubeFullTruckFt3: config.cubeFullTruckFt3,
+        palletsFullTruck: config.palletsFullTruck,
+      }),
       estCubeFt: num(s.row.est_cube_ft),
       estWeightLbs: num(s.row.est_weight_lbs),
       hold: s.hold,
@@ -268,6 +281,7 @@ export function buildDispatchPlanFromRows(
     const holds = all.filter((s) => s.hold);
     const live = all.filter((s) => !s.hold);
     const sum = (pick: (s: DispatchPlanStop) => number) => all.reduce((n, s) => n + pick(s), 0);
+    const pallets = sumEstPallets(all.map((s) => s.estPallets));
 
     return {
       routeCode: cutoff.routeCode,
@@ -282,7 +296,9 @@ export function buildDispatchPlanFromRows(
         ordersTotal: all.length,
         stopsTotal: live.length,
         stopsHeld: holds.length,
-        estPallets: sum((s) => s.estPallets),
+        estPallets: pallets.total,
+        palletStatus: pallets.status,
+        palletKnown: pallets.known,
         estCubeFt: sum((s) => s.estCubeFt),
         estWeightLbs: sum((s) => s.estWeightLbs),
       },

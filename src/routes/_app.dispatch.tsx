@@ -18,6 +18,7 @@ import { AlertTriangle, CheckCircle2, Clock, Hammer, Loader2, MapPin, Printer, R
 import { useAuth } from "@/lib/auth";
 import { useModuleView } from "@/lib/usage-log";
 import { buildLoadSheet } from "@/lib/dispatch/loadsheet";
+import { formatEstPallets, formatPalletTotal } from "@/lib/truck-capacity/est-pallets";
 import { TicketBoard } from "@/components/dispatch/TicketBoard";
 import { DATE_BASES, DATE_BASIS_LABEL } from "@/lib/dispatch/assign";
 import {
@@ -41,6 +42,23 @@ export const Route = createFileRoute("/_app/dispatch")({
 });
 
 const num = (n: unknown) => Number(n ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 });
+
+function showRunPallets(run: {
+  est_pallets?: number | null;
+  est_pallets_status?: string | null;
+  est_pallets_known?: number | null;
+}) {
+  if (run.est_pallets_status === "partial") {
+    return formatPalletTotal({
+      status: "partial",
+      total: null,
+      known: run.est_pallets_known ?? null,
+      unknownCount: 1,
+    });
+  }
+  if (run.est_pallets_status === "unavailable" || run.est_pallets == null) return formatEstPallets(null);
+  return formatEstPallets(run.est_pallets);
+}
 
 function timeLocal(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -308,7 +326,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
             <div className="grid gap-3 sm:grid-cols-4 text-sm">
               <Card className="p-3"><div className="text-muted-foreground text-xs">Stops</div><div className="font-semibold">{num(q.data.run.stops_total)}</div></Card>
               <Card className="p-3"><div className="text-muted-foreground text-xs">Held</div><div className="font-semibold">{num(q.data.run.stops_held)}</div></Card>
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Pallets</div><div className="font-semibold">{num(q.data.run.est_pallets)}</div></Card>
+              <Card className="p-3"><div className="text-muted-foreground text-xs">Pallets</div><div className="font-semibold">{showRunPallets(q.data.run)}</div></Card>
               <Card className="p-3"><div className="text-muted-foreground text-xs">Weight (lbs)</div><div className="font-semibold">{num(q.data.run.est_weight_lbs)}</div></Card>
             </div>
 
@@ -410,7 +428,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                           <TableCell className="truncate">{s.customerName ?? "—"}</TableCell>
                           <TableCell>{s.state ?? "—"}</TableCell>
                           <TableCell className="truncate">{s.orderNo ?? "—"}</TableCell>
-                          <TableCell className="text-right">{num(s.estPallets)}</TableCell>
+                          <TableCell className="text-right">{formatEstPallets(s.estPallets)}</TableCell>
                         </TableRow>
                       ))
                     : stops.map((s) => (
@@ -420,7 +438,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                           <TableCell>{s.state ?? "—"}</TableCell>
                           <TableCell className="truncate">{s.order_no ?? "—"}</TableCell>
                           <TableCell>{timeLocal(s.scheduled_arrival)}</TableCell>
-                          <TableCell className="text-right">{num(s.est_pallets)}</TableCell>
+                          <TableCell className="text-right">{formatEstPallets(s.est_pallets)}</TableCell>
                           <TableCell className="text-xs">
                             {s.hold ? (
                               <span className="text-amber-600 inline-flex items-center gap-1">
@@ -440,6 +458,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
             {showLoadSheet && (
               <p className="text-xs text-muted-foreground">
                 Load sheet is delivery order reversed — last stop loads first. Held stops are excluded.
+                Pallet total: {formatPalletTotal(loadSheet.totals.palletTotal)}.
               </p>
             )}
           </div>

@@ -46,6 +46,8 @@ function run(over: Partial<DispatchPlanRun> = {}): DispatchPlanRun {
       stopsTotal: stops.length,
       stopsHeld: 0,
       estPallets: 0,
+      palletStatus: "known",
+      palletKnown: 0,
       estCubeFt: 0,
       estWeightLbs: 0,
     },

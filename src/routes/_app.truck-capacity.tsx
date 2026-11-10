@@ -38,6 +38,7 @@ import { KpiCard } from "@/components/shared/KpiCard";
 import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
 import { ForecastBoard } from "@/components/truck-capacity/ForecastBoard";
 import { formatEstPallets } from "@/lib/truck-capacity/est-pallets";
+import { invalidateAfterCapacitySave } from "@/lib/truck-capacity/capacity-save";
 import { RouteCutoffsEditor } from "@/components/truck-capacity/RouteCutoffsEditor";
 import { SharePointSyncCard } from "@/components/truck-capacity/SharePointSyncCard";
 import { ForecastVsTracker } from "@/components/truck-capacity/ForecastVsTracker";
@@ -1267,8 +1268,9 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       });
       await palletsFn({ data: { updates } });
       toast.success("Settings saved");
-      qc.invalidateQueries({ queryKey: ["tc-settings"] });
-      qc.invalidateQueries({ queryKey: ["tc-routes"] });
+      invalidateAfterCapacitySave((queryKey) => {
+        void qc.invalidateQueries({ queryKey: [...queryKey] });
+      });
     } catch (e: any) { toast.error(e?.message ?? "Save failed"); }
     finally { setBusy(null); }
   }

@@ -12,7 +12,7 @@ import {
 } from "./features";
 import { groupContributions, driverSummary } from "./explain";
 import { forecastLogRowsFromDays } from "./forecast-log";
-import { estimatePallets } from "./est-pallets";
+import { estimatePallets, latestDemandCube } from "./est-pallets";
 
 export type ServingMethod = "auto" | "baseline" | "model";
 
@@ -117,22 +117,27 @@ async function loadP21Latest(routeId: string, from: string, to: string): Promise
   return latest;
 }
 
-/** Latest cube per ship date. The stored est_pallets column is not read. */
+/**
+ * Latest cube per ship date. Pages with snapshot_at then id so a 1,000-row
+ * cap cannot drop a newer snapshot. A failed read throws; it is not an empty
+ * route. The stored est_pallets column is not selected.
+ */
 async function loadP21Cubes(routeId: string, from: string, to: string): Promise<Map<string, number | null>> {
-  const { data } = await supabaseAdmin
-    .from("truck_capacity_p21_demand")
-    .select("ship_date, total_cube_ft, snapshot_at")
-    .eq("route_id", routeId)
-    .gte("ship_date", from)
-    .lte("ship_date", to)
-    .order("snapshot_at", { ascending: false });
-  const latest = new Map<string, number | null>();
-  for (const p of data ?? []) {
-    if (latest.has(p.ship_date)) continue;
-    const n = p.total_cube_ft == null ? null : Number(p.total_cube_ft);
-    latest.set(p.ship_date, n != null && Number.isFinite(n) ? n : null);
-  }
-  return latest;
+  const { fetchAllRows } = await import("../supabase-fetch-all");
+  const rows = await fetchAllRows<{ id: string; ship_date: string; total_cube_ft: number | null; snapshot_at: string | null }>(
+    () =>
+      supabaseAdmin
+        .from("truck_capacity_p21_demand")
+        .select("id, ship_date, total_cube_ft, snapshot_at", { count: "exact" })
+        .eq("route_id", routeId)
+        .gte("ship_date", from)
+        .lte("ship_date", to) as any,
+    {
+      orderBy: [{ column: "snapshot_at", ascending: false }, { column: "id", ascending: false }],
+      label: "forecast p21 cubes",
+    },
+  );
+  return latestDemandCube(rows);
 }
 
 export type ForecastServeOptions = {

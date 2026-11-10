@@ -65,6 +65,7 @@ function makeAdmin(opts: { routeRuns: RunRow[]; version: Row | null; route: type
       lte: () => builder,
       order: () => builder,
       limit: () => builder,
+      range: async () => ({ data: rows(), error: null, count: rows().length }),
       insert: (payload: unknown) => {
         calls.push({ table, op: "insert", payload });
         return Promise.resolve({ error: null });

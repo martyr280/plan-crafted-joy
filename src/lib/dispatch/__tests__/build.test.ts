@@ -149,7 +149,8 @@ describe("buildDispatchPlanFromRows", () => {
       row({ order_no: "O2", ship_to_id: "ST9", est_pallets: 3, est_cube_ft: 60, est_weight_lbs: 900 }),
     ];
     const wed = buildDispatchPlanFromRows(rows, MAP, TEMPLATE, CUTOFF, CONFIG).runs[0]!;
-    expect(wed.totals.estPallets).toBe(5);
+    expect(wed.totals.estPallets).toBeNull();
+    expect(wed.totals.palletStatus).toBe("unavailable");
     expect(wed.totals.estCubeFt).toBe(100);
     expect(wed.totals.estWeightLbs).toBe(1400);
   });

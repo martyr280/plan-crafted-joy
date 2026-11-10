@@ -1,3 +1,5 @@
+import { sumEstPallets, type PalletTotal } from "@/lib/truck-capacity/est-pallets";
+
 // Pure load-sheet ordering for the warehouse print view.
 //
 // A truck loads last-in-first-out: the LAST delivery of the day goes in the
@@ -28,18 +30,30 @@ export type LoadSheetStop<T extends LoadSheetInputStop> = T & {
 
 export type LoadSheet<T extends LoadSheetInputStop> = {
   stops: Array<LoadSheetStop<T>>;
-  totals: { stops: number; pallets: number; cubeFt: number; weightLbs: number };
+  totals: {
+    stops: number;
+    /** Complete total only. Null when any live stop is unknown — unknowns are not counted as 0. */
+    pallets: number | null;
+    palletTotal: PalletTotal;
+    cubeFt: number;
+    weightLbs: number;
+  };
 };
 
 export function buildLoadSheet<T extends LoadSheetInputStop>(stops: T[]): LoadSheet<T> {
-  const live = stops.filter((s) => !s.hold).slice().sort((a, b) => a.position - b.position);
+  const live = stops
+    .filter((s) => !s.hold)
+    .slice()
+    .sort((a, b) => a.position - b.position);
   const reversed = live.slice().reverse();
   const out = reversed.map((s, i) => ({ ...s, loadOrder: i + 1, deliveryPosition: s.position }));
+  const pallets = sumEstPallets(out.map((s) => s.estPallets));
   return {
     stops: out,
     totals: {
       stops: out.length,
-      pallets: out.reduce((n, s) => n + (Number(s.estPallets) || 0), 0),
+      pallets: pallets.total,
+      palletTotal: pallets,
       cubeFt: out.reduce((n, s) => n + (Number(s.estCubeFt) || 0), 0),
       weightLbs: out.reduce((n, s) => n + (Number(s.estWeightLbs) || 0), 0),
     },

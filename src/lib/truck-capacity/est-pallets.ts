@@ -68,6 +68,74 @@ export function formatEstPallets(n: number | null | undefined): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
+export type PalletTotalStatus = "known" | "partial" | "unavailable";
+
+/** A total that never treats an unknown estimate as zero. */
+export type PalletTotal = {
+  status: PalletTotalStatus;
+  /** Set only when every input is a positive estimate. */
+  total: number | null;
+  /** Sum of the estimates that could be made. Null when none could. */
+  known: number | null;
+  unknownCount: number;
+};
+
+/**
+ * Sum stop or day estimates. Zero, null, and non-finite values are unknown,
+ * not a contribution of 0. A mix is partial: `known` is the sum of the ones
+ * that exist, and `total` stays null so it cannot be read as complete.
+ */
+export function sumEstPallets(values: readonly (number | null | undefined)[]): PalletTotal {
+  let knownSum = 0;
+  let knownCount = 0;
+  let unknownCount = 0;
+  for (const value of values) {
+    if (value == null || !Number.isFinite(value) || value <= 0) unknownCount += 1;
+    else {
+      knownSum += value;
+      knownCount += 1;
+    }
+  }
+  if (knownCount === 0) return { status: "unavailable", total: null, known: null, unknownCount };
+  if (unknownCount > 0) return { status: "partial", total: null, known: knownSum, unknownCount };
+  return { status: "known", total: knownSum, known: knownSum, unknownCount: 0 };
+}
+
+export function formatPalletTotal(total: PalletTotal): string {
+  if (total.status === "partial" && total.known != null)
+    return `${formatEstPallets(total.known)} partial`;
+  if (total.status === "known") return formatEstPallets(total.total);
+  return EST_PALLETS_UNAVAILABLE;
+}
+
+export type DemandCubeRow = {
+  id?: string | null;
+  ship_date: string;
+  total_cube_ft?: unknown;
+  snapshot_at?: string | null;
+};
+
+/**
+ * Newest snapshot per ship date. Equal snapshot times break on id descending
+ * so a page cap cannot pick an arbitrary older row when the tie is stable.
+ * Stored est_pallets is not an input.
+ */
+export function latestDemandCube(rows: readonly DemandCubeRow[]): Map<string, number | null> {
+  const sorted = [...rows].sort((a, b) => {
+    const bySnap = String(b.snapshot_at ?? "").localeCompare(String(a.snapshot_at ?? ""));
+    if (bySnap !== 0) return bySnap;
+    return String(b.id ?? "").localeCompare(String(a.id ?? ""));
+  });
+  const latest = new Map<string, number | null>();
+  for (const row of sorted) {
+    if (latest.has(row.ship_date)) continue;
+    const raw = row.total_cube_ft;
+    const n = raw == null || raw === "" ? null : Number(raw);
+    latest.set(row.ship_date, n != null && Number.isFinite(n) ? n : null);
+  }
+  return latest;
+}
+
 export type RoutePalletCapacity = {
   id: string;
   cube_full_truck_ft3?: number | string | null;

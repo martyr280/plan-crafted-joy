@@ -61,7 +61,11 @@ vi.mock("@/integrations/supabase/client.server", () => ({
         order: () => query,
         limit: () => Promise.resolve({ data: state.tables[table] ?? [], error: null }),
         range: (f: number, t: number) =>
-          Promise.resolve({ data: (state.tables[table] ?? []).slice(f, t + 1), error: null, count: (state.tables[table] ?? []).length }),
+          Promise.resolve({
+            data: (state.tables[table] ?? []).slice(f, t + 1),
+            error: null,
+            count: (state.tables[table] ?? []).length,
+          }),
       };
       return query;
     },

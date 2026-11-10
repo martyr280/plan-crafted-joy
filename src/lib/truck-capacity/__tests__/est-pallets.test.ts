@@ -4,6 +4,7 @@ import {
   estimatePallets,
   estimateRunPallets,
   formatEstPallets,
+  latestDemandCube,
   resolveDisplayedEstPallets,
 } from "../est-pallets";
 import { buildDispatchBoard, type BoardCutoff, type DemandRow } from "@/lib/dispatch/board";
@@ -112,6 +113,18 @@ describe("estimatePallets", () => {
         palletsFullTruck: 26,
       }),
     ).toBe(26);
+  });
+  it("breaks snapshot ties on id and ignores a stored pallet count", () => {
+    const cubes = latestDemandCube([
+      { id: "a", ship_date: "2026-11-11", total_cube_ft: 100, snapshot_at: "2026-11-09T00:00:00Z" },
+      {
+        id: "b",
+        ship_date: "2026-11-11",
+        total_cube_ft: 2025,
+        snapshot_at: "2026-11-09T00:00:00Z",
+      },
+    ]);
+    expect(cubes.get("2026-11-11")).toBe(2025);
   });
   it("formats unavailable instead of 0", () => {
     expect(formatEstPallets(null)).toBe(EST_PALLETS_UNAVAILABLE);
