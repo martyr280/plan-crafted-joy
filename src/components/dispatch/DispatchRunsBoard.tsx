@@ -34,13 +34,20 @@ export type DispatchBoardRoute = {
   runs: DispatchBoardRun[];
 };
 
+export const destructiveBadgeClass =
+  "bg-destructive/15 text-destructive-text hover:text-destructive-text focus-visible:text-destructive-text";
+export const destructiveDetailClass =
+  "border-destructive/40 bg-destructive/5 text-destructive-text hover:text-destructive-text focus-visible:text-destructive-text";
+export const destructiveActionClass =
+  "text-destructive-text hover:text-destructive-text focus-visible:text-destructive-text";
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     planned: "bg-muted text-muted-foreground",
     pushed: "bg-primary/15 text-primary",
     locked: "bg-amber-500/15 text-amber-600",
-    cancelled: "bg-destructive/15 text-destructive",
-    error: "bg-destructive/15 text-destructive",
+    cancelled: destructiveBadgeClass,
+    error: destructiveBadgeClass,
   };
   return (
     <Badge className={map[status] ?? "bg-muted text-muted-foreground"} variant="secondary">
@@ -58,7 +65,7 @@ function ExceptionBadge({
   return flag.kind === "no_run" ? (
     <Badge
       variant="secondary"
-      className="ml-1 bg-destructive/15 text-destructive"
+      className={`ml-1 ${destructiveBadgeClass}`}
       title={flag.message}
     >
       {flag.badge}

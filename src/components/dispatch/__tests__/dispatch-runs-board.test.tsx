@@ -148,10 +148,12 @@ describe("dispatch runs board", () => {
     const noRun = screen.getByText("No run");
     const reduced = screen.getByText("Reduced");
     expect(noRun.getAttribute("title")).toBe("Tickets roll forward");
-    expect(noRun.className).toMatch(/text-destructive/);
+    expect(noRun.className).toMatch(/text-destructive-text/);
+    expect(noRun.className).not.toMatch(/text-destructive(?!-text)/);
     expect(reduced.getAttribute("title")).toBe("Short a driver");
     expect(reduced.className).toMatch(/text-amber-600/);
-    expect(screen.getByText("cancelled").className).toMatch(/text-destructive/);
+    expect(screen.getByText("cancelled").className).toMatch(/text-destructive-text/);
+    expect(screen.getByText("cancelled").className).not.toMatch(/text-destructive(?!-text)/);
     expect(screen.getByText("locked").className).toMatch(/text-amber-600/);
   });
 });

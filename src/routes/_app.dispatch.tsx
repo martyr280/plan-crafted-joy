@@ -34,6 +34,9 @@ import { TicketBoard } from "@/components/dispatch/TicketBoard";
 import { RunDetailAlert } from "@/components/dispatch/RunDetailAlert";
 import {
   DispatchRunsBoard,
+  destructiveActionClass,
+  destructiveBadgeClass,
+  destructiveDetailClass,
   type DispatchBoardRoute,
 } from "@/components/dispatch/DispatchRunsBoard";
 import { LoadSheetView } from "@/components/dispatch/LoadSheetView";
@@ -72,8 +75,8 @@ function StatusBadge({ status }: { status: string }) {
     planned: "bg-muted text-muted-foreground",
     pushed: "bg-primary/15 text-primary",
     locked: "bg-amber-500/15 text-amber-600",
-    cancelled: "bg-destructive/15 text-destructive",
-    error: "bg-destructive/15 text-destructive",
+    cancelled: destructiveBadgeClass,
+    error: destructiveBadgeClass,
   };
   return <Badge className={map[status] ?? "bg-muted text-muted-foreground"} variant="secondary">{status}</Badge>;
 }
@@ -81,7 +84,9 @@ function StatusBadge({ status }: { status: string }) {
 function ExceptionBadge({ flag }: { flag: any }) {
   if (!flag) return null;
   return flag.kind === "no_run" ? (
-    <Badge variant="secondary" className="ml-1 bg-destructive/15 text-destructive" title={flag.message}>{flag.badge}</Badge>
+    <Badge variant="secondary" className={`ml-1 ${destructiveBadgeClass}`} title={flag.message}>
+      {flag.badge}
+    </Badge>
   ) : (
     <Badge variant="secondary" className="ml-1 bg-amber-500/15 text-amber-600" title={flag.message}>{flag.badge}</Badge>
   );
@@ -261,13 +266,22 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
             </div>
 
             {q.data.exception && (
-              <Card className={q.data.exception.kind === "no_run" ? "p-3 border-destructive/40 bg-destructive/5 text-sm text-destructive" : "p-3 border-amber-500/40 bg-amber-500/5 text-sm text-amber-700"}>
+              <Card
+                tabIndex={0}
+                className={
+                  q.data.exception.kind === "no_run"
+                    ? `p-3 text-sm ${destructiveDetailClass}`
+                    : "p-3 border-amber-500/40 bg-amber-500/5 text-sm text-amber-700"
+                }
+              >
                 {q.data.exception.message}
               </Card>
             )}
 
             {q.data.run.error && (
-              <Card className="p-3 border-destructive/40 bg-destructive/5 text-sm text-destructive">{q.data.run.error}</Card>
+              <Card tabIndex={0} className={`p-3 text-sm ${destructiveDetailClass}`}>
+                {q.data.run.error}
+              </Card>
             )}
 
             <div className="flex flex-wrap gap-2">
@@ -303,7 +317,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-destructive"
+                className={destructiveActionClass}
                 disabled={!canWrite || cancel.isPending}
                 onClick={async () => {
                   const res: any = await cancel.mutateAsync({ runId: q.data!.run.id });

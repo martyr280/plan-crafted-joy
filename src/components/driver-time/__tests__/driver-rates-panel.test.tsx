@@ -192,9 +192,21 @@ describe("DriverRatesPanel states", () => {
     const amount = screen.getByLabelText("Hourly rate (USD)");
     fireEvent.change(amount, { target: { value: "0" } });
     expect(screen.getByRole("alert").textContent).toMatch(/more than \$0/);
+    expect(amount.getAttribute("aria-invalid")).toBe("true");
+    expect(amount.getAttribute("aria-describedby")).toBe("rate-error");
+    const dateInput = screen.getByLabelText("Effective date");
+    expect(dateInput.getAttribute("aria-invalid")).toBe("false");
+    expect(dateInput.getAttribute("aria-describedby")).toBeNull();
     fireEvent.change(amount, { target: { value: "24.505" } });
     expect(screen.getByRole("alert").textContent).toMatch(/2 decimals/);
     fireEvent.change(amount, { target: { value: "24.50" } });
+    expect(amount.getAttribute("aria-invalid")).toBe("false");
+    fireEvent.change(dateInput, { target: { value: "" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/Pick an effective date/);
+    expect(dateInput.getAttribute("aria-invalid")).toBe("true");
+    expect(dateInput.getAttribute("aria-describedby")).toBe("date-error");
+    expect(amount.getAttribute("aria-describedby")).toBeNull();
+    fireEvent.change(dateInput, { target: { value: "2026-11-10" } });
     fireEvent.change(screen.getByLabelText("Effective date"), { target: { value: "2099-06-01" } });
     expect(screen.getByText(/Future date: applies from 2099-06-01/)).toBeTruthy();
   });
@@ -295,7 +307,13 @@ describe("DriverRatesPanel states", () => {
     ports.update.mockRejectedValue(
       new Error("This rate changed since you opened it. Refresh and try again."),
     );
-    ports.query.refetch = vi.fn().mockRejectedValue(new Error("network"));
+    let rejectRefresh: (error: Error) => void = () => undefined;
+    ports.query.refetch = vi.fn().mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRefresh = reject;
+        }),
+    );
     render(<DriverRatesPanel />);
     fireEvent.click(screen.getByRole("button", { name: /History/ }));
     fireEvent.click(
@@ -306,11 +324,15 @@ describe("DriverRatesPanel states", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
     });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
+    expect(screen.getByRole("status").textContent).toMatch(/Refreshing this rate/);
+    expect((screen.getByLabelText("Hourly rate (USD)") as HTMLInputElement).value).toBe("21.00");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
+      rejectRefresh(new Error("network"));
     });
     expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("status").textContent).toMatch(/Could not refresh this rate/);
+    expect(screen.queryByText(/\$25\.00/)).toBeNull();
     ports.query.refetch = vi.fn().mockResolvedValue({
       isSuccess: true,
       isError: false,
@@ -320,7 +342,7 @@ describe("DriverRatesPanel states", () => {
       fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
     });
     expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("status").textContent).toMatch(/not in the refreshed list/);
     fireEvent.click(screen.getByRole("button", { name: "Review change" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
@@ -361,9 +383,10 @@ describe("DriverRatesPanel states", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
     });
-    expect(screen.getByLabelText("Hourly rate (USD)")).toHaveProperty("value", "21.00");
+    expect((screen.getByLabelText("Hourly rate (USD)") as HTMLInputElement).value).toBe("21.00");
     expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("status").textContent).toMatch(/Could not refresh this rate/);
+    expect(screen.queryByText(/\$25\.00/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Review change" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));

@@ -131,11 +131,14 @@ function DriverRatesPanelInner() {
             const isOpen = open.has(d.id);
             return (
               <div key={d.id} className="px-3 py-2 text-sm">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="font-medium min-w-0 flex-1 break-words" title={d.name}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                  <span
+                    className="w-full break-words font-medium sm:min-w-0 sm:flex-1"
+                    title={d.name}
+                  >
                     {d.name}
                   </span>
-                  <span className="text-muted-foreground text-xs min-w-48">
+                  <span className="w-full text-muted-foreground text-xs sm:w-auto sm:min-w-48">
                     {current ? (
                       <>
                         Current{" "}
@@ -273,6 +276,7 @@ function RateDialog({
       : null,
   );
   const reviewRef = useRef<HTMLParagraphElement>(null);
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const busy = add.isPending || update.isPending;
 
   const parsed = parseHourlyRate(rate);
@@ -283,7 +287,8 @@ function RateDialog({
     parsed.ok &&
     parsed.value === baseline.hourlyRate &&
     date === baseline.effectiveDate;
-  const fieldError = rate && !parsed.ok ? parsed.error : !dateOk ? "Pick an effective date." : null;
+  const rateError = rate && !parsed.ok ? parsed.error : null;
+  const dateError = !dateOk ? "Pick an effective date." : null;
 
   useEffect(() => {
     if (confirming) reviewRef.current?.focus();
@@ -321,21 +326,29 @@ function RateDialog({
   }
 
   async function refreshKeptValues() {
+    setRefreshNote("Refreshing this rate.");
     let latest: PayRateRow[];
     try {
       latest = await onRefresh();
     } catch {
+      setRefreshNote("Could not refresh this rate. The draft and the conflict are unchanged.");
       return;
     }
     if (editing.mode !== "edit") return;
     const row = latest.find((r) => r.id === editing.row.id);
-    if (!row?.updated_at || row.hourly_rate == null || !row.effective_date) return;
+    if (!row?.updated_at || row.hourly_rate == null || !row.effective_date) {
+      setRefreshNote(
+        "This rate was not in the refreshed list. The draft and the conflict are unchanged.",
+      );
+      return;
+    }
     setBaseline({
       hourlyRate: Number(row.hourly_rate),
       effectiveDate: row.effective_date,
       updatedAt: row.updated_at,
     });
     setSaveError(null);
+    setRefreshNote(null);
     setConfirming(true);
   }
 
@@ -367,10 +380,15 @@ function RateDialog({
                 inputMode="decimal"
                 placeholder="24.50"
                 value={rate}
-                aria-invalid={Boolean(fieldError)}
-                aria-describedby={fieldError ? "rate-error" : undefined}
+                aria-invalid={Boolean(rateError)}
+                aria-describedby={rateError ? "rate-error" : undefined}
                 onChange={(e) => setRate(e.target.value)}
               />
+              {rateError && (
+                <p id="rate-error" className="text-xs text-destructive-text" role="alert">
+                  {rateError}
+                </p>
+              )}
             </div>
             <div className="grid gap-1">
               <Label htmlFor="rate-date">Effective date</Label>
@@ -378,8 +396,8 @@ function RateDialog({
                 id="rate-date"
                 type="date"
                 value={date}
-                aria-invalid={Boolean(fieldError)}
-                aria-describedby={fieldError ? "rate-error" : undefined}
+                aria-invalid={Boolean(dateError)}
+                aria-describedby={dateError ? "date-error" : undefined}
                 onChange={(e) => setDate(e.target.value)}
               />
               {dateOk && date > today && (
@@ -387,10 +405,15 @@ function RateDialog({
                   Future date: applies from {date}; earlier days keep the old rate.
                 </p>
               )}
+              {dateError && (
+                <p id="date-error" className="text-xs text-destructive-text" role="alert">
+                  {dateError}
+                </p>
+              )}
             </div>
-            {fieldError && (
-              <p id="rate-error" className="text-xs text-destructive-text" role="alert">
-                {fieldError}
+            {refreshNote && (
+              <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
+                {refreshNote}
               </p>
             )}
             {saveError && (
