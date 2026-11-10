@@ -26,6 +26,7 @@ const touchedSource = [
   "src/lib/dispatch/pallets.ts",
   "src/lib/driver-time.functions.ts",
   "src/lib/driver-time/access.ts",
+  "src/lib/driver-time/cost-coverage.ts",
   "src/lib/driver-time/report-panels.ts",
   "src/lib/driver-time/rates.ts",
   "src/lib/truck-capacity.functions.ts",

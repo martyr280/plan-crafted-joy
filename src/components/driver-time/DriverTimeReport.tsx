@@ -3,10 +3,15 @@ import { AlertTriangle, CheckCircle2, Clock, Loader2, Users } from "lucide-react
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/shared/KpiCard";
-import { destructiveTextClass } from "@/components/driver-time/text-classes";
+import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 import { driverTimeReportPanels } from "@/lib/driver-time/report-panels";
+import {
+  driverCostCoverage,
+  estimatedCostFigure,
+  type ReportDriver,
+} from "@/lib/driver-time/cost-coverage";
 import { formatMinutes } from "@/lib/driver-time/reconciliation";
-import { DriverCard, hm, money } from "@/components/driver-time/DriverCard";
+import { DriverCard, hm } from "@/components/driver-time/DriverCard";
 
 type Totals = {
   drivers: number;
@@ -44,12 +49,21 @@ export function DriverTimeReport({
     drivers: Array<{ driverId: string; flaggedMinutes: number } & Record<string, unknown>>;
     flaggedMinutes: number;
   }>;
-  drivers?: Array<{ cost?: { cost: number | null } | null }>;
+  drivers?: ReportDriver[];
   thresholdMinutes?: number;
   isAdmin?: boolean;
 }) {
   const panels = driverTimeReportPanels({ isError, isLoading, isFetching, hasData });
   const groups = panels.showReport ? (hubGroups ?? []) : [];
+  const coverage = driverCostCoverage(drivers);
+  const costLabel = estimatedCostFigure(canManageDriverPay, drivers);
+  const costFigure = costLabel.partial ? (
+    <span className={`text-lg font-semibold leading-snug ${warningTextClass}`}>
+      {costLabel.text}
+    </span>
+  ) : (
+    costLabel.text
+  );
   const figure = (value: ReactNode) => {
     if (panels.showKpiNumbers) return value;
     return (
@@ -103,19 +117,16 @@ export function DriverTimeReport({
         />
         <KpiCard
           label="Estimated cost"
-          value={figure(
-            canManageDriverPay && (drivers ?? []).some((d) => d.cost?.cost != null)
-              ? money(totals?.estimatedCost ?? 0)
-              : "—",
-          )}
+          value={figure(costFigure)}
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
       </div>
-      {panels.showReport && canManageDriverPay && (totals?.driversWithoutRate ?? 0) > 0 && (
-        <Card className="mb-4 border-warning/40 p-3 text-xs text-muted-foreground">
-          {totals?.driversWithoutRate} driver(s) have no hourly rate on file, so their time is
-          excluded from the cost estimate. Enter Paycom paid hours to calculate an estimate;
-          warehouse time alone cannot establish overtime.
+      {panels.showReport && canManageDriverPay && coverage.unpriced > 0 && (
+        <Card className={`mb-4 border-warning/40 bg-warning/10 p-3 text-xs ${warningTextClass}`}>
+          {coverage.unpriced} of {coverage.included} driver(s) have no computed cost, so this total
+          is not complete ({coverage.priced} of {coverage.included} drivers priced). A missing
+          hourly rate or missing Paycom hours leaves that driver unpriced. Warehouse time alone
+          cannot establish overtime.
         </Card>
       )}
       {panels.showReport ? (

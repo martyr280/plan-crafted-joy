@@ -87,7 +87,7 @@ describe("DriverTimeReport", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
-  it("shows an em dash when every driver cost is unknown", () => {
+  it("shows an em dash when every computed cost is null, even if both rates are known", () => {
     render(
       <DriverTimeReport
         isError={false}
@@ -95,16 +95,22 @@ describe("DriverTimeReport", () => {
         hasData
         onRetry={vi.fn()}
         canManageDriverPay
-        totals={{ ...emptyTotals, drivers: 2, estimatedCost: 0 }}
-        drivers={[{ cost: { cost: null } }, { cost: { cost: null } }]}
+        totals={{ ...emptyTotals, drivers: 2, estimatedCost: 0, driversWithoutRate: 0 }}
+        drivers={[
+          { cost: { cost: null, hourlyRate: 20 } },
+          { cost: { cost: null, hourlyRate: 22 } },
+        ]}
         hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
       />,
     );
     expect(kpi("Estimated cost")).toMatch(/—/);
-    expect(kpi("Estimated cost")).not.toMatch(/\$0/);
+    expect(kpi("Estimated cost")).not.toMatch(/\$0|Partial/);
+    expect(screen.getByText(/2 of 2 driver\(s\) have no computed cost/)).toBeTruthy();
+    expect(screen.getByText(/0 of 2 drivers priced/)).toBeTruthy();
+    expect(screen.queryByText(/no hourly rate on file/)).toBeNull();
   });
 
-  it("formats a known cost in USD and ignores the unknown drivers in a mixed week", () => {
+  it("labels a mixed week as partial when one computed cost is missing and both rates are known", () => {
     render(
       <DriverTimeReport
         isError={false}
@@ -112,16 +118,37 @@ describe("DriverTimeReport", () => {
         hasData
         onRetry={vi.fn()}
         canManageDriverPay
-        totals={{ ...emptyTotals, drivers: 2, estimatedCost: 40 }}
-        drivers={[{ cost: { cost: null } }, { cost: { cost: 40 } }]}
+        totals={{ ...emptyTotals, drivers: 2, estimatedCost: 40, driversWithoutRate: 0 }}
+        drivers={[{ cost: { cost: 40, hourlyRate: 20 } }, { cost: { cost: null, hourlyRate: 22 } }]}
         hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
       />,
     );
-    expect(kpi("Estimated cost")).toMatch(/\$40/);
-    expect(kpi("Estimated cost")).not.toMatch(/\$0/);
+    const cost = screen.getByText("Partial: $40 (1 of 2 drivers priced)");
+    expect(cost.className).toMatch(/text-warning-text/);
+    expect(kpi("Estimated cost")).not.toMatch(/Estimated cost\$40$/);
+    expect(screen.getByText(/1 of 2 driver\(s\) have no computed cost/)).toBeTruthy();
+    expect(screen.queryByText(/no hourly rate on file/)).toBeNull();
   });
 
-  it("formats every known cost in USD", () => {
+  it("labels a known zero beside an unavailable cost as partial, not a complete $0", () => {
+    render(
+      <DriverTimeReport
+        isError={false}
+        isLoading={false}
+        hasData
+        onRetry={vi.fn()}
+        canManageDriverPay
+        totals={{ ...emptyTotals, drivers: 2, estimatedCost: 0, driversWithoutRate: 0 }}
+        drivers={[{ cost: { cost: 0, hourlyRate: 18 } }, { cost: { cost: null, hourlyRate: 18 } }]}
+        hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
+      />,
+    );
+    expect(screen.getByText("Partial: $0 (1 of 2 drivers priced)")).toBeTruthy();
+    expect(kpi("Estimated cost")).toMatch(/Partial/);
+    expect(screen.getByText(/1 of 2 driver\(s\) have no computed cost/)).toBeTruthy();
+  });
+
+  it("formats every known cost in USD without a partial label", () => {
     render(
       <DriverTimeReport
         isError={false}
@@ -130,11 +157,16 @@ describe("DriverTimeReport", () => {
         onRetry={vi.fn()}
         canManageDriverPay
         totals={{ ...emptyTotals, drivers: 2, estimatedCost: 1250 }}
-        drivers={[{ cost: { cost: 250 } }, { cost: { cost: 1000 } }]}
+        drivers={[
+          { cost: { cost: 250, hourlyRate: 20 } },
+          { cost: { cost: 1000, hourlyRate: 22 } },
+        ]}
         hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
       />,
     );
     expect(kpi("Estimated cost")).toMatch(/\$1,250/);
+    expect(kpi("Estimated cost")).not.toMatch(/Partial/);
+    expect(screen.queryByText(/no computed cost/)).toBeNull();
   });
 
   it("hides cached counts when a later refresh fails", () => {
