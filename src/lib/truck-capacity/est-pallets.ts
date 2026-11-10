@@ -78,6 +78,8 @@ export type PalletTotal = {
   /** Sum of the estimates that could be made. Null when none could. */
   known: number | null;
   unknownCount: number;
+  /** Inputs that were summed, including the unknown ones. */
+  stopCount: number;
 };
 
 /**
@@ -96,14 +98,21 @@ export function sumEstPallets(values: readonly (number | null | undefined)[]): P
       knownCount += 1;
     }
   }
-  if (knownCount === 0) return { status: "unavailable", total: null, known: null, unknownCount };
-  if (unknownCount > 0) return { status: "partial", total: null, known: knownSum, unknownCount };
-  return { status: "known", total: knownSum, known: knownSum, unknownCount: 0 };
+  const stopCount = knownCount + unknownCount;
+  if (knownCount === 0)
+    return { status: "unavailable", total: null, known: null, unknownCount, stopCount };
+  if (unknownCount > 0) {
+    return { status: "partial", total: null, known: knownSum, unknownCount, stopCount };
+  }
+  return { status: "known", total: knownSum, known: knownSum, unknownCount: 0, stopCount };
 }
 
 export function formatPalletTotal(total: PalletTotal): string {
-  if (total.status === "partial" && total.known != null)
-    return `${formatEstPallets(total.known)} partial`;
+  if (total.status === "partial" && total.known != null) {
+    const knownStops = Math.max(0, total.stopCount - total.unknownCount);
+    const coverage = total.stopCount > 0 ? ` (${knownStops} of ${total.stopCount} stops)` : "";
+    return `At least ${formatEstPallets(total.known)} estimated pallets${coverage}; some stops unavailable`;
+  }
   if (total.status === "known") return formatEstPallets(total.total);
   return EST_PALLETS_UNAVAILABLE;
 }

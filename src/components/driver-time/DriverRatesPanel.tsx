@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Pencil, Plus, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -6,15 +6,38 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { canManageDriverPay } from "@/lib/driver-time/access";
-import { useAddDriverPayRate, useDriverPayRates, useUpdateDriverPayRate } from "@/hooks/useDriverTime";
+import {
+  useAddDriverPayRate,
+  useDriverPayRates,
+  useUpdateDriverPayRate,
+} from "@/hooks/useDriverTime";
 import { dateStrInTz } from "@/lib/driver-time/tz";
-import { isValidDateStr, parseHourlyRate, rateHistory, rateOn, type PayRateRow } from "@/lib/driver-time/rates";
+import {
+  STALE_PAY_RATE_MESSAGE,
+  isValidDateStr,
+  parseHourlyRate,
+  rateHistory,
+  rateOn,
+  type PayRateRow,
+} from "@/lib/driver-time/rates";
 
 export const rateMoney = (n: number) =>
-  n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 type Driver = { id: string; name: string; source: string };
 type Editing =
@@ -35,8 +58,12 @@ function DriverRatesPanelInner() {
   const [editing, setEditing] = useState<Editing | null>(null);
   const today = dateStrInTz(new Date());
 
-  const drivers: Driver[] = (q.data as any)?.drivers ?? [];
-  const rates: PayRateRow[] = (q.data as any)?.rates ?? [];
+  const payload = q.data as
+    | { drivers?: Driver[]; rates?: PayRateRow[]; rosterError?: string | null }
+    | undefined;
+  const drivers: Driver[] = useMemo(() => payload?.drivers ?? [], [payload]);
+  const rates: PayRateRow[] = payload?.rates ?? [];
+  const rosterError = payload?.rosterError;
   const shown = useMemo(() => {
     const f = filter.trim().toLowerCase();
     return f ? drivers.filter((d) => d.name.toLowerCase().includes(f)) : drivers;
@@ -45,7 +72,8 @@ function DriverRatesPanelInner() {
   const toggle = (id: string) =>
     setOpen((s) => {
       const n = new Set(s);
-      if (n.has(id)) n.delete(id); else n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 
@@ -57,22 +85,43 @@ function DriverRatesPanelInner() {
             Driver rates
           </div>
           <p className="text-xs text-muted-foreground">
-            Each day's cost uses the newest rate that started on or before that day. Adding a rate keeps all earlier rates.
+            Each day's cost uses the newest rate that started on or before that day. Adding a rate
+            keeps all earlier rates.
           </p>
         </div>
-        <div className="relative">
+        <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input aria-label="Filter drivers" className="pl-8 h-9 w-56" placeholder="Filter drivers" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <Input
+            aria-label="Filter drivers"
+            className="pl-8 h-9 w-full"
+            placeholder="Filter drivers"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
         </div>
       </div>
 
-      {(q.data as any)?.rosterError && (
-        <p className="text-xs text-destructive">
-          Samsara driver list unavailable ({(q.data as any).rosterError}). Showing drivers Driver Time has already seen.
+      {rosterError && (
+        <p className="text-xs text-destructive-text">
+          Samsara driver list unavailable ({rosterError}). Showing drivers Driver Time has already
+          seen.
         </p>
       )}
-      {q.isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading rates…</div>}
-      {q.isError && <p className="text-sm text-destructive">Rates unavailable: {(q.error as Error).message}</p>}
+      {q.isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading rates…
+        </div>
+      )}
+      {q.isError && (
+        <div className="space-y-2" role="alert">
+          <p className="text-sm text-destructive-text">
+            Rates unavailable: {(q.error as Error).message}
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={() => void q.refetch()}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {!q.isLoading && !q.isError && (
         <div className="rounded-md border divide-y">
@@ -83,27 +132,68 @@ function DriverRatesPanelInner() {
             return (
               <div key={d.id} className="px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="font-medium min-w-40 flex-1">{d.name}</span>
-                  <span className="text-muted-foreground text-xs min-w-48">
-                    {current ? <>Current <strong className="text-foreground">{rateMoney(Number(current.hourly_rate))}/hr</strong> since {current.effective_date}</> : "No rate in effect today"}
+                  <span className="font-medium min-w-0 flex-1 break-words" title={d.name}>
+                    {d.name}
                   </span>
-                  <Button variant="ghost" size="sm" disabled={!history.length} onClick={() => toggle(d.id)} aria-expanded={isOpen}>
-                    History ({history.length})
+                  <span className="text-muted-foreground text-xs min-w-48">
+                    {current ? (
+                      <>
+                        Current{" "}
+                        <strong className="text-foreground">
+                          {rateMoney(Number(current.hourly_rate))}/hr
+                        </strong>{" "}
+                        since {current.effective_date}
+                      </>
+                    ) : (
+                      "No rate in effect today"
+                    )}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto whitespace-normal text-left"
+                    disabled={!history.length}
+                    onClick={() => toggle(d.id)}
+                    aria-expanded={isOpen}
+                  >
+                    History for {d.name} ({history.length})
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setEditing({ mode: "add", driver: d })}>
-                    <Plus className="h-4 w-4" /> Add rate
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-auto whitespace-normal text-left"
+                    onClick={() => setEditing({ mode: "add", driver: d })}
+                  >
+                    <Plus className="h-4 w-4" /> Add rate for {d.name}
                   </Button>
                 </div>
                 {isOpen && (
                   <ul className="mt-2 ml-2 space-y-1">
                     {history.map((r) => (
-                      <li key={r.id} className="flex items-center gap-3 text-xs">
-                        <span className="w-24">{r.effective_date}</span>
-                        <span className="w-24 font-medium">{rateMoney(Number(r.hourly_rate))}/hr</span>
-                        {r.effective_date > today && <Badge variant="secondary">Starts later</Badge>}
+                      <li
+                        key={r.id}
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                      >
+                        <span>{r.effective_date}</span>
+                        <span className="font-medium">{rateMoney(Number(r.hourly_rate))}/hr</span>
+                        {r.effective_date > today && (
+                          <Badge variant="secondary">Starts later</Badge>
+                        )}
                         {current?.id === r.id && <Badge>Current</Badge>}
-                        <Button variant="ghost" size="sm" className="h-7" aria-label={`Edit rate from ${r.effective_date}`}
-                          onClick={() => setEditing({ mode: "edit", driver: d, row: r as any })}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7"
+                          aria-label={`Edit rate for ${d.name} from ${r.effective_date}`}
+                          onClick={() => {
+                            if (!r.id || !r.updated_at) return;
+                            setEditing({
+                              mode: "edit",
+                              driver: d,
+                              row: { ...r, id: r.id, updated_at: r.updated_at },
+                            });
+                          }}
+                        >
                           <Pencil className="h-3.5 w-3.5" /> Edit
                         </Button>
                       </li>
@@ -113,16 +203,50 @@ function DriverRatesPanelInner() {
               </div>
             );
           })}
-          {!shown.length && <div className="px-3 py-2 text-sm text-muted-foreground">No drivers found.</div>}
+          {!shown.length && drivers.length === 0 && (
+            <div className="px-3 py-2 text-sm text-muted-foreground">
+              No drivers on the roster yet.
+            </div>
+          )}
+          {!shown.length && drivers.length > 0 && (
+            <div className="px-3 py-2 text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+              <span>No drivers match this filter.</span>
+              <Button type="button" size="sm" variant="outline" onClick={() => setFilter("")}>
+                Clear filter
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
-      {editing && <RateDialog key={editing.mode === "edit" ? editing.row.id : `add:${editing.driver.id}`} editing={editing} today={today} onClose={() => setEditing(null)} />}
+      {editing && (
+        <RateDialog
+          key={editing.mode === "edit" ? editing.row.id : `add:${editing.driver.id}`}
+          editing={editing}
+          today={today}
+          onClose={() => setEditing(null)}
+          onRefresh={async () => {
+            const result = await q.refetch();
+            return ((result.data as { rates?: PayRateRow[] } | undefined)?.rates ??
+              rates) as PayRateRow[];
+          }}
+        />
+      )}
     </Card>
   );
 }
 
-function RateDialog({ editing, today, onClose }: { editing: Editing; today: string; onClose: () => void }) {
+function RateDialog({
+  editing,
+  today,
+  onClose,
+  onRefresh,
+}: {
+  editing: Editing;
+  today: string;
+  onClose: () => void;
+  onRefresh: () => Promise<PayRateRow[]>;
+}) {
   const add = useAddDriverPayRate();
   const update = useUpdateDriverPayRate();
   const initialRate = editing.mode === "edit" ? Number(editing.row.hourly_rate).toFixed(2) : "";
@@ -130,35 +254,80 @@ function RateDialog({ editing, today, onClose }: { editing: Editing; today: stri
   const [rate, setRate] = useState(initialRate);
   const [date, setDate] = useState(initialDate);
   const [confirming, setConfirming] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState(
+    editing.mode === "edit" ? editing.row.updated_at : "",
+  );
+  const reviewRef = useRef<HTMLParagraphElement>(null);
   const busy = add.isPending || update.isPending;
 
   const parsed = parseHourlyRate(rate);
   const dateOk = isValidDateStr(date);
-  const unchanged = editing.mode === "edit" && parsed.ok && parsed.value === Number(editing.row.hourly_rate) && date === editing.row.effective_date;
-  const error = rate && !parsed.ok ? parsed.error : !dateOk ? "Pick an effective date." : null;
+  const unchanged =
+    editing.mode === "edit" &&
+    parsed.ok &&
+    parsed.value === Number(editing.row.hourly_rate) &&
+    date === editing.row.effective_date;
+  const fieldError = rate && !parsed.ok ? parsed.error : !dateOk ? "Pick an effective date." : null;
+
+  useEffect(() => {
+    if (confirming) reviewRef.current?.focus();
+  }, [confirming]);
 
   async function submit() {
     if (!parsed.ok || !dateOk || busy) return;
     try {
       if (editing.mode === "add") {
-        await add.mutateAsync({ driverId: editing.driver.id, driverName: editing.driver.name, hourlyRate: parsed.value, effectiveDate: date });
-        toast.success(`Added ${rateMoney(parsed.value)}/hr for ${editing.driver.name} from ${date}`);
+        await add.mutateAsync({
+          driverId: editing.driver.id,
+          driverName: editing.driver.name,
+          hourlyRate: parsed.value,
+          effectiveDate: date,
+        });
+        toast.success(
+          `Added ${rateMoney(parsed.value)}/hr for ${editing.driver.name} from ${date}`,
+        );
       } else {
-        await update.mutateAsync({ id: editing.row.id, hourlyRate: parsed.value, effectiveDate: date, expectedUpdatedAt: editing.row.updated_at });
+        await update.mutateAsync({
+          id: editing.row.id,
+          hourlyRate: parsed.value,
+          effectiveDate: date,
+          expectedUpdatedAt,
+        });
         toast.success(`Rate updated for ${editing.driver.name}`);
       }
       onClose();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not save the rate");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Could not save the rate";
+      toast.error(message);
+      setSaveError(message);
       setConfirming(false);
     }
   }
 
+  async function refreshKeptValues() {
+    const latest = await onRefresh();
+    if (editing.mode === "edit") {
+      const row = latest.find((r) => r.id === editing.row.id);
+      if (row?.updated_at) setExpectedUpdatedAt(row.updated_at);
+    }
+    setSaveError(null);
+    setConfirming(false);
+    reviewRef.current?.focus();
+  }
+
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o && !busy) onClose();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{editing.mode === "add" ? "Add rate" : "Edit rate"} · {editing.driver.name}</DialogTitle>
+          <DialogTitle>
+            {editing.mode === "add" ? "Add rate" : "Edit rate"} · {editing.driver.name}
+          </DialogTitle>
           <DialogDescription>
             {editing.mode === "add"
               ? "Adds a new rate starting on the effective date. Earlier rates stay in the history."
@@ -170,26 +339,81 @@ function RateDialog({ editing, today, onClose }: { editing: Editing; today: stri
           <div className="grid gap-3">
             <div className="grid gap-1">
               <Label htmlFor="rate-amount">Hourly rate (USD)</Label>
-              <Input id="rate-amount" inputMode="decimal" placeholder="24.50" value={rate} onChange={(e) => setRate(e.target.value)} />
+              <Input
+                id="rate-amount"
+                inputMode="decimal"
+                placeholder="24.50"
+                value={rate}
+                aria-invalid={Boolean(fieldError)}
+                aria-describedby={fieldError ? "rate-error" : undefined}
+                onChange={(e) => setRate(e.target.value)}
+              />
             </div>
             <div className="grid gap-1">
               <Label htmlFor="rate-date">Effective date</Label>
-              <Input id="rate-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-              {dateOk && date > today && <p className="text-xs text-muted-foreground">Future date: applies from {date}; earlier days keep the old rate.</p>}
+              <Input
+                id="rate-date"
+                type="date"
+                value={date}
+                aria-invalid={Boolean(fieldError)}
+                aria-describedby={fieldError ? "rate-error" : undefined}
+                onChange={(e) => setDate(e.target.value)}
+              />
+              {dateOk && date > today && (
+                <p className="text-xs text-muted-foreground">
+                  Future date: applies from {date}; earlier days keep the old rate.
+                </p>
+              )}
             </div>
-            {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
+            {fieldError && (
+              <p id="rate-error" className="text-xs text-destructive-text" role="alert">
+                {fieldError}
+              </p>
+            )}
+            {saveError && (
+              <div className="space-y-2" role="alert">
+                <p className="text-xs text-destructive-text">{saveError}</p>
+                {saveError === STALE_PAY_RATE_MESSAGE && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void refreshKeptValues()}
+                  >
+                    Refresh this rate
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
-          editing.mode === "edit" && parsed.ok && (
-            <p className="text-sm">
-              Change <strong>{rateMoney(Number(editing.row.hourly_rate))}/hr from {editing.row.effective_date}</strong> to{" "}
-              <strong>{rateMoney(parsed.value)}/hr from {date}</strong>?
+          editing.mode === "edit" &&
+          parsed.ok && (
+            <p
+              ref={reviewRef}
+              tabIndex={-1}
+              role="status"
+              className="text-sm focus-visible:outline focus-visible:outline-2"
+            >
+              Change{" "}
+              <strong>
+                {rateMoney(Number(editing.row.hourly_rate))}/hr from {editing.row.effective_date}
+              </strong>{" "}
+              to{" "}
+              <strong>
+                {rateMoney(parsed.value)}/hr from {date}
+              </strong>
+              ? Review this change before saving.
             </p>
           )
         )}
 
         <DialogFooter>
-          <Button variant="ghost" disabled={busy} onClick={() => (confirming ? setConfirming(false) : onClose())}>
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() => (confirming ? setConfirming(false) : onClose())}
+          >
             {confirming ? "Back" : "Cancel"}
           </Button>
           {editing.mode === "add" ? (
@@ -201,7 +425,12 @@ function RateDialog({ editing, today, onClose }: { editing: Editing; today: stri
               {busy && <Loader2 className="h-4 w-4 animate-spin" />} Confirm change
             </Button>
           ) : (
-            <Button disabled={!parsed.ok || !dateOk || unchanged} onClick={() => setConfirming(true)}>Review change</Button>
+            <Button
+              disabled={!parsed.ok || !dateOk || unchanged}
+              onClick={() => setConfirming(true)}
+            >
+              Review change
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>

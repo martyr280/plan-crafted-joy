@@ -37,6 +37,7 @@ const ports = vi.hoisted(() => ({
     isError: false,
     error: null as Error | null,
     data: null as unknown,
+    refetch: vi.fn(),
   },
   add: vi.fn(),
   update: vi.fn(),
@@ -62,7 +63,7 @@ import { DriverRatesPanel } from "../DriverRatesPanel";
 import { toast } from "sonner";
 
 function showLoaded() {
-  ports.query = { isLoading: false, isError: false, error: null, data: loaded };
+  ports.query = { isLoading: false, isError: false, error: null, data: loaded, refetch: vi.fn() };
 }
 
 afterEach(() => {
@@ -116,14 +117,14 @@ describe("DriverRatesPanel role matrix", () => {
 describe("DriverRatesPanel states", () => {
   it("empty roster", () => {
     ports.roles = ["ops_logistics_admin"];
-    ports.query = { isLoading: false, isError: false, error: null, data: emptyData };
+    ports.query = { isLoading: false, isError: false, error: null, data: emptyData, refetch: vi.fn() };
     render(<DriverRatesPanel />);
-    expect(screen.getByText("No drivers found.")).toBeTruthy();
+    expect(screen.getByText("No drivers on the roster yet.")).toBeTruthy();
     expect(screen.queryByText(/\$/)).toBeNull();
   });
   it("loading hides amounts", () => {
     ports.roles = ["admin"];
-    ports.query = { isLoading: true, isError: false, error: null, data: undefined };
+    ports.query = { isLoading: true, isError: false, error: null, data: undefined, refetch: vi.fn() };
     render(<DriverRatesPanel />);
     expect(screen.getByText(/Loading rates/)).toBeTruthy();
     expect(screen.queryByText("Synthetic Driver")).toBeNull();
@@ -136,6 +137,7 @@ describe("DriverRatesPanel states", () => {
       isError: true,
       error: new Error("denied by policy"),
       data: undefined,
+      refetch: vi.fn(),
     };
     render(<DriverRatesPanel />);
     expect(screen.getByText(/Rates unavailable: denied by policy/)).toBeTruthy();
@@ -162,6 +164,7 @@ describe("DriverRatesPanel states", () => {
         ],
         rosterError: null,
       },
+      refetch: vi.fn(),
     };
     render(<DriverRatesPanel />);
     fireEvent.click(screen.getByRole("button", { name: /History/ }));
@@ -173,7 +176,7 @@ describe("DriverRatesPanel states", () => {
     ports.roles = ["ops_logistics_admin"];
     showLoaded();
     render(<DriverRatesPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Add rate" }));
+    fireEvent.click(screen.getByRole("button", { name: /Add rate for Synthetic Driver/ }));
     const amount = screen.getByLabelText("Hourly rate (USD)");
     fireEvent.change(amount, { target: { value: "0" } });
     expect(screen.getByRole("alert").textContent).toMatch(/more than \$0/);
@@ -190,7 +193,7 @@ describe("DriverRatesPanel states", () => {
       new Error("This driver already has a rate starting 2026-11-10. Edit that row instead."),
     );
     render(<DriverRatesPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Add rate" }));
+    fireEvent.click(screen.getByRole("button", { name: /Add rate for Synthetic Driver/ }));
     fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "18.00" } });
     fireEvent.change(screen.getByLabelText("Effective date"), { target: { value: "2026-11-10" } });
     await act(async () => {
@@ -214,7 +217,7 @@ describe("DriverRatesPanel states", () => {
     );
     render(<DriverRatesPanel />);
     fireEvent.click(screen.getByRole("button", { name: /History/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Edit rate from 2026-01-05/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Edit rate for Synthetic Driver from 2026-01-05/ }));
     fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "21.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Review change" }));
     await act(async () => {

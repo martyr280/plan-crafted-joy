@@ -27,7 +27,7 @@ export function dispatchListPanels(state: {
     showStaleNote: state.isError && state.hasData,
     showLoading: state.isLoading && !state.hasData,
     showRows,
-    showKpiNumbers: !state.isError,
+    showKpiNumbers: showRows,
     allowRowActions: showRows,
   };
 }

@@ -140,6 +140,8 @@ describe("saved dispatch pallet estimates", () => {
     ]);
     expect(mixed.totals.pallets).toBeNull();
     expect(mixed.totals.palletTotal.known).toBe(13);
-    expect(formatPalletTotal(mixed.totals.palletTotal)).toBe("13 partial");
+    expect(formatPalletTotal(mixed.totals.palletTotal)).toBe(
+      "At least 13 estimated pallets (1 of 2 stops); some stops unavailable",
+    );
   });
 });

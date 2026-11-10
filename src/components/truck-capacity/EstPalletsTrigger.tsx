@@ -17,9 +17,9 @@ export function EstPalletsTrigger({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className="block max-w-full text-left text-[11px] text-muted-foreground underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="mt-0.5 block min-h-6 max-w-full text-left text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             data-testid={`est-pallets-${code}`}
-            aria-label={`${code} estimated pallets: ${shown === EST_PALLETS_UNAVAILABLE ? "unavailable" : shown}. Cube divided by cube per full truck divided by pallets per full truck.`}
+            aria-label={`${code} estimated pallets: ${shown === EST_PALLETS_UNAVAILABLE ? "unavailable" : shown}. Cube divided by the quantity cube per full truck divided by pallets per full truck.`}
             onClick={(event) => event.stopPropagation()}
           >
             {text}

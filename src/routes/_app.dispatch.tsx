@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,15 +12,31 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { KpiCard } from "@/components/shared/KpiCard";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Clock, Hammer, Loader2, MapPin, Printer, RefreshCw, Send, Truck, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  MapPin,
+  Printer,
+  RefreshCw,
+  Send,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useModuleView } from "@/lib/usage-log";
-import { buildLoadSheet } from "@/lib/dispatch/loadsheet";
-import { formatEstPallets, formatPalletTotal } from "@/lib/truck-capacity/est-pallets";
+import {
+  formatEstPallets,
+  formatPalletTotal,
+  sumEstPallets,
+} from "@/lib/truck-capacity/est-pallets";
 import { TicketBoard } from "@/components/dispatch/TicketBoard";
-import { DispatchListAlert, RunDetailAlert } from "@/components/dispatch/RunDetailAlert";
+import { RunDetailAlert } from "@/components/dispatch/RunDetailAlert";
+import {
+  DispatchRunsBoard,
+  type DispatchBoardRoute,
+} from "@/components/dispatch/DispatchRunsBoard";
+import { LoadSheetView } from "@/components/dispatch/LoadSheetView";
 import { dispatchListPanels, dispatchRunPanels } from "@/components/dispatch/run-detail-panels";
 import { DATE_BASES, DATE_BASIS_LABEL } from "@/lib/dispatch/assign";
 import {
@@ -45,24 +61,6 @@ export const Route = createFileRoute("/_app/dispatch")({
 
 const num = (n: unknown) => Number(n ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 });
 const EMPTY_DISPATCH_ROWS: never[] = [];
-
-function showRunPallets(run: {
-  est_pallets?: number | null;
-  est_pallets_status?: string | null;
-  est_pallets_known?: number | null;
-}) {
-  if (run.est_pallets_status === "partial") {
-    return formatPalletTotal({
-      status: "partial",
-      total: null,
-      known: run.est_pallets_known ?? null,
-      unknownCount: 1,
-    });
-  }
-  if (run.est_pallets_status === "unavailable" || run.est_pallets == null)
-    return formatEstPallets(null);
-  return formatEstPallets(run.est_pallets);
-}
 
 function timeLocal(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -96,6 +94,7 @@ function DispatchPage() {
   const isAdmin = hasRole("admin");
 
   const runs = useDispatchRuns();
+  const build = useBuildRunNow();
   const [openRunId, setOpenRunId] = useState<string | null>(null);
   const listPanels = dispatchListPanels({
     isError: runs.isError,
@@ -104,25 +103,30 @@ function DispatchPage() {
   });
 
   const rows = listPanels.showRows ? (runs.data?.rows ?? EMPTY_DISPATCH_ROWS) : EMPTY_DISPATCH_ROWS;
-  const byHub = useMemo(() => {
-    const m = new Map<string, any[]>();
-    for (const r of rows) {
-      const list = m.get(r.hub) ?? [];
-      list.push(r);
-      m.set(r.hub, list);
-    }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [rows]);
-
-  const totals = useMemo(() => {
-    const all: any[] = rows.flatMap((r: any) => r.runs);
-    return {
-      enabled: rows.filter((r: any) => r.enabled).length,
-      planned: all.filter((r: any) => r.status === "planned").length,
-      pushed: all.filter((r: any) => r.status === "pushed").length,
-      held: all.reduce((n: number, r: any) => n + r.stopsHeld, 0),
-    };
-  }, [rows]);
+  const boardProps = {
+    isError: runs.isError,
+    isLoading: runs.isLoading,
+    isFetching: runs.isFetching && !runs.data,
+    hasData: Boolean(runs.data),
+    errorMessage: (runs.error as Error | null)?.message,
+    onRetry: () => void runs.refetch(),
+    rows: (runs.data?.rows ?? EMPTY_DISPATCH_ROWS) as DispatchBoardRoute[],
+    canWrite,
+    building: build.isPending,
+    onOpenRun: setOpenRunId,
+    onBuild: async (routeId: string, code: string) => {
+      const res = (await build.mutateAsync({ routeId })) as {
+        ok?: boolean;
+        runIds?: string[];
+        skipped?: string[];
+        error?: string;
+      };
+      if (res?.ok) {
+        toast.success(`Built ${res.runIds?.length ?? 0} run(s) for ${code}`);
+        for (const m of res.skipped ?? []) toast.warning(m);
+      } else toast.error(res?.error ?? "Build failed");
+    },
+  };
 
   return (
     <div>
@@ -137,13 +141,7 @@ function DispatchPage() {
         }
       />
 
-      {listPanels.showError && (
-        <DispatchListAlert
-          message={(runs.error as Error)?.message ?? "Dispatch runs could not be loaded."}
-          stale={listPanels.showStaleNote}
-          onRetry={() => void runs.refetch()}
-        />
-      )}
+      <DispatchRunsBoard part="summary" {...boardProps} />
 
       {listPanels.showRows && runs.data && !runs.data.viewAvailable && (
         <Card className="p-4 mb-4 border-amber-500/40 bg-amber-500/5">
@@ -160,29 +158,6 @@ function DispatchPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <KpiCard
-          label="Routes enabled"
-          value={listPanels.showKpiNumbers ? String(totals.enabled) : "—"}
-          icon={<Truck className="w-4 h-4" />}
-        />
-        <KpiCard
-          label="Runs planned"
-          value={listPanels.showKpiNumbers ? String(totals.planned) : "—"}
-          icon={<Clock className="w-4 h-4" />}
-        />
-        <KpiCard
-          label="Runs pushed"
-          value={listPanels.showKpiNumbers ? String(totals.pushed) : "—"}
-          icon={<Send className="w-4 h-4" />}
-        />
-        <KpiCard
-          label="Stops held"
-          value={listPanels.showKpiNumbers ? String(totals.held) : "—"}
-          icon={<AlertTriangle className="w-4 h-4" />}
-        />
-      </div>
-
       <Tabs defaultValue="board">
         <TabsList>
           <TabsTrigger value="tickets">Tickets by cutoff</TabsTrigger>
@@ -193,32 +168,7 @@ function DispatchPage() {
         </TabsList>
 
         <TabsContent value="board" className="mt-4 space-y-6">
-          {listPanels.showLoading && (
-            <Card className="p-6 text-sm text-muted-foreground">Loading routes…</Card>
-          )}
-          {byHub.map(([hub, list]) => (
-            <div key={hub}>
-              <h2 className="text-sm font-semibold text-muted-foreground mb-2">{hub}</h2>
-              <Card className="overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Route</TableHead>
-                      <TableHead>Mode</TableHead>
-                      <TableHead>Next cutoff</TableHead>
-                      <TableHead>Runs</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {list.map((r: any) => (
-                      <RouteRow key={r.routeId} route={r} canWrite={canWrite} onOpenRun={setOpenRunId} />
-                    ))}
-                  </TableBody>
-                </Table>
-              </Card>
-            </div>
-          ))}
+          <DispatchRunsBoard part="table" {...boardProps} />
         </TabsContent>
 
         <TabsContent value="tickets" className="mt-4">
@@ -244,70 +194,6 @@ function DispatchPage() {
   );
 }
 
-/* ------------------------------------------------------------- board row */
-
-function RouteRow({ route, canWrite, onOpenRun }: { route: any; canWrite: boolean; onOpenRun: (id: string) => void }) {
-  const build = useBuildRunNow();
-  return (
-    <TableRow>
-      <TableCell>
-        <div className="font-medium">{route.code}</div>
-        <div className="text-xs text-muted-foreground">{route.name}</div>
-      </TableCell>
-      <TableCell>
-        {route.enabled ? (
-          <Badge variant="secondary" className="bg-primary/15 text-primary">{route.autoPush ? "auto-push" : "enabled"}</Badge>
-        ) : (
-          <Badge variant="secondary">shadow</Badge>
-        )}
-      </TableCell>
-      <TableCell className="text-sm">
-        {route.cutoff ? (
-          <div>
-            <div>{route.cutoff.timeLabel}</div>
-            <div className="text-xs text-muted-foreground">
-              ships {route.cutoff.runDates.join(", ") || "—"}
-            </div>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">no cutoff configured</span>
-        )}
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-wrap gap-1">
-          {route.runs.length === 0 && <span className="text-xs text-muted-foreground">none</span>}
-          {route.runs.map((run: any) => (
-            <button key={run.id} onClick={() => onOpenRun(run.id)} className="text-xs underline-offset-2 hover:underline">
-              <span className="mr-1">{run.runDate}</span>
-              <StatusBadge status={run.status} />
-              <ExceptionBadge flag={run.exception} />
-              {run.stopsHeld > 0 && <span className="ml-1 text-amber-600">{run.stopsHeld} held</span>}
-            </button>
-          ))}
-        </div>
-      </TableCell>
-      <TableCell className="text-right">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!canWrite || build.isPending}
-          onClick={async () => {
-            const res: any = await build.mutateAsync({ routeId: route.routeId });
-            if (res?.ok) {
-              toast.success(`Built ${res.runIds.length} run(s) for ${route.code}`);
-              for (const m of res.skipped ?? []) toast.warning(m);
-            }
-            else toast.error(res?.error ?? "Build failed");
-          }}
-        >
-          {build.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Hammer className="w-4 h-4" />}
-          <span className="ml-2">Build now</span>
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-}
-
 /* ---------------------------------------------------------- run detail */
 
 function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; onClose: () => void; canWrite: boolean }) {
@@ -318,23 +204,6 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
   const [showLoadSheet, setShowLoadSheet] = useState(false);
 
   const stops = (q.data?.stops ?? []) as any[];
-  const loadSheet = useMemo(
-    () =>
-      buildLoadSheet(
-        stops.map((s) => ({
-          position: s.position,
-          hold: s.hold,
-          estPallets: s.est_pallets,
-          estCubeFt: s.est_cube_ft,
-          estWeightLbs: s.est_weight_lbs,
-          customerName: s.customer_name,
-          state: s.state,
-          orderNo: s.order_no,
-          pickTicketNo: s.pick_ticket_no,
-        })),
-      ),
-    [stops],
-  );
   const panels = dispatchRunPanels({
     isError: q.isError,
     isLoading: q.isLoading,
@@ -380,8 +249,10 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                 <div className="font-semibold">{num(q.data.run.stops_held)}</div>
               </Card>
               <Card className="p-3">
-                <div className="text-muted-foreground text-xs">Pallets</div>
-                <div className="font-semibold">{showRunPallets(q.data.run)}</div>
+                <div className="text-muted-foreground text-xs">Estimated pallets</div>
+                <div className="font-semibold">
+                  {formatPalletTotal(sumEstPallets(stops.map((s) => s.est_pallets)))}
+                </div>
               </Card>
               <Card className="p-3">
                 <div className="text-muted-foreground text-xs">Weight (lbs)</div>
@@ -466,33 +337,38 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
               </Card>
             )}
 
+            {showLoadSheet ? (
+              <LoadSheetView
+                stops={stops.map((s) => ({
+                  position: s.position,
+                  hold: s.hold,
+                  estPallets: s.est_pallets,
+                  estCubeFt: s.est_cube_ft,
+                  estWeightLbs: s.est_weight_lbs,
+                  customerName: s.customer_name,
+                  state: s.state,
+                  orderNo: s.order_no,
+                  pickTicketNo: s.pick_ticket_no,
+                }))}
+              />
+            ) : (
             <Card className="overflow-hidden">
               <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-14">{showLoadSheet ? "Load" : "#"}</TableHead>
+                      <TableHead className="w-14">#</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead className="w-16">ST</TableHead>
                     <TableHead className="w-28">Order</TableHead>
-                    {!showLoadSheet && <TableHead className="w-32">Arrival (CT)</TableHead>}
-                    <TableHead className="w-20 text-right">Pallets</TableHead>
-                    {!showLoadSheet && <TableHead className="w-40">Status</TableHead>}
+                      <TableHead className="w-32">Arrival (CT)</TableHead>
+                      <TableHead className="w-28 whitespace-normal text-right">
+                        Estimated pallets
+                      </TableHead>
+                      <TableHead className="w-40">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {showLoadSheet
-                    ? loadSheet.stops.map((s: any, i: number) => (
-                        <TableRow key={i}>
-                          <TableCell>{s.loadOrder}</TableCell>
-                          <TableCell className="truncate">{s.customerName ?? "—"}</TableCell>
-                          <TableCell>{s.state ?? "—"}</TableCell>
-                          <TableCell className="truncate">{s.orderNo ?? "—"}</TableCell>
-                          <TableCell className="text-right">
-                            {formatEstPallets(s.estPallets)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    : stops.map((s) => (
+                    {stops.map((s) => (
                         <TableRow key={s.id} className={s.hold ? "bg-amber-500/5" : undefined}>
                           <TableCell>{s.position}</TableCell>
                           <TableCell className="truncate">{s.customer_name ?? "—"}</TableCell>
@@ -518,11 +394,6 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                 </TableBody>
               </Table>
             </Card>
-            {showLoadSheet && (
-              <p className="text-xs text-muted-foreground">
-                Load sheet is delivery order reversed — last stop loads first. Held stops are
-                excluded. Pallet total: {formatPalletTotal(loadSheet.totals.palletTotal)}.
-              </p>
             )}
           </div>
         )}

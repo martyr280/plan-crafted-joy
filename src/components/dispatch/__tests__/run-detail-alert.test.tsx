@@ -60,4 +60,11 @@ describe("dispatch runs list failure", () => {
     expect(panels.allowRowActions).toBe(true);
     expect(panels.showError).toBe(false);
   });
+
+  it("does not treat a pending load as zero", () => {
+    const pending = dispatchListPanels({ isError: false, isLoading: true, hasData: false });
+    expect(pending.showKpiNumbers).toBe(false);
+    expect(pending.showRows).toBe(false);
+    expect(pending.showLoading).toBe(true);
+  });
 });

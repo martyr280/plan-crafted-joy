@@ -13,7 +13,7 @@ export function RunDetailAlert({
 }) {
   return (
     <Card
-      className="p-3 border-destructive/40 bg-destructive/5 text-sm text-destructive space-y-2"
+      className="p-3 border-destructive/40 bg-destructive/5 text-sm text-destructive-text space-y-2"
       role="alert"
       data-testid="dispatch-run-error"
     >
@@ -38,7 +38,7 @@ export function DispatchListAlert({
 }) {
   return (
     <Card
-      className="p-3 mb-4 border-destructive/40 bg-destructive/5 text-sm text-destructive space-y-2"
+      className="p-3 mb-4 border-destructive/40 bg-destructive/5 text-sm text-destructive-text space-y-2"
       role="alert"
       data-testid="dispatch-runs-error"
     >

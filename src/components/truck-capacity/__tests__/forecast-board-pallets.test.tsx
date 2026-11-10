@@ -12,6 +12,9 @@ describe("estimated pallet trigger", () => {
       </div>,
     );
     const trigger = screen.getByRole("button", { name: /OKL estimated pallets: 13/i });
+    expect(trigger.getAttribute("aria-label")).toMatch(/quantity cube per full truck divided by pallets/);
+    expect(trigger.className).toMatch(/text-xs/);
+    expect(trigger.className).not.toMatch(/text-\[11px\]/);
     expect(trigger.tagName).toBe("BUTTON");
     trigger.focus();
     expect(document.activeElement).toBe(trigger);
