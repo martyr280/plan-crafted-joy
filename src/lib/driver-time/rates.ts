@@ -177,3 +177,34 @@ export function estimateCostWithRates(input: RatedCostInput): RatedCostEstimate 
 export function isFutureRate(r: PayRateRow, today: string): boolean {
   return r.effective_date > today;
 }
+
+export function duplicatePayRateMessage(date: string): string {
+  return `This driver already has a rate starting ${date}. Edit that row instead.`;
+}
+
+export const STALE_PAY_RATE_MESSAGE = "This rate changed since you opened it. Refresh and try again.";
+
+/** Map a Postgres write failure to the message the rate dialog shows. */
+export function payRateWriteError(e: { code?: string; message?: string } | null | undefined, date: string): Error {
+  if (e?.code === "23505") return new Error(duplicatePayRateMessage(date));
+  return new Error(e?.message || "Could not save the rate");
+}
+
+/**
+ * Price a week only when the caller may see pay. When canPay is false the
+ * supplied rate rows are ignored, so a weekly report cannot leak an amount.
+ */
+export function priceDriverWeek(canPay: boolean, input: RatedCostInput): RatedCostEstimate {
+  if (!canPay) {
+    const hidden = estimateCost({
+      driverId: input.driverId,
+      driverName: input.driverName,
+      samsaraWeekHours: input.samsaraWeekHours,
+      paycomHours: input.paycomHours,
+      flaggedHours: input.flaggedHours,
+      hourlyRate: null,
+    });
+    return { ...hidden, dailyRates: [] };
+  }
+  return estimateCostWithRates(input);
+}

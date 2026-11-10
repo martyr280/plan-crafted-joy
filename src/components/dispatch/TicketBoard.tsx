@@ -17,6 +17,7 @@ import { DATE_BASES, DATE_BASIS_LABEL, type DateBasis } from "@/lib/dispatch/ass
 import type { DispatchBoard, RunException, TicketView } from "@/lib/dispatch/board";
 import type { RolledFrom } from "@/lib/dispatch/assign";
 import { toCsv } from "@/lib/sales-reports.drilldown";
+import { formatEstPallets } from "@/lib/truck-capacity/est-pallets";
 
 const n0 = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString("en-US"));
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -140,7 +141,7 @@ function Upcoming({ b, isAdmin }: { b: DispatchBoard; isAdmin: boolean }) {
             <TableHead className="text-right">Est cube</TableHead><TableHead className="text-right">Est weight</TableHead>
             <TableHead>
               <TooltipProvider><Tooltip><TooltipTrigger className="inline-flex items-center gap-1">Nelson demand <Info className="w-3 h-3" /></TooltipTrigger>
-                <TooltipContent className="max-w-xs">Latest Truck Capacity demand snapshot for the same route and date. No pallet column: est_pallets is empty on every row of the P21 view.</TooltipContent></Tooltip></TooltipProvider>
+                <TooltipContent className="max-w-xs">Latest Truck Capacity demand snapshot for the same route and date. Estimated pallets = cube ÷ (cube per full truck ÷ pallets per full truck). Missing, zero, or negative cube or route capacity shows as unavailable. A saved pallet count is not reused.</TooltipContent></Tooltip></TooltipProvider>
             </TableHead>
             <TableHead>Exception</TableHead>
             {isAdmin && <TableHead />}
@@ -160,6 +161,7 @@ function Upcoming({ b, isAdmin }: { b: DispatchBoard; isAdmin: boolean }) {
                 {r.demand ? (
                   <div>
                     <div>{r.demand.order_count ?? "—"} orders · {n0(r.demand.total_cube_ft)} ft³ · {r.demand.projected_capacity_frac == null ? "—" : `${Math.round(r.demand.projected_capacity_frac * 100)}%`}</div>
+                    <div className="text-xs" data-testid={`demand-pallets-${r.route_code}`}>Est. pallets: {formatEstPallets(r.demand.est_pallets)}</div>
                     <div className="text-xs text-muted-foreground">Printed so far: {r.orders} of {r.demand.order_count ?? "—"} orders</div>
                   </div>
                 ) : <span className="text-muted-foreground">no demand snapshot</span>}

@@ -12,6 +12,7 @@ import {
   validateP21SqlOutput,
   type SqlValidation,
 } from "./truck-capacity/sql-validate";
+import { estimatePallets } from "./truck-capacity/est-pallets";
 
 // Re-export the validators so the *.functions.ts server-fn module (which
 // runs auth + saves settings) can call them without pulling in the rest of
@@ -676,7 +677,6 @@ export async function runP21Snapshot(
     if (rolled !== ship) rolledForwardCount++;
     if (ship === todayLocal) backlogRows++;
 
-    const est = num(r.est_pallets);
     const weight = num(r.total_weight_lbs);
     const cube = num(r.total_cube_ft);
     const oc = num(r.order_count) ?? 0;
@@ -686,12 +686,11 @@ export async function runP21Snapshot(
       prev.order_count += oc;
       prev.total_weight_lbs = addNullable(prev.total_weight_lbs, weight);
       prev.total_cube_ft = addNullable(prev.total_cube_ft, cube);
-      prev.est_pallets = addNullable(prev.est_pallets, est);
     } else {
       agg.set(key, {
         route_id: route.id, ship_date: rolled,
         order_count: oc, total_weight_lbs: weight,
-        total_cube_ft: cube, est_pallets: est,
+        total_cube_ft: cube, est_pallets: null,
         pallets_full_truck: route.pallets_full_truck,
         cube_full_truck_ft3: route.cube_full_truck_ft3 == null ? null : Number(route.cube_full_truck_ft3),
         weight_full_truck_lbs: route.weight_full_truck_lbs == null ? null : Number(route.weight_full_truck_lbs),
@@ -713,9 +712,16 @@ export async function runP21Snapshot(
 
   const inserts: any[] = [];
   for (const a of agg.values()) {
+    // P21's est_pallets column is not a source. Recompute from this route's
+    // current cube/full and pallets/full. Missing or non-positive inputs stay null.
+    const estPallets = estimatePallets({
+      cube: a.total_cube_ft,
+      cubeFullTruckFt3: a.cube_full_truck_ft3,
+      palletsFullTruck: a.pallets_full_truck,
+    });
     const ratios: number[] = [];
-    if (a.est_pallets != null && a.pallets_full_truck && a.pallets_full_truck > 0) {
-      ratios.push(a.est_pallets / a.pallets_full_truck);
+    if (estPallets != null && a.pallets_full_truck && a.pallets_full_truck > 0) {
+      ratios.push(estPallets / a.pallets_full_truck);
     }
     if (a.total_cube_ft != null && a.cube_full_truck_ft3 && a.cube_full_truck_ft3 > 0) {
       ratios.push(a.total_cube_ft / a.cube_full_truck_ft3);
@@ -730,7 +736,7 @@ export async function runP21Snapshot(
       order_count: a.order_count,
       total_weight_lbs: a.total_weight_lbs,
       total_cube_ft: a.total_cube_ft,
-      est_pallets: a.est_pallets,
+      est_pallets: estPallets,
       projected_capacity_frac: Math.min(1.5, Math.max(...ratios)),
     });
   }

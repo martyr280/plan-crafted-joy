@@ -37,6 +37,7 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
 import { ForecastBoard } from "@/components/truck-capacity/ForecastBoard";
+import { formatEstPallets } from "@/lib/truck-capacity/est-pallets";
 import { RouteCutoffsEditor } from "@/components/truck-capacity/RouteCutoffsEditor";
 import { SharePointSyncCard } from "@/components/truck-capacity/SharePointSyncCard";
 import { ForecastVsTracker } from "@/components/truck-capacity/ForecastVsTracker";
@@ -834,6 +835,7 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
             <TableHeader><TableRow>
               <TableHead>Date</TableHead><TableHead>DoW</TableHead><TableHead>Baseline</TableHead>
               <TableHead>Model</TableHead><TableHead>Blend</TableHead><TableHead>P21</TableHead>
+              <TableHead>Est. pallets</TableHead>
               <TableHead>Final</TableHead><TableHead>Method</TableHead><TableHead>Drivers</TableHead>
             </TableRow></TableHeader>
             <TableBody>
@@ -845,6 +847,7 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
                   <TableCell>{pct(d.model)}</TableCell>
                   <TableCell>{pct(d.blend)}</TableCell>
                   <TableCell>{pct(d.p21)}</TableCell>
+                  <TableCell data-testid={`forecast-pallets-${d.date}`}>{formatEstPallets(d.est_pallets)}</TableCell>
                   <TableCell className="font-medium">{pct(d.final)}</TableCell>
                   <TableCell><Badge variant="outline" className="text-xs">{d.method}</Badge></TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[320px]">{d.driverSummary ?? "—"}</TableCell>
@@ -868,6 +871,7 @@ function ForecastTooltip({ active, payload }: any) {
   return (
     <div className="rounded border bg-background p-2 text-xs shadow-md max-w-[320px]">
       <div className="font-medium">{d.date}</div>
+      <div>Est. pallets: {formatEstPallets(d.est_pallets)}</div>
       <div className="text-muted-foreground whitespace-pre-line">{d.explain}</div>
     </div>
   );
@@ -1362,6 +1366,7 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           P21 route code (Order Entry → Ship Info → Route) drives the projection match. Multiple codes allowed — enter comma-separated (e.g. <code>ARK01,ARK02</code>). Leave blank for lanes the client hasn&apos;t confirmed.
           When a P21 code is claimed by more than one route, the server resolves per row by (1) <b>ship_city</b> against Cities (with alias fuzzing — <code>St./Ste./Ft./Mt.</code> expand, trailing state tokens strip), then (2) <b>ship_zip</b> against Zip prefixes, then (3) <b>ship_state</b> against States, then (4) shipment weekday, then (5) lowest sort_order (with an audit warning). Each cascade only narrows when it actually splits the claimants — a signal that hits zero or all is skipped, so partial data still helps. Populate Cities / Zips / States for shared codes like <code>NSC01</code> (Carolinas).
           Truck-full targets compute projected_capacity_frac = min(1.5, max of pallets/cube/weight ratios).
+          Estimated pallets = cube ÷ (cube/full ÷ pallets/full), using the Pallets/full and cube/full figures on this screen. Missing, zero, or negative inputs show as unavailable. Editing Pallets/full here changes the next estimate; cube/full is left as entered.
           Per Joe: pallet counts are approximate (pallet sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with loose product), so cube or weight is often the binding constraint.
           Cutoff time is display-only for now (from the Driver Routes sheet).
           <br /><span className="text-amber-600">Pending client confirmation:</span> <code>SOCA1</code> (Carolinas code on the Ocala tab).
@@ -1954,10 +1959,10 @@ function SnapshotResultView({ result }: { result: any }) {
             <div>
               <div className="font-medium mt-1">Top 5 route-days by projected fraction</div>
               <table className="w-full text-[11px] mt-1">
-                <thead className="text-muted-foreground"><tr><th className="text-left">Route</th><th className="text-left">Ship date</th><th className="text-right">Frac</th><th className="text-right">Cube ft³</th><th className="text-right">Weight lb</th><th className="text-right">Orders</th></tr></thead>
+                <thead className="text-muted-foreground"><tr><th className="text-left">Route</th><th className="text-left">Ship date</th><th className="text-right">Frac</th><th className="text-right">Cube ft³</th><th className="text-right">Weight lb</th><th className="text-right">Est. pallets</th><th className="text-right">Orders</th></tr></thead>
                 <tbody>
                   {readout.top5ByProjectedFrac.map((t: any, i: number) => (
-                    <tr key={i} className="border-t"><td>{t.route}</td><td>{t.ship_date}</td><td className="text-right">{Number(t.projected_capacity_frac).toFixed(3)}</td><td className="text-right">{t.total_cube_ft ?? "—"}</td><td className="text-right">{t.total_weight_lbs ?? "—"}</td><td className="text-right">{t.order_count ?? "—"}</td></tr>
+                    <tr key={i} className="border-t"><td>{t.route}</td><td>{t.ship_date}</td><td className="text-right">{Number(t.projected_capacity_frac).toFixed(3)}</td><td className="text-right">{t.total_cube_ft ?? "—"}</td><td className="text-right">{t.total_weight_lbs ?? "—"}</td><td className="text-right">{formatEstPallets(t.est_pallets)}</td><td className="text-right">{t.order_count ?? "—"}</td></tr>
                   ))}
                 </tbody>
               </table>

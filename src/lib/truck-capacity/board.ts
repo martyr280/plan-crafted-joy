@@ -11,6 +11,7 @@ import {
   nextCutoff, runsWeekend, addDaysISO, localDateIn,
   type RouteCutoff, type NextCutoff,
 } from "./cutoffs";
+import { estimateRunPallets } from "./est-pallets";
 
 export type BoardCutoff = {
   id: string;
@@ -52,6 +53,8 @@ export type BoardRow = {
   last_run: { date: string; capacity_frac: number; driver: string | null } | null;
   runs_weekend: boolean;
   forecast_error: string | null;
+  /** Estimated pallets on the target run. Null renders as unavailable. */
+  est_pallets: number | null;
 };
 
 export type BoardResponse = {
@@ -109,7 +112,7 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
 
   const [{ data: routesData, error: rErr }, { data: cutoffData, error: cErr }] = await Promise.all([
     supabaseAdmin.from("truck_capacity_routes")
-      .select("id, code, name, hub, sort_order, active")
+      .select("id, code, name, hub, sort_order, active, cube_full_truck_ft3, pallets_full_truck")
       .eq("active", true)
       .order("hub", { ascending: true })
       .order("sort_order", { ascending: true })
@@ -143,16 +146,22 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
     () =>
       supabaseAdmin
         .from("truck_capacity_p21_demand")
-        .select("route_id, ship_date, projected_capacity_frac, snapshot_at", { count: "exact" })
+        .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, snapshot_at", { count: "exact" })
         .gte("ship_date", addDaysISO(todayUtc, -2))
         .lte("ship_date", windowEnd) as any,
     { label: "board truck_capacity_p21_demand", orderBy: [{ column: "snapshot_at", ascending: false }, { column: "id" }] },
   );
-  const demandLatest = new Map<string, number>();
+  const demandLatest = new Map<string, { frac: number; cube: number | null }>();
   let snapshotAt: string | null = null;
   for (const d of demand ?? []) {
     const key = `${d.route_id}|${d.ship_date}`;
-    if (!demandLatest.has(key)) demandLatest.set(key, Number(d.projected_capacity_frac ?? 0));
+    if (!demandLatest.has(key)) {
+      const cubeN = d.total_cube_ft == null || d.total_cube_ft === "" ? null : Number(d.total_cube_ft);
+      demandLatest.set(key, {
+        frac: Number(d.projected_capacity_frac ?? 0),
+        cube: cubeN != null && Number.isFinite(cubeN) ? cubeN : null,
+      });
+    }
     if (d.snapshot_at && (!snapshotAt || d.snapshot_at > snapshotAt)) snapshotAt = d.snapshot_at;
   }
 
@@ -183,13 +192,20 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
     // Current = P21 already booked for the target run day (fallback: max across
     // the whole cutoff window so multi-day runs aren't understated).
     let current: number | null = null;
+    const booked: { cube: number | null }[] = [];
     if (nc) {
       const dates = nc.runDates.length ? nc.runDates : targetDate ? [targetDate] : [];
       for (const d of dates) {
         const v = demandLatest.get(`${route.id}|${d}`);
-        if (v != null) current = current == null ? v : Math.max(current, v);
+        if (v == null) continue;
+        if (current == null) current = v.frac; else current = Math.max(current, v.frac);
+        booked.push({ cube: v.cube });
       }
     }
+    const est_pallets = estimateRunPallets(booked, {
+      cubeFullTruckFt3: (route as { cube_full_truck_ft3?: number | null }).cube_full_truck_ft3,
+      palletsFullTruck: (route as { pallets_full_truck?: number | null }).pallets_full_truck,
+    });
 
     let predicted: number | null = null;
     let final: number | null = null;
@@ -232,6 +248,7 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
       last_run: lastRun.get(route.id) ?? null,
       runs_weekend: runsWeekend(cutoffs),
       forecast_error: forecastError,
+      est_pallets,
     };
   });
 

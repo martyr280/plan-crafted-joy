@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
+import { canManageDriverPay } from "@/lib/driver-time/access";
 import { useAddDriverPayRate, useDriverPayRates, useUpdateDriverPayRate } from "@/hooks/useDriverTime";
 import { dateStrInTz } from "@/lib/driver-time/tz";
 import { isValidDateStr, parseHourlyRate, rateHistory, rateOn, type PayRateRow } from "@/lib/driver-time/rates";
@@ -20,11 +21,10 @@ type Editing =
   | { mode: "add"; driver: Driver }
   | { mode: "edit"; driver: Driver; row: PayRateRow & { id: string; updated_at: string } };
 
-/** Admin-only. Renders nothing (and loads nothing) for anyone else. */
+/** Driver-pay managers only. Renders nothing (and loads nothing) for anyone else. */
 export function DriverRatesPanel() {
-  const { hasAnyRole } = useAuth();
-  const isAdmin = hasAnyRole(["admin"] as any);
-  if (!isAdmin) return null;
+  const { roles } = useAuth();
+  if (!canManageDriverPay(roles)) return null;
   return <DriverRatesPanelInner />;
 }
 
@@ -53,7 +53,7 @@ function DriverRatesPanelInner() {
     <Card className="p-4 space-y-3" data-testid="driver-rates-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="font-semibold text-sm">Driver rates (admin only)</div>
+          <div className="font-semibold text-sm" data-testid="driver-rates-heading">Driver rates</div>
           <p className="text-xs text-muted-foreground">
             Each day's cost uses the newest rate that started on or before that day. Adding a rate keeps all earlier rates.
           </p>

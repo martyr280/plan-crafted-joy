@@ -36,7 +36,7 @@ export function thresholdLabel(minutes: number): string {
   return `${Number((minutes / 60).toFixed(2))} h`;
 }
 
-export function DriverCard({ driver, isAdmin, thresholdMinutes }: { driver: any; weekStart: string; isAdmin: boolean; thresholdMinutes: number }) {
+export function DriverCard({ driver, isAdmin, canViewPay = false, thresholdMinutes }: { driver: any; weekStart: string; isAdmin: boolean; canViewPay?: boolean; thresholdMinutes: number }) {
   const update = useUpdateDriverTimeEvent();
 
   const byDay = useMemo(() => {
@@ -59,8 +59,8 @@ export function DriverCard({ driver, isAdmin, thresholdMinutes }: { driver: any;
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          {isAdmin && (
-            <span className="text-muted-foreground">
+          {canViewPay && (
+            <span className="text-muted-foreground" data-testid="driver-pay-cost">
               {driver.cost.cost === null
                 ? driver.cost.note
                 : `${money(driver.cost.cost)} est. (${driver.cost.multiplier}× · ${driver.cost.hoursSource} hours)`}

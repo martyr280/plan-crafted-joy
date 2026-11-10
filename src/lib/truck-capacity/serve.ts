@@ -12,6 +12,7 @@ import {
 } from "./features";
 import { groupContributions, driverSummary } from "./explain";
 import { forecastLogRowsFromDays } from "./forecast-log";
+import { estimatePallets } from "./est-pallets";
 
 export type ServingMethod = "auto" | "baseline" | "model";
 
@@ -34,6 +35,8 @@ export type ForecastDay = {
   n_baseline: number;
   explain: string;
   driverSummary?: string;
+  /** Cube formula for this date. Null is unavailable, including a stale stored 0. */
+  est_pallets: number | null;
 };
 
 
@@ -114,6 +117,24 @@ async function loadP21Latest(routeId: string, from: string, to: string): Promise
   return latest;
 }
 
+/** Latest cube per ship date. The stored est_pallets column is not read. */
+async function loadP21Cubes(routeId: string, from: string, to: string): Promise<Map<string, number | null>> {
+  const { data } = await supabaseAdmin
+    .from("truck_capacity_p21_demand")
+    .select("ship_date, total_cube_ft, snapshot_at")
+    .eq("route_id", routeId)
+    .gte("ship_date", from)
+    .lte("ship_date", to)
+    .order("snapshot_at", { ascending: false });
+  const latest = new Map<string, number | null>();
+  for (const p of data ?? []) {
+    if (latest.has(p.ship_date)) continue;
+    const n = p.total_cube_ft == null ? null : Number(p.total_cube_ft);
+    latest.set(p.ship_date, n != null && Number.isFinite(n) ? n : null);
+  }
+  return latest;
+}
+
 export type ForecastServeOptions = {
   /** false = pure read: no forecast_log upsert and no activity_events insert. */
   logForecast?: boolean;
@@ -134,10 +155,11 @@ export async function computeForecastForRoute(
   const from = addDaysISO(today, -84);
   const horizonEnd = addDaysISO(today, horizonDays);
 
-  const [routeRunsData, hubRunsData, p21Latest] = await Promise.all([
+  const [routeRunsData, hubRunsData, p21Latest, p21Cubes] = await Promise.all([
     loadRouteRunsSince(routeId, from),
     loadHubRunsSince(route.hub, from),
     loadP21Latest(routeId, today, horizonEnd),
+    loadP21Cubes(routeId, today, horizonEnd),
   ]);
 
   const baselineDays = baselineFromSnapshot(
@@ -264,6 +286,12 @@ export async function computeForecastForRoute(
     const explainSuffix = driverStr ? ` · ${driverStr}` : "";
     const p21Suffix = p21 != null ? ` · P21 ${p21.toFixed(2)}${guardApplied ? " (guard)" : ""}` : "";
     const lowConfidence = b.low_confidence || (saturated && b.forecast == null);
+    const cube = p21Cubes.get(b.date);
+    const est_pallets = cube === undefined ? null : estimatePallets({
+      cube,
+      cubeFullTruckFt3: route.cube_full_truck_ft3,
+      palletsFullTruck: route.pallets_full_truck,
+    });
     return {
       date: b.date, dow: b.dow, baseline: b.baseline, seasonal: b.seasonal,
       forecast: b.forecast, model: modelPred, model_raw: modelRaw,
@@ -274,6 +302,7 @@ export async function computeForecastForRoute(
       n_baseline: b.n_baseline,
       explain: `${b.explain}${satNote}${p21Suffix}${explainSuffix}`,
       driverSummary: driverStr,
+      est_pallets,
     };
   });
 

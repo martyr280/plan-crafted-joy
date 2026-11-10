@@ -8,6 +8,7 @@
 // resulting demand rows for a sanity readout of projected_capacity_frac.
 import { runP21Snapshot } from "../src/lib/truck-capacity.server";
 import { supabaseAdmin } from "../src/integrations/supabase/client.server";
+import { estimatePallets } from "../src/lib/truck-capacity/est-pallets";
 
 type Kind = "orders" | "transfers";
 
@@ -55,21 +56,29 @@ async function main() {
   // Map route_id → code for readability.
   const routeIds = Array.from(new Set(withFrac.map((r) => r.route_id)));
   const { data: routeRows } = await supabaseAdmin
-    .from("truck_capacity_routes").select("id, code, hub").in("id", routeIds);
+    .from("truck_capacity_routes").select("id, code, hub, cube_full_truck_ft3, pallets_full_truck").in("id", routeIds);
   const codeById = new Map((routeRows ?? []).map((r) => [r.id, `${r.code} · ${r.hub}`]));
+  const capById = new Map((routeRows ?? []).map((r) => [r.id, r]));
 
   const top5 = [...withFrac]
     .sort((a, b) => Number(b.projected_capacity_frac) - Number(a.projected_capacity_frac))
     .slice(0, 5)
-    .map((r) => ({
-      route: codeById.get(r.route_id) ?? r.route_id,
-      ship_date: r.ship_date,
-      projected_capacity_frac: Number(r.projected_capacity_frac).toFixed(3),
-      total_cube_ft: r.total_cube_ft,
-      total_weight_lbs: r.total_weight_lbs,
-      est_pallets: r.est_pallets,
-      order_count: r.order_count,
-    }));
+    .map((r) => {
+      const cap = capById.get(r.route_id);
+      return {
+        route: codeById.get(r.route_id) ?? r.route_id,
+        ship_date: r.ship_date,
+        projected_capacity_frac: Number(r.projected_capacity_frac).toFixed(3),
+        total_cube_ft: r.total_cube_ft,
+        total_weight_lbs: r.total_weight_lbs,
+        est_pallets: estimatePallets({
+          cube: r.total_cube_ft,
+          cubeFullTruckFt3: cap?.cube_full_truck_ft3,
+          palletsFullTruck: cap?.pallets_full_truck,
+        }),
+        order_count: r.order_count,
+      };
+    });
 
   console.log("\nSanity readout:");
   console.log(JSON.stringify({

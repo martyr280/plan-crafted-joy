@@ -3,11 +3,24 @@
 
 import { assignRun, daysBetween, DATE_BASES, DATE_BASIS_COLUMN, type AssignCutoff, type DateBasis, type ExceptionReason, type NoRunException, type RolledFrom } from "./assign";
 import { shortHoldReason, type P21DispatchRow } from "./build";
+import { resolveDisplayedEstPallets } from "@/lib/truck-capacity/est-pallets";
 
 export const ALWAYS_EXCLUDED = ["WCALL", "LTL01"];
 
 export type BoardCutoff = AssignCutoff & { route_id: string };
-export type DemandRow = { route_id: string; ship_date: string; order_count: number | null; total_cube_ft: number | null; projected_capacity_frac: number | null; snapshot_at: string | null };
+export type DemandRow = {
+  route_id: string;
+  ship_date: string;
+  order_count: number | null;
+  total_cube_ft: number | null;
+  projected_capacity_frac: number | null;
+  snapshot_at: string | null;
+  /** Current route capacity, attached by the caller. Not stored on the demand row. */
+  cube_full_truck_ft3?: number | string | null;
+  pallets_full_truck?: number | string | null;
+  /** Cached column. Ignored; the cube formula is recomputed. */
+  est_pallets?: number | string | null;
+};
 
 export type RunException = { id: string; p21_code: string; run_date: string; kind: "no_run" | "reduced"; reason: ExceptionReason; note: string | null; created_by: string | null; created_by_name?: string | null; created_at?: string | null };
 
@@ -46,7 +59,7 @@ export type UpcomingRun = {
   missing_cube: number;
   est_weight_lbs: number;
   missing_weight: number;
-  demand: { order_count: number | null; total_cube_ft: number | null; projected_capacity_frac: number | null; snapshot_at: string | null } | null;
+  demand: { order_count: number | null; total_cube_ft: number | null; projected_capacity_frac: number | null; snapshot_at: string | null; est_pallets: number | null } | null;
   ticketList: TicketView[];
   exception: RunException | null;
 };
@@ -108,7 +121,18 @@ export function buildDispatchBoard(
       run = {
         route_code: code, route_id: routeId, run_date: runDate, tickets: 0, orders: 0, held: 0,
         est_cube_ft: 0, missing_cube: 0, est_weight_lbs: 0, missing_weight: 0,
-        demand: dm ? { order_count: dm.order_count, total_cube_ft: numOrNull(dm.total_cube_ft), projected_capacity_frac: numOrNull(dm.projected_capacity_frac), snapshot_at: dm.snapshot_at } : null,
+        demand: dm ? {
+          order_count: dm.order_count,
+          total_cube_ft: numOrNull(dm.total_cube_ft),
+          projected_capacity_frac: numOrNull(dm.projected_capacity_frac),
+          snapshot_at: dm.snapshot_at,
+          est_pallets: resolveDisplayedEstPallets({
+            cube: dm.total_cube_ft,
+            cubeFullTruckFt3: dm.cube_full_truck_ft3,
+            palletsFullTruck: dm.pallets_full_truck,
+            storedEstPallets: dm.est_pallets,
+          }),
+        } : null,
         ticketList: [],
         exception: excByKey.get(key) ?? null,
       };

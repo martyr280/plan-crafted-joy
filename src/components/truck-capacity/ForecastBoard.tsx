@@ -11,6 +11,8 @@ import { AlertTriangle, ChevronRight, Clock, RefreshCw } from "lucide-react";
 import { getForecastBoard } from "@/lib/truck-capacity.functions";
 import { cutoffSortKey } from "@/lib/truck-capacity/cutoffs";
 import { UtilizationBar } from "./UtilizationBar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { EST_PALLETS_UNAVAILABLE, formatEstPallets } from "@/lib/truck-capacity/est-pallets";
 
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -150,6 +152,20 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
                   </TableCell>
                   <TableCell className="align-top text-sm">
                     {r.current == null ? <span className="text-muted-foreground">—</span> : `${(r.current * 100).toFixed(0)}%`}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="text-[11px] text-muted-foreground" data-testid={`est-pallets-${r.code}`}>
+                            {formatEstPallets(r.est_pallets) === EST_PALLETS_UNAVAILABLE
+                              ? "pallets unavailable"
+                              : `${formatEstPallets(r.est_pallets)} est. pallets`}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          Estimated pallets = cube ÷ (cube per full truck ÷ pallets per full truck), from this route&apos;s Truck Capacity settings. Missing, zero, or negative cube or capacity shows as unavailable. A previously saved pallet count is not reused.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableCell>
                   <TableCell className="align-top text-xs">
                     {r.last_run ? (

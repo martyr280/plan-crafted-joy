@@ -587,7 +587,7 @@ async function boardFromRows(rows: any[], jobId: string | null, pulledAt: string
     db().from("route_cutoffs").select("route_id, p21_code, cutoff_dow, cutoff_time, run_dows, active").eq("active", true).limit(2000),
     db().from("truck_capacity_settings").select("excluded_p21_codes").limit(1).maybeSingle(),
     db().from("truck_capacity_p21_demand")
-      .select("route_id, ship_date, order_count, total_cube_ft, projected_capacity_frac, snapshot_at")
+      .select("route_id, ship_date, order_count, total_cube_ft, est_pallets, projected_capacity_frac, snapshot_at")
       .gte("ship_date", today).order("ship_date").order("route_id").order("snapshot_at", { ascending: false }).limit(5000),
     db().from("dispatch_run_exceptions").select("id, p21_code, run_date, kind, reason, note, created_by, created_at")
       .gte("run_date", addDaysISO(today, -60)).order("run_date").order("p21_code").limit(5000),
@@ -596,7 +596,12 @@ async function boardFromRows(rows: any[], jobId: string | null, pulledAt: string
   const { data: profs } = ids.length ? await db().from("profiles").select("id, display_name, email").in("id", ids) : { data: [] };
   const nameOf = new Map((profs ?? []).map((p: any) => [p.id, p.display_name || p.email]));
   const exceptions = (exc ?? []).map((e: any) => ({ ...e, created_by_name: nameOf.get(e.created_by) ?? null }));
-  const board = buildDispatchBoard(rows, cutoffs ?? [], demand ?? [], {
+  const routeIds = [...new Set((demand ?? []).map((d: any) => d.route_id).filter(Boolean))];
+  const { data: caps } = routeIds.length
+    ? await db().from("truck_capacity_routes").select("id, cube_full_truck_ft3, pallets_full_truck").in("id", routeIds)
+    : { data: [] as { id: string; cube_full_truck_ft3: number | null; pallets_full_truck: number | null }[] };
+  const { attachRouteCapacity } = await import("@/lib/truck-capacity/est-pallets");
+  const board = buildDispatchBoard(rows, cutoffs ?? [], attachRouteCapacity(demand ?? [], caps ?? []), {
     basis, today, excludedCodes: (settings?.excluded_p21_codes ?? []) as string[], exceptions,
   });
   return { ...board, jobId, pulledAt };

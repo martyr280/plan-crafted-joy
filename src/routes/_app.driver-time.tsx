@@ -16,6 +16,7 @@ import {
   Loader2, MapPin, Printer, RefreshCw, Users,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { driverTimeGates } from "@/lib/driver-time/access";
 import { useModuleView } from "@/lib/usage-log";
 import {
   useDriverTimeWeek, useUpdateDriverTimeEvent, useRunDriverTimeSweep,
@@ -59,9 +60,10 @@ function shiftWeek(weekStart: string, weeks: number) {
 
 function DriverTimePage() {
   useModuleView("driver-time");
-  const { hasAnyRole } = useAuth();
-  const canView = hasAnyRole(["admin", "ops_logistics", "ops_logistics_admin"] as any);
-  const isAdmin = hasAnyRole(["admin"] as any);
+  const { roles } = useAuth();
+  const gates = driverTimeGates(roles);
+  const canView = gates.canViewModule;
+  const canPay = gates.canManageDriverPay;
 
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [includeWeekends, setIncludeWeekends] = useState(false);
@@ -167,13 +169,13 @@ function DriverTimePage() {
         <KpiCard label="Needs review" value={String(totals?.needsReview ?? 0)} icon={<AlertTriangle className="w-5 h-5" />} />
         <KpiCard
           label="Estimated cost"
-          value={isAdmin && drivers.some(d=>d.cost.cost != null) ? money(totals?.estimatedCost ?? 0) : "—"}
+          value={!!data?.canManageDriverPay && drivers.some(d=>d.cost.cost != null) ? money(totals?.estimatedCost ?? 0) : "—"}
           icon={<CheckCircle2 className="w-5 h-5" />}
         />
 
       </div>
 
-      {isAdmin && (totals?.driversWithoutRate ?? 0) > 0 && (
+      {!!data?.canManageDriverPay && (totals?.driversWithoutRate ?? 0) > 0 && (
         <Card className="p-3 mb-4 text-xs text-muted-foreground border-warning/40">
           {totals?.driversWithoutRate} driver(s) have no hourly rate on file, so their time is excluded from the cost
           estimate. Enter Paycom paid hours to calculate an estimate; warehouse time alone cannot establish overtime.
@@ -185,7 +187,7 @@ function DriverTimePage() {
           <TabsTrigger value="report">Weekly report</TabsTrigger>
           <TabsTrigger value="runs">Sweeps</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
-          {isAdmin && <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>}
+          {gates.canOpenDiagnostics && <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>}
         </TabsList>
 
 
@@ -212,7 +214,7 @@ function DriverTimePage() {
               </div>
               <div className="space-y-4 p-3">
                 {g.drivers.map((d: any) => (
-                  <DriverCard key={d.driverId} driver={d} weekStart={weekStart} isAdmin={!!data?.isAdmin} thresholdMinutes={Number((data as any)?.thresholdMinutes ?? 90)} />
+                  <DriverCard key={d.driverId} driver={d} weekStart={weekStart} isAdmin={!!data?.isAdmin} canViewPay={!!data?.canManageDriverPay} thresholdMinutes={Number((data as any)?.thresholdMinutes ?? 90)} />
                 ))}
               </div>
             </Card>
@@ -255,10 +257,10 @@ function DriverTimePage() {
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4">
-          <DriverTimeSettings isAdmin={isAdmin} />
+          <DriverTimeSettings canManageDriverPay={canPay} />
         </TabsContent>
 
-        {isAdmin && (
+        {gates.canOpenDiagnostics && (
           <TabsContent value="diagnostics" className="mt-4">
             <DiagnosticsTab />
           </TabsContent>
@@ -274,7 +276,7 @@ function DriverTimePage() {
 
 /* ---------------------------------------------------------------- settings */
 
-function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
+function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolean }) {
   const cfgQ = useDriverTimeConfig();
   const save = useSaveDriverTimeConfig();
 
@@ -452,8 +454,8 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
         )}
       </Card>
 
-      {/* Admin-only: the panel checks the role itself and renders nothing otherwise. */}
-      {isAdmin && <DriverRatesPanel />}
+      {/* Driver Time → Settings → Driver rates. The panel also checks the role and loads nothing otherwise. */}
+      {canManageDriverPay && <DriverRatesPanel />}
     </div>
   );
 }
