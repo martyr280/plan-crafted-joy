@@ -355,6 +355,53 @@ describe("DriverRatesPanel states", () => {
     });
   });
 
+  it("ignores a second refresh while the first is still pending", async () => {
+    ports.roles = ["ops_logistics_admin"];
+    showLoaded();
+    ports.update.mockRejectedValue(
+      new Error("This rate changed since you opened it. Refresh and try again."),
+    );
+    let rejectRefresh: (error: Error) => void = () => undefined;
+    ports.query.refetch = vi.fn().mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRefresh = reject;
+        }),
+    );
+    render(<DriverRatesPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /History/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Edit rate for Synthetic Driver from 2026-01-05/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "21.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review change" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    const refresh = screen.getByRole("button", { name: "Refresh this rate" });
+    fireEvent.click(refresh);
+    expect((refresh as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(refresh);
+    expect(ports.query.refetch).toHaveBeenCalledTimes(1);
+    expect((screen.getByLabelText("Hourly rate (USD)") as HTMLInputElement).value).toBe("21.00");
+    await act(async () => {
+      rejectRefresh(new Error("network"));
+    });
+    expect((refresh as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
+    expect(screen.getByRole("status").textContent).toMatch(/Could not refresh this rate/);
+    fireEvent.click(screen.getByRole("button", { name: "Review change" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    expect(ports.update).toHaveBeenLastCalledWith({
+      id: "r1",
+      hourlyRate: 21,
+      effectiveDate: "2026-01-05",
+      expectedUpdatedAt: "stamp-1",
+    });
+  });
+
   it("keeps the conflict when refetch resolves with an error and cached rates", async () => {
     ports.roles = ["admin"];
     showLoaded();

@@ -37,6 +37,10 @@ import {
   destructiveActionClass,
   destructiveBadgeClass,
   destructiveDetailClass,
+  destructiveTextClass,
+  warningBadgeClass,
+  warningDetailClass,
+  warningTextClass,
   type DispatchBoardRoute,
 } from "@/components/dispatch/DispatchRunsBoard";
 import { LoadSheetView } from "@/components/dispatch/LoadSheetView";
@@ -74,7 +78,7 @@ function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     planned: "bg-muted text-muted-foreground",
     pushed: "bg-primary/15 text-primary",
-    locked: "bg-amber-500/15 text-amber-600",
+    locked: warningBadgeClass,
     cancelled: destructiveBadgeClass,
     error: destructiveBadgeClass,
   };
@@ -88,7 +92,9 @@ function ExceptionBadge({ flag }: { flag: any }) {
       {flag.badge}
     </Badge>
   ) : (
-    <Badge variant="secondary" className="ml-1 bg-amber-500/15 text-amber-600" title={flag.message}>{flag.badge}</Badge>
+    <Badge variant="secondary" className={`ml-1 ${warningBadgeClass}`} title={flag.message}>
+      {flag.badge}
+    </Badge>
   );
 }
 
@@ -151,7 +157,7 @@ function DispatchPage() {
       {listPanels.showRows && runs.data && !runs.data.viewAvailable && (
         <Card className="p-4 mb-4 border-amber-500/40 bg-amber-500/5">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <AlertTriangle className={`w-4 h-4 ${warningTextClass} mt-0.5 shrink-0`} />
             <div className="text-sm">
               <div className="font-medium">Dispatch source view not marked available</div>
               <p className="text-muted-foreground mt-1">
@@ -238,7 +244,11 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <StatusBadge status={q.data.run.status} />
               {!q.data.enabled && <Badge variant="secondary">shadow mode</Badge>}
-              {q.data.locked && <Badge variant="secondary" className="bg-amber-500/15 text-amber-600">locked</Badge>}
+              {q.data.locked && (
+                <Badge variant="secondary" className={warningBadgeClass}>
+                  locked
+                </Badge>
+              )}
               <ExceptionBadge flag={q.data.exception} />
               <span className="text-muted-foreground">lock {timeLocal(q.data.run.lock_at)}</span>
               <span className="text-muted-foreground">· pushed {timeLocal(q.data.run.pushed_at)}</span>
@@ -271,7 +281,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                 className={
                   q.data.exception.kind === "no_run"
                     ? `p-3 text-sm ${destructiveDetailClass}`
-                    : "p-3 border-amber-500/40 bg-amber-500/5 text-sm text-amber-700"
+                    : `p-3 text-sm ${warningDetailClass}`
                 }
               >
                 {q.data.exception.message}
@@ -394,7 +404,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                         </TableCell>
                         <TableCell className="text-xs">
                           {s.hold ? (
-                            <span className="text-amber-600 inline-flex items-center gap-1">
+                            <span className={`${warningTextClass} inline-flex items-center gap-1`}>
                               <AlertTriangle className="w-3 h-3" /> {s.hold_reason ?? "held"}
                             </span>
                           ) : (
@@ -501,8 +511,10 @@ function AddressQueueTab({ canWrite }: { canWrite: boolean }) {
               <div>
                 <Label className="text-xs">Suggested Samsara addresses</Label>
                 {suggest.isPending && <div className="text-muted-foreground text-xs mt-1">Scoring candidates…</div>}
-                {suggest.data && !(suggest.data as any).ok && (
-                  <div className="text-destructive text-xs mt-1">{(suggest.data as any).error}</div>
+                {suggest.data && !(suggest.data as { ok?: boolean }).ok && (
+                  <div className={`${destructiveTextClass} text-xs mt-1`}>
+                    {(suggest.data as { error?: string }).error}
+                  </div>
                 )}
                 <div className="mt-2 space-y-1">
                   {((suggest.data as any)?.candidates ?? []).map((c: any) => (
@@ -665,7 +677,7 @@ function SequenceTab({ routes, canWrite }: { routes: any[]; canWrite: boolean })
           <div className="text-sm space-y-2">
             <div>{preview.rows.length} valid line(s), {preview.errors.length} rejected.</div>
             {preview.errors.length > 0 && (
-              <ul className="text-xs text-destructive space-y-1">
+              <ul className={`text-xs ${destructiveTextClass} space-y-1`}>
                 {preview.errors.map((e: any) => <li key={e.lineNo}>line {e.lineNo}: {e.reason} — “{e.raw}”</li>)}
               </ul>
             )}
@@ -802,7 +814,11 @@ function DriverMappingCard({ routes, canWrite }: { routes: any[]; canWrite: bool
           Unconfirmed mappings stay inert — routes are created unassigned rather than assigned to a guess.
         </p>
       </div>
-      {q.data?.rosterError && <div className="text-xs text-destructive">Samsara roster unavailable: {q.data.rosterError}</div>}
+      {q.data?.rosterError && (
+        <div className={`text-xs ${destructiveTextClass}`}>
+          Samsara roster unavailable: {q.data.rosterError}
+        </div>
+      )}
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>

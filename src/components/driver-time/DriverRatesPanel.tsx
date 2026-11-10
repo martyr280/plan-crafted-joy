@@ -276,6 +276,8 @@ function RateDialog({
       : null,
   );
   const reviewRef = useRef<HTMLParagraphElement>(null);
+  const refreshLock = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const busy = add.isPending || update.isPending;
 
@@ -326,30 +328,38 @@ function RateDialog({
   }
 
   async function refreshKeptValues() {
+    if (refreshLock.current) return;
+    refreshLock.current = true;
+    setRefreshing(true);
     setRefreshNote("Refreshing this rate.");
-    let latest: PayRateRow[];
     try {
-      latest = await onRefresh();
-    } catch {
-      setRefreshNote("Could not refresh this rate. The draft and the conflict are unchanged.");
-      return;
+      let latest: PayRateRow[];
+      try {
+        latest = await onRefresh();
+      } catch {
+        setRefreshNote("Could not refresh this rate. The draft and the conflict are unchanged.");
+        return;
+      }
+      if (editing.mode !== "edit") return;
+      const row = latest.find((r) => r.id === editing.row.id);
+      if (!row?.updated_at || row.hourly_rate == null || !row.effective_date) {
+        setRefreshNote(
+          "This rate was not in the refreshed list. The draft and the conflict are unchanged.",
+        );
+        return;
+      }
+      setBaseline({
+        hourlyRate: Number(row.hourly_rate),
+        effectiveDate: row.effective_date,
+        updatedAt: row.updated_at,
+      });
+      setSaveError(null);
+      setRefreshNote(null);
+      setConfirming(true);
+    } finally {
+      refreshLock.current = false;
+      setRefreshing(false);
     }
-    if (editing.mode !== "edit") return;
-    const row = latest.find((r) => r.id === editing.row.id);
-    if (!row?.updated_at || row.hourly_rate == null || !row.effective_date) {
-      setRefreshNote(
-        "This rate was not in the refreshed list. The draft and the conflict are unchanged.",
-      );
-      return;
-    }
-    setBaseline({
-      hourlyRate: Number(row.hourly_rate),
-      effectiveDate: row.effective_date,
-      updatedAt: row.updated_at,
-    });
-    setSaveError(null);
-    setRefreshNote(null);
-    setConfirming(true);
   }
 
   return (
@@ -424,6 +434,7 @@ function RateDialog({
                     type="button"
                     size="sm"
                     variant="outline"
+                    disabled={refreshing}
                     onClick={() => void refreshKeptValues()}
                   >
                     Refresh this rate

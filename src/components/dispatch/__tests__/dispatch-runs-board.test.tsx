@@ -151,9 +151,12 @@ describe("dispatch runs board", () => {
     expect(noRun.className).toMatch(/text-destructive-text/);
     expect(noRun.className).not.toMatch(/text-destructive(?!-text)/);
     expect(reduced.getAttribute("title")).toBe("Short a driver");
-    expect(reduced.className).toMatch(/text-amber-600/);
+    expect(reduced.className).toMatch(/text-warning-text/);
+    expect(reduced.className).not.toMatch(/text-amber-\d+/);
     expect(screen.getByText("cancelled").className).toMatch(/text-destructive-text/);
     expect(screen.getByText("cancelled").className).not.toMatch(/text-destructive(?!-text)/);
-    expect(screen.getByText("locked").className).toMatch(/text-amber-600/);
+    expect(screen.getByText("locked").className).toMatch(/text-warning-text/);
+    expect(screen.getByText("2 held").className).toMatch(/text-warning-text/);
+    expect(screen.getByText("2 held").className).not.toMatch(/text-amber-\d+/);
   });
 });

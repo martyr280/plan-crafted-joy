@@ -34,18 +34,26 @@ export type DispatchBoardRoute = {
   runs: DispatchBoardRun[];
 };
 
-export const destructiveBadgeClass =
-  "bg-destructive/15 text-destructive-text hover:text-destructive-text focus-visible:text-destructive-text";
-export const destructiveDetailClass =
-  "border-destructive/40 bg-destructive/5 text-destructive-text hover:text-destructive-text focus-visible:text-destructive-text";
-export const destructiveActionClass =
+export const destructiveTextClass =
   "text-destructive-text hover:text-destructive-text focus-visible:text-destructive-text";
+export const destructiveBadgeClass =
+  "bg-destructive/15 text-destructive-text hover:bg-destructive/15 hover:text-destructive-text focus-visible:text-destructive-text";
+export const destructiveDetailClass =
+  "border-destructive/40 bg-destructive/5 text-destructive-text hover:bg-destructive/5 hover:text-destructive-text focus-visible:text-destructive-text";
+export const destructiveActionClass =
+  "text-destructive-text hover:bg-destructive/10 hover:text-destructive-text focus-visible:bg-destructive/10 focus-visible:text-destructive-text";
+export const warningTextClass =
+  "text-warning-text hover:text-warning-text focus-visible:text-warning-text";
+export const warningBadgeClass =
+  "bg-amber-500/15 text-warning-text hover:bg-amber-500/15 hover:text-warning-text focus-visible:text-warning-text";
+export const warningDetailClass =
+  "border-amber-500/40 bg-amber-500/5 text-warning-text hover:bg-amber-500/5 hover:text-warning-text focus-visible:text-warning-text";
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     planned: "bg-muted text-muted-foreground",
     pushed: "bg-primary/15 text-primary",
-    locked: "bg-amber-500/15 text-amber-600",
+    locked: warningBadgeClass,
     cancelled: destructiveBadgeClass,
     error: destructiveBadgeClass,
   };
@@ -63,15 +71,11 @@ function ExceptionBadge({
 }) {
   if (!flag) return null;
   return flag.kind === "no_run" ? (
-    <Badge
-      variant="secondary"
-      className={`ml-1 ${destructiveBadgeClass}`}
-      title={flag.message}
-    >
+    <Badge variant="secondary" className={`ml-1 ${destructiveBadgeClass}`} title={flag.message}>
       {flag.badge}
     </Badge>
   ) : (
-    <Badge variant="secondary" className="ml-1 bg-amber-500/15 text-amber-600" title={flag.message}>
+    <Badge variant="secondary" className={`ml-1 ${warningBadgeClass}`} title={flag.message}>
       {flag.badge}
     </Badge>
   );
@@ -245,7 +249,9 @@ export function DispatchRunsBoard({
                             <StatusBadge status={run.status} />
                             <ExceptionBadge flag={run.exception} />
                             {run.stopsHeld > 0 && (
-                              <span className="ml-1 text-amber-600">{run.stopsHeld} held</span>
+                              <span className={`ml-1 ${warningTextClass}`}>
+                                {run.stopsHeld} held
+                              </span>
                             )}
                           </button>
                         ))}
