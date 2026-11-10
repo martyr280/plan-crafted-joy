@@ -9,13 +9,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { KpiCard } from "@/components/shared/KpiCard";
 import { toast } from "sonner";
 import {
-  AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Download,
   Loader2, MapPin, Printer, RefreshCw, Users,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { driverTimeGates } from "@/lib/driver-time/access";
 import { useModuleView } from "@/lib/usage-log";
 import {
   useDriverTimeWeek, useUpdateDriverTimeEvent, useRunDriverTimeSweep,
@@ -23,9 +27,12 @@ import {
   useSamsaraDiagnostics,
 } from "@/hooks/useDriverTime";
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
-import { formatMinutes, hubTimezone, reconciliationCsv } from "@/lib/driver-time/reconciliation";
+import { hubTimezone, reconciliationCsv } from "@/lib/driver-time/reconciliation";
 import { WarehouseActualEditor } from "@/components/driver-time/WarehouseActualEditor";
-import { DriverCard, money, hm, clock, dayLabel, STATUS_STYLE } from "@/components/driver-time/DriverCard";
+import { hm, clock, dayLabel, STATUS_STYLE } from "@/components/driver-time/DriverCard";
+import { DriverTimeReport } from "@/components/driver-time/DriverTimeReport";
+import { driverTimeReportPanels } from "@/lib/driver-time/report-panels";
+import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 import { DriverRatesPanel } from "@/components/driver-time/DriverRatesPanel";
 
 export const Route = createFileRoute("/_app/driver-time")({
@@ -57,11 +64,27 @@ function shiftWeek(weekStart: string, weeks: number) {
 }
 
 
+type WeekPayload = NonNullable<ReturnType<typeof useDriverTimeWeek>["data"]>;
+const NO_DRIVERS: WeekPayload["drivers"] = [];
+const NO_GROUPS: WeekPayload["hubGroups"] = [];
+
+type SweepRun = {
+  id: string;
+  started_at: string;
+  week_start: string;
+  week_end: string;
+  status: string;
+  drivers_scanned: number;
+  events_found: number;
+  error?: string | null;
+};
+
 function DriverTimePage() {
   useModuleView("driver-time");
-  const { hasAnyRole } = useAuth();
-  const canView = hasAnyRole(["admin", "ops_logistics", "ops_logistics_admin"] as any);
-  const isAdmin = hasAnyRole(["admin"] as any);
+  const { roles } = useAuth();
+  const gates = driverTimeGates(roles);
+  const canView = gates.canViewModule;
+  const canPay = gates.canManageDriverPay;
 
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [includeWeekends, setIncludeWeekends] = useState(false);
@@ -69,8 +92,14 @@ function DriverTimePage() {
   const sweep = useRunDriverTimeSweep();
 
   const data = weekQ.data;
-  const drivers = data?.drivers ?? [];
-  const hubGroups = (data as any)?.hubGroups ?? [];
+  const report = driverTimeReportPanels({
+    isError: weekQ.isError,
+    isLoading: weekQ.isLoading,
+    isFetching: weekQ.isFetching,
+    hasData: weekQ.data != null,
+  });
+  const drivers = report.showReport && data?.drivers ? data.drivers : NO_DRIVERS;
+  const hubGroups = report.showReport && data?.hubGroups ? data.hubGroups : NO_GROUPS;
 
   const totals = data?.totals;
 
@@ -119,11 +148,28 @@ function DriverTimePage() {
         description="Verified warehouse hours alongside automated Samsara estimates. Official reports take precedence for the weekdays they cover."
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => downloadCsv()} disabled={!drivers.length}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadCsv()}
+              disabled={!report.allowExport || !drivers.length}
+            >
               <Download className="w-4 h-4 mr-1" /> Reconciled CSV
             </Button>
-            <Button variant="outline" size="sm" onClick={() => downloadCsv(true)} disabled={!drivers.length}>Raw events CSV</Button>
-            <Button variant="outline" size="sm" onClick={() => window.print()} disabled={!drivers.length}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadCsv(true)}
+              disabled={!report.allowExport || !drivers.length}
+            >
+              Raw events CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              disabled={!report.allowExport || !drivers.length}
+            >
               <Printer className="w-4 h-4 mr-1" /> Print / PDF
             </Button>
             <Button
@@ -137,7 +183,7 @@ function DriverTimePage() {
                   onError: (e: any) => toast.error(e?.message ?? "Sweep failed"),
                 })
               }
-              disabled={sweep.isPending}
+              disabled={sweep.isPending || !report.allowExport}
             >
               {sweep.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
               Rescan selected week
@@ -160,64 +206,34 @@ function DriverTimePage() {
       </div>
 
       <label className="flex gap-2 items-center mb-4 text-sm"><input type="checkbox" checked={includeWeekends} onChange={e=>setIncludeWeekends(e.target.checked)} /> Include weekend automated events</label>
-      {weekQ.isError && <Card className="p-4 mb-4 text-destructive">Report unavailable: {(weekQ.error as Error).message}. Hours have not been treated as zero.</Card>}
-      <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <KpiCard label="Drivers in report" value={String(totals?.drivers ?? 0)} icon={<Users className="w-5 h-5" />} />
-        <KpiCard label="Warehouse time (H:MM)" value={totals ? formatMinutes(totals.flaggedMinutes) : "—"} icon={<Clock className="w-5 h-5" />} />
-        <KpiCard label="Needs review" value={String(totals?.needsReview ?? 0)} icon={<AlertTriangle className="w-5 h-5" />} />
-        <KpiCard
-          label="Estimated cost"
-          value={isAdmin && drivers.some(d=>d.cost.cost != null) ? money(totals?.estimatedCost ?? 0) : "—"}
-          icon={<CheckCircle2 className="w-5 h-5" />}
-        />
-
-      </div>
-
-      {isAdmin && (totals?.driversWithoutRate ?? 0) > 0 && (
-        <Card className="p-3 mb-4 text-xs text-muted-foreground border-warning/40">
-          {totals?.driversWithoutRate} driver(s) have no hourly rate on file, so their time is excluded from the cost
-          estimate. Enter Paycom paid hours to calculate an estimate; warehouse time alone cannot establish overtime.
-        </Card>
-      )}
 
       <Tabs defaultValue="report">
         <TabsList>
           <TabsTrigger value="report">Weekly report</TabsTrigger>
           <TabsTrigger value="runs">Sweeps</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
-          {isAdmin && <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>}
+          {gates.canOpenDiagnostics && <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>}
         </TabsList>
 
 
         <TabsContent value="report" className="mt-4 space-y-4">
-          <Card className="p-3 text-sm">{totals?.officialDrivers ?? 0} driver(s) have official weekday totals. All other totals are automated estimates. Excused, superseded and unresolved-location events remain visible but do not count. Times are shown in each warehouse’s local timezone.</Card>
-          <WarehouseActualEditor key={weekStart} weekStart={weekStart} drivers={drivers} />
-          {weekQ.isLoading && (
-            <Card className="p-6 text-sm text-muted-foreground flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading week…
-            </Card>
+          <DriverTimeReport
+            isError={weekQ.isError}
+            isLoading={weekQ.isLoading}
+            isFetching={weekQ.isFetching}
+            hasData={weekQ.data != null}
+            errorMessage={(weekQ.error as Error | null)?.message}
+            onRetry={() => void weekQ.refetch()}
+            totals={report.showReport ? totals : null}
+            canManageDriverPay={!!data?.canManageDriverPay}
+            drivers={drivers}
+            hubGroups={hubGroups}
+            thresholdMinutes={Number(data?.thresholdMinutes ?? 90)}
+            isAdmin={!!data?.isAdmin}
+          />
+          {report.showReport && (
+            <WarehouseActualEditor key={weekStart} weekStart={weekStart} drivers={drivers} />
           )}
-          {!weekQ.isLoading && !weekQ.isError && !drivers.length && (
-            <Card className="p-6 text-sm text-muted-foreground">
-              No stored events or official report for this window. This does not prove zero hours. Rescan the selected week or enter verified hours.
-            </Card>
-          )}
-          {hubGroups.map((g: any) => (
-            <Card key={g.hub} className="p-0 overflow-hidden">
-              <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2">
-                <div className="text-sm font-semibold">{g.hub}</div>
-                <div className="text-xs text-muted-foreground">
-                  {g.drivers.length} driver{g.drivers.length === 1 ? "" : "s"} · {hm(g.flaggedMinutes)} reported
-                </div>
-              </div>
-              <div className="space-y-4 p-3">
-                {g.drivers.map((d: any) => (
-                  <DriverCard key={d.driverId} driver={d} weekStart={weekStart} isAdmin={!!data?.isAdmin} thresholdMinutes={Number((data as any)?.thresholdMinutes ?? 90)} />
-                ))}
-              </div>
-            </Card>
-          ))}
-
         </TabsContent>
 
         <TabsContent value="runs" className="mt-4">
@@ -234,20 +250,42 @@ function DriverTimePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(data?.runs ?? []).map((r: any) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="text-xs">{new Date(r.started_at).toLocaleString("en-US", { timeZone: CENTRAL_TZ })}</TableCell>
-                    <TableCell className="text-xs">{r.week_start} → {r.week_end}</TableCell>
-                    <TableCell>
-                      <Badge variant={r.status === "completed" ? "secondary" : "destructive"}>{r.status}</Badge>
+                {!report.showReport ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-sm text-muted-foreground">
+                      Sweep history is unavailable until this week loads.
                     </TableCell>
-                    <TableCell className="text-right">{r.drivers_scanned}</TableCell>
-                    <TableCell className="text-right">{r.events_found}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[380px] truncate">{r.error ?? "—"}</TableCell>
                   </TableRow>
-                ))}
-                {!(data?.runs ?? []).length && (
-                  <TableRow><TableCell colSpan={6} className="text-sm text-muted-foreground">No sweeps yet.</TableCell></TableRow>
+                ) : (
+                  <>
+                    {((data?.runs ?? []) as SweepRun[]).map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="text-xs">
+                          {new Date(r.started_at).toLocaleString("en-US", { timeZone: CENTRAL_TZ })}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {r.week_start} → {r.week_end}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={r.status === "completed" ? "secondary" : "destructive"}>
+                            {r.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{r.drivers_scanned}</TableCell>
+                        <TableCell className="text-right">{r.events_found}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[380px] truncate">
+                          {r.error ?? "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!(data?.runs ?? []).length && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-sm text-muted-foreground">
+                          No sweeps yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
                 )}
               </TableBody>
             </Table>
@@ -255,10 +293,10 @@ function DriverTimePage() {
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4">
-          <DriverTimeSettings isAdmin={isAdmin} />
+          <DriverTimeSettings canManageDriverPay={canPay} />
         </TabsContent>
 
-        {isAdmin && (
+        {gates.canOpenDiagnostics && (
           <TabsContent value="diagnostics" className="mt-4">
             <DiagnosticsTab />
           </TabsContent>
@@ -274,7 +312,7 @@ function DriverTimePage() {
 
 /* ---------------------------------------------------------------- settings */
 
-function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
+function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolean }) {
   const cfgQ = useDriverTimeConfig();
   const save = useSaveDriverTimeConfig();
 
@@ -299,7 +337,7 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
       <Card className="p-4 space-y-3">
         <div className="font-semibold text-sm">Detection</div>
         {cfgQ.data?.error && (
-          <div className="text-xs text-destructive">
+          <div className={`text-xs ${destructiveTextClass}`}>
             Samsara data unavailable: {cfgQ.data.error} — check the API token scopes in Settings → Integrations.
           </div>
         )}
@@ -452,8 +490,8 @@ function DriverTimeSettings({ isAdmin }: { isAdmin: boolean }) {
         )}
       </Card>
 
-      {/* Admin-only: the panel checks the role itself and renders nothing otherwise. */}
-      {isAdmin && <DriverRatesPanel />}
+      {/* Driver Time → Settings → Driver rates. The panel also checks the role and loads nothing otherwise. */}
+      {canManageDriverPay && <DriverRatesPanel />}
     </div>
   );
 }
@@ -482,7 +520,7 @@ function ragOf(min: number, greenUnder: number, redAtOrOver: number): Rag {
 const RAG_CLASS: Record<Rag, string> = {
   green: "text-success-text bg-success/10",
   yellow: "text-warning-text bg-warning/10",
-  red: "text-destructive bg-destructive/10",
+  red: `${destructiveTextClass} bg-destructive/10`,
   none: "text-muted-foreground",
 };
 
@@ -625,7 +663,9 @@ function DiagnosticsTab() {
               : "border-destructive/50 bg-destructive/10 p-5"
           }
         >
-          <div className={`flex items-start gap-3 ${verdict.ok ? "text-success-text" : "text-destructive"}`}>
+          <div
+            className={`flex items-start gap-3 ${verdict.ok ? "text-success-text" : destructiveTextClass}`}
+          >
             {verdict.ok ? <CheckCircle2 className="mt-0.5 h-6 w-6" /> : <AlertTriangle className="mt-0.5 h-6 w-6" />}
             <p className="text-lg font-semibold leading-snug">{verdict.text}</p>
           </div>
@@ -642,7 +682,9 @@ function DiagnosticsTab() {
         <>
           {d.warnings?.length > 0 && (
             <Card className="border-destructive/40 bg-destructive/5 p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-destructive">
+              <div
+                className={`mb-2 flex items-center gap-2 text-sm font-medium ${warningTextClass}`}
+              >
                 <AlertTriangle className="h-4 w-4" /> Warnings
               </div>
               <ul className="list-inside list-disc space-y-1 text-sm">
@@ -689,9 +731,11 @@ function DiagnosticsTab() {
               <div className="space-y-2">
                 {d.probes.map((p: any) => (
                   <div key={p.endpoint} className="flex items-start gap-2 text-sm">
-                    {p.ok
-                      ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-success-text" />
-                      : <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />}
+                    {p.ok ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-success-text" />
+                    ) : (
+                      <AlertTriangle className={`mt-0.5 h-4 w-4 ${destructiveTextClass}`} />
+                    )}
                     <div>
                       <div>{p.endpoint}</div>
                       <div className="text-xs text-muted-foreground">{p.detail}</div>
@@ -802,7 +846,9 @@ function DiagnosticsTab() {
                 <span className="rounded px-2 py-1 text-warning-text bg-warning/10">
                   {greenUnder}–{Math.max(greenUnder, redAtOrOver - 1)} min
                 </span>
-                <span className="rounded px-2 py-1 text-destructive bg-destructive/10">≥ {redAtOrOver} min</span>
+                <span className={`rounded px-2 py-1 ${destructiveTextClass} bg-destructive/10`}>
+                  ≥ {redAtOrOver} min
+                </span>
                 <span className="rounded px-2 py-1 text-muted-foreground bg-muted">no data</span>
               </div>
 

@@ -12,6 +12,8 @@ import {
 } from "./features";
 import { groupContributions, driverSummary } from "./explain";
 import { forecastLogRowsFromDays } from "./forecast-log";
+import { estimatePallets, latestDemandCube } from "./est-pallets";
+import type { PagedQuery } from "../supabase-fetch-all";
 
 export type ServingMethod = "auto" | "baseline" | "model";
 
@@ -34,6 +36,8 @@ export type ForecastDay = {
   n_baseline: number;
   explain: string;
   driverSummary?: string;
+  /** Cube formula for this date. Null is unavailable, including a stale stored 0. */
+  est_pallets: number | null;
 };
 
 
@@ -114,6 +118,42 @@ async function loadP21Latest(routeId: string, from: string, to: string): Promise
   return latest;
 }
 
+/**
+ * Latest cube per ship date. Pages with snapshot_at then id so a 1,000-row
+ * cap cannot drop a newer snapshot. A failed read throws; it is not an empty
+ * route. The stored est_pallets column is not selected.
+ */
+async function loadP21Cubes(
+  routeId: string,
+  from: string,
+  to: string,
+): Promise<Map<string, number | null>> {
+  const { fetchAllRows } = await import("../supabase-fetch-all");
+  type CubeRow = {
+    id: string;
+    ship_date: string;
+    total_cube_ft: number | null;
+    snapshot_at: string | null;
+  };
+  const rows = await fetchAllRows<CubeRow>(
+    () =>
+      supabaseAdmin
+        .from("truck_capacity_p21_demand")
+        .select("id, ship_date, total_cube_ft, snapshot_at", { count: "exact" })
+        .eq("route_id", routeId)
+        .gte("ship_date", from)
+        .lte("ship_date", to) as unknown as PagedQuery<CubeRow>,
+    {
+      orderBy: [
+        { column: "snapshot_at", ascending: false },
+        { column: "id", ascending: false },
+      ],
+      label: "forecast p21 cubes",
+    },
+  );
+  return latestDemandCube(rows);
+}
+
 export type ForecastServeOptions = {
   /** false = pure read: no forecast_log upsert and no activity_events insert. */
   logForecast?: boolean;
@@ -134,10 +174,11 @@ export async function computeForecastForRoute(
   const from = addDaysISO(today, -84);
   const horizonEnd = addDaysISO(today, horizonDays);
 
-  const [routeRunsData, hubRunsData, p21Latest] = await Promise.all([
+  const [routeRunsData, hubRunsData, p21Latest, p21Cubes] = await Promise.all([
     loadRouteRunsSince(routeId, from),
     loadHubRunsSince(route.hub, from),
     loadP21Latest(routeId, today, horizonEnd),
+    loadP21Cubes(routeId, today, horizonEnd),
   ]);
 
   const baselineDays = baselineFromSnapshot(
@@ -264,6 +305,15 @@ export async function computeForecastForRoute(
     const explainSuffix = driverStr ? ` · ${driverStr}` : "";
     const p21Suffix = p21 != null ? ` · P21 ${p21.toFixed(2)}${guardApplied ? " (guard)" : ""}` : "";
     const lowConfidence = b.low_confidence || (saturated && b.forecast == null);
+    const cube = p21Cubes.get(b.date);
+    const est_pallets =
+      cube === undefined
+        ? null
+        : estimatePallets({
+            cube,
+            cubeFullTruckFt3: route.cube_full_truck_ft3,
+            palletsFullTruck: route.pallets_full_truck,
+          });
     return {
       date: b.date, dow: b.dow, baseline: b.baseline, seasonal: b.seasonal,
       forecast: b.forecast, model: modelPred, model_raw: modelRaw,
@@ -274,6 +324,7 @@ export async function computeForecastForRoute(
       n_baseline: b.n_baseline,
       explain: `${b.explain}${satNote}${p21Suffix}${explainSuffix}`,
       driverSummary: driverStr,
+      est_pallets,
     };
   });
 

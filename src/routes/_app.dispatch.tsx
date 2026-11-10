@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
-import { KpiCard } from "@/components/shared/KpiCard";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Clock, Hammer, Loader2, MapPin, Printer, RefreshCw, Send, Truck, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  MapPin,
+  Printer,
+  RefreshCw,
+  Send,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useModuleView } from "@/lib/usage-log";
-import { buildLoadSheet } from "@/lib/dispatch/loadsheet";
+import {
+  formatEstPallets,
+  formatPalletTotal,
+  sumEstPallets,
+} from "@/lib/truck-capacity/est-pallets";
 import { TicketBoard } from "@/components/dispatch/TicketBoard";
+import { RunDetailAlert } from "@/components/dispatch/RunDetailAlert";
+import {
+  DispatchRunsBoard,
+  destructiveActionClass,
+  destructiveBadgeClass,
+  destructiveDetailClass,
+  destructiveTextClass,
+  warningBadgeClass,
+  warningDetailClass,
+  warningTextClass,
+  type DispatchBoardRoute,
+} from "@/components/dispatch/DispatchRunsBoard";
+import { LoadSheetView } from "@/components/dispatch/LoadSheetView";
+import { dispatchListPanels, dispatchRunPanels } from "@/components/dispatch/run-detail-panels";
 import { DATE_BASES, DATE_BASIS_LABEL } from "@/lib/dispatch/assign";
 import {
   useAddressQueue, useApproveAndPush, useBuildRunNow, useCancelRun, useDispatchRun, useDispatchRuns,
@@ -41,6 +67,7 @@ export const Route = createFileRoute("/_app/dispatch")({
 });
 
 const num = (n: unknown) => Number(n ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 });
+const EMPTY_DISPATCH_ROWS: never[] = [];
 
 function timeLocal(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -51,9 +78,9 @@ function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     planned: "bg-muted text-muted-foreground",
     pushed: "bg-primary/15 text-primary",
-    locked: "bg-amber-500/15 text-amber-600",
-    cancelled: "bg-destructive/15 text-destructive",
-    error: "bg-destructive/15 text-destructive",
+    locked: warningBadgeClass,
+    cancelled: destructiveBadgeClass,
+    error: destructiveBadgeClass,
   };
   return <Badge className={map[status] ?? "bg-muted text-muted-foreground"} variant="secondary">{status}</Badge>;
 }
@@ -61,9 +88,13 @@ function StatusBadge({ status }: { status: string }) {
 function ExceptionBadge({ flag }: { flag: any }) {
   if (!flag) return null;
   return flag.kind === "no_run" ? (
-    <Badge variant="secondary" className="ml-1 bg-destructive/15 text-destructive" title={flag.message}>{flag.badge}</Badge>
+    <Badge variant="secondary" className={`ml-1 ${destructiveBadgeClass}`} title={flag.message}>
+      {flag.badge}
+    </Badge>
   ) : (
-    <Badge variant="secondary" className="ml-1 bg-amber-500/15 text-amber-600" title={flag.message}>{flag.badge}</Badge>
+    <Badge variant="secondary" className={`ml-1 ${warningBadgeClass}`} title={flag.message}>
+      {flag.badge}
+    </Badge>
   );
 }
 
@@ -74,28 +105,39 @@ function DispatchPage() {
   const isAdmin = hasRole("admin");
 
   const runs = useDispatchRuns();
+  const build = useBuildRunNow();
   const [openRunId, setOpenRunId] = useState<string | null>(null);
+  const listPanels = dispatchListPanels({
+    isError: runs.isError,
+    isLoading: runs.isLoading,
+    hasData: Boolean(runs.data),
+  });
 
-  const rows: any[] = runs.data?.rows ?? [];
-  const byHub = useMemo(() => {
-    const m = new Map<string, any[]>();
-    for (const r of rows) {
-      const list = m.get(r.hub) ?? [];
-      list.push(r);
-      m.set(r.hub, list);
-    }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [rows]);
-
-  const totals = useMemo(() => {
-    const all: any[] = rows.flatMap((r: any) => r.runs);
-    return {
-      enabled: rows.filter((r: any) => r.enabled).length,
-      planned: all.filter((r: any) => r.status === "planned").length,
-      pushed: all.filter((r: any) => r.status === "pushed").length,
-      held: all.reduce((n: number, r: any) => n + r.stopsHeld, 0),
-    };
-  }, [rows]);
+  const rows = listPanels.showRows ? (runs.data?.rows ?? EMPTY_DISPATCH_ROWS) : EMPTY_DISPATCH_ROWS;
+  const boardProps = {
+    isError: runs.isError,
+    isLoading: runs.isLoading,
+    isFetching: runs.isFetching && !runs.data,
+    hasData: Boolean(runs.data),
+    errorMessage: (runs.error as Error | null)?.message,
+    onRetry: () => void runs.refetch(),
+    rows: (runs.data?.rows ?? EMPTY_DISPATCH_ROWS) as DispatchBoardRoute[],
+    canWrite,
+    building: build.isPending,
+    onOpenRun: setOpenRunId,
+    onBuild: async (routeId: string, code: string) => {
+      const res = (await build.mutateAsync({ routeId })) as {
+        ok?: boolean;
+        runIds?: string[];
+        skipped?: string[];
+        error?: string;
+      };
+      if (res?.ok) {
+        toast.success(`Built ${res.runIds?.length ?? 0} run(s) for ${code}`);
+        for (const m of res.skipped ?? []) toast.warning(m);
+      } else toast.error(res?.error ?? "Build failed");
+    },
+  };
 
   return (
     <div>
@@ -110,10 +152,12 @@ function DispatchPage() {
         }
       />
 
-      {runs.data && !runs.data.viewAvailable && (
+      <DispatchRunsBoard part="summary" {...boardProps} />
+
+      {listPanels.showRows && runs.data && !runs.data.viewAvailable && (
         <Card className="p-4 mb-4 border-amber-500/40 bg-amber-500/5">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <AlertTriangle className={`w-4 h-4 ${warningTextClass} mt-0.5 shrink-0`} />
             <div className="text-sm">
               <div className="font-medium">Dispatch source view not marked available</div>
               <p className="text-muted-foreground mt-1">
@@ -125,13 +169,6 @@ function DispatchPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <KpiCard label="Routes enabled" value={String(totals.enabled)} icon={<Truck className="w-4 h-4" />} />
-        <KpiCard label="Runs planned" value={String(totals.planned)} icon={<Clock className="w-4 h-4" />} />
-        <KpiCard label="Runs pushed" value={String(totals.pushed)} icon={<Send className="w-4 h-4" />} />
-        <KpiCard label="Stops held" value={String(totals.held)} icon={<AlertTriangle className="w-4 h-4" />} />
-      </div>
-
       <Tabs defaultValue="board">
         <TabsList>
           <TabsTrigger value="tickets">Tickets by cutoff</TabsTrigger>
@@ -142,30 +179,7 @@ function DispatchPage() {
         </TabsList>
 
         <TabsContent value="board" className="mt-4 space-y-6">
-          {runs.isLoading && <Card className="p-6 text-sm text-muted-foreground">Loading routes…</Card>}
-          {byHub.map(([hub, list]) => (
-            <div key={hub}>
-              <h2 className="text-sm font-semibold text-muted-foreground mb-2">{hub}</h2>
-              <Card className="overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Route</TableHead>
-                      <TableHead>Mode</TableHead>
-                      <TableHead>Next cutoff</TableHead>
-                      <TableHead>Runs</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {list.map((r: any) => (
-                      <RouteRow key={r.routeId} route={r} canWrite={canWrite} onOpenRun={setOpenRunId} />
-                    ))}
-                  </TableBody>
-                </Table>
-              </Card>
-            </div>
-          ))}
+          <DispatchRunsBoard part="table" {...boardProps} />
         </TabsContent>
 
         <TabsContent value="tickets" className="mt-4">
@@ -177,81 +191,17 @@ function DispatchPage() {
         </TabsContent>
 
         <TabsContent value="sequence" className="mt-4">
-          <SequenceTab routes={rows} canWrite={canWrite} />
+          <SequenceTab routes={rows} canWrite={canWrite && listPanels.allowRowActions} />
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4 space-y-4">
-          <SettingsCard routes={rows} isAdmin={isAdmin} />
-          <DriverMappingCard routes={rows} canWrite={canWrite} />
+          <SettingsCard routes={rows} isAdmin={isAdmin && listPanels.allowRowActions} />
+          <DriverMappingCard routes={rows} canWrite={canWrite && listPanels.allowRowActions} />
         </TabsContent>
       </Tabs>
 
       <RunDetailDialog runId={openRunId} onClose={() => setOpenRunId(null)} canWrite={canWrite} />
     </div>
-  );
-}
-
-/* ------------------------------------------------------------- board row */
-
-function RouteRow({ route, canWrite, onOpenRun }: { route: any; canWrite: boolean; onOpenRun: (id: string) => void }) {
-  const build = useBuildRunNow();
-  return (
-    <TableRow>
-      <TableCell>
-        <div className="font-medium">{route.code}</div>
-        <div className="text-xs text-muted-foreground">{route.name}</div>
-      </TableCell>
-      <TableCell>
-        {route.enabled ? (
-          <Badge variant="secondary" className="bg-primary/15 text-primary">{route.autoPush ? "auto-push" : "enabled"}</Badge>
-        ) : (
-          <Badge variant="secondary">shadow</Badge>
-        )}
-      </TableCell>
-      <TableCell className="text-sm">
-        {route.cutoff ? (
-          <div>
-            <div>{route.cutoff.timeLabel}</div>
-            <div className="text-xs text-muted-foreground">
-              ships {route.cutoff.runDates.join(", ") || "—"}
-            </div>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">no cutoff configured</span>
-        )}
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-wrap gap-1">
-          {route.runs.length === 0 && <span className="text-xs text-muted-foreground">none</span>}
-          {route.runs.map((run: any) => (
-            <button key={run.id} onClick={() => onOpenRun(run.id)} className="text-xs underline-offset-2 hover:underline">
-              <span className="mr-1">{run.runDate}</span>
-              <StatusBadge status={run.status} />
-              <ExceptionBadge flag={run.exception} />
-              {run.stopsHeld > 0 && <span className="ml-1 text-amber-600">{run.stopsHeld} held</span>}
-            </button>
-          ))}
-        </div>
-      </TableCell>
-      <TableCell className="text-right">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!canWrite || build.isPending}
-          onClick={async () => {
-            const res: any = await build.mutateAsync({ routeId: route.routeId });
-            if (res?.ok) {
-              toast.success(`Built ${res.runIds.length} run(s) for ${route.code}`);
-              for (const m of res.skipped ?? []) toast.warning(m);
-            }
-            else toast.error(res?.error ?? "Build failed");
-          }}
-        >
-          {build.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Hammer className="w-4 h-4" />}
-          <span className="ml-2">Build now</span>
-        </Button>
-      </TableCell>
-    </TableRow>
   );
 }
 
@@ -265,23 +215,11 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
   const [showLoadSheet, setShowLoadSheet] = useState(false);
 
   const stops = (q.data?.stops ?? []) as any[];
-  const loadSheet = useMemo(
-    () =>
-      buildLoadSheet(
-        stops.map((s) => ({
-          position: s.position,
-          hold: s.hold,
-          estPallets: s.est_pallets,
-          estCubeFt: s.est_cube_ft,
-          estWeightLbs: s.est_weight_lbs,
-          customerName: s.customer_name,
-          state: s.state,
-          orderNo: s.order_no,
-          pickTicketNo: s.pick_ticket_no,
-        })),
-      ),
-    [stops],
-  );
+  const panels = dispatchRunPanels({
+    isError: q.isError,
+    isLoading: q.isLoading,
+    hasData: Boolean(q.data),
+  });
 
   return (
     <Dialog open={Boolean(runId)} onOpenChange={(o) => !o && onClose()}>
@@ -292,34 +230,68 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
           </DialogTitle>
         </DialogHeader>
 
-        {q.isLoading && <div className="text-sm text-muted-foreground">Loading run…</div>}
+        {panels.showLoading && <div className="text-sm text-muted-foreground">Loading run…</div>}
+        {panels.showError && (
+          <RunDetailAlert
+            message={(q.error as Error)?.message ?? "The run could not be loaded."}
+            stale={panels.showStaleNote}
+            onRetry={() => void q.refetch()}
+          />
+        )}
 
-        {q.data && (
+        {panels.showRun && q.data && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <StatusBadge status={q.data.run.status} />
               {!q.data.enabled && <Badge variant="secondary">shadow mode</Badge>}
-              {q.data.locked && <Badge variant="secondary" className="bg-amber-500/15 text-amber-600">locked</Badge>}
+              {q.data.locked && (
+                <Badge variant="secondary" className={warningBadgeClass}>
+                  locked
+                </Badge>
+              )}
               <ExceptionBadge flag={q.data.exception} />
               <span className="text-muted-foreground">lock {timeLocal(q.data.run.lock_at)}</span>
               <span className="text-muted-foreground">· pushed {timeLocal(q.data.run.pushed_at)}</span>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-4 text-sm">
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Stops</div><div className="font-semibold">{num(q.data.run.stops_total)}</div></Card>
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Held</div><div className="font-semibold">{num(q.data.run.stops_held)}</div></Card>
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Pallets</div><div className="font-semibold">{num(q.data.run.est_pallets)}</div></Card>
-              <Card className="p-3"><div className="text-muted-foreground text-xs">Weight (lbs)</div><div className="font-semibold">{num(q.data.run.est_weight_lbs)}</div></Card>
+              <Card className="p-3">
+                <div className="text-muted-foreground text-xs">Stops</div>
+                <div className="font-semibold">{num(q.data.run.stops_total)}</div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-muted-foreground text-xs">Held</div>
+                <div className="font-semibold">{num(q.data.run.stops_held)}</div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-muted-foreground text-xs">Estimated pallets</div>
+                <div className="font-semibold">
+                  {formatPalletTotal(sumEstPallets(stops.map((s) => s.est_pallets)))}
+                </div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-muted-foreground text-xs">Weight (lbs)</div>
+                <div className="font-semibold">{num(q.data.run.est_weight_lbs)}</div>
+              </Card>
             </div>
 
             {q.data.exception && (
-              <Card className={q.data.exception.kind === "no_run" ? "p-3 border-destructive/40 bg-destructive/5 text-sm text-destructive" : "p-3 border-amber-500/40 bg-amber-500/5 text-sm text-amber-700"}>
+              <Card
+                tabIndex={0}
+                className={
+                  q.data.exception.kind === "no_run"
+                    ? `p-3 text-sm ${destructiveDetailClass}`
+                    : `p-3 text-sm ${warningDetailClass}`
+                }
+              >
                 {q.data.exception.message}
               </Card>
             )}
 
             {q.data.run.error && (
-              <Card className="p-3 border-destructive/40 bg-destructive/5 text-sm text-destructive">{q.data.run.error}</Card>
+              <Card tabIndex={0} className={`p-3 text-sm ${destructiveDetailClass}`}>
+                {q.data.run.error}
+              </Card>
             )}
 
             <div className="flex flex-wrap gap-2">
@@ -355,7 +327,7 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-destructive"
+                className={destructiveActionClass}
                 disabled={!canWrite || cancel.isPending}
                 onClick={async () => {
                   const res: any = await cancel.mutateAsync({ runId: q.data!.run.id });
@@ -389,58 +361,63 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
               </Card>
             )}
 
-            <Card className="overflow-hidden">
-              <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-14">{showLoadSheet ? "Load" : "#"}</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead className="w-16">ST</TableHead>
-                    <TableHead className="w-28">Order</TableHead>
-                    {!showLoadSheet && <TableHead className="w-32">Arrival (CT)</TableHead>}
-                    <TableHead className="w-20 text-right">Pallets</TableHead>
-                    {!showLoadSheet && <TableHead className="w-40">Status</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {showLoadSheet
-                    ? loadSheet.stops.map((s: any, i: number) => (
-                        <TableRow key={i}>
-                          <TableCell>{s.loadOrder}</TableCell>
-                          <TableCell className="truncate">{s.customerName ?? "—"}</TableCell>
-                          <TableCell>{s.state ?? "—"}</TableCell>
-                          <TableCell className="truncate">{s.orderNo ?? "—"}</TableCell>
-                          <TableCell className="text-right">{num(s.estPallets)}</TableCell>
-                        </TableRow>
-                      ))
-                    : stops.map((s) => (
-                        <TableRow key={s.id} className={s.hold ? "bg-amber-500/5" : undefined}>
-                          <TableCell>{s.position}</TableCell>
-                          <TableCell className="truncate">{s.customer_name ?? "—"}</TableCell>
-                          <TableCell>{s.state ?? "—"}</TableCell>
-                          <TableCell className="truncate">{s.order_no ?? "—"}</TableCell>
-                          <TableCell>{timeLocal(s.scheduled_arrival)}</TableCell>
-                          <TableCell className="text-right">{num(s.est_pallets)}</TableCell>
-                          <TableCell className="text-xs">
-                            {s.hold ? (
-                              <span className="text-amber-600 inline-flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" /> {s.hold_reason ?? "held"}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground inline-flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" /> ok
-                              </span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                </TableBody>
-              </Table>
-            </Card>
-            {showLoadSheet && (
-              <p className="text-xs text-muted-foreground">
-                Load sheet is delivery order reversed — last stop loads first. Held stops are excluded.
-              </p>
+            {showLoadSheet ? (
+              <LoadSheetView
+                stops={stops.map((s) => ({
+                  position: s.position,
+                  hold: s.hold,
+                  estPallets: s.est_pallets,
+                  estCubeFt: s.est_cube_ft,
+                  estWeightLbs: s.est_weight_lbs,
+                  customerName: s.customer_name,
+                  state: s.state,
+                  orderNo: s.order_no,
+                  pickTicketNo: s.pick_ticket_no,
+                }))}
+              />
+            ) : (
+              <Card className="overflow-hidden">
+                <Table className="table-fixed">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-14">#</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead className="w-16">ST</TableHead>
+                      <TableHead className="w-28">Order</TableHead>
+                      <TableHead className="w-32">Arrival (CT)</TableHead>
+                      <TableHead className="w-28 whitespace-normal text-right">
+                        Estimated pallets
+                      </TableHead>
+                      <TableHead className="w-40">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stops.map((s) => (
+                      <TableRow key={s.id} className={s.hold ? "bg-amber-500/5" : undefined}>
+                        <TableCell>{s.position}</TableCell>
+                        <TableCell className="truncate">{s.customer_name ?? "—"}</TableCell>
+                        <TableCell>{s.state ?? "—"}</TableCell>
+                        <TableCell className="truncate">{s.order_no ?? "—"}</TableCell>
+                        <TableCell>{timeLocal(s.scheduled_arrival)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatEstPallets(s.est_pallets)}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {s.hold ? (
+                            <span className={`${warningTextClass} inline-flex items-center gap-1`}>
+                              <AlertTriangle className="w-3 h-3" /> {s.hold_reason ?? "held"}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> ok
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
             )}
           </div>
         )}
@@ -534,8 +511,10 @@ function AddressQueueTab({ canWrite }: { canWrite: boolean }) {
               <div>
                 <Label className="text-xs">Suggested Samsara addresses</Label>
                 {suggest.isPending && <div className="text-muted-foreground text-xs mt-1">Scoring candidates…</div>}
-                {suggest.data && !(suggest.data as any).ok && (
-                  <div className="text-destructive text-xs mt-1">{(suggest.data as any).error}</div>
+                {suggest.data && !(suggest.data as { ok?: boolean }).ok && (
+                  <div className={`${destructiveTextClass} text-xs mt-1`}>
+                    {(suggest.data as { error?: string }).error}
+                  </div>
                 )}
                 <div className="mt-2 space-y-1">
                   {((suggest.data as any)?.candidates ?? []).map((c: any) => (
@@ -698,7 +677,7 @@ function SequenceTab({ routes, canWrite }: { routes: any[]; canWrite: boolean })
           <div className="text-sm space-y-2">
             <div>{preview.rows.length} valid line(s), {preview.errors.length} rejected.</div>
             {preview.errors.length > 0 && (
-              <ul className="text-xs text-destructive space-y-1">
+              <ul className={`text-xs ${destructiveTextClass} space-y-1`}>
                 {preview.errors.map((e: any) => <li key={e.lineNo}>line {e.lineNo}: {e.reason} — “{e.raw}”</li>)}
               </ul>
             )}
@@ -835,7 +814,11 @@ function DriverMappingCard({ routes, canWrite }: { routes: any[]; canWrite: bool
           Unconfirmed mappings stay inert — routes are created unassigned rather than assigned to a guess.
         </p>
       </div>
-      {q.data?.rosterError && <div className="text-xs text-destructive">Samsara roster unavailable: {q.data.rosterError}</div>}
+      {q.data?.rosterError && (
+        <div className={`text-xs ${destructiveTextClass}`}>
+          Samsara roster unavailable: {q.data.rosterError}
+        </div>
+      )}
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>

@@ -97,7 +97,31 @@ export function flaggedMinutesByDay(b: any): { byDay: Record<string, number>; un
 }
 
 export type DailyRate = { date: string; minutes: number; hourlyRate: number | null; effectiveDate: string | null };
-export type RatedCostEstimate = CostEstimate & { dailyRates: DailyRate[] };
+export type PricingCompleteness = {
+  cost: number | null;
+  pricedMinutes: number;
+  excludedMinutes: number;
+};
+
+export type RatedCostEstimate = CostEstimate & PricingCompleteness & { dailyRates: DailyRate[] };
+
+function minuteTotals(
+  dailyRates: DailyRate[],
+  unsplitMinutes: number,
+  unsplitPriced: boolean,
+): { pricedMinutes: number; excludedMinutes: number } {
+  let pricedMinutes = 0;
+  let excludedMinutes = 0;
+  for (const day of dailyRates) {
+    if (day.hourlyRate != null) pricedMinutes += day.minutes;
+    else excludedMinutes += day.minutes;
+  }
+  if (unsplitMinutes > 0) {
+    if (unsplitPriced) pricedMinutes += unsplitMinutes;
+    else excludedMinutes += unsplitMinutes;
+  }
+  return { pricedMinutes, excludedMinutes };
+}
 
 export type RatedCostInput = {
   driverId: string;
@@ -140,7 +164,15 @@ export function estimateCostWithRates(input: RatedCostInput): RatedCostEstimate 
       // falls through to "no rate" handling below
     } else if (!first || first !== last) {
       const e = estimateCost({ ...base, hourlyRate: num(last) });
-      return { ...e, cost: null, note: "Rate changed during this week and the official total has no daily breakdown", dailyRates };
+      const refused = minuteTotals(dailyRates, input.unsplitMinutes, false);
+      return {
+        ...e,
+        cost: null,
+        note: "Rate changed during this week and the official total has no daily breakdown",
+        dailyRates,
+        pricedMinutes: 0,
+        excludedMinutes: refused.pricedMinutes + refused.excludedMinutes,
+      };
     } else {
       unsplitRate = num(last);
     }
@@ -151,7 +183,11 @@ export function estimateCostWithRates(input: RatedCostInput): RatedCostEstimate 
     // No per-day minutes at all: keep the old behaviour of showing the rate in
     // force at week end (cost 0). No rate anywhere: existing "no rate" note.
     const fallback = days.length || input.unsplitMinutes > 0 ? null : num(rateOn(input.rates, input.driverId, input.weekEnd));
-    return { ...estimateCost({ ...base, hourlyRate: fallback }), dailyRates };
+    return {
+      ...estimateCost({ ...base, hourlyRate: fallback }),
+      dailyRates,
+      ...minuteTotals(dailyRates, input.unsplitMinutes, false),
+    };
   }
 
   const latestRate = rated.length ? rated[rated.length - 1].hourlyRate! : unsplitRate!;
@@ -170,10 +206,84 @@ export function estimateCostWithRates(input: RatedCostInput): RatedCostEstimate 
   } else if (distinct.size > 1) {
     note = [e.note, "rate changed during this week"].filter(Boolean).join("; ");
   }
-  return { ...e, cost: round2(raw), note, dailyRates };
+  return {
+    ...e,
+    cost: round2(raw),
+    note,
+    dailyRates,
+    ...minuteTotals(dailyRates, input.unsplitMinutes, unsplitRate !== null),
+  };
 }
 
 /** Today's date for rate defaults (Central time, same as the rest of Driver Time). */
 export function isFutureRate(r: PayRateRow, today: string): boolean {
   return r.effective_date > today;
+}
+
+export function duplicatePayRateMessage(date: string): string {
+  return `This driver already has a rate starting ${date}. Edit that row instead.`;
+}
+
+export const STALE_PAY_RATE_MESSAGE =
+  "This rate changed since you opened it. Refresh and try again.";
+
+/** Map a Postgres write failure to the message the rate dialog shows. */
+export function payRateWriteError(
+  e: { code?: string; message?: string } | null | undefined,
+  date: string,
+): Error {
+  if (e?.code === "23505") return new Error(duplicatePayRateMessage(date));
+  return new Error(e?.message || "Could not save the rate");
+}
+
+/**
+ * Price a week only when the caller may see pay. When canPay is false the
+ * supplied rate rows are ignored, so a weekly report cannot leak an amount.
+ */
+export function priceDriverWeek(canPay: boolean, input: RatedCostInput): RatedCostEstimate {
+  if (!canPay) {
+    const hidden = estimateCost({
+      driverId: input.driverId,
+      driverName: input.driverName,
+      samsaraWeekHours: input.samsaraWeekHours,
+      paycomHours: input.paycomHours,
+      flaggedHours: input.flaggedHours,
+      hourlyRate: null,
+    });
+    return { ...hidden, dailyRates: [], pricedMinutes: 0, excludedMinutes: 0 };
+  }
+  return estimateCostWithRates(input);
+}
+
+/**
+ * A missing Paycom total cannot become a dollar amount or an overtime
+ * multiplier. Authorized warehouse minutes stay visible as not costed.
+ * A denied caller gets no amount and no minute metadata.
+ */
+export function applyMissingPaycom(
+  cost: RatedCostEstimate,
+  paidHours: number | null,
+  canPay: boolean,
+): RatedCostEstimate {
+  if (typeof paidHours === "number" && Number.isFinite(paidHours)) return cost;
+  if (!canPay) {
+    return {
+      ...cost,
+      cost: null,
+      hourlyRate: null,
+      multiplier: null,
+      pricedMinutes: 0,
+      excludedMinutes: 0,
+      dailyRates: [],
+      note: null,
+    };
+  }
+  return {
+    ...cost,
+    cost: null,
+    multiplier: null,
+    pricedMinutes: 0,
+    excludedMinutes: (cost.pricedMinutes ?? 0) + (cost.excludedMinutes ?? 0),
+    note: "Enter Paycom paid hours to estimate cost",
+  };
 }

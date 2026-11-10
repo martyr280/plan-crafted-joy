@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { estimatePallets } from "@/lib/truck-capacity/est-pallets";
 import { runJob } from "./p21.server";
 import {
   computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
@@ -313,21 +314,41 @@ async function buildSnapshotReadout(startedAt: Date) {
   const capped = fracs.filter((f) => f >= 1.499999).length;
   const routeIds = Array.from(new Set(withFrac.map((r) => r.route_id)));
   const { data: routeRows } = routeIds.length
-    ? await supabaseAdmin.from("truck_capacity_routes").select("id, code, hub").in("id", routeIds)
-    : { data: [] as { id: string; code: string; hub: string }[] };
+    ? await supabaseAdmin
+        .from("truck_capacity_routes")
+        .select("id, code, hub, cube_full_truck_ft3, pallets_full_truck")
+        .in("id", routeIds)
+    : {
+        data: [] as {
+          id: string;
+          code: string;
+          hub: string;
+          cube_full_truck_ft3: number | null;
+          pallets_full_truck: number | null;
+        }[],
+      };
   const codeById = new Map((routeRows ?? []).map((r) => [r.id, `${r.code} · ${r.hub}`]));
+  const capById = new Map((routeRows ?? []).map((r) => [r.id, r]));
   const top5 = [...withFrac]
     .sort((a, b) => Number(b.projected_capacity_frac) - Number(a.projected_capacity_frac))
     .slice(0, 5)
-    .map((r) => ({
-      route: codeById.get(r.route_id) ?? r.route_id,
-      ship_date: r.ship_date,
-      projected_capacity_frac: Number(Number(r.projected_capacity_frac).toFixed(3)),
-      total_cube_ft: r.total_cube_ft,
-      total_weight_lbs: r.total_weight_lbs,
-      est_pallets: r.est_pallets,
-      order_count: r.order_count,
-    }));
+    .map((r) => {
+      const cap = capById.get(r.route_id);
+      return {
+        route: codeById.get(r.route_id) ?? r.route_id,
+        ship_date: r.ship_date,
+        projected_capacity_frac: Number(Number(r.projected_capacity_frac).toFixed(3)),
+        total_cube_ft: r.total_cube_ft,
+        total_weight_lbs: r.total_weight_lbs,
+        // Recompute. The stored est_pallets column can be stale after a route edit.
+        est_pallets: estimatePallets({
+          cube: r.total_cube_ft,
+          cubeFullTruckFt3: cap?.cube_full_truck_ft3,
+          palletsFullTruck: cap?.pallets_full_truck,
+        }),
+        order_count: r.order_count,
+      };
+    });
   return {
     demandRowsWritten: list.length,
     rowsWithProjection: withFrac.length,

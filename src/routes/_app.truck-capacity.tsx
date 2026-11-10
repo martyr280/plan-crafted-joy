@@ -37,6 +37,14 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
 import { AlertsTab } from "@/components/truck-capacity/AlertsTab";
 import { ForecastBoard } from "@/components/truck-capacity/ForecastBoard";
+import { formatEstPallets } from "@/lib/truck-capacity/est-pallets";
+import {
+  destructiveTextClass,
+  successTextClass,
+  warningNoticeClass,
+  warningTextClass,
+} from "@/components/driver-time/text-classes";
+import { invalidateAfterCapacitySave } from "@/lib/truck-capacity/capacity-save";
 import { RouteCutoffsEditor } from "@/components/truck-capacity/RouteCutoffsEditor";
 import { SharePointSyncCard } from "@/components/truck-capacity/SharePointSyncCard";
 import { ForecastVsTracker } from "@/components/truck-capacity/ForecastVsTracker";
@@ -137,9 +145,17 @@ function TruckCapacityPage() {
       {scoped && (
         <Card className="p-3 mb-4 flex items-center gap-2 text-sm">
           <Users className="w-4 h-4 text-primary" />
-          {scopeQ.data?.repCode
-            ? <span>Showing only your routes ({scopeQ.data.repCode}) — {routes.length} route{routes.length === 1 ? "" : "s"} assigned.</span>
-            : <span className="text-amber-600">No sales rep code is linked to your profile yet, so no routes are visible. Ask an admin to set it.</span>}
+          {scopeQ.data?.repCode ? (
+            <span>
+              Showing only your routes ({scopeQ.data.repCode}) — {routes.length} route
+              {routes.length === 1 ? "" : "s"} assigned.
+            </span>
+          ) : (
+            <span className={`rounded px-1.5 ${warningTextClass} bg-warning/10`}>
+              No sales rep code is linked to your profile yet, so no routes are visible. Ask an
+              admin to set it.
+            </span>
+          )}
         </Card>
       )}
 
@@ -327,7 +343,11 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
                         </Badge>
                       ))}
                   </TableCell>
-                  <TableCell className={`text-right font-medium ${bad ? "text-destructive" : ""}`}>{pct(r.avg)}</TableCell>
+                  <TableCell
+                    className={`text-right font-medium ${bad ? destructiveTextClass : ""}`}
+                  >
+                    {pct(r.avg)}
+                  </TableCell>
                   <TableCell className="text-right">{r.weeksBelow} / {r.weeksWithData}</TableCell>
                   <TableCell><Sparkline series={r.series} threshold={threshold} /></TableCell>
                   <TableCell className="text-right">{r.worst ? `${pct(r.worst.value)} (${r.worst.week.slice(5)})` : "—"}</TableCell>
@@ -834,6 +854,7 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
             <TableHeader><TableRow>
               <TableHead>Date</TableHead><TableHead>DoW</TableHead><TableHead>Baseline</TableHead>
               <TableHead>Model</TableHead><TableHead>Blend</TableHead><TableHead>P21</TableHead>
+                <TableHead>Est. pallets</TableHead>
               <TableHead>Final</TableHead><TableHead>Method</TableHead><TableHead>Drivers</TableHead>
             </TableRow></TableHeader>
             <TableBody>
@@ -845,6 +866,9 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
                   <TableCell>{pct(d.model)}</TableCell>
                   <TableCell>{pct(d.blend)}</TableCell>
                   <TableCell>{pct(d.p21)}</TableCell>
+                  <TableCell data-testid={`forecast-pallets-${d.date}`}>
+                    {formatEstPallets(d.est_pallets)}
+                  </TableCell>
                   <TableCell className="font-medium">{pct(d.final)}</TableCell>
                   <TableCell><Badge variant="outline" className="text-xs">{d.method}</Badge></TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[320px]">{d.driverSummary ?? "—"}</TableCell>
@@ -868,6 +892,7 @@ function ForecastTooltip({ active, payload }: any) {
   return (
     <div className="rounded border bg-background p-2 text-xs shadow-md max-w-[320px]">
       <div className="font-medium">{d.date}</div>
+      <div>Est. pallets: {formatEstPallets(d.est_pallets)}</div>
       <div className="text-muted-foreground whitespace-pre-line">{d.explain}</div>
     </div>
   );
@@ -893,12 +918,14 @@ function ForecastVsActualPanel() {
       </div>
 
       {q.isLoading && <div className="text-xs text-muted-foreground">Scoring logged forecasts…</div>}
-      {q.error && <div className="text-xs text-destructive">{(q.error as Error).message}</div>}
+      {q.error && (
+        <div className={`text-xs ${destructiveTextClass}`}>{(q.error as Error).message}</div>
+      )}
 
       {d && (
         <>
-          <div className="mb-3 rounded-md border border-amber-500/60 bg-amber-500/10 p-3 text-sm">
-            <div className="flex items-center gap-2 font-medium text-amber-700">
+          <div className="mb-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+            <div className={`flex items-center gap-2 font-medium ${warningTextClass}`}>
               <AlertTriangle className="h-4 w-4" /> Coverage
             </div>
             <div className="mt-1 text-muted-foreground">
@@ -955,7 +982,10 @@ function ForecastVsActualPanel() {
                     <TableCell className="text-xs">
                       {r.hub ? `${r.hub[0]}·${r.code}` : r.code}
                       {r.n < 3 && (
-                        <Badge variant="outline" className="ml-2 text-[10px] text-amber-700 border-amber-500/60">
+                        <Badge
+                          variant="outline"
+                          className={`ml-2 whitespace-normal text-xs border-warning/40 ${warningTextClass}`}
+                        >
                           n&lt;3 · not yet meaningful
                         </Badge>
                       )}
@@ -1018,7 +1048,9 @@ function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[]
               <TableCell className="text-xs">{r.baseline?.toFixed(3)}</TableCell>
               <TableCell className="text-xs">{r.model?.toFixed(3)}</TableCell>
               <TableCell className="text-xs font-medium">{r.blend?.toFixed(3)}</TableCell>
-              <TableCell className={`text-xs ${r.delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              <TableCell
+                className={`text-xs ${r.delta >= 0 ? successTextClass : destructiveTextClass}`}
+              >
                 {r.delta >= 0 ? "+" : ""}{r.delta?.toFixed(3)}
               </TableCell>
             </TableRow>
@@ -1105,7 +1137,7 @@ function ImportTab() {
             </Button>
           </div>
           {report.quarantine?.length > 0 && (
-            <div className="mb-3 text-sm text-destructive">
+            <div className={`mb-3 text-sm ${destructiveTextClass}`}>
               Import blocked:{" "}
               {report.quarantine
                 .map(
@@ -1263,8 +1295,9 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       });
       await palletsFn({ data: { updates } });
       toast.success("Settings saved");
-      qc.invalidateQueries({ queryKey: ["tc-settings"] });
-      qc.invalidateQueries({ queryKey: ["tc-routes"] });
+      invalidateAfterCapacitySave((queryKey) => {
+        void qc.invalidateQueries({ queryKey: [...queryKey] });
+      });
     } catch (e: any) { toast.error(e?.message ?? "Save failed"); }
     finally { setBusy(null); }
   }
@@ -1362,9 +1395,12 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           P21 route code (Order Entry → Ship Info → Route) drives the projection match. Multiple codes allowed — enter comma-separated (e.g. <code>ARK01,ARK02</code>). Leave blank for lanes the client hasn&apos;t confirmed.
           When a P21 code is claimed by more than one route, the server resolves per row by (1) <b>ship_city</b> against Cities (with alias fuzzing — <code>St./Ste./Ft./Mt.</code> expand, trailing state tokens strip), then (2) <b>ship_zip</b> against Zip prefixes, then (3) <b>ship_state</b> against States, then (4) shipment weekday, then (5) lowest sort_order (with an audit warning). Each cascade only narrows when it actually splits the claimants — a signal that hits zero or all is skipped, so partial data still helps. Populate Cities / Zips / States for shared codes like <code>NSC01</code> (Carolinas).
           Truck-full targets compute projected_capacity_frac = min(1.5, max of pallets/cube/weight ratios).
+          Estimated pallets = cube ÷ (cube/full ÷ pallets/full), using the Pallets/full and cube/full figures on this screen. Missing, zero, or negative inputs show as unavailable. Editing Pallets/full here changes the next estimate; cube/full is left as entered.
           Per Joe: pallet counts are approximate (pallet sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with loose product), so cube or weight is often the binding constraint.
           Cutoff time is display-only for now (from the Driver Routes sheet).
-          <br /><span className="text-amber-600">Pending client confirmation:</span> <code>SOCA1</code> (Carolinas code on the Ocala tab).
+          <br />
+          <span className={warningTextClass}>Pending client confirmation:</span> <code>SOCA1</code>{" "}
+          (Carolinas code on the Ocala tab).
           <br /><span className="text-muted-foreground">Transfer lanes (<code>BHM-XFER-DAL</code>, <code>DAL-XFER-BHM</code>, <code>BHM-XFER-OCA</code>) are pulled by the separate <code>transfer_hdr</code>/<code>transfer_line</code> query below. Pin each transfer route&apos;s P21 code to the synthesized <code>&lt;from&gt;-&gt;&lt;to&gt;</code> pair (e.g. <code>BHM-&gt;DAL</code>) so the same matcher can route it.</span>
           <br /><span className="text-muted-foreground">Note:</span> <code>DAL-XFER-BHM</code> (Dallas Transfer) also carries Ocala → Dallas freight per Joe, so its utilization reads higher than Birmingham-only demand would suggest.
 
@@ -1418,8 +1454,26 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         <div className="text-xs text-muted-foreground mb-2">Must return: <code>route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets</code>.</div>
         <Textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={14} className="font-mono text-xs" />
         {testResult && <div className="text-xs mt-2">Test: <b>{testResult.rowCount}</b> rows.
-          {testResult.validation?.errors?.length ? <div className="text-red-600 mt-1"><b>Errors:</b><ul className="list-disc ml-4">{testResult.validation.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
-          {testResult.validation?.warnings?.length ? <div className="text-amber-600 mt-1"><b>Warnings:</b><ul className="list-disc ml-4">{testResult.validation.warnings.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
+            {testResult.validation?.errors?.length ? (
+              <div className={`mt-1 ${destructiveTextClass}`}>
+                <b>Errors:</b>
+                <ul className="list-disc ml-4">
+                  {testResult.validation.errors.map((m: string, i: number) => (
+                    <li key={i}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {testResult.validation?.warnings?.length ? (
+              <div className={`mt-1 ${warningTextClass}`}>
+                <b>Warnings:</b>
+                <ul className="list-disc ml-4">
+                  {testResult.validation.warnings.map((m: string, i: number) => (
+                    <li key={i}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testResult.sample, null, 2)}</pre></div>}
         {snapResult && <SnapshotResultView result={snapResult} />}
       </Card>
@@ -1437,8 +1491,26 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         </div>
         <Textarea value={transferSql} onChange={(e) => setTransferSql(e.target.value)} rows={14} className="font-mono text-xs" />
         {testTransferResult && <div className="text-xs mt-2">Test: <b>{testTransferResult.rowCount}</b> rows.
-          {testTransferResult.validation?.errors?.length ? <div className="text-red-600 mt-1"><b>Errors:</b><ul className="list-disc ml-4">{testTransferResult.validation.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
-          {testTransferResult.validation?.warnings?.length ? <div className="text-amber-600 mt-1"><b>Warnings:</b><ul className="list-disc ml-4">{testTransferResult.validation.warnings.map((m: string, i: number) => <li key={i}>{m}</li>)}</ul></div> : null}
+            {testTransferResult.validation?.errors?.length ? (
+              <div className={`mt-1 ${destructiveTextClass}`}>
+                <b>Errors:</b>
+                <ul className="list-disc ml-4">
+                  {testTransferResult.validation.errors.map((m: string, i: number) => (
+                    <li key={i}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {testTransferResult.validation?.warnings?.length ? (
+              <div className={`mt-1 ${warningTextClass}`}>
+                <b>Warnings:</b>
+                <ul className="list-disc ml-4">
+                  {testTransferResult.validation.warnings.map((m: string, i: number) => (
+                    <li key={i}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testTransferResult.sample, null, 2)}</pre></div>}
         {snapTransferResult && <SnapshotResultView result={snapTransferResult} />}
       </Card>
@@ -1791,7 +1863,13 @@ function CapacityCoverageCard() {
   const overall = d?.overallPct == null ? "—" : `${(d.overallPct * 100).toFixed(1)}%`;
   const tone = d?.overallPct == null ? "muted" : d.overallPct >= 0.9 ? "green" : d.overallPct >= 0.5 ? "amber" : "red";
   const toneClass =
-    tone === "green" ? "text-green-600" : tone === "amber" ? "text-amber-600" : tone === "red" ? "text-red-600" : "text-muted-foreground";
+    tone === "green"
+      ? successTextClass
+      : tone === "amber"
+        ? warningTextClass
+        : tone === "red"
+          ? destructiveTextClass
+          : "text-muted-foreground";
 
   return (
     <Card className="p-4 space-y-3">
@@ -1832,12 +1910,16 @@ function CapacityCoverageCard() {
             </div>
             <div className="rounded border p-3">
               <div className="text-xs text-muted-foreground">Routes missing cube AND weight</div>
-              <div className="text-2xl font-semibold text-red-600">{d.missingCubeAndWeight.length}</div>
+              <div className={`text-2xl font-semibold ${destructiveTextClass}`}>
+                {d.missingCubeAndWeight.length}
+              </div>
               <div className="text-xs text-muted-foreground">rows with no way to compute a fraction</div>
             </div>
             <div className="rounded border p-3">
               <div className="text-xs text-muted-foreground">Routes with only one target</div>
-              <div className="text-2xl font-semibold text-amber-600">{d.partialTargets.length}</div>
+              <div className={`text-2xl font-semibold ${warningTextClass}`}>
+                {d.partialTargets.length}
+              </div>
               <div className="text-xs text-muted-foreground">have cube or weight, not both</div>
             </div>
           </div>
@@ -1864,7 +1946,9 @@ function CapacityCoverageCard() {
                         <TableCell className="font-mono text-xs">{r.code} <span className="text-muted-foreground">— {r.name}</span></TableCell>
                         <TableCell className="text-xs">{r.hub}</TableCell>
                         <TableCell className="text-right">{r.rows}</TableCell>
-                        <TableCell className="text-right text-red-600">{r.covered}</TableCell>
+                        <TableCell className={`text-right ${destructiveTextClass}`}>
+                          {r.covered}
+                        </TableCell>
                         <TableCell className="text-right text-muted-foreground">—</TableCell>
                         <TableCell className="text-right text-muted-foreground">—</TableCell>
                         <TableCell className="text-right text-muted-foreground">{r.pallets_full_truck ?? "—"}</TableCell>
@@ -1898,8 +1982,16 @@ function CapacityCoverageCard() {
                         <TableCell className="text-xs">{r.hub}</TableCell>
                         <TableCell className="text-right">{r.rows}</TableCell>
                         <TableCell className="text-right">{r.pct == null ? "—" : `${(r.pct * 100).toFixed(0)}%`}</TableCell>
-                        <TableCell className="text-right">{r.cube_full_truck_ft3 ?? <span className="text-red-600">missing</span>}</TableCell>
-                        <TableCell className="text-right">{r.weight_full_truck_lbs ?? <span className="text-red-600">missing</span>}</TableCell>
+                        <TableCell className="text-right">
+                          {r.cube_full_truck_ft3 ?? (
+                            <span className={destructiveTextClass}>missing</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {r.weight_full_truck_lbs ?? (
+                            <span className={destructiveTextClass}>missing</span>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1918,7 +2010,9 @@ function CapacityCoverageCard() {
           )}
 
           {d.totalRows > 0 && d.missingCubeAndWeight.length === 0 && d.partialTargets.length === 0 && (
-            <div className="text-xs text-green-600">Every route with demand in the window has both cube and weight targets set.</div>
+              <div className={`text-xs ${successTextClass}`}>
+                Every route with demand in the window has both cube and weight targets set.
+              </div>
           )}
         </>
       )}
@@ -1934,13 +2028,16 @@ function SnapshotResultView({ result }: { result: any }) {
   return (
     <div className="text-xs mt-3 space-y-2 border-t pt-2">
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        <span>Status: <b className={r.ok ? "text-green-700" : "text-red-600"}>{r.ok ? "OK" : "FAILED"}</b></span>
+        <span>
+          Status:{" "}
+          <b className={r.ok ? successTextClass : destructiveTextClass}>{r.ok ? "OK" : "FAILED"}</b>
+        </span>
         <span>Kind: <b>{r.kind}</b></span>
         <span>Pulled: <b>{r.rowsPulled}</b></span>
         <span>Written: <b>{r.snapshotsWritten}</b></span>
-        {r.skipped && <span className="text-amber-600">skipped</span>}
+        {r.skipped && <span className={warningTextClass}>skipped</span>}
       </div>
-      {r.error && <div className="text-red-600">Error: {r.error}</div>}
+      {r.error && <div className={destructiveTextClass}>Error: {r.error}</div>}
       <div>Unmatched codes: {r.unmatchedRouteCodes?.length ? <code>{r.unmatchedRouteCodes.join(", ")}</code> : "—"}</div>
       {readout && (
         <div className="space-y-1">
@@ -1954,10 +2051,28 @@ function SnapshotResultView({ result }: { result: any }) {
             <div>
               <div className="font-medium mt-1">Top 5 route-days by projected fraction</div>
               <table className="w-full text-[11px] mt-1">
-                <thead className="text-muted-foreground"><tr><th className="text-left">Route</th><th className="text-left">Ship date</th><th className="text-right">Frac</th><th className="text-right">Cube ft³</th><th className="text-right">Weight lb</th><th className="text-right">Orders</th></tr></thead>
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="text-left">Route</th>
+                    <th className="text-left">Ship date</th>
+                    <th className="text-right">Frac</th>
+                    <th className="text-right">Cube ft³</th>
+                    <th className="text-right">Weight lb</th>
+                    <th className="text-right">Est. pallets</th>
+                    <th className="text-right">Orders</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {readout.top5ByProjectedFrac.map((t: any, i: number) => (
-                    <tr key={i} className="border-t"><td>{t.route}</td><td>{t.ship_date}</td><td className="text-right">{Number(t.projected_capacity_frac).toFixed(3)}</td><td className="text-right">{t.total_cube_ft ?? "—"}</td><td className="text-right">{t.total_weight_lbs ?? "—"}</td><td className="text-right">{t.order_count ?? "—"}</td></tr>
+                    <tr key={i} className="border-t">
+                      <td>{t.route}</td>
+                      <td>{t.ship_date}</td>
+                      <td className="text-right">{Number(t.projected_capacity_frac).toFixed(3)}</td>
+                      <td className="text-right">{t.total_cube_ft ?? "—"}</td>
+                      <td className="text-right">{t.total_weight_lbs ?? "—"}</td>
+                      <td className="text-right">{formatEstPallets(t.est_pallets)}</td>
+                      <td className="text-right">{t.order_count ?? "—"}</td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -1966,12 +2081,14 @@ function SnapshotResultView({ result }: { result: any }) {
         </div>
       )}
       {warnings.length > 0 && (
-        <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+        <div className={`p-2 ${warningNoticeClass}`}>
           <div className="font-medium">Plausibility warnings</div>
           <ul className="list-disc ml-4">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
         </div>
       )}
-      {r.ok && warnings.length === 0 && readout && <div className="text-green-700">Plausibility: OK — no red flags.</div>}
+      {r.ok && warnings.length === 0 && readout && (
+        <div className={successTextClass}>Plausibility: OK — no red flags.</div>
+      )}
     </div>
   );
 }
@@ -2135,7 +2252,11 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
                     : assigned.map((m) => (
                       <Badge key={m.id} variant="outline" className="mr-1 mb-1 gap-1">
                         {m.rep_code}{m.rep_name ? ` · ${m.rep_name}` : ""}
-                        <button type="button" onClick={() => remove(m.id)} className="ml-1 text-muted-foreground hover:text-destructive">
+                        <button
+                          type="button"
+                          onClick={() => remove(m.id)}
+                          className="ml-1 text-muted-foreground hover:text-destructive-text focus-visible:text-destructive-text"
+                        >
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </Badge>
@@ -2163,7 +2284,7 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
             <div className="text-xs">
               Imported {importResult.inserted}, skipped {importResult.skipped}.
               {importResult.errors?.length ? (
-                <ul className="list-disc ml-4 text-destructive mt-1">
+                <ul className={`list-disc ml-4 mt-1 ${destructiveTextClass}`}>
                   {importResult.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}
                 </ul>
               ) : null}

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { MapPin } from "lucide-react";
 import { useUpdateDriverTimeEvent } from "@/hooks/useDriverTime";
 import { formatMinutes, hubTimezone } from "@/lib/driver-time/reconciliation";
+import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 
 export const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -27,7 +28,7 @@ export function dayLabel(date: string) {
 }
 
 export const STATUS_STYLE: Record<string, string> = {
-  new: "bg-destructive/10 text-destructive border-destructive/30",
+  new: `bg-destructive/10 ${destructiveTextClass} border-destructive/30`,
   reviewed: "bg-primary/10 text-primary border-primary/30",
   excused: "bg-muted text-muted-foreground",
 };
@@ -36,7 +37,45 @@ export function thresholdLabel(minutes: number): string {
   return `${Number((minutes / 60).toFixed(2))} h`;
 }
 
-export function DriverCard({ driver, isAdmin, thresholdMinutes }: { driver: any; weekStart: string; isAdmin: boolean; thresholdMinutes: number }) {
+export function DriverCard({
+  driver,
+  isAdmin,
+  canViewPay = false,
+  thresholdMinutes,
+}: {
+  driver: {
+    driverName: string;
+    hub?: string | null;
+    flaggedMinutes: number;
+    automatedMinutes: number;
+    officialMinutes: number;
+    varianceMinutes: number;
+    official: {
+      source?: string;
+      reason?: string;
+      intervals?: Array<{
+        date: string;
+        start: string;
+        end: string;
+        minutes: number;
+        note?: string | null;
+      }>;
+    } | null;
+    cost: {
+      cost: number | null;
+      note?: string | null;
+      multiplier?: number | null;
+      hoursSource?: string;
+      pricedMinutes?: number;
+      excludedMinutes?: number;
+    };
+    history: Array<{ at: string; after?: { minutes: number; reason?: string } | null }>;
+    events: Array<{ event_date: string }>;
+  };
+  isAdmin: boolean;
+  canViewPay?: boolean;
+  thresholdMinutes: number;
+}) {
   const update = useUpdateDriverTimeEvent();
 
   const byDay = useMemo(() => {
@@ -49,6 +88,14 @@ export function DriverCard({ driver, isAdmin, thresholdMinutes }: { driver: any;
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [driver.events]);
 
+  const excludedMinutes = driver.cost.excludedMinutes ?? 0;
+  const pricedMinutes = driver.cost.pricedMinutes ?? 0;
+  const hourText = (minutes: number) => `${Math.round((minutes / 60) * 100) / 100}h`;
+  const payLabel =
+    driver.cost.cost === null
+      ? driver.cost.note
+      : `${excludedMinutes > 0 ? "At least " : ""}${money(driver.cost.cost)} est. (${driver.cost.multiplier}× · ${driver.cost.hoursSource} hours)`;
+
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
@@ -59,12 +106,20 @@ export function DriverCard({ driver, isAdmin, thresholdMinutes }: { driver: any;
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          {isAdmin && (
-            <span className="text-muted-foreground">
-              {driver.cost.cost === null
-                ? driver.cost.note
-                : `${money(driver.cost.cost)} est. (${driver.cost.multiplier}× · ${driver.cost.hoursSource} hours)`}
-            </span>
+          {canViewPay && (
+            <div className="max-w-full text-muted-foreground" data-testid="driver-pay-cost">
+              <div>{payLabel}</div>
+              {driver.cost.cost !== null && pricedMinutes > 0 && (
+                <div data-testid="driver-pay-priced">{hourText(pricedMinutes)} priced</div>
+              )}
+              {excludedMinutes > 0 && (
+                <div className={warningTextClass} data-testid="driver-pay-exclusion">
+                  {driver.cost.cost === null
+                    ? `${hourText(excludedMinutes)} not costed`
+                    : (driver.cost.note ?? "Some warehouse time was not costed.")}
+                </div>
+              )}
+            </div>
           )}
           <span className="text-sm font-bold" data-testid="warehouse-over-threshold">
             Warehouse time over {thresholdLabel(thresholdMinutes)}: {formatMinutes(driver.flaggedMinutes)}

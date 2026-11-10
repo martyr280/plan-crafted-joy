@@ -6,24 +6,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, ChevronRight, Clock, RefreshCw } from "lucide-react";
+import { AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { getForecastBoard } from "@/lib/truck-capacity.functions";
-import { cutoffSortKey } from "@/lib/truck-capacity/cutoffs";
-import { UtilizationBar } from "./UtilizationBar";
-
-
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function fmtRunDates(dates: string[]) {
-  if (!dates.length) return "—";
-  return dates
-    .map((d) => {
-      const dt = new Date(`${d}T12:00:00Z`);
-      return `${DOW[dt.getUTCDay()]} ${d.slice(5)}`;
-    })
-    .join(", ");
-}
+import { ForecastBoardTable } from "./ForecastBoardTable";
 
 export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: string) => void }) {
   const fetchBoard = useServerFn(getForecastBoard);
@@ -37,10 +22,9 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
     const rows = q.data?.rows ?? [];
     const hubs = q.data?.hubs ?? [];
     // Joe's ask: inside a hub, the truck that cuts off soonest goes first;
-    // routes with no cutoff configured sink to the bottom. cutoffSortKey()
-    // already encodes that ordering — the wire form is an ISO string.
+    // routes with no cutoff configured sink to the bottom, same as cutoffSortKey.
     const keyOf = (r: (typeof rows)[number]) =>
-      cutoffSortKey(r.next_cutoff ? ({ atUtc: new Date(Date.parse(r.next_cutoff.atUtc)) } as any) : null);
+      r.next_cutoff ? new Date(r.next_cutoff.atUtc).getTime() : Number.MAX_SAFE_INTEGER;
     return hubs.map((hub) => ({
       hub,
       rows: rows
@@ -49,7 +33,6 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
         .sort((a, b) => keyOf(a) - keyOf(b) || a.code.localeCompare(b.code)),
     }));
   }, [q.data]);
-
 
   const snap = q.data;
 
@@ -61,7 +44,9 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
           {snap?.snapshot_at ? (
             <>
               P21 snapshot {new Date(snap.snapshot_at).toLocaleString()}
-              {snap.snapshot_age_hours != null && <span className="ml-1">({snap.snapshot_age_hours}h ago)</span>}
+              {snap.snapshot_age_hours != null && (
+                <span className="ml-1">({snap.snapshot_age_hours}h ago)</span>
+              )}
             </>
           ) : (
             "No P21 snapshot yet"
@@ -77,13 +62,19 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
         </Button>
       </div>
 
-      {q.isLoading && <Card className="p-4 text-sm text-muted-foreground">Building board across all active routes…</Card>}
-      {q.error && <Card className="p-4 text-sm text-destructive">{(q.error as Error).message}</Card>}
+      {q.isLoading && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          Building board across all active routes…
+        </Card>
+      )}
+      {q.error && (
+        <Card className="p-4 text-sm text-destructive-text">{(q.error as Error).message}</Card>
+      )}
 
       {!!snap?.routes_without_cutoffs.length && (
         <Card className="p-3 text-xs text-muted-foreground">
-          No cutoff configured for: {snap.routes_without_cutoffs.join(", ")} — add them in Settings → Route cutoffs so
-          the board can tell you which orders count toward the next run.
+          No cutoff configured for: {snap.routes_without_cutoffs.join(", ")} — add them in Settings
+          → Route cutoffs so the board can tell you which orders count toward the next run.
         </Card>
       )}
 
@@ -93,81 +84,7 @@ export function ForecastBoard({ onSelectRoute }: { onSelectRoute: (routeId: stri
             <div className="text-sm font-semibold">{hub}</div>
             <div className="text-xs text-muted-foreground">{rows.length} routes</div>
           </div>
-          <Table className="table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[16%]">Route</TableHead>
-                <TableHead className="w-[16%]">Next cutoff</TableHead>
-                <TableHead className="w-[16%]">Ships on</TableHead>
-                <TableHead className="w-[24%]">Projected fill</TableHead>
-                <TableHead className="w-[12%]">On the books</TableHead>
-                <TableHead className="w-[12%]">Last actual</TableHead>
-                <TableHead className="w-[4%]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow
-                  key={r.route_id}
-                  className="cursor-pointer"
-                  onClick={() => onSelectRoute(r.route_id)}
-                >
-                  <TableCell className="align-top">
-                    <div className="font-medium">{r.code}</div>
-                    <div className="truncate text-xs text-muted-foreground">{r.name}</div>
-                  </TableCell>
-                  <TableCell className="align-top text-xs">
-                    {r.next_cutoff ? (
-                      <>
-                        <div className="font-medium">
-                          {DOW[new Date(`${r.next_cutoff.localDate}T12:00:00Z`).getUTCDay()]} {r.next_cutoff.timeLabel}
-                        </div>
-
-                        <div className="text-muted-foreground">
-                          {r.next_cutoff.isToday ? "today" : r.next_cutoff.isTomorrow ? "tomorrow" : `in ${r.next_cutoff.daysAway}d`}
-                          {r.cutoff_count > 1 && ` · ${r.cutoff_count} cutoffs`}
-                        </div>
-                      </>
-                    ) : (
-                      <span className="text-muted-foreground">not configured</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="align-top text-xs">
-                    <div>{r.next_cutoff ? fmtRunDates(r.next_cutoff.runDates) : "—"}</div>
-                    {r.next_cutoff?.windowFrom && (
-                      <div className="text-muted-foreground">
-                        orders counted through {r.next_cutoff.timeLabel}
-                      </div>
-                    )}
-
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <UtilizationBar value={r.final} secondary={r.current} />
-                    <div className="mt-1 text-[11px] text-muted-foreground">
-                      {r.method ? `${r.method}` : r.forecast_error ? "forecast error" : "no model"}
-                      {r.mad != null && ` ±${(r.mad * 100).toFixed(0)}%`}
-                    </div>
-                  </TableCell>
-                  <TableCell className="align-top text-sm">
-                    {r.current == null ? <span className="text-muted-foreground">—</span> : `${(r.current * 100).toFixed(0)}%`}
-                  </TableCell>
-                  <TableCell className="align-top text-xs">
-                    {r.last_run ? (
-                      <>
-                        <div>{(r.last_run.capacity_frac * 100).toFixed(0)}%</div>
-                        <div className="text-muted-foreground">{r.last_run.date}</div>
-                      </>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ForecastBoardTable rows={rows} onSelectRoute={onSelectRoute} />
         </Card>
       ))}
     </div>

@@ -17,6 +17,8 @@ import { DATE_BASES, DATE_BASIS_LABEL, type DateBasis } from "@/lib/dispatch/ass
 import type { DispatchBoard, RunException, TicketView } from "@/lib/dispatch/board";
 import type { RolledFrom } from "@/lib/dispatch/assign";
 import { toCsv } from "@/lib/sales-reports.drilldown";
+import { formatEstPallets } from "@/lib/truck-capacity/est-pallets";
+import { destructiveTextClass, warningTextClass } from "@/components/dispatch/DispatchRunsBoard";
 
 const n0 = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString("en-US"));
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -30,7 +32,18 @@ const KIND_LABEL: Record<string, string> = { no_run: "No run", reduced: "Reduced
 const rolledText = (r: RolledFrom | null) => (r ? `Rolled from ${longDay(r.runDate)} (${REASON_LABEL[r.reason] ?? r.reason})` : "");
 
 function ExceptionBadge({ e }: { e: RunException }) {
-  const badge = <Badge variant="outline" className={e.kind === "no_run" ? "border-destructive text-destructive" : "border-amber-500 text-amber-600"}>{KIND_LABEL[e.kind]} — {REASON_LABEL[e.reason]}</Badge>;
+  const badge = (
+    <Badge
+      variant="outline"
+      className={
+        e.kind === "no_run"
+          ? `border-destructive ${destructiveTextClass}`
+          : `border-amber-500 ${warningTextClass}`
+      }
+    >
+      {KIND_LABEL[e.kind]} — {REASON_LABEL[e.reason]}
+    </Badge>
+  );
   if (!e.note) return badge;
   return <TooltipProvider><Tooltip><TooltipTrigger>{badge}</TooltipTrigger><TooltipContent className="max-w-xs">{e.note}</TooltipContent></Tooltip></TooltipProvider>;
 }
@@ -140,7 +153,14 @@ function Upcoming({ b, isAdmin }: { b: DispatchBoard; isAdmin: boolean }) {
             <TableHead className="text-right">Est cube</TableHead><TableHead className="text-right">Est weight</TableHead>
             <TableHead>
               <TooltipProvider><Tooltip><TooltipTrigger className="inline-flex items-center gap-1">Nelson demand <Info className="w-3 h-3" /></TooltipTrigger>
-                <TooltipContent className="max-w-xs">Latest Truck Capacity demand snapshot for the same route and date. No pallet column: est_pallets is empty on every row of the P21 view.</TooltipContent></Tooltip></TooltipProvider>
+                    <TooltipContent className="max-w-xs">
+                      Latest Truck Capacity demand snapshot for the same route and date. Estimated
+                      pallets = cube ÷ (cube per full truck ÷ pallets per full truck). Missing,
+                      zero, or negative cube or route capacity shows as unavailable. A saved pallet
+                      count is not reused.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
             </TableHead>
             <TableHead>Exception</TableHead>
             {isAdmin && <TableHead />}
@@ -153,13 +173,24 @@ function Upcoming({ b, isAdmin }: { b: DispatchBoard; isAdmin: boolean }) {
               <TableCell className="font-medium">{r.route_code}</TableCell>
               <TableCell>{dayLabel(r.run_date)}{(() => { const rolled = r.ticketList.filter((t) => t.rolled_from); if (!rolled.length) return null; const byFrom = new Map<string, number>(); for (const t of rolled) { const k = rolledText(t.rolled_from); byFrom.set(k, (byFrom.get(k) ?? 0) + 1); } return [...byFrom].map(([k, n]) => <div key={k} className="text-xs text-muted-foreground">{n} × {k}</div>); })()}</TableCell>
               <TableCell className="text-right tabular-nums">{r.tickets}</TableCell>
-              <TableCell className="text-right">{r.held ? <Badge variant="outline" className="border-amber-500 text-amber-600">{r.held}</Badge> : "—"}</TableCell>
+                <TableCell className="text-right">
+                  {r.held ? (
+                    <Badge variant="outline" className={`border-amber-500 ${warningTextClass}`}>
+                      {r.held}
+                    </Badge>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
               <TableCell className="text-right tabular-nums">{n0(r.est_cube_ft)} ft³{r.missing_cube > 0 && <span className="ml-1 text-xs text-muted-foreground">({r.missing_cube} missing cube)</span>}</TableCell>
               <TableCell className="text-right tabular-nums">{n0(r.est_weight_lbs)} lb{r.missing_weight > 0 && <span className="ml-1 text-xs text-muted-foreground">({r.missing_weight} missing)</span>}</TableCell>
               <TableCell className="text-sm">
                 {r.demand ? (
                   <div>
                     <div>{r.demand.order_count ?? "—"} orders · {n0(r.demand.total_cube_ft)} ft³ · {r.demand.projected_capacity_frac == null ? "—" : `${Math.round(r.demand.projected_capacity_frac * 100)}%`}</div>
+                      <div className="text-xs" data-testid={`demand-pallets-${r.route_code}`}>
+                        Est. pallets: {formatEstPallets(r.demand.est_pallets)}
+                      </div>
                     <div className="text-xs text-muted-foreground">Printed so far: {r.orders} of {r.demand.order_count ?? "—"} orders</div>
                   </div>
                 ) : <span className="text-muted-foreground">no demand snapshot</span>}
@@ -204,7 +235,12 @@ function Stale({ b }: { b: DispatchBoard }) {
               <TableCell>{t.route_code}</TableCell><TableCell>{t.pick_ticket_no}</TableCell><TableCell>{t.order_no}</TableCell>
               <TableCell>{t.customer_name}</TableCell><TableCell>{t.print_date ?? "—"}</TableCell>
               <TableCell className="text-right tabular-nums">{t.age_days ?? "—"}</TableCell><TableCell>{t.run_date}</TableCell>
-              <TableCell className="text-xs text-amber-600">{t.hold_reason ?? ""}{t.rolled_from && <div className="text-muted-foreground">{rolledText(t.rolled_from)}</div>}</TableCell>
+              <TableCell className={`text-xs ${warningTextClass}`}>
+                {t.hold_reason ?? ""}
+                {t.rolled_from && (
+                  <div className="text-muted-foreground">{rolledText(t.rolled_from)}</div>
+                )}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

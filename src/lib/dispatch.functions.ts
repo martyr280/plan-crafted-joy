@@ -52,14 +52,53 @@ export const listDispatchRuns = createServerFn({ method: "POST" })
     const { getDispatchSettings } = await import("@/lib/dispatch.server");
     const settings = await getDispatchSettings();
 
-    const [{ data: routes }, { data: cutoffs }, { data: runs }] = await Promise.all([
-      db().from("truck_capacity_routes").select("id, code, name, hub, p21_route_code, pallets_full_truck, active, sort_order").eq("active", true).limit(1000),
+    const [routeRes, cutoffRes, runRes] = await Promise.all([
+      db()
+        .from("truck_capacity_routes")
+        .select(
+          "id, code, name, hub, p21_route_code, pallets_full_truck, cube_full_truck_ft3, active, sort_order",
+        )
+        .eq("active", true)
+        .limit(1000),
       db().from("route_cutoffs").select("*").eq("active", true).limit(2000),
       db().from("dispatch_runs").select("*").gte("run_date", todayIso()).order("run_date", { ascending: true }).limit(1000),
     ]);
+    if (routeRes.error) throw new Error(`Dispatch routes unavailable: ${routeRes.error.message}`);
+    if (cutoffRes.error)
+      throw new Error(`Dispatch cutoffs unavailable: ${cutoffRes.error.message}`);
+    if (runRes.error) throw new Error(`Dispatch runs unavailable: ${runRes.error.message}`);
+    const routes = routeRes.data;
+    const cutoffs = cutoffRes.data;
+    const runs = runRes.data;
 
     const { loadRunExceptions } = await import("@/lib/dispatch.server");
     const { runFlag } = await import("@/lib/dispatch/run-exceptions");
+    const { rehydrateDispatchPallets } = await import("@/lib/dispatch/pallets");
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const runIds = (runs ?? []).map((x: { id: string }) => x.id);
+    const stopCubes = runIds.length
+      ? await fetchAllRows<{
+          dispatch_run_id: string;
+          est_cube_ft: number | null;
+          est_pallets: number | null;
+        }>(
+          () =>
+            db()
+              .from("dispatch_stops")
+              .select("dispatch_run_id, est_cube_ft, est_pallets", { count: "exact" })
+              .in("dispatch_run_id", runIds),
+          { orderBy: [{ column: "created_at" }, { column: "id" }], label: "dispatch stop cubes" },
+        )
+      : [];
+    const cubesByRun = new Map<
+      string,
+      { est_cube_ft: number | null; est_pallets: number | null }[]
+    >();
+    for (const stop of stopCubes) {
+      const list = cubesByRun.get(stop.dispatch_run_id) ?? [];
+      list.push(stop);
+      cubesByRun.set(stop.dispatch_run_id, list);
+    }
     const exceptions = await loadRunExceptions((routes ?? []).map((r: any) => String(r.p21_route_code || r.code)));
     const now = new Date();
     const cutoffsByRoute = new Map<string, RouteCutoff[]>();
@@ -94,24 +133,53 @@ export const listDispatchRuns = createServerFn({ method: "POST" })
             }
           : null,
         runs: (runs ?? [])
-          .filter((x: any) => x.route_id === r.id)
-          .map((x: any) => ({
-            id: x.id as string,
-            runDate: x.run_date as string,
-            runSeq: x.run_seq as number,
-            status: x.status as string,
-            stopsTotal: Number(x.stops_total ?? 0),
-            stopsHeld: Number(x.stops_held ?? 0),
-            ordersTotal: Number(x.orders_total ?? 0),
-            estPallets: Number(x.est_pallets ?? 0),
-            estCubeFt: Number(x.est_cube_ft ?? 0),
-            estWeightLbs: Number(x.est_weight_lbs ?? 0),
-            lockAt: x.lock_at as string | null,
-            pushedAt: x.pushed_at as string | null,
-            samsaraRouteId: x.samsara_route_id as string | null,
-            error: x.error as string | null,
-            exception: runFlag(exceptions, p21Code, String(x.run_date).slice(0, 10), codeCutoffs),
-          })),
+          .filter((x: { route_id: string }) => x.route_id === r.id)
+          .map(
+            (x: {
+              id: string;
+              run_date: string;
+              run_seq: number;
+              status: string;
+              stops_total: number | null;
+              stops_held: number | null;
+              orders_total: number | null;
+              est_cube_ft: number | null;
+              est_weight_lbs: number | null;
+              lock_at: string | null;
+              pushed_at: string | null;
+              samsara_route_id: string | null;
+              error: string | null;
+            }) => {
+              const fresh = rehydrateDispatchPallets(cubesByRun.get(x.id) ?? [], {
+                cubeFullTruckFt3: r.cube_full_truck_ft3,
+                palletsFullTruck: r.pallets_full_truck,
+              });
+              return {
+                id: x.id as string,
+                runDate: x.run_date as string,
+                runSeq: x.run_seq as number,
+                status: x.status as string,
+                stopsTotal: Number(x.stops_total ?? 0),
+                stopsHeld: Number(x.stops_held ?? 0),
+                ordersTotal: Number(x.orders_total ?? 0),
+                estPallets: fresh.total.total,
+                palletStatus: fresh.total.status,
+                palletKnown: fresh.total.known,
+                estCubeFt: Number(x.est_cube_ft ?? 0),
+                estWeightLbs: Number(x.est_weight_lbs ?? 0),
+                lockAt: x.lock_at as string | null,
+                pushedAt: x.pushed_at as string | null,
+                samsaraRouteId: x.samsara_route_id as string | null,
+                error: x.error as string | null,
+                exception: runFlag(
+                  exceptions,
+                  p21Code,
+                  String(x.run_date).slice(0, 10),
+                  codeCutoffs,
+                ),
+              };
+            },
+          ),
       };
     });
 
@@ -124,19 +192,33 @@ export const getDispatchRun = createServerFn({ method: "POST" })
   .inputValidator((i) => z.object({ runId: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
-    const { data: run } = await db().from("dispatch_runs").select("*").eq("id", data.runId).maybeSingle();
-    if (!run) throw new Error("Dispatch run not found");
-    const { data: stops } = await db()
-      .from("dispatch_stops")
+    const { data: run, error: runErr } = await db()
+      .from("dispatch_runs")
       .select("*")
-      .eq("dispatch_run_id", data.runId)
-      .order("position", { ascending: true })
-      .limit(5000);
-    const { data: route } = await db()
+      .eq("id", data.runId)
+      .maybeSingle();
+    if (runErr) throw new Error(`Dispatch run unavailable: ${runErr.message}`);
+    if (!run) throw new Error("Dispatch run not found");
+    const { fetchAllRows } = await import("./supabase-fetch-all");
+    const stops = await fetchAllRows<{ est_cube_ft: number | null; est_pallets: number | null }>(
+      () =>
+        db()
+          .from("dispatch_stops")
+          .select("*", { count: "exact" })
+          .eq("dispatch_run_id", data.runId),
+      { orderBy: [{ column: "position" }, { column: "id" }], label: "dispatch run detail stops" },
+    );
+    const { data: route, error: routeErr } = await db()
       .from("truck_capacity_routes")
-      .select("id, code, name, hub, pallets_full_truck")
+      .select("id, code, name, hub, pallets_full_truck, cube_full_truck_ft3")
       .eq("id", run.route_id)
       .maybeSingle();
+    if (routeErr) throw new Error(`Route pallet capacity unavailable: ${routeErr.message}`);
+    const { rehydrateDispatchPallets } = await import("@/lib/dispatch/pallets");
+    const fresh = rehydrateDispatchPallets(stops, {
+      cubeFullTruckFt3: route?.cube_full_truck_ft3,
+      palletsFullTruck: route?.pallets_full_truck,
+    });
     const { getDispatchSettings, loadRunExceptions } = await import("@/lib/dispatch.server");
     const { runFlag } = await import("@/lib/dispatch/run-exceptions");
     const settings = await getDispatchSettings();
@@ -147,9 +229,14 @@ export const getDispatchRun = createServerFn({ method: "POST" })
     const exception = runFlag(await loadRunExceptions([p21Code]), p21Code, String(run.run_date).slice(0, 10), codeCutoffs);
     return {
       exception,
-      run,
+      run: {
+        ...run,
+        est_pallets: fresh.total.total,
+        est_pallets_status: fresh.total.status,
+        est_pallets_known: fresh.total.known,
+      },
       route,
-      stops: stops ?? [],
+      stops: fresh.stops,
       enabled: (settings.enabledRouteIds ?? []).includes(String(run.route_id)),
       locked: run.lock_at ? Date.now() >= Date.parse(run.lock_at) : false,
     };
@@ -582,23 +669,70 @@ async function boardFromRows(rows: any[], jobId: string | null, pulledAt: string
   const { buildDispatchBoard } = await import("@/lib/dispatch/board");
   const { localDateIn, addDaysISO } = await import("@/lib/truck-capacity/cutoffs");
   const today = localDateIn("America/Chicago", new Date());
-  const [basis, { data: cutoffs }, { data: settings }, { data: demand }, { data: exc }] = await Promise.all([
-    getDispatchDateBasis(),
-    db().from("route_cutoffs").select("route_id, p21_code, cutoff_dow, cutoff_time, run_dows, active").eq("active", true).limit(2000),
-    db().from("truck_capacity_settings").select("excluded_p21_codes").limit(1).maybeSingle(),
-    db().from("truck_capacity_p21_demand")
-      .select("route_id, ship_date, order_count, total_cube_ft, projected_capacity_frac, snapshot_at")
-      .gte("ship_date", today).order("ship_date").order("route_id").order("snapshot_at", { ascending: false }).limit(5000),
-    db().from("dispatch_run_exceptions").select("id, p21_code, run_date, kind, reason, note, created_by, created_at")
-      .gte("run_date", addDaysISO(today, -60)).order("run_date").order("p21_code").limit(5000),
-  ]);
+  const [basis, { data: cutoffs }, { data: settings }, { data: demand }, { data: exc }] =
+    await Promise.all([
+      getDispatchDateBasis(),
+      db()
+        .from("route_cutoffs")
+        .select("route_id, p21_code, cutoff_dow, cutoff_time, run_dows, active")
+        .eq("active", true)
+        .limit(2000),
+      db().from("truck_capacity_settings").select("excluded_p21_codes").limit(1).maybeSingle(),
+      db()
+        .from("truck_capacity_p21_demand")
+        .select(
+          "route_id, ship_date, order_count, total_cube_ft, est_pallets, projected_capacity_frac, snapshot_at",
+        )
+        .gte("ship_date", today)
+        .order("ship_date")
+        .order("route_id")
+        .order("snapshot_at", { ascending: false })
+        .limit(5000),
+      db()
+        .from("dispatch_run_exceptions")
+        .select("id, p21_code, run_date, kind, reason, note, created_by, created_at")
+        .gte("run_date", addDaysISO(today, -60))
+        .order("run_date")
+        .order("p21_code")
+        .limit(5000),
+    ]);
   const ids = [...new Set((exc ?? []).map((e: any) => e.created_by).filter(Boolean))];
   const { data: profs } = ids.length ? await db().from("profiles").select("id, display_name, email").in("id", ids) : { data: [] };
   const nameOf = new Map((profs ?? []).map((p: any) => [p.id, p.display_name || p.email]));
   const exceptions = (exc ?? []).map((e: any) => ({ ...e, created_by_name: nameOf.get(e.created_by) ?? null }));
-  const board = buildDispatchBoard(rows, cutoffs ?? [], demand ?? [], {
-    basis, today, excludedCodes: (settings?.excluded_p21_codes ?? []) as string[], exceptions,
-  });
+  const routeIds = [
+    ...new Set(
+      (demand ?? [])
+        .map((d: { route_id?: string | null }) => d.route_id)
+        .filter((id: unknown): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  const { data: caps, error: capErr } = routeIds.length
+    ? await db()
+        .from("truck_capacity_routes")
+        .select("id, cube_full_truck_ft3, pallets_full_truck")
+        .in("id", routeIds)
+    : {
+        data: [] as {
+          id: string;
+          cube_full_truck_ft3: number | null;
+          pallets_full_truck: number | null;
+        }[],
+        error: null,
+      };
+  if (capErr) throw new Error(`Route pallet capacity unavailable: ${capErr.message}`);
+  const { attachRouteCapacity } = await import("@/lib/truck-capacity/est-pallets");
+  const board = buildDispatchBoard(
+    rows,
+    cutoffs ?? [],
+    attachRouteCapacity(demand ?? [], caps ?? []),
+    {
+      basis,
+      today,
+      excludedCodes: (settings?.excluded_p21_codes ?? []) as string[],
+      exceptions,
+    },
+  );
   return { ...board, jobId, pulledAt };
 }
 

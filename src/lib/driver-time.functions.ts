@@ -5,7 +5,12 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dateStrInTz } from "@/lib/driver-time/tz";
 import { actualSchema, validateActual, buildReconciledDrivers, weekday } from "@/lib/driver-time/reconciliation";
-import { isValidDateStr, isValidHourlyRate } from "@/lib/driver-time/rates";
+import {
+  isValidDateStr,
+  isValidHourlyRate,
+  payRateWriteError,
+  STALE_PAY_RATE_MESSAGE,
+} from "@/lib/driver-time/rates";
 
 const db = () => supabaseAdmin as any;
 
@@ -27,6 +32,15 @@ async function requireViewer(userId: string) {
 
 async function requireAdmin(userId: string) {
   if (!(await hasAnyRoleSrv(userId, ["admin"]))) throw new Error("Admin role required");
+}
+
+/** Global admin or logistics admin. has_role already denies branch managers. */
+async function canManageDriverPaySrv(userId: string): Promise<boolean> {
+  return hasAnyRoleSrv(userId, ["admin", "ops_logistics_admin"]);
+}
+
+async function requireDriverPay(userId: string) {
+  if (!(await canManageDriverPaySrv(userId))) throw new Error("Driver pay access required");
 }
 
 function mondayOf(dateStr: string): string {
@@ -64,6 +78,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     const isAdmin = await hasAnyRoleSrv(context.userId, ["admin"]);
+    const canManageDriverPay = await canManageDriverPaySrv(context.userId);
     const weekStart = mondayOf(data.weekStart ?? dateStrInTz(new Date()));
     const weekEndDate = new Date(`${weekStart}T00:00:00Z`);
     weekEndDate.setUTCDate(weekEndDate.getUTCDate() + (data.includeWeekends ? 6 : 4));
@@ -87,11 +102,11 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
 
     if (overrideError) throw new Error(overrideError.message);
     if ((events?.length ?? 0) >= 5000 || (overrides?.length ?? 0) >= 2000) throw new Error("Report exceeds safe row limit; narrow the window.");
-    // Rates are admin-only. Non-admins never load them, so their cost stays
-    // null ("no rate") and the card hides it. Only rows dated on or before
-    // the week end can apply to any day of this week.
+    // Rates load only for driver-pay managers. Everyone else keeps a null cost
+    // and the card hides it. Only rows dated on or before the week end can
+    // apply to any day of this week.
     let rates: any[] = [];
-    if (isAdmin) rates = await loadPayRates({ onOrBefore: weekEnd });
+    if (canManageDriverPay) rates = await loadPayRates({ onOrBefore: weekEnd });
 
     const { data: runs } = await db()
       .from("driver_warehouse_runs")
@@ -99,8 +114,8 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       .order("started_at", { ascending: false })
       .limit(10);
 
-    const { estimateCost } = await import("@/lib/driver-time/cost");
-    const { estimateCostWithRates, flaggedMinutesByDay } = await import("@/lib/driver-time/rates");
+    const { flaggedMinutesByDay, priceDriverWeek, applyMissingPaycom } =
+      await import("@/lib/driver-time/rates");
     const paycomFor = (driverId: string) =>
       (overrides ?? []).find((o: any) => String(o.driver_id) === String(driverId))?.paycom_hours ?? null;
 
@@ -112,22 +127,30 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       const flaggedHours = b.flaggedMinutes / 60;
       const paidHours = paycomFor(b.driverId);
       const base = { driverId:b.driverId,driverName:b.driverName,samsaraWeekHours:0,paycomHours:paidHours,flaggedHours };
-      let cost: any;
-      if (isAdmin) {
-        const split = flaggedMinutesByDay(b);
-        const splitTotal = Object.values(split.byDay).reduce((s, m) => s + m, 0) + split.unsplitMinutes;
-        // Defensive: if the day split ever disagrees with the reported total,
-        // price the whole week as one unsplit block (refuses mid-week changes).
-        const byDay = splitTotal === b.flaggedMinutes ? split.byDay : {};
-        const unsplitMinutes = splitTotal === b.flaggedMinutes ? split.unsplitMinutes : b.flaggedMinutes;
-        cost = estimateCostWithRates({ ...base, byDay, unsplitMinutes, weekStart, weekEnd, rates });
-      } else {
-        cost = estimateCost({ ...base, hourlyRate: null });
-      }
-      // This module does not fetch total weekly paid hours. Never label zero
-      // as real Samsara hours or infer an overtime multiplier from it.
-      if (paidHours == null) { cost.cost = null; cost.multiplier = null; cost.note = "Enter Paycom paid hours to estimate cost"; }
-      return {...b,flaggedHours:Math.round(flaggedHours*100)/100,cost};
+      const split = canManageDriverPay ? flaggedMinutesByDay(b) : { byDay: {}, unsplitMinutes: 0 };
+      const splitTotal =
+        Object.values(split.byDay).reduce((s, m) => s + m, 0) + split.unsplitMinutes;
+      // Defensive: if the day split ever disagrees with the reported total,
+      // price the whole week as one unsplit block (refuses mid-week changes).
+      const byDay = canManageDriverPay && splitTotal === b.flaggedMinutes ? split.byDay : {};
+      const unsplitMinutes =
+        canManageDriverPay && splitTotal === b.flaggedMinutes
+          ? split.unsplitMinutes
+          : canManageDriverPay
+            ? b.flaggedMinutes
+            : 0;
+      const cost = priceDriverWeek(canManageDriverPay, {
+        ...base,
+        byDay,
+        unsplitMinutes,
+        weekStart,
+        weekEnd,
+        rates: canManageDriverPay ? rates : [],
+      });
+      // Missing Paycom cannot become a cost or an overtime multiplier.
+      // Known warehouse minutes stay not costed. Denied callers keep no metadata.
+      const visible = applyMissingPaycom(cost, paidHours, canManageDriverPay);
+      return { ...b, flaggedHours: Math.round(flaggedHours * 100) / 100, cost: visible };
     });
 
     // Hub groups in the Truck Capacity order, worst offender first inside a hub.
@@ -150,6 +173,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       weekEnd,
       includeWeekends: data.includeWeekends,
       isAdmin,
+      canManageDriverPay,
       thresholdMinutes: settings.thresholdMinutes,
       drivers: driverRows,
       hubGroups,
@@ -162,8 +186,12 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
         unresolvedMinutes: driverRows.reduce((s,d)=>s+d.unresolvedMinutes,0),
         flaggedHours: Math.round((driverRows.reduce((s, d) => s + d.flaggedMinutes, 0) / 60) * 100) / 100,
         needsReview: scopedEvents.filter((e: any) => e.needs_review && !e.superseded_at && e.status !== "excused").length,
-        estimatedCost: driverRows.reduce((s, d) => s + (d.cost.cost ?? 0), 0),
-        driversWithoutRate: driverRows.filter((d) => d.cost.hourlyRate === null).length,
+        estimatedCost: canManageDriverPay
+          ? driverRows.reduce((s, d) => s + (d.cost.cost ?? 0), 0)
+          : null,
+        driversWithoutRate: canManageDriverPay
+          ? driverRows.filter((d) => d.cost.hourlyRate === null).length
+          : 0,
       },
       runs: runs ?? [],
     };
@@ -307,10 +335,10 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
   });
 
 /* --------------------------------------------------------------- pay rates */
-// Admin-only. The table's RLS is admin-only plus the branch-manager restrictive
-// deny; these handlers also check the admin role before touching it (the same
-// pattern as every other admin-only Driver Time function). Rates are never
-// deleted and adding never overwrites: a new raise is a new row.
+// Driver-pay managers (global admin or ops_logistics_admin). RLS matches:
+// logistics admins may select/insert/update, global admins keep delete, and
+// the restrictive branch-manager deny still blocks a combined account.
+// Rates are never deleted here and adding never overwrites: a new raise is a new row.
 
 async function loadPayRates(opts: { onOrBefore?: string } = {}): Promise<any[]> {
   const { fetchAllRows } = await import("@/lib/supabase-fetch-all");
@@ -323,11 +351,11 @@ async function loadPayRates(opts: { onOrBefore?: string } = {}): Promise<any[]> 
   }, { label: "driver_pay_rates", orderBy: [{ column: "driver_id" }, { column: "effective_date", ascending: false }, { column: "id" }] });
 }
 
-/** Licensed drivers known to Driver Time + every rate row (admin only). */
+/** Licensed drivers known to Driver Time + every rate row (driver-pay managers). */
 export const listDriverPayRates = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
-    await requireAdmin(context.userId);
+    await requireDriverPay(context.userId);
     const rates = await loadPayRates();
     const { getDriverTimeSettings, filterRoster } = await import("@/lib/driver-time.server");
     const { isExcludedDriver } = await import("@/lib/driver-time/detect");
@@ -371,12 +399,6 @@ const rateInput = z.object({
   effectiveDate: z.string().refine(isValidDateStr, "Effective date must be a real YYYY-MM-DD date"),
 });
 
-function duplicateDateError(e: any, date: string): Error {
-  return e?.code === "23505"
-    ? new Error(`This driver already has a rate starting ${date}. Edit that row instead.`)
-    : new Error(e?.message ?? String(e));
-}
-
 /** Adds a new rate row. Never upserts, so existing history is untouched. */
 export const addDriverPayRate = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
@@ -384,13 +406,13 @@ export const addDriverPayRate = createServerFn({ method: "POST" })
     rateInput.extend({ driverId: z.string().trim().min(1).max(200), driverName: z.string().trim().max(200).nullable() }).parse(i),
   )
   .handler(async ({ data, context }) => {
-    await requireAdmin(context.userId);
+    await requireDriverPay(context.userId);
     const { data: row, error } = await db()
       .from("driver_pay_rates")
       .insert({ driver_id: data.driverId, driver_name: data.driverName, hourly_rate: data.hourlyRate, effective_date: data.effectiveDate })
       .select("id")
       .single();
-    if (error) throw duplicateDateError(error, data.effectiveDate);
+    if (error) throw payRateWriteError(error, data.effectiveDate);
     return { ok: true as const, id: row.id as string };
   });
 
@@ -399,15 +421,15 @@ export const updateDriverPayRate = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator((i) => rateInput.extend({ id: z.string().uuid(), expectedUpdatedAt: z.string().min(1) }).parse(i))
   .handler(async ({ data, context }) => {
-    await requireAdmin(context.userId);
+    await requireDriverPay(context.userId);
     const { data: changed, error } = await db()
       .from("driver_pay_rates")
       .update({ hourly_rate: data.hourlyRate, effective_date: data.effectiveDate })
       .eq("id", data.id)
       .eq("updated_at", data.expectedUpdatedAt)
       .select("id");
-    if (error) throw duplicateDateError(error, data.effectiveDate);
-    if (!changed?.length) throw new Error("This rate changed since you opened it. Refresh and try again.");
+    if (error) throw payRateWriteError(error, data.effectiveDate);
+    if (!changed?.length) throw new Error(STALE_PAY_RATE_MESSAGE);
     return { ok: true as const };
   });
 

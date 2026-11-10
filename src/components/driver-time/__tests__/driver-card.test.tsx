@@ -16,19 +16,32 @@ const driver = {
     duration_min: 120, address_name: "NDI Nashville", location_source: "log", statuses: ["onDuty", "yardMove"], status: "new" }],
 };
 
-const render = (isAdmin: boolean, t = 90) =>
-  renderToStaticMarkup(<DriverCard driver={driver} weekStart="2026-09-21" isAdmin={isAdmin} thresholdMinutes={t} />);
+const render = (isAdmin: boolean, t = 90, canViewPay = false) =>
+  renderToStaticMarkup(
+    <DriverCard driver={driver} isAdmin={isAdmin} canViewPay={canViewPay} thresholdMinutes={t} />,
+  );
 
 describe("DriverCard (Joe Green 2026-09-30 clean-up)", () => {
-  it("non-admin: no Paycom input, no official box, no duty status; shows week total over threshold", () => {
+  it("non-admin: no Paycom input, no official box, no duty status, no pay; shows week total over threshold", () => {
     const html = render(false);
     expect(html).not.toContain("Paycom hrs");
     expect(html).not.toContain("bg-muted/30");
+    expect(html).not.toContain("driver-pay-cost");
     expect(html).not.toMatch(/onDuty|yardMove/);
     expect(html).toContain("Warehouse time over 1.5 h: 16:31");
   });
-  it("admin still sees the official box and cost note", () => {
-    const html = render(true);
+  it("pay visibility is separate from the admin official box", () => {
+    const payOnly = render(false, 90, true);
+    expect(payOnly).toContain("driver-pay-cost");
+    expect(payOnly).toContain("Enter Paycom paid hours");
+    expect(payOnly).not.toContain("bg-muted/30");
+    const adminOnly = render(true, 90, false);
+    expect(adminOnly).toContain("bg-muted/30");
+    expect(adminOnly).not.toContain("driver-pay-cost");
+    expect(adminOnly).not.toContain("Enter Paycom paid hours");
+  });
+  it("admin with pay still sees the official box and cost note", () => {
+    const html = render(true, 90, true);
     expect(html).toContain("bg-muted/30");
     expect(html).toContain("Enter Paycom paid hours");
     expect(html).not.toContain("Paycom hrs");

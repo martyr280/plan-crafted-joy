@@ -192,7 +192,7 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         db()
           .from("truck_capacity_p21_demand")
           .select(
-            "route_id,ship_date,order_count,total_cube_ft,projected_capacity_frac,snapshot_at",
+            "route_id,ship_date,order_count,total_cube_ft,est_pallets,projected_capacity_frac,snapshot_at",
           )
           .in("route_id", ids)
           .gte("ship_date", today),
@@ -216,7 +216,13 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
       const basis: DateBasis = (DATE_BASES as readonly string[]).includes(rawBasis)
         ? (rawBasis as DateBasis)
         : "pick_ticket_print";
-      return buildDispatchBoard(rows, cutoffs, demand, {
+      const { data: caps, error: capErr } = await db()
+        .from("truck_capacity_routes")
+        .select("id, cube_full_truck_ft3, pallets_full_truck")
+        .in("id", ids);
+      if (capErr) throw new Error("Unable to read route pallet capacity");
+      const { attachRouteCapacity } = await import("./truck-capacity/est-pallets");
+      return buildDispatchBoard(rows, cutoffs, attachRouteCapacity(demand, caps ?? []), {
         basis,
         today,
         excludedCodes: settings?.excluded_p21_codes ?? [],
