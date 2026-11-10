@@ -254,3 +254,36 @@ export function priceDriverWeek(canPay: boolean, input: RatedCostInput): RatedCo
   }
   return estimateCostWithRates(input);
 }
+
+/**
+ * A missing Paycom total cannot become a dollar amount or an overtime
+ * multiplier. Authorized warehouse minutes stay visible as not costed.
+ * A denied caller gets no amount and no minute metadata.
+ */
+export function applyMissingPaycom(
+  cost: RatedCostEstimate,
+  paidHours: number | null,
+  canPay: boolean,
+): RatedCostEstimate {
+  if (typeof paidHours === "number" && Number.isFinite(paidHours)) return cost;
+  if (!canPay) {
+    return {
+      ...cost,
+      cost: null,
+      hourlyRate: null,
+      multiplier: null,
+      pricedMinutes: 0,
+      excludedMinutes: 0,
+      dailyRates: [],
+      note: null,
+    };
+  }
+  return {
+    ...cost,
+    cost: null,
+    multiplier: null,
+    pricedMinutes: 0,
+    excludedMinutes: (cost.pricedMinutes ?? 0) + (cost.excludedMinutes ?? 0),
+    note: "Enter Paycom paid hours to estimate cost",
+  };
+}

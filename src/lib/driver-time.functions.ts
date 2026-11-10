@@ -114,7 +114,8 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       .order("started_at", { ascending: false })
       .limit(10);
 
-    const { flaggedMinutesByDay, priceDriverWeek } = await import("@/lib/driver-time/rates");
+    const { flaggedMinutesByDay, priceDriverWeek, applyMissingPaycom } =
+      await import("@/lib/driver-time/rates");
     const paycomFor = (driverId: string) =>
       (overrides ?? []).find((o: any) => String(o.driver_id) === String(driverId))?.paycom_hours ?? null;
 
@@ -146,16 +147,10 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
         weekEnd,
         rates: canManageDriverPay ? rates : [],
       });
-      // This module does not fetch total weekly paid hours. Never label zero
-      // as real Samsara hours or infer an overtime multiplier from it.
-      if (paidHours == null) {
-        cost.cost = null;
-        cost.multiplier = null;
-        cost.pricedMinutes = 0;
-        cost.excludedMinutes = 0;
-        cost.note = "Enter Paycom paid hours to estimate cost";
-      }
-      return {...b,flaggedHours:Math.round(flaggedHours*100)/100,cost};
+      // Missing Paycom cannot become a cost or an overtime multiplier.
+      // Known warehouse minutes stay not costed. Denied callers keep no metadata.
+      const visible = applyMissingPaycom(cost, paidHours, canManageDriverPay);
+      return { ...b, flaggedHours: Math.round(flaggedHours * 100) / 100, cost: visible };
     });
 
     // Hub groups in the Truck Capacity order, worst offender first inside a hub.

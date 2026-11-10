@@ -89,6 +89,8 @@ export function DriverCard({
   }, [driver.events]);
 
   const excludedMinutes = driver.cost.excludedMinutes ?? 0;
+  const pricedMinutes = driver.cost.pricedMinutes ?? 0;
+  const hourText = (minutes: number) => `${Math.round((minutes / 60) * 100) / 100}h`;
   const payLabel =
     driver.cost.cost === null
       ? driver.cost.note
@@ -107,9 +109,14 @@ export function DriverCard({
           {canViewPay && (
             <div className="max-w-full text-muted-foreground" data-testid="driver-pay-cost">
               <div>{payLabel}</div>
-              {driver.cost.cost !== null && excludedMinutes > 0 && (
+              {driver.cost.cost !== null && pricedMinutes > 0 && (
+                <div data-testid="driver-pay-priced">{hourText(pricedMinutes)} priced</div>
+              )}
+              {excludedMinutes > 0 && (
                 <div className={warningTextClass} data-testid="driver-pay-exclusion">
-                  {driver.cost.note ?? "Some warehouse time was not costed."}
+                  {driver.cost.cost === null
+                    ? `${hourText(excludedMinutes)} not costed`
+                    : (driver.cost.note ?? "Some warehouse time was not costed.")}
                 </div>
               )}
             </div>
