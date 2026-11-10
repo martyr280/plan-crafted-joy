@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { MapPin } from "lucide-react";
 import { useUpdateDriverTimeEvent } from "@/hooks/useDriverTime";
 import { formatMinutes, hubTimezone } from "@/lib/driver-time/reconciliation";
+import { destructiveTextClass } from "@/components/driver-time/text-classes";
 
 export const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -27,7 +28,7 @@ export function dayLabel(date: string) {
 }
 
 export const STATUS_STYLE: Record<string, string> = {
-  new: "bg-destructive/10 text-destructive border-destructive/30",
+  new: `bg-destructive/10 ${destructiveTextClass} border-destructive/30`,
   reviewed: "bg-primary/10 text-primary border-primary/30",
   excused: "bg-muted text-muted-foreground",
 };

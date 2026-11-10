@@ -27,6 +27,7 @@ import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
 import { formatMinutes, hubTimezone, reconciliationCsv } from "@/lib/driver-time/reconciliation";
 import { WarehouseActualEditor } from "@/components/driver-time/WarehouseActualEditor";
 import { DriverCard, money, hm, clock, dayLabel, STATUS_STYLE } from "@/components/driver-time/DriverCard";
+import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 import { DriverRatesPanel } from "@/components/driver-time/DriverRatesPanel";
 
 export const Route = createFileRoute("/_app/driver-time")({
@@ -162,7 +163,11 @@ function DriverTimePage() {
       </div>
 
       <label className="flex gap-2 items-center mb-4 text-sm"><input type="checkbox" checked={includeWeekends} onChange={e=>setIncludeWeekends(e.target.checked)} /> Include weekend automated events</label>
-      {weekQ.isError && <Card className="p-4 mb-4 text-destructive">Report unavailable: {(weekQ.error as Error).message}. Hours have not been treated as zero.</Card>}
+      {weekQ.isError && (
+        <Card className={`p-4 mb-4 ${destructiveTextClass}`}>
+          Report unavailable: {(weekQ.error as Error).message}. Hours have not been treated as zero.
+        </Card>
+      )}
       <div className="grid gap-4 md:grid-cols-4 mb-6">
         <KpiCard label="Drivers in report" value={String(totals?.drivers ?? 0)} icon={<Users className="w-5 h-5" />} />
         <KpiCard label="Warehouse time (H:MM)" value={totals ? formatMinutes(totals.flaggedMinutes) : "—"} icon={<Clock className="w-5 h-5" />} />
@@ -312,7 +317,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
       <Card className="p-4 space-y-3">
         <div className="font-semibold text-sm">Detection</div>
         {cfgQ.data?.error && (
-          <div className="text-xs text-destructive">
+          <div className={`text-xs ${destructiveTextClass}`}>
             Samsara data unavailable: {cfgQ.data.error} — check the API token scopes in Settings → Integrations.
           </div>
         )}
@@ -495,7 +500,7 @@ function ragOf(min: number, greenUnder: number, redAtOrOver: number): Rag {
 const RAG_CLASS: Record<Rag, string> = {
   green: "text-success-text bg-success/10",
   yellow: "text-warning-text bg-warning/10",
-  red: "text-destructive bg-destructive/10",
+  red: `${destructiveTextClass} bg-destructive/10`,
   none: "text-muted-foreground",
 };
 
@@ -638,7 +643,9 @@ function DiagnosticsTab() {
               : "border-destructive/50 bg-destructive/10 p-5"
           }
         >
-          <div className={`flex items-start gap-3 ${verdict.ok ? "text-success-text" : "text-destructive"}`}>
+          <div
+            className={`flex items-start gap-3 ${verdict.ok ? "text-success-text" : destructiveTextClass}`}
+          >
             {verdict.ok ? <CheckCircle2 className="mt-0.5 h-6 w-6" /> : <AlertTriangle className="mt-0.5 h-6 w-6" />}
             <p className="text-lg font-semibold leading-snug">{verdict.text}</p>
           </div>
@@ -655,7 +662,9 @@ function DiagnosticsTab() {
         <>
           {d.warnings?.length > 0 && (
             <Card className="border-destructive/40 bg-destructive/5 p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-destructive">
+              <div
+                className={`mb-2 flex items-center gap-2 text-sm font-medium ${warningTextClass}`}
+              >
                 <AlertTriangle className="h-4 w-4" /> Warnings
               </div>
               <ul className="list-inside list-disc space-y-1 text-sm">
@@ -702,9 +711,11 @@ function DiagnosticsTab() {
               <div className="space-y-2">
                 {d.probes.map((p: any) => (
                   <div key={p.endpoint} className="flex items-start gap-2 text-sm">
-                    {p.ok
-                      ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-success-text" />
-                      : <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />}
+                    {p.ok ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-success-text" />
+                    ) : (
+                      <AlertTriangle className={`mt-0.5 h-4 w-4 ${destructiveTextClass}`} />
+                    )}
                     <div>
                       <div>{p.endpoint}</div>
                       <div className="text-xs text-muted-foreground">{p.detail}</div>
@@ -815,7 +826,9 @@ function DiagnosticsTab() {
                 <span className="rounded px-2 py-1 text-warning-text bg-warning/10">
                   {greenUnder}–{Math.max(greenUnder, redAtOrOver - 1)} min
                 </span>
-                <span className="rounded px-2 py-1 text-destructive bg-destructive/10">≥ {redAtOrOver} min</span>
+                <span className={`rounded px-2 py-1 ${destructiveTextClass} bg-destructive/10`}>
+                  ≥ {redAtOrOver} min
+                </span>
                 <span className="rounded px-2 py-1 text-muted-foreground bg-muted">no data</span>
               </div>
 
