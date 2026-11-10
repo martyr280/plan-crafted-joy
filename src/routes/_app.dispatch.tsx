@@ -20,8 +20,8 @@ import { useModuleView } from "@/lib/usage-log";
 import { buildLoadSheet } from "@/lib/dispatch/loadsheet";
 import { formatEstPallets, formatPalletTotal } from "@/lib/truck-capacity/est-pallets";
 import { TicketBoard } from "@/components/dispatch/TicketBoard";
-import { RunDetailAlert } from "@/components/dispatch/RunDetailAlert";
-import { dispatchRunPanels } from "@/components/dispatch/run-detail-panels";
+import { DispatchListAlert, RunDetailAlert } from "@/components/dispatch/RunDetailAlert";
+import { dispatchListPanels, dispatchRunPanels } from "@/components/dispatch/run-detail-panels";
 import { DATE_BASES, DATE_BASIS_LABEL } from "@/lib/dispatch/assign";
 import {
   useAddressQueue, useApproveAndPush, useBuildRunNow, useCancelRun, useDispatchRun, useDispatchRuns,
@@ -44,6 +44,7 @@ export const Route = createFileRoute("/_app/dispatch")({
 });
 
 const num = (n: unknown) => Number(n ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 });
+const EMPTY_DISPATCH_ROWS: never[] = [];
 
 function showRunPallets(run: {
   est_pallets?: number | null;
@@ -96,8 +97,13 @@ function DispatchPage() {
 
   const runs = useDispatchRuns();
   const [openRunId, setOpenRunId] = useState<string | null>(null);
+  const listPanels = dispatchListPanels({
+    isError: runs.isError,
+    isLoading: runs.isLoading,
+    hasData: Boolean(runs.data),
+  });
 
-  const rows: any[] = runs.data?.rows ?? [];
+  const rows = listPanels.showRows ? (runs.data?.rows ?? EMPTY_DISPATCH_ROWS) : EMPTY_DISPATCH_ROWS;
   const byHub = useMemo(() => {
     const m = new Map<string, any[]>();
     for (const r of rows) {
@@ -131,7 +137,15 @@ function DispatchPage() {
         }
       />
 
-      {runs.data && !runs.data.viewAvailable && (
+      {listPanels.showError && (
+        <DispatchListAlert
+          message={(runs.error as Error)?.message ?? "Dispatch runs could not be loaded."}
+          stale={listPanels.showStaleNote}
+          onRetry={() => void runs.refetch()}
+        />
+      )}
+
+      {listPanels.showRows && runs.data && !runs.data.viewAvailable && (
         <Card className="p-4 mb-4 border-amber-500/40 bg-amber-500/5">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
@@ -147,10 +161,26 @@ function DispatchPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <KpiCard label="Routes enabled" value={String(totals.enabled)} icon={<Truck className="w-4 h-4" />} />
-        <KpiCard label="Runs planned" value={String(totals.planned)} icon={<Clock className="w-4 h-4" />} />
-        <KpiCard label="Runs pushed" value={String(totals.pushed)} icon={<Send className="w-4 h-4" />} />
-        <KpiCard label="Stops held" value={String(totals.held)} icon={<AlertTriangle className="w-4 h-4" />} />
+        <KpiCard
+          label="Routes enabled"
+          value={listPanels.showKpiNumbers ? String(totals.enabled) : "—"}
+          icon={<Truck className="w-4 h-4" />}
+        />
+        <KpiCard
+          label="Runs planned"
+          value={listPanels.showKpiNumbers ? String(totals.planned) : "—"}
+          icon={<Clock className="w-4 h-4" />}
+        />
+        <KpiCard
+          label="Runs pushed"
+          value={listPanels.showKpiNumbers ? String(totals.pushed) : "—"}
+          icon={<Send className="w-4 h-4" />}
+        />
+        <KpiCard
+          label="Stops held"
+          value={listPanels.showKpiNumbers ? String(totals.held) : "—"}
+          icon={<AlertTriangle className="w-4 h-4" />}
+        />
       </div>
 
       <Tabs defaultValue="board">
@@ -163,7 +193,9 @@ function DispatchPage() {
         </TabsList>
 
         <TabsContent value="board" className="mt-4 space-y-6">
-          {runs.isLoading && <Card className="p-6 text-sm text-muted-foreground">Loading routes…</Card>}
+          {listPanels.showLoading && (
+            <Card className="p-6 text-sm text-muted-foreground">Loading routes…</Card>
+          )}
           {byHub.map(([hub, list]) => (
             <div key={hub}>
               <h2 className="text-sm font-semibold text-muted-foreground mb-2">{hub}</h2>
@@ -198,12 +230,12 @@ function DispatchPage() {
         </TabsContent>
 
         <TabsContent value="sequence" className="mt-4">
-          <SequenceTab routes={rows} canWrite={canWrite} />
+          <SequenceTab routes={rows} canWrite={canWrite && listPanels.allowRowActions} />
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4 space-y-4">
-          <SettingsCard routes={rows} isAdmin={isAdmin} />
-          <DriverMappingCard routes={rows} canWrite={canWrite} />
+          <SettingsCard routes={rows} isAdmin={isAdmin && listPanels.allowRowActions} />
+          <DriverMappingCard routes={rows} canWrite={canWrite && listPanels.allowRowActions} />
         </TabsContent>
       </Tabs>
 
