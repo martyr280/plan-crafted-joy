@@ -255,6 +255,8 @@ describe("DriverRatesPanel states", () => {
       new Error("This rate changed since you opened it. Refresh and try again."),
     );
     ports.query.refetch = vi.fn().mockResolvedValue({
+      isSuccess: true,
+      isError: false,
       data: {
         ...loaded,
         rates: [{ ...loaded.rates[0], hourly_rate: 25, updated_at: "stamp-2" }],
@@ -310,11 +312,56 @@ describe("DriverRatesPanel states", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
     expect(screen.queryByRole("status")).toBeNull();
     ports.query.refetch = vi.fn().mockResolvedValue({
+      isSuccess: true,
+      isError: false,
       data: { drivers: loaded.drivers, rates: [], rosterError: null },
     });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
     });
+    expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Review change" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    expect(ports.update).toHaveBeenLastCalledWith({
+      id: "r1",
+      hourlyRate: 21,
+      effectiveDate: "2026-01-05",
+      expectedUpdatedAt: "stamp-1",
+    });
+  });
+
+  it("keeps the conflict when refetch resolves with an error and cached rates", async () => {
+    ports.roles = ["admin"];
+    showLoaded();
+    ports.update.mockRejectedValue(
+      new Error("This rate changed since you opened it. Refresh and try again."),
+    );
+    ports.query.refetch = vi.fn().mockResolvedValue({
+      isError: true,
+      isSuccess: false,
+      error: new Error("timeout"),
+      data: {
+        ...loaded,
+        rates: [{ ...loaded.rates[0], hourly_rate: 25, updated_at: "stamp-2" }],
+      },
+    });
+    render(<DriverRatesPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /History/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Edit rate for Synthetic Driver from 2026-01-05/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "21.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review change" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
+    });
+    expect(screen.getByLabelText("Hourly rate (USD)")).toHaveProperty("value", "21.00");
     expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
     expect(screen.queryByRole("status")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Review change" }));

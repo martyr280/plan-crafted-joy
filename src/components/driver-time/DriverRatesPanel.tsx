@@ -226,8 +226,15 @@ function DriverRatesPanelInner() {
           today={today}
           onClose={() => setEditing(null)}
           onRefresh={async () => {
-            const result = await q.refetch();
-            const next = (result.data as { rates?: PayRateRow[] } | undefined)?.rates;
+            const result = (await q.refetch()) as {
+              isSuccess?: boolean;
+              isError?: boolean;
+              data?: { rates?: PayRateRow[] };
+            };
+            if (result.isError || !result.isSuccess) {
+              throw new Error("Could not refresh this rate.");
+            }
+            const next = result.data?.rates;
             if (!next) throw new Error("Could not refresh this rate.");
             return next;
           }}
