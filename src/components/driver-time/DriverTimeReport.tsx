@@ -6,6 +6,7 @@ import { KpiCard } from "@/components/shared/KpiCard";
 import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 import { driverTimeReportPanels } from "@/lib/driver-time/report-panels";
 import {
+  costCoverageNotice,
   driverCostCoverage,
   estimatedCostFigure,
   type ReportDriver,
@@ -56,6 +57,7 @@ export function DriverTimeReport({
   const panels = driverTimeReportPanels({ isError, isLoading, isFetching, hasData });
   const groups = panels.showReport ? (hubGroups ?? []) : [];
   const coverage = driverCostCoverage(drivers);
+  const coverageNotice = costCoverageNotice(coverage);
   const costLabel = estimatedCostFigure(canManageDriverPay, drivers);
   const costFigure = costLabel.partial ? (
     <span className={`text-lg font-semibold leading-snug ${warningTextClass}`}>
@@ -121,12 +123,9 @@ export function DriverTimeReport({
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
       </div>
-      {panels.showReport && canManageDriverPay && coverage.unpriced > 0 && (
+      {panels.showReport && canManageDriverPay && coverageNotice && (
         <Card className={`mb-4 border-warning/40 bg-warning/10 p-3 text-xs ${warningTextClass}`}>
-          {coverage.unpriced} of {coverage.included} driver(s) have no computed cost, so this total
-          is not complete ({coverage.priced} of {coverage.included} drivers priced). A missing
-          hourly rate or missing Paycom hours leaves that driver unpriced. Warehouse time alone
-          cannot establish overtime.
+          {coverageNotice}
         </Card>
       )}
       {panels.showReport ? (
@@ -159,7 +158,6 @@ export function DriverTimeReport({
               <DriverCard
                 key={String(d.driverId)}
                 driver={d as never}
-                weekStart="2026-11-10"
                 isAdmin={!!isAdmin}
                 canViewPay={!!canManageDriverPay}
                 thresholdMinutes={thresholdMinutes ?? 90}

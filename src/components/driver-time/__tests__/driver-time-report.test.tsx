@@ -104,9 +104,8 @@ describe("DriverTimeReport", () => {
       />,
     );
     expect(kpi("Estimated cost")).toMatch(/—/);
-    expect(kpi("Estimated cost")).not.toMatch(/\$0|Partial/);
-    expect(screen.getByText(/2 of 2 driver\(s\) have no computed cost/)).toBeTruthy();
-    expect(screen.getByText(/0 of 2 drivers priced/)).toBeTruthy();
+    expect(kpi("Estimated cost")).not.toMatch(/\$0|Partial|At least/);
+    expect(screen.getByText(/0 fully priced, 0 partly priced, 2 unpriced/)).toBeTruthy();
     expect(screen.queryByText(/no hourly rate on file/)).toBeNull();
   });
 
@@ -123,10 +122,10 @@ describe("DriverTimeReport", () => {
         hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
       />,
     );
-    const cost = screen.getByText("Partial: $40 (1 of 2 drivers priced)");
+    const cost = screen.getByText("Partial: $40 (1 fully priced, 1 unpriced)");
     expect(cost.className).toMatch(/text-warning-text/);
     expect(kpi("Estimated cost")).not.toMatch(/Estimated cost\$40$/);
-    expect(screen.getByText(/1 of 2 driver\(s\) have no computed cost/)).toBeTruthy();
+    expect(screen.getByText(/1 fully priced, 0 partly priced, 1 unpriced/)).toBeTruthy();
     expect(screen.queryByText(/no hourly rate on file/)).toBeNull();
   });
 
@@ -143,9 +142,9 @@ describe("DriverTimeReport", () => {
         hubGroups={[{ hub: "Dallas", drivers: [], flaggedMinutes: 0 }]}
       />,
     );
-    expect(screen.getByText("Partial: $0 (1 of 2 drivers priced)")).toBeTruthy();
+    expect(screen.getByText("Partial: $0 (1 fully priced, 1 unpriced)")).toBeTruthy();
     expect(kpi("Estimated cost")).toMatch(/Partial/);
-    expect(screen.getByText(/1 of 2 driver\(s\) have no computed cost/)).toBeTruthy();
+    expect(screen.getByText(/1 fully priced, 0 partly priced, 1 unpriced/)).toBeTruthy();
   });
 
   it("formats every known cost in USD without a partial label", () => {

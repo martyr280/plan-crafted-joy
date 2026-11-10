@@ -148,7 +148,13 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       });
       // This module does not fetch total weekly paid hours. Never label zero
       // as real Samsara hours or infer an overtime multiplier from it.
-      if (paidHours == null) { cost.cost = null; cost.multiplier = null; cost.note = "Enter Paycom paid hours to estimate cost"; }
+      if (paidHours == null) {
+        cost.cost = null;
+        cost.multiplier = null;
+        cost.pricedMinutes = 0;
+        cost.excludedMinutes = 0;
+        cost.note = "Enter Paycom paid hours to estimate cost";
+      }
       return {...b,flaggedHours:Math.round(flaggedHours*100)/100,cost};
     });
 

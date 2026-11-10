@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { MapPin } from "lucide-react";
 import { useUpdateDriverTimeEvent } from "@/hooks/useDriverTime";
 import { formatMinutes, hubTimezone } from "@/lib/driver-time/reconciliation";
-import { destructiveTextClass } from "@/components/driver-time/text-classes";
+import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 
 export const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -66,11 +66,12 @@ export function DriverCard({
       note?: string | null;
       multiplier?: number | null;
       hoursSource?: string;
+      pricedMinutes?: number;
+      excludedMinutes?: number;
     };
     history: Array<{ at: string; after?: { minutes: number; reason?: string } | null }>;
     events: Array<{ event_date: string }>;
   };
-  weekStart: string;
   isAdmin: boolean;
   canViewPay?: boolean;
   thresholdMinutes: number;
@@ -87,6 +88,12 @@ export function DriverCard({
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [driver.events]);
 
+  const excludedMinutes = driver.cost.excludedMinutes ?? 0;
+  const payLabel =
+    driver.cost.cost === null
+      ? driver.cost.note
+      : `${excludedMinutes > 0 ? "At least " : ""}${money(driver.cost.cost)} est. (${driver.cost.multiplier}× · ${driver.cost.hoursSource} hours)`;
+
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
@@ -98,11 +105,14 @@ export function DriverCard({
         </div>
         <div className="flex items-center gap-3 text-xs">
           {canViewPay && (
-            <span className="text-muted-foreground" data-testid="driver-pay-cost">
-              {driver.cost.cost === null
-                ? driver.cost.note
-                : `${money(driver.cost.cost)} est. (${driver.cost.multiplier}× · ${driver.cost.hoursSource} hours)`}
-            </span>
+            <div className="max-w-full text-muted-foreground" data-testid="driver-pay-cost">
+              <div>{payLabel}</div>
+              {driver.cost.cost !== null && excludedMinutes > 0 && (
+                <div className={warningTextClass} data-testid="driver-pay-exclusion">
+                  {driver.cost.note ?? "Some warehouse time was not costed."}
+                </div>
+              )}
+            </div>
           )}
           <span className="text-sm font-bold" data-testid="warehouse-over-threshold">
             Warehouse time over {thresholdLabel(thresholdMinutes)}: {formatMinutes(driver.flaggedMinutes)}

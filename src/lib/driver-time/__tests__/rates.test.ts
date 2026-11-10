@@ -101,6 +101,8 @@ describe("estimateCostWithRates: each day priced at its own rate", () => {
     const byDay = { "2026-08-31": 60, "2026-09-01": 60 };
     const e = estimateCostWithRates({ ...base, weekStart: "2026-08-31", weekEnd: "2026-09-04", paycomHours: 38, flaggedHours: 2, byDay, unsplitMinutes: 0 });
     expect(e.cost).toBe(20);
+    expect(e.pricedMinutes).toBe(60);
+    expect(e.excludedMinutes).toBe(60);
     expect(e.note).toBe("no rate on file for 2026-08-31 (1 h not costed)");
   });
   it("future-dated raise does not touch a past week", () => {

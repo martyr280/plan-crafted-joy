@@ -20,7 +20,6 @@ const render = (isAdmin: boolean, t = 90, canViewPay = false) =>
   renderToStaticMarkup(
     <DriverCard
       driver={driver}
-      weekStart="2026-09-21"
       isAdmin={isAdmin}
       canViewPay={canViewPay}
       thresholdMinutes={t}
