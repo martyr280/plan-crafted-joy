@@ -1,4 +1,6 @@
 /** Text roles. The destructive and warning fills stay on backgrounds and borders. */
+export const successTextClass =
+  "text-success-text hover:text-success-text focus-visible:text-success-text";
 export const destructiveTextClass =
   "text-destructive-text hover:text-destructive-text focus-visible:text-destructive-text";
 export const warningTextClass =

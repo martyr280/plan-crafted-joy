@@ -40,6 +40,7 @@ import { ForecastBoard } from "@/components/truck-capacity/ForecastBoard";
 import { formatEstPallets } from "@/lib/truck-capacity/est-pallets";
 import {
   destructiveTextClass,
+  successTextClass,
   warningNoticeClass,
   warningTextClass,
 } from "@/components/driver-time/text-classes";
@@ -983,7 +984,7 @@ function ForecastVsActualPanel() {
                       {r.n < 3 && (
                         <Badge
                           variant="outline"
-                          className={`ml-2 text-[10px] border-warning/40 ${warningTextClass}`}
+                          className={`ml-2 whitespace-normal text-xs border-warning/40 ${warningTextClass}`}
                         >
                           n&lt;3 · not yet meaningful
                         </Badge>
@@ -1048,7 +1049,7 @@ function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[]
               <TableCell className="text-xs">{r.model?.toFixed(3)}</TableCell>
               <TableCell className="text-xs font-medium">{r.blend?.toFixed(3)}</TableCell>
               <TableCell
-                className={`text-xs ${r.delta >= 0 ? "text-emerald-600" : destructiveTextClass}`}
+                className={`text-xs ${r.delta >= 0 ? successTextClass : destructiveTextClass}`}
               >
                 {r.delta >= 0 ? "+" : ""}{r.delta?.toFixed(3)}
               </TableCell>
@@ -1863,7 +1864,7 @@ function CapacityCoverageCard() {
   const tone = d?.overallPct == null ? "muted" : d.overallPct >= 0.9 ? "green" : d.overallPct >= 0.5 ? "amber" : "red";
   const toneClass =
     tone === "green"
-      ? "text-green-600"
+      ? successTextClass
       : tone === "amber"
         ? warningTextClass
         : tone === "red"
@@ -2009,7 +2010,9 @@ function CapacityCoverageCard() {
           )}
 
           {d.totalRows > 0 && d.missingCubeAndWeight.length === 0 && d.partialTargets.length === 0 && (
-            <div className="text-xs text-green-600">Every route with demand in the window has both cube and weight targets set.</div>
+              <div className={`text-xs ${successTextClass}`}>
+                Every route with demand in the window has both cube and weight targets set.
+              </div>
           )}
         </>
       )}
@@ -2027,7 +2030,7 @@ function SnapshotResultView({ result }: { result: any }) {
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         <span>
           Status:{" "}
-          <b className={r.ok ? "text-green-700" : destructiveTextClass}>{r.ok ? "OK" : "FAILED"}</b>
+          <b className={r.ok ? successTextClass : destructiveTextClass}>{r.ok ? "OK" : "FAILED"}</b>
         </span>
         <span>Kind: <b>{r.kind}</b></span>
         <span>Pulled: <b>{r.rowsPulled}</b></span>
@@ -2083,7 +2086,9 @@ function SnapshotResultView({ result }: { result: any }) {
           <ul className="list-disc ml-4">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
         </div>
       )}
-      {r.ok && warnings.length === 0 && readout && <div className="text-green-700">Plausibility: OK — no red flags.</div>}
+      {r.ok && warnings.length === 0 && readout && (
+        <div className={successTextClass}>Plausibility: OK — no red flags.</div>
+      )}
     </div>
   );
 }

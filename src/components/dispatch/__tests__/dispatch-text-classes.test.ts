@@ -12,6 +12,7 @@ const touchedSource = [
   "src/components/dispatch/run-detail-panels.ts",
   "src/components/driver-time/DriverCard.tsx",
   "src/components/driver-time/DriverRatesPanel.tsx",
+  "src/components/driver-time/DriverTimeReport.tsx",
   "src/components/driver-time/text-classes.ts",
   "src/components/truck-capacity/EstPalletsTrigger.tsx",
   "src/components/truck-capacity/ForecastBoard.tsx",
@@ -25,6 +26,7 @@ const touchedSource = [
   "src/lib/dispatch/pallets.ts",
   "src/lib/driver-time.functions.ts",
   "src/lib/driver-time/access.ts",
+  "src/lib/driver-time/report-panels.ts",
   "src/lib/driver-time/rates.ts",
   "src/lib/truck-capacity.functions.ts",
   "src/lib/truck-capacity.server.ts",
@@ -40,7 +42,8 @@ const touchedSource = [
 const files = touchedSource.map((file) => join(process.cwd(), file));
 
 // Raw palette utilities used as text. Semantic text tokens stay allowed.
-const rawFillText = /text-(?:destructive(?!-text\b|-foreground\b)|(?:red|amber|yellow|orange)-\d+)/;
+const rawFillText =
+  /text-(?:destructive(?!-text\b|-foreground\b)|(?:red|amber|yellow|orange|green|emerald)-\d+)/;
 
 describe("PR text colors", () => {
   it("covers the truck-capacity route and every other non-test file in the PR", () => {
