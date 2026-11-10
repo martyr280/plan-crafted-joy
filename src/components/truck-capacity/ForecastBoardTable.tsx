@@ -57,7 +57,7 @@ export function ForecastBoardTable({
   onSelectRoute: (routeId: string) => void;
 }) {
   return (
-    <Table className="table-fixed">
+    <Table className="min-w-[1100px] table-fixed">
       <TableHeader>
         <TableRow>
           <TableHead className="w-[16%]">Route</TableHead>
@@ -78,11 +78,11 @@ export function ForecastBoardTable({
             className="cursor-pointer"
             onClick={() => onSelectRoute(r.route_id)}
           >
-            <TableCell className="align-top">
+            <TableCell className="align-top overflow-hidden">
               <div className="font-medium break-words">{r.code}</div>
               <div className="break-words text-xs text-muted-foreground">{r.name}</div>
             </TableCell>
-            <TableCell className="align-top text-xs">
+            <TableCell className="align-top overflow-hidden text-xs">
               {r.next_cutoff ? (
                 <>
                   <div className="font-medium">
@@ -102,7 +102,7 @@ export function ForecastBoardTable({
                 <span className="text-muted-foreground">not configured</span>
               )}
             </TableCell>
-            <TableCell className="align-top text-xs">
+            <TableCell className="align-top overflow-hidden text-xs">
               <div>{r.next_cutoff ? fmtRunDates(r.next_cutoff.runDates) : "—"}</div>
               {r.next_cutoff?.windowFrom && (
                 <div className="text-muted-foreground">
@@ -110,14 +110,14 @@ export function ForecastBoardTable({
                 </div>
               )}
             </TableCell>
-            <TableCell className="align-top">
-              <UtilizationBar value={r.final} secondary={r.current} />
+            <TableCell className="align-top overflow-hidden">
+              <UtilizationBar value={r.final} secondary={r.current} className="min-w-0" />
               <div className="mt-1 text-xs text-muted-foreground">
                 {r.method ? `${r.method}` : r.forecast_error ? "forecast error" : "no model"}
                 {r.mad != null && ` ±${(r.mad * 100).toFixed(0)}%`}
               </div>
             </TableCell>
-            <TableCell className="align-top text-sm">
+            <TableCell className="align-top overflow-hidden break-words text-sm">
               {r.current == null ? (
                 <span className="text-muted-foreground">—</span>
               ) : (
@@ -125,7 +125,7 @@ export function ForecastBoardTable({
               )}
               <EstPalletsTrigger code={r.code} estPallets={r.est_pallets} />
             </TableCell>
-            <TableCell className="align-top text-xs">
+            <TableCell className="align-top overflow-hidden text-xs">
               {r.last_run ? (
                 <>
                   <div>{(r.last_run.capacity_frac * 100).toFixed(0)}%</div>

@@ -34,6 +34,42 @@ export type DispatchBoardRoute = {
   runs: DispatchBoardRun[];
 };
 
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    planned: "bg-muted text-muted-foreground",
+    pushed: "bg-primary/15 text-primary",
+    locked: "bg-amber-500/15 text-amber-600",
+    cancelled: "bg-destructive/15 text-destructive",
+    error: "bg-destructive/15 text-destructive",
+  };
+  return (
+    <Badge className={map[status] ?? "bg-muted text-muted-foreground"} variant="secondary">
+      {status}
+    </Badge>
+  );
+}
+
+function ExceptionBadge({
+  flag,
+}: {
+  flag?: { kind?: string; badge?: string; message?: string } | null;
+}) {
+  if (!flag) return null;
+  return flag.kind === "no_run" ? (
+    <Badge
+      variant="secondary"
+      className="ml-1 bg-destructive/15 text-destructive"
+      title={flag.message}
+    >
+      {flag.badge}
+    </Badge>
+  ) : (
+    <Badge variant="secondary" className="ml-1 bg-amber-500/15 text-amber-600" title={flag.message}>
+      {flag.badge}
+    </Badge>
+  );
+}
+
 function KpiFigure({ kind, value }: { kind: "number" | "loading" | "unavailable"; value: number }) {
   if (kind === "number") return <>{value.toLocaleString("en-US")}</>;
   return (
@@ -199,7 +235,8 @@ export function DispatchRunsBoard({
                             onClick={() => onOpenRun(run.id)}
                           >
                             <span className="mr-1">{run.runDate}</span>
-                            <Badge variant="secondary">{run.status}</Badge>
+                            <StatusBadge status={run.status} />
+                            <ExceptionBadge flag={run.exception} />
                             {run.stopsHeld > 0 && (
                               <span className="ml-1 text-amber-600">{run.stopsHeld} held</span>
                             )}

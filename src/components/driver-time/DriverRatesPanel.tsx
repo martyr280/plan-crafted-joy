@@ -227,8 +227,9 @@ function DriverRatesPanelInner() {
           onClose={() => setEditing(null)}
           onRefresh={async () => {
             const result = await q.refetch();
-            return ((result.data as { rates?: PayRateRow[] } | undefined)?.rates ??
-              rates) as PayRateRow[];
+            const next = (result.data as { rates?: PayRateRow[] } | undefined)?.rates;
+            if (!next) throw new Error("Could not refresh this rate.");
+            return next;
           }}
         />
       )}
@@ -255,8 +256,14 @@ function RateDialog({
   const [date, setDate] = useState(initialDate);
   const [confirming, setConfirming] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState(
-    editing.mode === "edit" ? editing.row.updated_at : "",
+  const [baseline, setBaseline] = useState(
+    editing.mode === "edit"
+      ? {
+          hourlyRate: Number(editing.row.hourly_rate),
+          effectiveDate: editing.row.effective_date,
+          updatedAt: editing.row.updated_at,
+        }
+      : null,
   );
   const reviewRef = useRef<HTMLParagraphElement>(null);
   const busy = add.isPending || update.isPending;
@@ -265,9 +272,10 @@ function RateDialog({
   const dateOk = isValidDateStr(date);
   const unchanged =
     editing.mode === "edit" &&
+    baseline != null &&
     parsed.ok &&
-    parsed.value === Number(editing.row.hourly_rate) &&
-    date === editing.row.effective_date;
+    parsed.value === baseline.hourlyRate &&
+    date === baseline.effectiveDate;
   const fieldError = rate && !parsed.ok ? parsed.error : !dateOk ? "Pick an effective date." : null;
 
   useEffect(() => {
@@ -292,7 +300,7 @@ function RateDialog({
           id: editing.row.id,
           hourlyRate: parsed.value,
           effectiveDate: date,
-          expectedUpdatedAt,
+          expectedUpdatedAt: baseline?.updatedAt ?? "",
         });
         toast.success(`Rate updated for ${editing.driver.name}`);
       }
@@ -306,14 +314,22 @@ function RateDialog({
   }
 
   async function refreshKeptValues() {
-    const latest = await onRefresh();
-    if (editing.mode === "edit") {
-      const row = latest.find((r) => r.id === editing.row.id);
-      if (row?.updated_at) setExpectedUpdatedAt(row.updated_at);
+    let latest: PayRateRow[];
+    try {
+      latest = await onRefresh();
+    } catch {
+      return;
     }
+    if (editing.mode !== "edit") return;
+    const row = latest.find((r) => r.id === editing.row.id);
+    if (!row?.updated_at || row.hourly_rate == null || !row.effective_date) return;
+    setBaseline({
+      hourlyRate: Number(row.hourly_rate),
+      effectiveDate: row.effective_date,
+      updatedAt: row.updated_at,
+    });
     setSaveError(null);
-    setConfirming(false);
-    reviewRef.current?.focus();
+    setConfirming(true);
   }
 
   return (
@@ -397,7 +413,7 @@ function RateDialog({
             >
               Change{" "}
               <strong>
-                {rateMoney(Number(editing.row.hourly_rate))}/hr from {editing.row.effective_date}
+                {rateMoney(baseline?.hourlyRate ?? 0)}/hr from {baseline?.effectiveDate}
               </strong>{" "}
               to{" "}
               <strong>

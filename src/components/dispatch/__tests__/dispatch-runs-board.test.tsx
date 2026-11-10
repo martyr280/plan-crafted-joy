@@ -118,4 +118,40 @@ describe("dispatch runs board", () => {
     expect(kpiText("Routes enabled")).toMatch(/0/);
     expect(onBuild).not.toHaveBeenCalled();
   });
+
+  it("keeps no-run and reduced-run warnings on the list", () => {
+    board({
+      isError: false,
+      hasData: true,
+      rows: [
+        {
+          ...route,
+          runs: [
+            {
+              id: "run-1",
+              runDate: "2026-11-12",
+              status: "cancelled",
+              stopsHeld: 0,
+              exception: { kind: "no_run", badge: "No run", message: "Tickets roll forward" },
+            },
+            {
+              id: "run-2",
+              runDate: "2026-11-13",
+              status: "locked",
+              stopsHeld: 2,
+              exception: { kind: "reduced", badge: "Reduced", message: "Short a driver" },
+            },
+          ],
+        },
+      ],
+    });
+    const noRun = screen.getByText("No run");
+    const reduced = screen.getByText("Reduced");
+    expect(noRun.getAttribute("title")).toBe("Tickets roll forward");
+    expect(noRun.className).toMatch(/text-destructive/);
+    expect(reduced.getAttribute("title")).toBe("Short a driver");
+    expect(reduced.className).toMatch(/text-amber-600/);
+    expect(screen.getByText("cancelled").className).toMatch(/text-destructive/);
+    expect(screen.getByText("locked").className).toMatch(/text-amber-600/);
+  });
 });

@@ -117,14 +117,26 @@ describe("DriverRatesPanel role matrix", () => {
 describe("DriverRatesPanel states", () => {
   it("empty roster", () => {
     ports.roles = ["ops_logistics_admin"];
-    ports.query = { isLoading: false, isError: false, error: null, data: emptyData, refetch: vi.fn() };
+    ports.query = {
+      isLoading: false,
+      isError: false,
+      error: null,
+      data: emptyData,
+      refetch: vi.fn(),
+    };
     render(<DriverRatesPanel />);
     expect(screen.getByText("No drivers on the roster yet.")).toBeTruthy();
     expect(screen.queryByText(/\$/)).toBeNull();
   });
   it("loading hides amounts", () => {
     ports.roles = ["admin"];
-    ports.query = { isLoading: true, isError: false, error: null, data: undefined, refetch: vi.fn() };
+    ports.query = {
+      isLoading: true,
+      isError: false,
+      error: null,
+      data: undefined,
+      refetch: vi.fn(),
+    };
     render(<DriverRatesPanel />);
     expect(screen.getByText(/Loading rates/)).toBeTruthy();
     expect(screen.queryByText("Synthetic Driver")).toBeNull();
@@ -217,7 +229,9 @@ describe("DriverRatesPanel states", () => {
     );
     render(<DriverRatesPanel />);
     fireEvent.click(screen.getByRole("button", { name: /History/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Edit rate for Synthetic Driver from 2026-01-05/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Edit rate for Synthetic Driver from 2026-01-05/ }),
+    );
     fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "21.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Review change" }));
     await act(async () => {
@@ -232,5 +246,86 @@ describe("DriverRatesPanel states", () => {
     expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
       expect.stringMatching(/changed since you opened it/),
     );
+  });
+
+  it("a successful refresh moves the shown baseline and the save token together", async () => {
+    ports.roles = ["admin"];
+    showLoaded();
+    ports.update.mockRejectedValueOnce(
+      new Error("This rate changed since you opened it. Refresh and try again."),
+    );
+    ports.query.refetch = vi.fn().mockResolvedValue({
+      data: {
+        ...loaded,
+        rates: [{ ...loaded.rates[0], hourly_rate: 25, updated_at: "stamp-2" }],
+      },
+    });
+    render(<DriverRatesPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /History/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Edit rate for Synthetic Driver from 2026-01-05/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "21.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review change" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
+    });
+    expect(screen.getByRole("status").textContent).toMatch(/\$25\.00\/hr from 2026-01-05/);
+    expect(screen.getByRole("status").textContent).toMatch(/\$21\.00\/hr from 2026-01-05/);
+    expect(document.activeElement).toBe(screen.getByRole("status"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    expect(ports.update).toHaveBeenLastCalledWith({
+      id: "r1",
+      hourlyRate: 21,
+      effectiveDate: "2026-01-05",
+      expectedUpdatedAt: "stamp-2",
+    });
+  });
+
+  it("a failed or missing refresh keeps the stale error and the original token", async () => {
+    ports.roles = ["ops_logistics_admin"];
+    showLoaded();
+    ports.update.mockRejectedValue(
+      new Error("This rate changed since you opened it. Refresh and try again."),
+    );
+    ports.query.refetch = vi.fn().mockRejectedValue(new Error("network"));
+    render(<DriverRatesPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /History/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Edit rate for Synthetic Driver from 2026-01-05/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "21.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review change" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
+    });
+    expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
+    expect(screen.queryByRole("status")).toBeNull();
+    ports.query.refetch = vi.fn().mockResolvedValue({
+      data: { drivers: loaded.drivers, rates: [], rosterError: null },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh this rate" }));
+    });
+    expect(screen.getByRole("alert").textContent).toMatch(/changed since you opened it/);
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Review change" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+    expect(ports.update).toHaveBeenLastCalledWith({
+      id: "r1",
+      hourlyRate: 21,
+      effectiveDate: "2026-01-05",
+      expectedUpdatedAt: "stamp-1",
+    });
   });
 });

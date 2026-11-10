@@ -352,48 +352,48 @@ function RunDetailDialog({ runId, onClose, canWrite }: { runId: string | null; o
                 }))}
               />
             ) : (
-            <Card className="overflow-hidden">
-              <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow>
+              <Card className="overflow-hidden">
+                <Table className="table-fixed">
+                  <TableHeader>
+                    <TableRow>
                       <TableHead className="w-14">#</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead className="w-16">ST</TableHead>
-                    <TableHead className="w-28">Order</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead className="w-16">ST</TableHead>
+                      <TableHead className="w-28">Order</TableHead>
                       <TableHead className="w-32">Arrival (CT)</TableHead>
                       <TableHead className="w-28 whitespace-normal text-right">
                         Estimated pallets
                       </TableHead>
                       <TableHead className="w-40">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {stops.map((s) => (
-                        <TableRow key={s.id} className={s.hold ? "bg-amber-500/5" : undefined}>
-                          <TableCell>{s.position}</TableCell>
-                          <TableCell className="truncate">{s.customer_name ?? "—"}</TableCell>
-                          <TableCell>{s.state ?? "—"}</TableCell>
-                          <TableCell className="truncate">{s.order_no ?? "—"}</TableCell>
-                          <TableCell>{timeLocal(s.scheduled_arrival)}</TableCell>
-                          <TableCell className="text-right">
-                            {formatEstPallets(s.est_pallets)}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {s.hold ? (
-                              <span className="text-amber-600 inline-flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" /> {s.hold_reason ?? "held"}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground inline-flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" /> ok
-                              </span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                </TableBody>
-              </Table>
-            </Card>
+                      <TableRow key={s.id} className={s.hold ? "bg-amber-500/5" : undefined}>
+                        <TableCell>{s.position}</TableCell>
+                        <TableCell className="truncate">{s.customer_name ?? "—"}</TableCell>
+                        <TableCell>{s.state ?? "—"}</TableCell>
+                        <TableCell className="truncate">{s.order_no ?? "—"}</TableCell>
+                        <TableCell>{timeLocal(s.scheduled_arrival)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatEstPallets(s.est_pallets)}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {s.hold ? (
+                            <span className="text-amber-600 inline-flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> {s.hold_reason ?? "held"}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> ok
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
             )}
           </div>
         )}
