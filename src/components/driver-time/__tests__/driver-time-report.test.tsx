@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type React from "react";
 import { DriverTimeReport } from "../DriverTimeReport";
 
 const emptyTotals = {
@@ -185,5 +186,72 @@ describe("DriverTimeReport", () => {
     expect(screen.queryByText("Dallas")).toBeNull();
     expect(kpi("Needs review")).not.toMatch(/3/);
     expect(screen.queryByText(/2 driver\(s\) have official/)).toBeNull();
+  });
+});
+
+describe("DriverTimeReport Retry focus", () => {
+  type Phase = "failed" | "retrying" | "loaded";
+  const props = (phase: Phase) => ({
+    isError: phase !== "loaded",
+    isLoading: false,
+    isFetching: phase === "retrying",
+    hasData: phase === "loaded",
+    errorMessage: "timeout",
+    onRetry: vi.fn(),
+    totals: { ...emptyTotals, drivers: 2, officialDrivers: 1 },
+  });
+  const ui = (phase: Phase) => (
+    <>
+      <button type="button">Elsewhere</button>
+      <DriverTimeReport {...props(phase)} />
+    </>
+  );
+
+  // Chromium blurs a focused button to BODY when it becomes disabled; jsdom neither
+  // does that nor blurs a disabled button, so the blur is issued as it is disabled.
+  function keyboardRetry(rerender: (n: React.ReactNode) => void) {
+    const retry = screen.getByRole("button", { name: "Retry" });
+    retry.focus();
+    fireEvent.click(retry);
+    retry.blur();
+    rerender(ui("retrying"));
+    expect((retry as HTMLButtonElement).disabled).toBe(true);
+    expect(document.activeElement).toBe(document.body);
+  }
+
+  it("moves focus to the week summary when a retry succeeds and Retry disappears", () => {
+    const { rerender } = render(ui("failed"));
+    keyboardRetry(rerender);
+    rerender(ui("loaded"));
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    const summary = screen.getByTestId("driver-time-summary");
+    expect(document.activeElement).toBe(summary);
+    expect(summary.textContent).toMatch(/1 driver\(s\) have official weekday totals/);
+    expect(summary.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("returns focus to Retry when the retry fails again", () => {
+    const { rerender } = render(ui("failed"));
+    keyboardRetry(rerender);
+    rerender(ui("failed"));
+    const retry = screen.getByRole("button", { name: "Retry" });
+    expect((retry as HTMLButtonElement).disabled).toBe(false);
+    expect(document.activeElement).toBe(retry);
+  });
+
+  it("leaves focus alone when the user moved it during the retry", () => {
+    const { rerender } = render(ui("failed"));
+    keyboardRetry(rerender);
+    const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+    elsewhere.focus();
+    rerender(ui("loaded"));
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
+  it("does not take focus when the error clears without the user touching Retry", () => {
+    const { rerender } = render(ui("failed"));
+    rerender(ui("retrying"));
+    rerender(ui("loaded"));
+    expect(document.activeElement).toBe(document.body);
   });
 });

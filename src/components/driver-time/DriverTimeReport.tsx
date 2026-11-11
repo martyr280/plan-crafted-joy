@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Clock, Loader2, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,19 @@ export function DriverTimeReport({
   isAdmin?: boolean;
 }) {
   const panels = driverTimeReportPanels({ isError, isLoading, isFetching, hasData });
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  // True while Retry was the last thing focused and nothing else has taken focus since.
+  // Disabling or removing Retry drops focus to BODY without moving it anywhere useful.
+  const retryOwnsFocus = useRef(false);
+  useEffect(() => {
+    if (!retryOwnsFocus.current || isFetching) return;
+    const lost = !document.activeElement || document.activeElement === document.body;
+    retryOwnsFocus.current = false;
+    if (!lost) return;
+    if (panels.showError) retryRef.current?.focus();
+    else summaryRef.current?.focus();
+  }, [isFetching, panels.showError]);
   const groups = panels.showReport ? (hubGroups ?? []) : [];
   const coverage = driverCostCoverage(drivers);
   const coverageNotice = costCoverageNotice(coverage);
@@ -85,12 +98,22 @@ export function DriverTimeReport({
             been treated as zero.
           </p>
           <Button
+            ref={retryRef}
             type="button"
             size="sm"
             variant="outline"
             className="mt-3"
             disabled={!!isFetching}
-            onClick={onRetry}
+            onFocus={() => {
+              retryOwnsFocus.current = true;
+            }}
+            onBlur={(e) => {
+              if (e.relatedTarget) retryOwnsFocus.current = false;
+            }}
+            onClick={() => {
+              retryOwnsFocus.current = true;
+              onRetry();
+            }}
           >
             Retry
           </Button>
@@ -128,17 +151,20 @@ export function DriverTimeReport({
           {coverageNotice}
         </Card>
       )}
-      {panels.showReport ? (
-        <Card className="p-3 text-sm">
-          {totals?.officialDrivers ?? 0} driver(s) have official weekday totals. All other totals
-          are automated estimates. Excused, superseded and unresolved-location events remain visible
-          but do not count. Times are shown in each warehouse’s local timezone.
-        </Card>
-      ) : (
-        <Card className="p-3 text-sm text-muted-foreground">
-          {panels.showLoading ? "Week totals are still loading." : "Week totals are unavailable."}
-        </Card>
-      )}
+      <Card
+        ref={summaryRef}
+        tabIndex={-1}
+        data-testid="driver-time-summary"
+        className={`p-3 text-sm focus-visible:outline focus-visible:outline-2 ${
+          panels.showReport ? "" : "text-muted-foreground"
+        }`}
+      >
+        {panels.showReport
+          ? `${totals?.officialDrivers ?? 0} driver(s) have official weekday totals. All other totals are automated estimates. Excused, superseded and unresolved-location events remain visible but do not count. Times are shown in each warehouse’s local timezone.`
+          : panels.showLoading
+            ? "Week totals are still loading."
+            : "Week totals are unavailable."}
+      </Card>
       {panels.showReport && groups.length === 0 && (
         <Card className="p-6 text-sm text-muted-foreground">
           No stored events or official report for this window. This does not prove zero hours.

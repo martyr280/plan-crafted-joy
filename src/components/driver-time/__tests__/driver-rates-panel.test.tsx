@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 const emptyData = {
@@ -444,5 +444,124 @@ describe("DriverRatesPanel states", () => {
       effectiveDate: "2026-01-05",
       expectedUpdatedAt: "stamp-1",
     });
+  });
+});
+
+describe("DriverRatesPanel focus return", () => {
+  const addName = /Add rate for Synthetic Driver/;
+  const editName = /Edit rate for Synthetic Driver from 2026-01-05/;
+
+  // Keyboard activation: the opener holds focus when it is clicked.
+  function open(name: RegExp) {
+    if (name === editName) fireEvent.click(screen.getByRole("button", { name: /History/ }));
+    const opener = screen.getByRole("button", { name });
+    opener.focus();
+    fireEvent.click(opener);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    return opener;
+  }
+
+  async function closed() {
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Radix restores focus after unmount on a zero-delay timer.
+    await act(() => new Promise((r) => setTimeout(r, 10)));
+  }
+
+  function escape() {
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+  }
+
+  async function edit() {
+    fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "21.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review change" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm change" }));
+    });
+  }
+
+  for (const [label, name] of [
+    ["Add", addName],
+    ["Edit", editName],
+  ] as const) {
+    it(`${label}: Escape returns focus to the opener`, async () => {
+      ports.roles = ["admin"];
+      showLoaded();
+      render(<DriverRatesPanel />);
+      const opener = open(name);
+      escape();
+      await closed();
+      expect(document.activeElement).toBe(opener);
+    });
+
+    it(`${label}: Cancel returns focus to the opener`, async () => {
+      ports.roles = ["admin"];
+      showLoaded();
+      render(<DriverRatesPanel />);
+      const opener = open(name);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      await closed();
+      expect(document.activeElement).toBe(opener);
+    });
+  }
+
+  it("Add: a successful save returns focus to the opener", async () => {
+    ports.roles = ["ops_logistics_admin"];
+    showLoaded();
+    ports.add.mockResolvedValue({ ok: true });
+    render(<DriverRatesPanel />);
+    const opener = open(addName);
+    fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "22.00" } });
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: "Add rate" }).at(-1)!);
+    });
+    await closed();
+    expect(ports.add).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("Edit: a successful save returns focus to the opener", async () => {
+    ports.roles = ["ops_logistics_admin"];
+    showLoaded();
+    ports.update.mockResolvedValue({ ok: true });
+    render(<DriverRatesPanel />);
+    const opener = open(editName);
+    await edit();
+    await closed();
+    expect(ports.update).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("falls back to the Driver rates heading when the opener is gone after a save", async () => {
+    ports.roles = ["admin"];
+    showLoaded();
+    ports.update.mockImplementation(async () => {
+      ports.query = {
+        ...ports.query,
+        data: { ...loaded, rates: [{ ...loaded.rates[0], id: "r1-replaced" }] },
+      };
+      return { ok: true };
+    });
+    render(<DriverRatesPanel />);
+    const opener = open(editName);
+    await edit();
+    await closed();
+    expect(opener.isConnected).toBe(false);
+    const heading = screen.getByTestId("driver-rates-heading");
+    expect(document.activeElement).toBe(heading);
+    expect(heading.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("a failed save keeps the dialog open with focus inside it", async () => {
+    ports.roles = ["admin"];
+    showLoaded();
+    ports.add.mockRejectedValue(new Error("Could not save the rate"));
+    render(<DriverRatesPanel />);
+    open(addName);
+    fireEvent.change(screen.getByLabelText("Hourly rate (USD)"), { target: { value: "22.00" } });
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: "Add rate" }).at(-1)!);
+    });
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.contains(document.activeElement)).toBe(true);
   });
 });
