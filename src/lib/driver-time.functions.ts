@@ -431,10 +431,10 @@ async function loadDriverRoster() {
     const all = await fetchDrivers();
     rosterAll = all;
     rosterActive = filterRoster(all, settings).roster;
-  } catch (e: any) {
-    rosterError = e?.message ?? String(e);
+  } catch (e: unknown) {
+    rosterError = e instanceof Error ? e.message : String(e);
   }
-  const events = await fetchAllRows<any>(
+  const events = await fetchAllRows<{ id: string; driver_id: string; driver_name: string | null }>(
     () =>
       db().from("driver_warehouse_events").select("id, driver_id, driver_name", { count: "exact" }),
     { label: "driver_warehouse_events(drivers)" },
