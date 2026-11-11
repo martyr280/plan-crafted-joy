@@ -8,6 +8,8 @@ import {
   getDriverTimeConfig,
   saveDriverTimeConfig,
   listDriverPayRates,
+  getDriverRoster,
+  setDriverRosterVisibility,
   addDriverPayRate,
   updateDriverPayRate,
   getSamsaraDiagnostics,
@@ -89,10 +91,35 @@ export function useSaveDriverTimeConfig() {
   });
 }
 
-/** Admin only: callers must pass enabled=false for anyone else. */
-export function useDriverPayRates(enabled = true) {
+/** Driver-pay managers only: callers must pass enabled=false for anyone else. */
+export function useDriverPayRates(enabled = true, includeExcluded = false) {
   const fn = useServerFn(listDriverPayRates);
-  return useQuery({ queryKey: ["driver-pay-rates"], queryFn: () => fn(), enabled });
+  return useQuery({
+    queryKey: ["driver-pay-rates", includeExcluded],
+    queryFn: () => fn({ data: { includeExcluded } }),
+    enabled,
+  });
+}
+
+/** Driver-pay managers only: callers must pass enabled=false for anyone else. */
+export function useDriverRoster(enabled = true) {
+  const fn = useServerFn(getDriverRoster);
+  return useQuery({ queryKey: ["driver-roster"], queryFn: () => fn(), enabled });
+}
+
+export function useSetDriverRosterVisibility() {
+  const fn = useServerFn(setDriverRosterVisibility);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { driverId: string; hidden: boolean; expectedUpdatedAt: string | null }) =>
+      fn({ data: vars }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["driver-roster"] });
+      qc.invalidateQueries({ queryKey: ["driver-pay-rates"] });
+      qc.invalidateQueries({ queryKey: ["driver-time-config"] });
+      qc.invalidateQueries({ queryKey: ["driver-time-week"] });
+    },
+  });
 }
 
 function useRateMutation<V>(serverFn: any) {

@@ -184,6 +184,72 @@ export async function saveDriverTimeSettings(patch: Partial<DriverTimeSettings>)
   return next;
 }
 
+/** The stored driver_time row as saved (no defaults merged) and its updated_at token. */
+export async function getDriverTimeSettingsRow(): Promise<{ saved: unknown; updatedAt: string | null }> {
+  const { data, error } = await db()
+    .from("app_settings")
+    .select("value, updated_at")
+    .eq("key", "driver_time")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return { saved: data?.value ?? null, updatedAt: data?.updated_at ?? null };
+}
+
+/**
+ * Soft-hide or restore one driver by Samsara id. Read-modify-write on the raw
+ * row, guarded twice: the caller's token must match what was read, and the
+ * update only lands if updated_at is still that value. Already-in-state is a
+ * no-op success. Only excludedDriverIds changes; nothing else is written.
+ */
+export async function setDriverRosterHidden(input: {
+  driverId: string;
+  hidden: boolean;
+  expectedUpdatedAt: string | null;
+}): Promise<{ changed: boolean; updatedAt: string | null; excludedDriverIds: string[] }> {
+  const { nextDriverTimeValue, rosterTokenMatches, ROSTER_CONFLICT_MESSAGE } = await import(
+    "@/lib/driver-time/roster"
+  );
+  const row = await getDriverTimeSettingsRow();
+  const next = nextDriverTimeValue(row.saved, input.driverId, input.hidden);
+  if (!next.changed) {
+    return { changed: false, updatedAt: row.updatedAt, excludedDriverIds: next.excludedDriverIds };
+  }
+  if (!rosterTokenMatches(input.expectedUpdatedAt, row.updatedAt)) {
+    throw new Error(ROSTER_CONFLICT_MESSAGE);
+  }
+  let stamp = new Date().toISOString();
+  if (row.updatedAt && Date.parse(row.updatedAt) >= Date.parse(stamp)) {
+    stamp = new Date(Date.parse(row.updatedAt) + 1).toISOString();
+  }
+  let written: Array<{ updated_at?: string }> | null;
+  if (row.updatedAt == null) {
+    const { data, error } = await db()
+      .from("app_settings")
+      .insert({ key: "driver_time", value: next.value, updated_at: stamp })
+      .select("updated_at");
+    if (error) {
+      if (error.code === "23505") throw new Error(ROSTER_CONFLICT_MESSAGE);
+      throw new Error(error.message);
+    }
+    written = data;
+  } else {
+    const { data, error } = await db()
+      .from("app_settings")
+      .update({ value: next.value, updated_at: stamp })
+      .eq("key", "driver_time")
+      .eq("updated_at", row.updatedAt)
+      .select("updated_at");
+    if (error) throw new Error(error.message);
+    if (!data?.length) throw new Error(ROSTER_CONFLICT_MESSAGE);
+    written = data;
+  }
+  return {
+    changed: true,
+    updatedAt: written?.[0]?.updated_at ?? stamp,
+    excludedDriverIds: next.excludedDriverIds,
+  };
+}
+
 
 /** Monday-start week containing `d`, anchored to the Central calendar date. */
 export function weekBounds(d: Date): { weekStart: string; weekEnd: string } {
