@@ -153,78 +153,94 @@ export function mapLine(hunks, line) {
 const messageShape = (message) => message.replace(/\bline \d+/g, "line N");
 
 /**
- * Locates each diagnostic's owner: the innermost enclosing function, or the
- * top-level statement when there is none. The owner is identified by its full
- * lexical scope path from the file root and its own layout-insensitive token
- * stream, and the diagnostic by its token index inside it. Each path step
- * records the scope's kind, own name, modifiers and syntactic position
- * (declarator, property key, class field, export default, assignment target,
- * call callee and argument index, JSX attribute), plus its occurrence index
- * among identical siblings, so anonymous scopes only match their own position.
- * A rewrap of unchanged code keeps all of it; a token edit to the owner, a
- * different binding or parent, or a move between siblings changes it. Uses the
- * toolchain's own TypeScript parser; without it no diagnostic gets an owner.
+ * Gives each diagnostic the anchors a rewrapped copy of it must share.
+ *
+ * Code is compared as a layout-insensitive structure: a pre-order walk of the
+ * syntax tree that records every node kind with explicit nesting plus every
+ * leaf token. Only what Prettier may add, drop or move is skipped: whitespace,
+ * comments, parentheses, commas, semicolons, union bars, empty statements and
+ * `{" "}` JSX spacers. Quotes and number spellings are normalized. Because
+ * node kinds and nesting stay in the stream, skipping that punctuation never
+ * makes two different programs equal.
+ *
+ * - statement: the enclosing top-level statement's whole structure and the
+ *   diagnostic's token offset in it. Every diagnostic gets this anchor.
+ * - named: the innermost enclosing function whose path from the file root is
+ *   all stable unique names (function, variable declarator, property key,
+ *   class + member, export default), with that function's structure and the
+ *   token offset in it. Each name must be unique in its parent. Any other step
+ *   (a block, callback argument, JSX attribute, anonymous class...) gives no
+ *   named anchor. Sibling order is never part of an identity.
+ *
+ * Uses the toolchain's own TypeScript parser; without it there are no anchors.
  */
-export function ownerAnalyzer(ts) {
-  const FUNCTION_KINDS = new Set(
-    [
-      "FunctionDeclaration",
-      "FunctionExpression",
-      "ArrowFunction",
-      "MethodDeclaration",
-      "Constructor",
-      "GetAccessor",
-      "SetAccessor",
-    ].map((k) => ts.SyntaxKind[k]),
-  );
+export function anchorAnalyzer(ts) {
+  const K = ts.SyntaxKind;
+  const FUNCTION_KINDS = new Set([
+    K.FunctionDeclaration,
+    K.FunctionExpression,
+    K.ArrowFunction,
+    K.MethodDeclaration,
+    K.Constructor,
+    K.GetAccessor,
+    K.SetAccessor,
+  ]);
   // Tokens Prettier adds, drops or moves when it rewraps code.
-  const LAYOUT_TOKENS = new Set(
-    ["CommaToken", "SemicolonToken", "OpenParenToken", "CloseParenToken", "BarToken"].map(
-      (k) => ts.SyntaxKind[k],
-    ),
-  );
-  const CLASS_KINDS = new Set(["ClassDeclaration", "ClassExpression"].map((k) => ts.SyntaxKind[k]));
-  // Expression wrappers that do not change which binding a scope belongs to.
-  const WRAPPERS = new Set(
-    [
-      "ParenthesizedExpression",
-      "AsExpression",
-      "SatisfiesExpression",
-      "TypeAssertionExpression",
-      "NonNullExpression",
-    ]
-      .map((k) => ts.SyntaxKind[k])
-      .filter((k) => k != null),
-  );
-  const isJsDoc = (n) =>
-    n.kind >= ts.SyntaxKind.FirstJSDocNode && n.kind <= ts.SyntaxKind.LastJSDocNode;
+  const LAYOUT_TOKENS = new Set([
+    K.CommaToken,
+    K.SemicolonToken,
+    K.OpenParenToken,
+    K.CloseParenToken,
+    K.BarToken,
+    K.AmpersandToken,
+  ]);
+  const isJsDoc = (n) => n.kind >= K.FirstJSDocNode && n.kind <= K.LastJSDocNode;
   const kindFor = (file) => {
     if (/\.tsx$/i.test(file)) return ts.ScriptKind.TSX;
     if (/\.[cm]?ts$/i.test(file)) return ts.ScriptKind.TS;
     if (/\.jsx$/i.test(file)) return ts.ScriptKind.JSX;
     return ts.ScriptKind.JS;
   };
+  // Nodes whose presence is layout only; their children still count.
+  const transparent = (n) =>
+    n.kind === K.SyntaxList ||
+    n.kind === K.ParenthesizedExpression ||
+    n.kind === K.ParenthesizedType ||
+    ((n.kind === K.UnionType || n.kind === K.IntersectionType) && n.types.length === 1);
+  const skipped = (n) =>
+    isJsDoc(n) ||
+    n.kind === K.EmptyStatement ||
+    n.kind === K.EndOfFileToken ||
+    (n.kind === K.JsxExpression &&
+      n.expression &&
+      ts.isStringLiteral(n.expression) &&
+      !n.expression.text.trim());
 
-  function tokens(node, sf, out) {
-    if (isJsDoc(node)) return;
+  function structure(node, sf, out) {
+    if (skipped(node)) return;
+    const kids = node.getChildren(sf);
+    if (kids.length) {
+      const marked = !transparent(node);
+      if (marked) out.push({ text: `<${K[node.kind]}` });
+      for (const k of kids) structure(k, sf, out);
+      if (marked) out.push({ text: ">" });
+      return;
+    }
+    // A leading `|`/`&` is layout; a binary one is an operator. A `for (;;)`
+    // header's semicolons say which clause is present.
     if (
-      node.kind === ts.SyntaxKind.JsxExpression &&
-      node.expression &&
-      ts.isStringLiteral(node.expression) &&
-      !node.expression.text.trim()
+      LAYOUT_TOKENS.has(node.kind) &&
+      node.parent?.kind !== K.BinaryExpression &&
+      !(node.kind === K.SemicolonToken && node.parent?.kind === K.ForStatement)
     ) {
       return;
     }
-    const kids = node.getChildren(sf);
-    if (kids.length) {
-      for (const k of kids) tokens(k, sf, out);
-      return;
-    }
-    if (node.kind === ts.SyntaxKind.EndOfFileToken || LAYOUT_TOKENS.has(node.kind)) return;
     let text;
-    if (ts.isStringLiteral(node) || node.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral) {
+    if (ts.isStringLiteral(node) || node.kind === K.NoSubstitutionTemplateLiteral) {
       text = `s:${JSON.stringify(node.text)}`;
-    } else if (node.kind === ts.SyntaxKind.JsxText) {
+    } else if (node.kind === K.NumericLiteral) {
+      text = `n:${Number(node.text.replace(/_/g, ""))}`;
+    } else if (node.kind === K.JsxText) {
       text = node.text.replace(/\s+/g, "");
       if (!text) return;
       text = `j:${text}`;
@@ -234,6 +250,20 @@ export function ownerAnalyzer(ts) {
     out.push({ end: node.getEnd(), text });
   }
 
+  const unwrap = (n) => {
+    let child = n;
+    let p = n.parent;
+    while (p && p.kind === K.ParenthesizedExpression) {
+      child = p;
+      p = p.parent;
+    }
+    return { child, p };
+  };
+  const plainName = (name) =>
+    name && (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name))
+      ? name.text
+      : null;
+
   return function analyze(file, source) {
     if (typeof source !== "string") return null;
     let sf;
@@ -242,84 +272,132 @@ export function ownerAnalyzer(ts) {
     } catch {
       return null;
     }
-    const compact = (n) => {
-      const list = [];
-      tokens(n, sf, list);
-      return list.map((t) => t.text).join(" ");
-    };
-    const ownName = (n) => (n.name ? compact(n.name) : "");
-    const modifiers = (n) =>
-      (ts.canHaveModifiers?.(n) ? (ts.getModifiers(n) ?? []) : [])
-        .map((m) => ts.SyntaxKind[m.kind])
-        .join(",");
-    function position(n) {
-      let child = n;
-      let p = n.parent;
-      while (p && WRAPPERS.has(p.kind)) {
-        child = p;
-        p = p.parent;
-      }
-      if (!p) return "";
-      if (ts.isVariableDeclaration(p)) return `decl:${compact(p.name)}`;
-      if (ts.isPropertyAssignment(p) || ts.isPropertyDeclaration(p)) {
-        return `prop:${compact(p.name)}`;
-      }
-      if (ts.isExportAssignment(p)) return "export-default";
-      if (ts.isBinaryExpression(p) && p.right === child) return `assign:${compact(p.left)}`;
-      if ((ts.isCallExpression(p) || ts.isNewExpression(p)) && p.arguments?.includes(child)) {
-        return `arg:${compact(p.expression)}#${p.arguments.indexOf(child)}`;
-      }
-      if (ts.isJsxExpression(p) && p.parent && ts.isJsxAttribute(p.parent)) {
-        return `jsx:${compact(p.parent.name)}`;
-      }
-      return `in:${ts.SyntaxKind[p.kind]}`;
-    }
-    const isScope = (n) => FUNCTION_KINDS.has(n.kind) || CLASS_KINDS.has(n.kind);
-    function segment(n) {
-      let name = ownName(n);
-      if (!isScope(n) && ts.isVariableStatement(n)) {
-        name = n.declarationList.declarations.map((d) => compact(d.name)).join(",");
-      }
-      return [ts.SyntaxKind[n.kind], position(n), name, modifiers(n)].join("|");
-    }
-    // Every function, class and top-level statement gets its path from the root.
-    const paths = new Map();
-    const visit = (node, parentPath, seen) => {
-      let path = parentPath;
-      let childSeen = seen;
-      if (isScope(node) || node.parent === sf) {
-        const seg = segment(node);
-        const n = seen.get(seg) ?? 0;
-        seen.set(seg, n + 1);
-        path = [...parentPath, `${seg}#${n}`];
-        paths.set(node, path);
-        childSeen = new Map();
-      }
-      ts.forEachChild(node, (c) => visit(c, path, childSeen));
-    };
-    const rootSeen = new Map();
-    ts.forEachChild(sf, (c) => visit(c, [], rootSeen));
 
-    const owners = new Map();
-    const ownerData = (node) => {
-      let data = owners.get(node);
+    // Names bound directly in a container, for the uniqueness check.
+    const nameCounts = new Map();
+    const countsFor = (container) => {
+      let counts = nameCounts.get(container);
+      if (counts) return counts;
+      counts = new Map();
+      const add = (name) => counts.set(name, (counts.get(name) ?? 0) + 1);
+      const members =
+        ts.isSourceFile(container) || ts.isBlock(container)
+          ? container.statements
+          : ts.isClassLike(container)
+            ? container.members
+            : container.properties;
+      for (const s of members) {
+        if (ts.isVariableStatement(s)) {
+          for (const d of s.declarationList.declarations) add(plainName(d.name) ?? "\0");
+        } else if (ts.isExportAssignment(s)) {
+          add("\0export-default");
+        } else if (s.name) {
+          add(plainName(s.name) ?? "\0");
+        } else if (s.kind === K.Constructor) {
+          add("constructor");
+        }
+      }
+      nameCounts.set(container, counts);
+      return counts;
+    };
+    const unique = (container, name) => name != null && countsFor(container).get(name) === 1;
+    // A container's own path: the file root, or a named scope.
+    const isFunctionBody = (n) => ts.isBlock(n) && n.parent && FUNCTION_KINDS.has(n.parent.kind);
+    function statementHost(statement) {
+      const host = statement.parent;
+      if (ts.isSourceFile(host)) return { host, path: [] };
+      if (isFunctionBody(host)) {
+        const path = namedPath(host.parent);
+        return path ? { host, path } : null;
+      }
+      return null;
+    }
+    // The step a function, class or object literal takes from its binding.
+    function bindingStep(n) {
+      const { p } = unwrap(n);
+      if (!p) return null;
+      if (ts.isVariableDeclaration(p) && ts.isVariableDeclarationList(p.parent)) {
+        const statement = p.parent.parent;
+        const name = plainName(p.name);
+        if (!statement || !ts.isVariableStatement(statement)) return null;
+        const at = statementHost(statement);
+        return at && unique(at.host, name) ? [...at.path, `var:${name}`] : null;
+      }
+      if (ts.isPropertyAssignment(p) && ts.isObjectLiteralExpression(p.parent)) {
+        const name = plainName(p.name);
+        const path = bindingStep(p.parent);
+        return path && unique(p.parent, name) ? [...path, `prop:${name}`] : null;
+      }
+      if (ts.isPropertyDeclaration(p) && ts.isClassLike(p.parent)) {
+        const name = plainName(p.name);
+        const path = classPath(p.parent);
+        return path && unique(p.parent, name) ? [...path, `field:${name}`] : null;
+      }
+      if (ts.isExportAssignment(p) && !p.isExportEquals && ts.isSourceFile(p.parent)) {
+        return unique(p.parent, "\0export-default") ? ["export-default"] : null;
+      }
+      return null;
+    }
+    function classPath(c) {
+      if (ts.isClassDeclaration(c)) {
+        const name = plainName(c.name);
+        const at = statementHost(c);
+        return at && unique(at.host, name) ? [...at.path, `class:${name}`] : null;
+      }
+      return bindingStep(c);
+    }
+    const namedPaths = new Map();
+    function namedPath(fn) {
+      if (namedPaths.has(fn)) return namedPaths.get(fn);
+      let path = null;
+      const p = fn.parent;
+      if (ts.isFunctionDeclaration(fn)) {
+        const name = plainName(fn.name);
+        const at = statementHost(fn);
+        if (at && unique(at.host, name)) path = [...at.path, `function:${name}`];
+      } else if (fn.kind === K.Constructor || ts.isMethodDeclaration(fn) || ts.isAccessor(fn)) {
+        const name = fn.kind === K.Constructor ? "constructor" : plainName(fn.name);
+        const prefix = K[fn.kind];
+        if (ts.isClassLike(p)) {
+          const at = classPath(p);
+          if (at && unique(p, name)) path = [...at, `${prefix}:${name}`];
+        } else if (ts.isObjectLiteralExpression(p)) {
+          const at = bindingStep(p);
+          if (at && unique(p, name)) path = [...at, `${prefix}:${name}`];
+        }
+      } else if (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) {
+        path = bindingStep(fn);
+      }
+      namedPaths.set(fn, path);
+      return path;
+    }
+
+    const cache = new Map();
+    const shape = (node) => {
+      let data = cache.get(node);
       if (!data) {
-        const path = paths.get(node);
-        if (!path) return null;
         const list = [];
-        tokens(node, sf, list);
-        data = {
-          list,
-          scope: path.join(" > "),
-          id: crypto
-            .createHash("sha256")
-            .update(JSON.stringify([path, list.map((t) => t.text)]))
-            .digest("hex"),
-        };
-        owners.set(node, data);
+        structure(node, sf, list);
+        const hash = crypto
+          .createHash("sha256")
+          .update(JSON.stringify(list.map((t) => t.text)))
+          .digest("hex");
+        data = { list, hash };
+        cache.set(node, data);
       }
       return data;
     };
+    const anchor = (kind, node, pos, path = null) => {
+      const { list, hash } = shape(node);
+      const token = list.findIndex((t) => t.end != null && t.end > pos);
+      if (token < 0) return null;
+      const id = crypto
+        .createHash("sha256")
+        .update(JSON.stringify([kind, path, hash]))
+        .digest("hex");
+      return { kind, id, token, ...(path ? { path: path.join(" > ") } : {}) };
+    };
+
     return function locate(line, column) {
       if (!line) return null;
       let pos;
@@ -336,28 +414,25 @@ export function ownerAnalyzer(ts) {
         if (!next) break;
         node = next;
       }
-      let owner = null;
+      let statement = null;
+      let named = null;
       for (let n = node; n && n !== sf; n = n.parent) {
-        if (FUNCTION_KINDS.has(n.kind)) {
-          owner = n;
-          break;
+        if (!named && FUNCTION_KINDS.has(n.kind)) {
+          const path = namedPath(n);
+          if (path) named = anchor("named", n, pos, path);
         }
-        if (n.parent === sf) owner = n;
+        if (n.parent === sf) statement = anchor("statement", n, pos);
       }
-      if (!owner) return null;
-      const data = ownerData(owner);
-      if (!data) return null;
-      const index = data.list.findIndex((t) => t.end > pos);
-      if (index < 0) return null;
-      return { owner: data.id, ownerToken: index, ownerScope: data.scope };
+      const anchors = [statement, named].filter(Boolean);
+      return anchors.length ? { anchors } : null;
     };
   };
 }
 
-/** The toolchain's TypeScript, as the owner analyzer; null when unavailable. */
-export function loadOwnerAnalyzer(toolchain) {
+/** The toolchain's TypeScript, as the anchor analyzer; null when unavailable. */
+export function loadAnchorAnalyzer(toolchain) {
   try {
-    return ownerAnalyzer(createRequire(path.join(toolchain, "package.json"))("typescript"));
+    return anchorAnalyzer(createRequire(path.join(toolchain, "package.json"))("typescript"));
   } catch {
     return null;
   }
@@ -374,7 +449,7 @@ export function normalize(results, cwd, analyzer = null) {
       line: m.line ?? 0,
       column: m.column ?? 0,
       message: m.message,
-      ...(locate?.(m.line, m.column) ?? { owner: null, ownerToken: null, ownerScope: null }),
+      anchors: locate?.(m.line, m.column)?.anchors ?? [],
     }));
   });
 }
@@ -444,32 +519,26 @@ export function compareDiagnostics({ base, head, comparison, scope }) {
   // Second pass, after every exact match is taken: a diagnostic whose line was
   // rewrapped or moved still matches one unused base diagnostic in the same
   // (rename-mapped) file with the same rule, severity and message (cited line
-  // numbers aside), the same owner token stream and the same token index in it.
-  // Anything less is introduced.
-  const byOwner = new Map();
+  // numbers aside) and a shared anchor: an identical whole top-level statement,
+  // or an identical function at the same all-named path, with the diagnostic at
+  // the same token offset in it. Anything less is introduced.
+  const anchorKey = (file, m, a) =>
+    JSON.stringify([file, m.rule, m.severity, messageShape(m.message), a.id, a.token]);
+  const byAnchor = new Map();
   base.forEach((b, i) => {
-    if (used.has(i) || b.owner == null) return;
-    const k = JSON.stringify([
-      b.file,
-      b.rule,
-      b.severity,
-      messageShape(b.message),
-      b.owner,
-      b.ownerToken,
-    ]);
-    byOwner.set(k, [...(byOwner.get(k) ?? []), i]);
+    if (used.has(i)) return;
+    for (const a of b.anchors ?? []) {
+      const k = anchorKey(b.file, b, a);
+      byAnchor.set(k, [...(byAnchor.get(k) ?? []), i]);
+    }
   });
   for (const { m, diff, baseFile } of unmatched) {
-    if (baseFile != null && m.owner != null) {
-      const k = JSON.stringify([
-        baseFile,
-        m.rule,
-        m.severity,
-        messageShape(m.message),
-        m.owner,
-        m.ownerToken,
-      ]);
-      const index = (byOwner.get(k) ?? []).find((i) => !used.has(i));
+    if (baseFile != null) {
+      let index;
+      for (const a of m.anchors ?? []) {
+        index = (byAnchor.get(anchorKey(baseFile, m, a)) ?? []).find((i) => !used.has(i));
+        if (index != null) break;
+      }
       if (index != null) {
         used.add(index);
         inherited.push(m);
@@ -730,9 +799,9 @@ export async function main(env = process.env) {
     const baseRun = await runEslint(baseTree, toolchain, eslintBin, "base", output);
     const headRun = await runEslint(headTree, toolchain, eslintBin, "head", output);
     summary.runs = [baseRun.record, headRun.record];
-    const analyzer = loadOwnerAnalyzer(toolchain);
+    const analyzer = loadAnchorAnalyzer(toolchain);
     summary.toolchain.rewrapMatching = analyzer
-      ? "owner scope token stream (toolchain typescript)"
+      ? "identical top-level statement or all-named function structure (toolchain typescript)"
       : "disabled: typescript not in toolchain; every unmatched diagnostic is introduced";
     const base = normalize(baseRun.results, baseTree, analyzer);
     const head = normalize(headRun.results, headTree, analyzer);

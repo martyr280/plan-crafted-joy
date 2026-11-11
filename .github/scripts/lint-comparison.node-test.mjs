@@ -12,7 +12,7 @@ import {
   compareDiagnostics,
   main,
   mapLine,
-  ownerAnalyzer,
+  anchorAnalyzer,
   parseUnifiedDiff,
   unquoteGitPath,
 } from "./lint-comparison.mjs";
@@ -24,6 +24,11 @@ after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
 const CONFIG = `export default [
   { files: ["**/*.js"], rules: { "no-debugger": "error", "no-var": "warn" } },
+  {
+    files: ["**/*.jsx"],
+    languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } },
+    rules: { "no-debugger": "error", "no-var": "warn" },
+  },
 ];
 `;
 
@@ -137,7 +142,7 @@ describe("diff parsing", () => {
 });
 
 describe("rewrap matching", () => {
-  const analyze = ownerAnalyzer(createRequire(import.meta.url)("typescript"));
+  const analyze = anchorAnalyzer(createRequire(import.meta.url)("typescript"));
   const finding = (file, source, line, column, message = "m") => ({
     file,
     rule: "r",
@@ -198,12 +203,12 @@ describe("rewrap matching", () => {
     assert.equal(result.introduced.length, 1);
   });
 
-  it("gives no owner, so no pairing, without a parser or source", () => {
+  it("gives no anchors, so no pairing, without a parser or source", () => {
     assert.equal(analyze("a.ts", undefined), null);
     const bare = { file: "a.ts", rule: "r", severity: 2, line: 2, column: 3, message: "m" };
     const result = compareDiagnostics({
-      base: [{ ...bare, line: 1, owner: null, ownerToken: null }],
-      head: [{ ...bare, owner: null, ownerToken: null }],
+      base: [{ ...bare, line: 1, anchors: [] }],
+      head: [{ ...bare, anchors: [] }],
       comparison: diffFor("a.ts", 1, 2),
       scope: diffFor("a.ts", 1, 2),
     });
@@ -586,6 +591,41 @@ describe("diagnostics moved between scopes with identical bodies", () => {
         `export default () => {\n${body("  ", a)}};\n\n` +
         `export const named = () => {\n${body("  ", b)}};\n`,
     },
+    {
+      name: "named functions (QA same-rule-different-function)",
+      file: "a.js",
+      template: (a, b) =>
+        `export function oldFunction() {\n${body("  ", a)}}\n` +
+        `export function anotherFunction() {\n${body("  ", b)}}\n`,
+    },
+    {
+      name: "callbacks in different argument slots of one call",
+      file: "a.js",
+      template: (a, b) =>
+        `export function parent(run) {\n  run(\n    () => {\n${body("      ", a)}    },\n` +
+        `    () => {\n${body("      ", b)}    },\n  );\n}\n`,
+    },
+    {
+      name: "identical bindings in different block parents",
+      file: "a.js",
+      template: (a, b) =>
+        `export function parent(first, second) {\n  if (first) {\n    const a = () => {\n${body("      ", a)}    };\n    consume(a);\n  }\n` +
+        `  if (second) {\n    const a = () => {\n${body("      ", b)}    };\n    consume(a);\n  }\n}\n`,
+    },
+    {
+      name: "handlers on different JSX attributes",
+      file: "a.jsx",
+      template: (a, b) =>
+        `export function View() {\n  return (\n    <button\n      onClick={() => {\n${body("        ", a)}      }}\n` +
+        `      onFocus={() => {\n${body("        ", b)}      }}\n    />\n  );\n}\n`,
+    },
+    {
+      name: "the same JSX attribute on different elements",
+      file: "a.jsx",
+      template: (a, b) =>
+        `export function View() {\n  return (\n    <>\n      <button\n        id="first"\n        onClick={() => {\n${body("          ", a)}        }}\n      />\n` +
+        `      <button\n        id="second"\n        onClick={() => {\n${body("          ", b)}        }}\n      />\n    </>\n  );\n}\n`,
+    },
   ];
 
   for (const c of MOVES) {
@@ -604,6 +644,88 @@ describe("diagnostics moved between scopes with identical bodies", () => {
         [[c.file, lineOf(headText, "debugger;"), "no-debugger"]],
       );
       assert.deepEqual(summary.resolvedOrMoved, { errors: 1, warnings: 0, files: 1 });
+    });
+  }
+
+  // Base and head as written; `introduced` lists the head lines that must be
+  // reported, each holding a debugger.
+  const blockArrow = (cond, debug) =>
+    `  if (${cond}) {\n    const a = () => {\n${debug ? `${debug}debugger;\n` : ""}  return 1;\n}\n;\n    consume(a);\n  }\n`;
+  const button = (id, debug) =>
+    `    <button id="${id}" onClick={() => {\n${debug ? `${debug}debugger;\n` : ""}  return 1;\n}\n} />\n`;
+  const EXPLICIT = [
+    {
+      name: "a debugger kept in a block arrow whose if conditions were swapped (QA reordered-block-parents)",
+      file: "a.js",
+      base: `export function parent(first, second) {\n${blockArrow("first", "  ")}\n${blockArrow("second")}}\n`,
+      head: `export function parent(first, second) {\n${blockArrow("second", "      ")}\n${blockArrow("first")}}\n`,
+      introduced: [4],
+    },
+    {
+      name: "a debugger kept in an onClick whose buttons were swapped (QA jsx-reordered-elements)",
+      file: "a.jsx",
+      base: `export function View() {\n  return <>\n${button("first", "  ")}${button("second")}  </>;\n}\n`,
+      head: `export function View() {\n  return <>\n${button("second", "      ")}${button("first")}  </>;\n}\n`,
+      introduced: [4],
+    },
+    {
+      name: "a debugger moved out of an IIFE to the top level",
+      file: "a.js",
+      base: "(() => {\n  debugger;\n  return 1;\n})();\n",
+      head: "(() => {\n  return 1;\n})();\ndebugger;\n",
+      introduced: [4],
+    },
+    {
+      name: "a debugger moved out of a function into a new top-level statement",
+      file: "a.js",
+      base: `export function oldFunction() {\n${body("  ", true)}}\n`,
+      head: `export function oldFunction() {\n${body("  ", false)}}\n\ndebugger;\n`,
+      introduced: [6],
+    },
+    {
+      name: "a second debugger added in the same function",
+      file: "a.js",
+      base: `export function oldFunction() {\n${body("  ", true)}}\n`,
+      head: `export function oldFunction() {\n${body("  ", true).replace("debugger;\n", "debugger;\n  debugger;\n")}}\n`,
+      introduced: [4],
+    },
+    {
+      name: "a renamed identical function plus a new debugger in its clean sibling",
+      file: "a.js",
+      base: `export function oldFunction() {\n${body("  ", true)}}\nexport function newFunction() {\n${body("  ", false)}}\n`,
+      head: `export function renamedFunction() {\n${body("  ", true)}}\nexport function newFunction() {\n${body("  ", true)}}\n`,
+      introduced: [8],
+    },
+    {
+      name: "a rewrap in an accessor whose name is not unique while its class changed",
+      file: "a.js",
+      base: `export class Box { get value() { debugger; return 1; } set value(v) { this.v = v; } other() { return 1; } }\n`,
+      head: `export class Box {\n  get value() {\n    debugger;\n    return 1;\n  }\n  set value(v) {\n    this.v = v;\n  }\n  other() {\n    return 2;\n  }\n}\n`,
+      introduced: [3],
+    },
+    {
+      name: "a rewrap in a block-local arrow while its parent changed elsewhere",
+      file: "a.js",
+      base: `export function parent(first) { if (first) { const a = () => { debugger; return 1; }; consume(a); } return 1; }\n`,
+      head: `export function parent(first) {\n  if (first) {\n    const a = () => {\n      debugger;\n      return 1;\n    };\n    consume(a);\n  }\n  return 2;\n}\n`,
+      introduced: [4],
+    },
+  ];
+
+  for (const c of EXPLICIT) {
+    it(`fails ${c.name}`, async () => {
+      const r = baseRepo(`explicit-${c.name.replace(/\W+/g, "-").slice(0, 60)}`);
+      const base = r.write(c.file, c.base).commit("base");
+      const head = r.write(c.file, c.head).commit("head");
+      const { code, summary, read } = await compare(r.dir, base, head);
+      assert.equal(code, 1);
+      assert.equal(summary.status, "regression");
+      const lines = c.head.split("\n");
+      for (const line of c.introduced) assert.equal(lines[line - 1].trim(), "debugger;");
+      assert.deepEqual(
+        read("introduced-findings").map((m) => [m.file, m.line, m.rule]),
+        c.introduced.map((line) => [c.file, line, "no-debugger"]),
+      );
     });
   }
 
@@ -628,13 +750,39 @@ describe("diagnostics moved between scopes with identical bodies", () => {
       base: `export const fn = make({ a: 1 }).check((i) => parse({ x: 1, y: 2 }, i)).handler(async () => { debugger; });\n`,
       head: `export const fn = make({ a: 1 })\n  .check((i) =>\n    parse(\n      {\n        x: 1,\n        y: 2,\n      },\n      i,\n    ),\n  )\n  .handler(async () => {\n    debugger;\n  });\n`,
     },
+    {
+      name: "a named function (QA pure-rewrap)",
+      base: `export function oldFunction() { const p = pick('a', 'b'); debugger; return p; }\n\nexport function newFunction() {\n  return 1;\n}\n`,
+      head: `export function oldFunction() {\n  const p = pick(\n    "a",\n    "b",\n  );\n  debugger;\n  return p;\n}\n\nexport function newFunction() {\n  return 1;\n}\n`,
+    },
+    {
+      name: "a block-local arrow in an unchanged parent",
+      base: `export function parent(first) { if (first) { const a = () => { debugger; return 1; }; consume(a); } }\n`,
+      head: `export function parent(first) {\n  if (first) {\n    const a = () => {\n      debugger;\n      return 1;\n    };\n    consume(a);\n  }\n}\n`,
+    },
+    {
+      name: "a JSX onClick handler, with Prettier's wrapping parentheses",
+      file: "a.jsx",
+      base: `export function View() {\n  return <button id='first' onClick={() => { debugger; return 1; }} />;\n}\n`,
+      head: `export function View() {\n  return (\n    <button\n      id="first"\n      onClick={() => {\n        debugger;\n        return 1;\n      }}\n    />\n  );\n}\n`,
+    },
+    {
+      name: "a class method while a sibling method changed (unique named path)",
+      base: `export class Service { run() { const p = pick('a', 'b'); debugger; return p; } other() { return 1; } }\n`,
+      head: `export class Service {\n  run() {\n    const p = pick(\n      "a",\n      "b",\n    );\n    debugger;\n    return p;\n  }\n  other() {\n    return 2;\n  }\n}\n`,
+    },
+    {
+      name: "a const arrow inside a named function while the function's other code changed",
+      base: `export function parent() { const inner = () => { debugger; return 1; }; return inner() + 1; }\n`,
+      head: `export function parent() {\n  const inner = () => {\n    debugger;\n    return 1;\n  };\n  return inner() + 2;\n}\n`,
+    },
   ];
 
   for (const c of REWRAPS) {
     it(`still inherits a debugger when only ${c.name} is rewrapped`, async () => {
       const r = baseRepo(`rewrap-${c.name.replace(/\W+/g, "-")}`);
-      const base = r.write("a.js", c.base).commit("base");
-      const head = r.write("a.js", c.head).commit("head");
+      const base = r.write(c.file ?? "a.js", c.base).commit("base");
+      const head = r.write(c.file ?? "a.js", c.head).commit("head");
       const { code, summary } = await compare(r.dir, base, head);
       assert.equal(code, 0);
       assert.equal(summary.status, "pass");
