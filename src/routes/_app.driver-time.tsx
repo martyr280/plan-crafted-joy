@@ -49,6 +49,7 @@ import { driverTimeReportPanels } from "@/lib/driver-time/report-panels";
 import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 import { DriverRatesPanel } from "@/components/driver-time/DriverRatesPanel";
 import { DriverRosterPanel } from "@/components/driver-time/DriverRosterPanel";
+import { SETTINGS_CONFLICT_MESSAGE } from "@/lib/driver-time/roster";
 
 export const Route = createFileRoute("/_app/driver-time")({
   head: () => ({
@@ -386,18 +387,37 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
   const [mergeGap, setMergeGap] = useState<string>("");
   const [patterns, setPatterns] = useState<string>("");
 
+  const [conflict, setConflict] = useState(false);
+
   const selected = new Set<string>(settings?.warehouseAddressIds ?? []);
+
+  function saveDetection(
+    patch: Omit<Parameters<typeof save.mutate>[0], "expectedUpdatedAt">,
+    okMessage: string,
+  ) {
+    save.mutate(
+      { ...patch, expectedUpdatedAt: cfgQ.data?.settingsUpdatedAt ?? null },
+      {
+        onSuccess: () => {
+          setConflict(false);
+          toast.success(okMessage);
+        },
+        onError: (e: unknown) => {
+          const message = e instanceof Error ? e.message : String(e);
+          if (message === SETTINGS_CONFLICT_MESSAGE) setConflict(true);
+          else toast.error(message);
+        },
+      },
+    );
+  }
 
   function toggleAddress(id: string) {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    save.mutate(
+    saveDetection(
       { warehouseAddressIds: Array.from(next) },
-      {
-        onSuccess: () => toast.success("Warehouse geofences updated"),
-        onError: (e: any) => toast.error(e?.message),
-      },
+      "Warehouse geofences updated",
     );
   }
 
@@ -405,6 +425,25 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
     <div className="space-y-4">
       <Card className="p-4 space-y-3">
         <div className="font-semibold text-sm">Detection</div>
+        {conflict && (
+          <div
+            role="alert"
+            data-testid="detection-conflict"
+            className="flex flex-col gap-2 rounded-md border p-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span className={destructiveTextClass}>{SETTINGS_CONFLICT_MESSAGE}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setConflict(false);
+                void cfgQ.refetch();
+              }}
+            >
+              Refresh settings
+            </Button>
+          </div>
+        )}
         {cfgQ.data?.error && (
           <div className={`text-xs ${destructiveTextClass}`}>
             Samsara data unavailable: {cfgQ.data.error} — check the API token scopes in Settings →
@@ -445,12 +484,9 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
             className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
             value={settings?.basis ?? "presence"}
             onChange={(e) =>
-              save.mutate(
+              saveDetection(
                 { basis: e.target.value as "presence" | "onduty" },
-                {
-                  onSuccess: () => toast.success("Settings saved"),
-                  onError: (err: any) => toast.error(err?.message),
-                },
+                "Settings saved",
               )
             }
           >
@@ -465,12 +501,9 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               className="mt-0.5"
               checked={settings?.requireLicense ?? true}
               onChange={(e) =>
-                save.mutate(
+                saveDetection(
                   { requireLicense: e.target.checked },
-                  {
-                    onSuccess: () => toast.success("Settings saved"),
-                    onError: (err: any) => toast.error(err?.message),
-                  },
+                  "Settings saved",
                 )
               }
             />
@@ -482,12 +515,9 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               className="mt-0.5"
               checked={settings?.includeDeactivated ?? false}
               onChange={(e) =>
-                save.mutate(
+                saveDetection(
                   { includeDeactivated: e.target.checked },
-                  {
-                    onSuccess: () => toast.success("Settings saved"),
-                    onError: (err: any) => toast.error(err?.message),
-                  },
+                  "Settings saved",
                 )
               }
             />
@@ -498,7 +528,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
           size="sm"
           disabled={save.isPending}
           onClick={() =>
-            save.mutate(
+            saveDetection(
               {
                 thresholdMinutes: Number(threshold || settings?.thresholdMinutes || 90),
                 mergeGapMinutes: Number(mergeGap || settings?.mergeGapMinutes || 10),
@@ -509,10 +539,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
                   .map((s) => s.trim())
                   .filter(Boolean),
               },
-              {
-                onSuccess: () => toast.success("Settings saved"),
-                onError: (e: any) => toast.error(e?.message),
-              },
+              "Settings saved",
             )
           }
         >
@@ -545,12 +572,9 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
                       const cur = new Set(settings?.warehouseRemarkDriverIds ?? []);
                       if (on) cur.delete(d.id);
                       else cur.add(d.id);
-                      save.mutate(
+                      saveDetection(
                         { warehouseRemarkDriverIds: Array.from(cur) },
-                        {
-                          onSuccess: () => toast.success("Warehouse-remark setting saved"),
-                          onError: (err: any) => toast.error(err?.message),
-                        },
+                        "Warehouse-remark setting saved",
                       );
                     }}
                   />

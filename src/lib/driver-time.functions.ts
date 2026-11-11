@@ -135,15 +135,20 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
 
     const { getDriverTimeSettings } = await import("@/lib/driver-time.server");
     const settings = await getDriverTimeSettings();
-    const { isExcludedDriver } = await import("@/lib/driver-time/detect");
-    const scopedEvents = (events ?? []).filter(
-      (ev: any) => !isExcludedDriver({ id: ev.driver_id, name: ev.driver_name }, settings),
-    );
-    const { hiddenDriversInEvents } = await import("@/lib/driver-time/roster");
-    const hiddenByRoster = hiddenDriversInEvents(events ?? [], settings.excludedDriverIds);
+    // Roster exclusions apply to events on their own date and to official
+    // actuals for the week, so a hidden driver cannot come back through either.
+    const { scopeWeekInputs } = await import("@/lib/driver-time/roster");
+    const scoped = scopeWeekInputs({
+      events: events ?? [],
+      overrides: overrides ?? [],
+      settings,
+      weekStart,
+    });
+    const scopedEvents = scoped.events;
+    const hiddenByRoster = scoped.hidden;
     const driverRows = buildReconciledDrivers(
       scopedEvents,
-      overrides ?? [],
+      scoped.overrides,
       data.includeWeekends,
     ).map((b) => {
       const flaggedHours = b.flaggedMinutes / 60;
@@ -328,7 +333,11 @@ export const getDriverTimeConfig = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
-    const { getDriverTimeSettings } = await import("@/lib/driver-time.server");
+    const { getDriverTimeSettings, getDriverTimeSettingsRow } = await import(
+      "@/lib/driver-time.server"
+    );
+    // Token first: a write between the two reads then surfaces as a conflict.
+    const { updatedAt: settingsUpdatedAt } = await getDriverTimeSettingsRow();
     const settings = await getDriverTimeSettings();
     let addresses: any[] = [];
     let drivers: any[] = [];
@@ -348,17 +357,29 @@ export const getDriverTimeConfig = createServerFn({ method: "GET" })
       })),
       drivers: drivers.map((d) => ({ id: d.id, name: d.name, status: d.driverActivationStatus })),
       error,
+      settingsUpdatedAt,
     };
   });
 
+export const DETECTION_ROSTER_KEYS_MESSAGE =
+  "Detection settings cannot change hidden drivers. Use Settings → Driver roster.";
+
+/**
+ * Detection settings (any Driver Time viewer). The hidden-driver lists are not
+ * accepted here: they change only through setDriverRosterVisibility, behind the
+ * driver-pay gate. Compare-and-set on the row's updated_at.
+ */
 export const saveDriverTimeConfig = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) =>
-    z
+  .inputValidator((i) => {
+    if (i && typeof i === "object" && ("excludedDriverIds" in i || "excludedDrivers" in i)) {
+      throw new Error(DETECTION_ROSTER_KEYS_MESSAGE);
+    }
+    return z
       .object({
+        expectedUpdatedAt: z.string().min(1).max(64).nullable(),
         warehouseAddressIds: z.array(z.string()).max(200).optional(),
         thresholdMinutes: z.number().int().min(5).max(1440).optional(),
-        excludedDriverIds: z.array(z.string()).max(500).optional(),
         excludedDriverNamePatterns: z.array(z.string().max(120)).max(100).optional(),
         mergeGapMinutes: z.number().int().min(0).max(120).optional(),
         requireLicense: z.boolean().optional(),
@@ -366,8 +387,8 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
         basis: z.enum(["presence", "onduty"]).optional(),
         warehouseRemarkDriverIds: z.array(z.string().max(64)).max(500).optional(),
       })
-      .parse(i ?? {}),
-  )
+      .parse(i ?? {});
+  })
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     if (data.warehouseRemarkDriverIds) {
@@ -379,7 +400,9 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
         throw new Error("Only admins can change the per-driver Warehouse-remark setting");
     }
     const { saveDriverTimeSettings } = await import("@/lib/driver-time.server");
-    return { settings: await saveDriverTimeSettings(data) };
+    const { expectedUpdatedAt, ...patch } = data;
+    const saved = await saveDriverTimeSettings(patch, expectedUpdatedAt);
+    return { settings: saved.settings, settingsUpdatedAt: saved.updatedAt };
   });
 
 /* --------------------------------------------------------------- pay rates */
@@ -414,10 +437,11 @@ async function loadPayRates(opts: { onOrBefore?: string } = {}): Promise<any[]> 
 /**
  * Read-only roster build shared by Driver rates and the roster control:
  * 1) the licensed Samsara roster the sweep scans, 2) drivers with stored
- * events, 3) drivers with a rate row. Every step honors isExcludedDriver; rate
- * rows of hidden drivers are kept and returned, never deleted.
+ * events, 3) drivers with a rate row. Every step honors isExcludedDriverOn as
+ * of today; rate rows of hidden drivers are kept and returned, never deleted.
  */
 async function loadDriverRoster() {
+  const asOf = dateStrInTz(new Date());
   const rates = await loadPayRates();
   const { getDriverTimeSettings, filterRoster } = await import("@/lib/driver-time.server");
   const { buildDriverRoster } = await import("@/lib/driver-time/roster");
@@ -430,7 +454,7 @@ async function loadDriverRoster() {
     const { fetchDrivers } = await import("@/lib/samsara/hos.server");
     const all = await fetchDrivers();
     rosterAll = all;
-    rosterActive = filterRoster(all, settings).roster;
+    rosterActive = filterRoster(all, settings, asOf).roster;
   } catch (e: unknown) {
     rosterError = e instanceof Error ? e.message : String(e);
   }
@@ -445,6 +469,7 @@ async function loadDriverRoster() {
     events,
     rates,
     settings,
+    asOf,
   });
   return { active, excluded, rates, rosterError };
 }
@@ -485,7 +510,7 @@ export const getDriverRoster = createServerFn({ method: "GET" })
     };
   });
 
-/** Soft-hide (append id) or restore (remove id) in driver_time.excludedDriverIds. */
+/** Soft-hide (dated entry from this week) or restore (remove the id from both hide lists). */
 export const setDriverRosterVisibility = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
@@ -505,7 +530,7 @@ export const setDriverRosterVisibility = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await requireDriverPay(context.userId);
     const { setDriverRosterHidden } = await import("@/lib/driver-time.server");
-    const result = await setDriverRosterHidden(data);
+    const result = await setDriverRosterHidden({ ...data, userId: context.userId });
     return { ok: true as const, ...result };
   });
 

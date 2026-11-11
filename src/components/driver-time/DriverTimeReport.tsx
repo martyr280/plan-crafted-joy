@@ -22,7 +22,7 @@ type Totals = {
   officialDrivers: number;
   estimatedCost?: number;
   driversWithoutRate?: number;
-  hiddenByRoster?: { drivers: number; events: number };
+  hiddenByRoster?: { drivers: number; events: number; officialTotals?: number };
 };
 
 export function DriverTimeReport({

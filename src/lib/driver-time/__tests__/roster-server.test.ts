@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Synthetic in-memory service-role client. Reads filter local rows. The only
 // writes allowed are update/insert on app_settings; anything else throws, so a
@@ -111,16 +111,19 @@ vi.mock("@/integrations/supabase/client.server", () => {
 });
 
 import {
+  DETECTION_ROSTER_KEYS_MESSAGE,
   getDriverRoster,
+  getDriverTimeConfig,
   listDriverPayRates,
+  saveDriverTimeConfig,
   setDriverRosterVisibility,
 } from "@/lib/driver-time.functions";
-import { ROSTER_CONFLICT_MESSAGE } from "@/lib/driver-time/roster";
+import { ROSTER_CONFLICT_MESSAGE, SETTINGS_CONFLICT_MESSAGE } from "@/lib/driver-time/roster";
 
 type Call<R> = (input: { data?: unknown; context: { userId: string } }) => Promise<R>;
 type RosterResult = {
   active: Array<{ id: string; name: string }>;
-  hidden: Array<{ id: string; name: string; hasRates: boolean }>;
+  hidden: Array<{ id: string; name: string; hasRates: boolean; hiddenFrom: string | null }>;
   settingsUpdatedAt: string | null;
   rosterError: string | null;
 };
@@ -134,14 +137,29 @@ type SetResult = {
   changed: boolean;
   updatedAt: string | null;
   excludedDriverIds: string[];
+  hiddenFrom: string | null;
 };
+type ConfigResult = { settings: Row; settingsUpdatedAt: string | null };
+type SaveCall = (input: {
+  data?: unknown;
+  context: { userId: string; supabase?: unknown };
+}) => Promise<ConfigResult>;
 
 const roster = getDriverRoster as unknown as Call<RosterResult>;
 const listRates = listDriverPayRates as unknown as Call<RatesResult>;
 const setVisibility = setDriverRosterVisibility as unknown as Call<SetResult>;
+const getConfig = getDriverTimeConfig as unknown as Call<ConfigResult>;
+const saveConfig = saveDriverTimeConfig as unknown as SaveCall;
 const ctx = { userId: "user-1" };
 
 const T0 = "2026-09-30T15:54:18.123456+00:00";
+const NOW = new Date("2026-11-11T17:00:00.000Z");
+const HIDE_100 = {
+  id: "100",
+  hiddenFrom: "2026-11-09",
+  hiddenBy: "user-1",
+  hiddenAt: NOW.toISOString(),
+};
 const SAVED = {
   excludedDriverIds: ["900"],
   excludedDriverNamePatterns: ["Test Hub LTL"],
@@ -187,7 +205,12 @@ function seed(opts: { settings?: Row | null; roles?: string[] } = {}) {
 
 const settingsValue = () => mem.tables.app_settings[0]?.value as Row;
 
-beforeEach(() => seed());
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+  seed();
+});
+afterEach(() => vi.useRealTimers());
 
 describe("roster gate (UI helper and server use the same driver-pay rule)", () => {
   const ALLOWED = [["admin"], ["ops_logistics_admin"], ["ops_logistics_admin", "ops_logistics"]];
@@ -234,18 +257,26 @@ describe("roster gate (UI helper and server use the same driver-pay rule)", () =
 });
 
 describe("hide / restore writes", () => {
-  it("hide appends the id, keeps every other key, and moves the driver to Hidden", async () => {
+  it("hide adds a dated entry from this Central week, keeps every other key, and moves the driver to Hidden", async () => {
     const r = await setVisibility({
       data: { driverId: "100", hidden: true, expectedUpdatedAt: T0 },
       context: ctx,
     });
-    expect(r).toMatchObject({ ok: true, changed: true, excludedDriverIds: ["900", "100"] });
+    expect(r).toMatchObject({
+      ok: true,
+      changed: true,
+      excludedDriverIds: ["900"],
+      hiddenFrom: "2026-11-09",
+    });
     expect(r.updatedAt).not.toBe(T0);
-    expect(settingsValue()).toEqual({ ...SAVED, excludedDriverIds: ["900", "100"] });
+    expect(settingsValue()).toEqual({ ...SAVED, excludedDrivers: [HIDE_100] });
     expect(mem.writes.map((w) => `${w.table}:${w.op}`)).toEqual(["app_settings:update"]);
     const after = await roster({ context: ctx });
     expect(after.active.map((d) => d.id)).toEqual(["101"]);
-    expect(after.hidden.map((d) => d.id).sort()).toEqual(["100", "900"]);
+    expect(after.hidden.map((d) => [d.id, d.hiddenFrom]).sort()).toEqual([
+      ["100", "2026-11-09"],
+      ["900", null],
+    ]);
     expect(after.settingsUpdatedAt).toBe(r.updatedAt);
   });
 
@@ -260,7 +291,7 @@ describe("hide / restore writes", () => {
     });
     expect(second).toMatchObject({ changed: false, updatedAt: first.updatedAt });
     expect(mem.writes).toHaveLength(1);
-    expect(settingsValue().excludedDriverIds).toEqual(["900", "100"]);
+    expect(settingsValue().excludedDrivers).toEqual([HIDE_100]);
   });
 
   it("restore removes only that id and is idempotent", async () => {
@@ -305,7 +336,21 @@ describe("hide / restore writes", () => {
     expect(settingsValue()).toEqual({ ...SAVED, thresholdMinutes: 60 });
   });
 
-  it("with no driver_time row yet, hide inserts only excludedDriverIds", async () => {
+  it("restore removes a dated hide", async () => {
+    const first = await setVisibility({
+      data: { driverId: "100", hidden: true, expectedUpdatedAt: T0 },
+      context: ctx,
+    });
+    await setVisibility({
+      data: { driverId: "100", hidden: false, expectedUpdatedAt: first.updatedAt },
+      context: ctx,
+    });
+    expect(settingsValue()).toEqual({ ...SAVED, excludedDrivers: [] });
+    const view = await roster({ context: ctx });
+    expect(view.active.map((d) => d.id)).toEqual(["100", "101"]);
+  });
+
+  it("with no driver_time row yet, hide inserts only the dated entry", async () => {
     seed({ settings: null });
     const view = await roster({ context: ctx });
     expect(view.settingsUpdatedAt).toBeNull();
@@ -314,7 +359,7 @@ describe("hide / restore writes", () => {
       context: ctx,
     });
     expect(r.changed).toBe(true);
-    expect(settingsValue()).toEqual({ excludedDriverIds: ["100"] });
+    expect(settingsValue()).toEqual({ excludedDrivers: [HIDE_100] });
     expect(mem.writes.map((w) => w.op)).toEqual(["insert"]);
   });
 
@@ -341,7 +386,14 @@ describe("listDriverPayRates honors exclusions", () => {
     const r = await listRates({ data: { includeExcluded: true }, context: ctx });
     expect(r.drivers.map((d) => d.id)).toEqual(["100", "101"]);
     expect(r.excludedDrivers).toEqual([
-      { id: "900", name: "Harper Hidden", reason: "id", alsoMatchesPattern: false, hasRates: true },
+      {
+        id: "900",
+        name: "Harper Hidden",
+        reason: "id",
+        hiddenFrom: null,
+        alsoMatchesPattern: false,
+        hasRates: true,
+      },
     ]);
   });
 
@@ -352,5 +404,147 @@ describe("listDriverPayRates honors exclusions", () => {
     });
     const r = await listRates({ context: ctx });
     expect(r.drivers.map((d) => d.id)).toEqual(["100", "101", "900"]);
+  });
+});
+
+describe("Detection settings save (saveDriverTimeConfig)", () => {
+  const WITH_DATED = { ...SAVED, excludedDrivers: [{ id: "800", hiddenFrom: "2026-11-09" }] };
+  const supabaseCtx = (admin: boolean) => ({
+    ...ctx,
+    supabase: { rpc: async () => ({ data: admin, error: null }) },
+  });
+
+  for (const roles of [["ops_logistics"], ["ops_logistics_admin"], ["admin"]]) {
+    it(`${roles.join("+")} cannot change hidden drivers through Detection save, including clearing them`, async () => {
+      seed({ roles, settings: WITH_DATED });
+      for (const data of [
+        { expectedUpdatedAt: T0, excludedDriverIds: ["900", "100"] },
+        { expectedUpdatedAt: T0, excludedDriverIds: [] },
+        { expectedUpdatedAt: T0, excludedDrivers: [] },
+        { expectedUpdatedAt: T0, thresholdMinutes: 60, excludedDriverIds: ["100"] },
+      ]) {
+        await expect(async () => saveConfig({ data, context: supabaseCtx(false) })).rejects.toThrow(
+          DETECTION_ROSTER_KEYS_MESSAGE,
+        );
+      }
+      expect(mem.writes).toEqual([]);
+      expect(settingsValue()).toEqual(WITH_DATED);
+    });
+  }
+
+  it("ops_logistics keeps Detection access and the save preserves both hide lists exactly", async () => {
+    seed({ roles: ["ops_logistics"], settings: WITH_DATED });
+    const cfg = await getConfig({ context: ctx });
+    expect(cfg.settingsUpdatedAt).toBe(T0);
+    const r = await saveConfig({
+      data: { expectedUpdatedAt: cfg.settingsUpdatedAt, thresholdMinutes: 60 },
+      context: supabaseCtx(false),
+    });
+    expect(r.settingsUpdatedAt).not.toBe(T0);
+    expect(settingsValue()).toEqual({ ...WITH_DATED, thresholdMinutes: 60 });
+    expect(mem.writes.map((w) => `${w.table}:${w.op}`)).toEqual(["app_settings:update"]);
+  });
+
+  it("writes the stored JSON plus the patch, never the defaults-merged view", async () => {
+    await saveConfig({
+      data: { expectedUpdatedAt: T0, basis: "onduty" },
+      context: supabaseCtx(false),
+    });
+    expect(settingsValue()).toEqual({ ...SAVED, basis: "onduty" });
+  });
+
+  it("a stale token is a conflict and writes nothing", async () => {
+    await expect(
+      saveConfig({
+        data: { expectedUpdatedAt: "2026-01-01T00:00:00+00:00", thresholdMinutes: 60 },
+        context: supabaseCtx(false),
+      }),
+    ).rejects.toThrow(SETTINGS_CONFLICT_MESSAGE);
+    expect(mem.writes).toEqual([]);
+  });
+
+  it("requires a token", async () => {
+    await expect(async () =>
+      saveConfig({ data: { thresholdMinutes: 60 }, context: supabaseCtx(false) }),
+    ).rejects.toThrow();
+    expect(mem.writes).toEqual([]);
+  });
+
+  it("Detection loaded, then a hide lands: the Detection save conflicts and the hide survives", async () => {
+    const cfg = await getConfig({ context: ctx });
+    await setVisibility({
+      data: { driverId: "100", hidden: true, expectedUpdatedAt: cfg.settingsUpdatedAt },
+      context: ctx,
+    });
+    await expect(
+      saveConfig({
+        data: { expectedUpdatedAt: cfg.settingsUpdatedAt, thresholdMinutes: 60 },
+        context: supabaseCtx(false),
+      }),
+    ).rejects.toThrow(SETTINGS_CONFLICT_MESSAGE);
+    expect(settingsValue()).toEqual({ ...SAVED, excludedDrivers: [HIDE_100] });
+    // After refreshing, the same edit lands and keeps the hide.
+    const fresh = await getConfig({ context: ctx });
+    await saveConfig({
+      data: { expectedUpdatedAt: fresh.settingsUpdatedAt, thresholdMinutes: 60 },
+      context: supabaseCtx(false),
+    });
+    expect(settingsValue()).toEqual({
+      ...SAVED,
+      thresholdMinutes: 60,
+      excludedDrivers: [HIDE_100],
+    });
+  });
+
+  it("roster loaded, then a Detection save lands: the hide conflicts and the Detection edit survives", async () => {
+    const view = await roster({ context: ctx });
+    await saveConfig({
+      data: { expectedUpdatedAt: T0, thresholdMinutes: 60 },
+      context: supabaseCtx(false),
+    });
+    await expect(
+      setVisibility({
+        data: { driverId: "100", hidden: true, expectedUpdatedAt: view.settingsUpdatedAt },
+        context: ctx,
+      }),
+    ).rejects.toThrow(ROSTER_CONFLICT_MESSAGE);
+    expect(settingsValue()).toEqual({ ...SAVED, thresholdMinutes: 60 });
+    const fresh = await roster({ context: ctx });
+    await setVisibility({
+      data: { driverId: "100", hidden: true, expectedUpdatedAt: fresh.settingsUpdatedAt },
+      context: ctx,
+    });
+    expect(settingsValue()).toEqual({
+      ...SAVED,
+      thresholdMinutes: 60,
+      excludedDrivers: [HIDE_100],
+    });
+  });
+
+  it("a hide that lands between the Detection read and update is a conflict, and the hide survives", async () => {
+    mem.beforeWrite = () => {
+      const row = mem.tables.app_settings[0];
+      row.value = { ...(row.value as Row), excludedDrivers: [HIDE_100] };
+      row.updated_at = "2026-11-11T17:00:00.000001+00:00";
+      mem.beforeWrite = null;
+    };
+    await expect(
+      saveConfig({
+        data: { expectedUpdatedAt: T0, thresholdMinutes: 60 },
+        context: supabaseCtx(false),
+      }),
+    ).rejects.toThrow(SETTINGS_CONFLICT_MESSAGE);
+    expect(settingsValue()).toEqual({ ...SAVED, excludedDrivers: [HIDE_100] });
+  });
+
+  it("the per-driver Warehouse-remark setting stays admin-only", async () => {
+    seed({ roles: ["ops_logistics"] });
+    await expect(
+      saveConfig({
+        data: { expectedUpdatedAt: T0, warehouseRemarkDriverIds: ["100"] },
+        context: supabaseCtx(false),
+      }),
+    ).rejects.toThrow(/Only admins/);
+    expect(mem.writes).toEqual([]);
   });
 });

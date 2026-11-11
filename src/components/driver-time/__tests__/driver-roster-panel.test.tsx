@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 
@@ -9,6 +9,7 @@ type Payload = {
     id: string;
     name: string;
     reason: "id";
+    hiddenFrom: string | null;
     alsoMatchesPattern: boolean;
     hasRates: boolean;
   }>;
@@ -22,7 +23,14 @@ const before: Payload = {
     { id: "200", name: "Evan Events", source: "events" },
   ],
   hidden: [
-    { id: "900", name: "Harper Hidden", reason: "id", alsoMatchesPattern: false, hasRates: true },
+    {
+      id: "900",
+      name: "Harper Hidden",
+      reason: "id",
+      hiddenFrom: null,
+      alsoMatchesPattern: false,
+      hasRates: true,
+    },
   ],
   settingsUpdatedAt: "stamp-1",
   rosterError: null,
@@ -31,7 +39,14 @@ const before: Payload = {
 const afterHide: Payload = {
   active: [{ id: "200", name: "Evan Events", source: "events" }],
   hidden: [
-    { id: "100", name: "Avery Active", reason: "id", alsoMatchesPattern: false, hasRates: false },
+    {
+      id: "100",
+      name: "Avery Active",
+      reason: "id",
+      hiddenFrom: "2026-11-09",
+      alsoMatchesPattern: false,
+      hasRates: false,
+    },
     ...before.hidden,
   ],
   settingsUpdatedAt: "stamp-2",
@@ -86,7 +101,14 @@ async function settle() {
   await act(() => new Promise((r) => setTimeout(r, 10)));
 }
 
+beforeEach(() => {
+  // Wednesday Nov 11, 2026 in Central time; the hide week starts Mon Nov 9.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-11T17:00:00Z"));
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   ports.listCalls.mockClear();
   ports.mutate.mockReset();
@@ -145,6 +167,10 @@ describe("DriverRosterPanel hide / restore", () => {
     expect(
       within(dialog).getByText(/rates, warehouse events and capacity history are kept/),
     ).toBeTruthy();
+    expect(dialog.textContent).toMatch(
+      /from the week of Nov 9, 2026 onward\. Earlier weeks keep their time and estimated cost\./,
+    );
+    expect(dialog.textContent).not.toMatch(/past weeks/);
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     await settle();
@@ -169,7 +195,12 @@ describe("DriverRosterPanel hide / restore", () => {
   it("confirmed Hide sends the token, announces, and focuses the new Restore button", async () => {
     ports.roles = ["ops_logistics_admin"];
     load(before, afterHide);
-    ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-2" });
+    ports.mutate.mockResolvedValue({
+      ok: true,
+      changed: true,
+      updatedAt: "stamp-2",
+      hiddenFrom: "2026-11-09",
+    });
     render(<DriverRosterPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Hide Avery Active" }));
     await act(async () => {
@@ -183,7 +214,7 @@ describe("DriverRosterPanel hide / restore", () => {
       expectedUpdatedAt: "stamp-1",
     });
     expect(screen.getByTestId("driver-roster-live").textContent).toBe(
-      "Hid Avery Active. Their rates, events and history are kept.",
+      "Hid Avery Active from the week of Nov 9, 2026 onward. Earlier weeks still include them, and their rates, events and history are kept.",
     );
     expect(screen.getByTestId("driver-roster-live").getAttribute("aria-live")).toBe("polite");
     expect(document.activeElement).toBe(
@@ -206,11 +237,13 @@ describe("DriverRosterPanel hide / restore", () => {
       expectedUpdatedAt: "stamp-2",
     });
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(screen.getByTestId("driver-roster-live").textContent).toBe("Restored Avery Active.");
+    expect(screen.getByTestId("driver-roster-live").textContent).toBe(
+      "Removed the roster hide for Avery Active.",
+    );
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Hide Avery Active" }));
   });
 
-  it("Restore of someone Samsara no longer lists says when they will come back", async () => {
+  it("Restore of someone Samsara no longer lists says why they are not on the roster", async () => {
     ports.roles = ["admin"];
     const gone: Payload = { ...before, hidden: [] };
     load(before, { ...gone, active: before.active });
@@ -220,8 +253,8 @@ describe("DriverRosterPanel hide / restore", () => {
       fireEvent.click(screen.getByRole("button", { name: "Restore Harper Hidden" }));
     });
     await settle();
-    expect(screen.getByTestId("driver-roster-live").textContent).toMatch(
-      /Restored Harper Hidden\. They will reappear on the roster once Samsara lists them/,
+    expect(screen.getByTestId("driver-roster-live").textContent).toBe(
+      "Removed the roster hide for Harper Hidden. They are not on the roster right now: Samsara does not list them as a licensed, active driver, and Driver Time has no events or rates for them.",
     );
     expect(document.activeElement).toBe(screen.getByTestId("driver-roster-hidden-heading"));
   });
@@ -302,4 +335,79 @@ describe("DriverRosterPanel hide / restore", () => {
     render(<DriverRosterPanel />);
     expect(screen.getByText(/Restore alone will not bring them back/)).toBeTruthy();
   });
+
+  it("labels older all-week hides and dated hides", () => {
+    ports.roles = ["admin"];
+    load(afterHide);
+    render(<DriverRosterPanel />);
+    const list = screen.getByRole("list", { name: "Hidden drivers" });
+    expect(within(list).getByText(/Hidden in all weeks \(older hide\)/)).toBeTruthy();
+    expect(within(list).getByText(/Hidden from the week of Nov 9, 2026/)).toBeTruthy();
+  });
+
+  for (const name of ["Enyi Ukairo", "Scott Smith"]) {
+    it(`Restore of ${name} while a name pattern still matches says the pattern keeps them hidden`, async () => {
+      ports.roles = ["admin"];
+      const hiddenByBoth: Payload = {
+        ...before,
+        hidden: [
+          {
+            id: "55",
+            name,
+            reason: "id",
+            hiddenFrom: null,
+            alsoMatchesPattern: true,
+            hasRates: false,
+          },
+        ],
+      };
+      // After Restore the id hide is gone, but the pattern still keeps them off both lists.
+      load(hiddenByBoth, { ...before, hidden: [] });
+      ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-3" });
+      render(<DriverRosterPanel />);
+      expect(screen.getByText(/Restore alone will not bring them back/)).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: `Restore ${name}` }));
+      });
+      await settle();
+      const live = screen.getByTestId("driver-roster-live").textContent ?? "";
+      expect(live).toBe(
+        `Removed the roster hide for ${name}. They still match a detection name pattern, so they stay off the roster and the weekly report until that pattern is changed in Detection settings.`,
+      );
+      expect(live).not.toMatch(/Samsara/);
+      expect(live).not.toMatch(/reappear/);
+    });
+
+    it(`Restore of ${name} once the pattern is gone brings them back`, async () => {
+      ports.roles = ["admin"];
+      const legacyOnly: Payload = {
+        ...before,
+        hidden: [
+          {
+            id: "55",
+            name,
+            reason: "id",
+            hiddenFrom: null,
+            alsoMatchesPattern: false,
+            hasRates: false,
+          },
+        ],
+      };
+      load(legacyOnly, {
+        ...before,
+        active: [...before.active, { id: "55", name, source: "events" }],
+        hidden: [],
+      });
+      ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-3" });
+      render(<DriverRosterPanel />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: `Restore ${name}` }));
+      });
+      await settle();
+      expect(screen.getByTestId("driver-roster-live").textContent).toBe(
+        `Removed the roster hide for ${name}.`,
+      );
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: `Hide ${name}` }));
+    });
+  }
 });

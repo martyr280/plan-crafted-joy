@@ -18,7 +18,7 @@ import {
   type HosSegment,
 } from "@/lib/driver-time/detect";
 import { haversineMeters, matchGeofence, type Geofence, type LatLon } from "@/lib/driver-time/geo";
-import { CENTRAL_TZ, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
+import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
 import { filterRoster, getDriverTimeSettings, weekBounds } from "@/lib/driver-time.server";
 
 const MINUTE = 60_000;
@@ -357,7 +357,11 @@ export async function runSamsaraDiagnostics(opts?: {
 
   // Same filter the sweep uses, so the funnel matches what a run would scan.
 
-  const { roster, counts: rosterCounts } = filterRoster(drivers, settings);
+  const { roster, counts: rosterCounts } = filterRoster(
+    drivers,
+    settings,
+    dateStrInTz(new Date(startMs), CENTRAL_TZ),
+  );
   const rosterIds = new Set(roster.map((d) => d.id));
 
 

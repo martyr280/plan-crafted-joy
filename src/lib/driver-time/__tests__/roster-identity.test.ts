@@ -16,9 +16,11 @@ const roster = [
   { id: "5", name: "Enyi Ukairo", licenseNumber: "U321", driverActivationStatus: "deactivated" },
 ];
 
+const DAY = "2026-11-11";
+
 describe("filterRoster", () => {
   it("drops shared logins without a license number", () => {
-    const { roster: kept, counts } = filterRoster(roster, base);
+    const { roster: kept, counts } = filterRoster(roster, base, DAY);
     expect(kept.map((d) => d.id)).toEqual(["1", "2", "3"]);
     expect(counts.excludedNoLicense).toBe(0); // "Dallas Warehouse" is caught by the name pattern first
     expect(counts.excludedByPattern).toBe(1);
@@ -30,20 +32,32 @@ describe("filterRoster", () => {
     const { roster: kept, counts } = filterRoster(
       [{ id: "9", name: "Shop Tablet", licenseNumber: "", driverActivationStatus: "active" }],
       base,
+      DAY,
     );
     expect(kept).toHaveLength(0);
     expect(counts.excludedNoLicense).toBe(1);
   });
 
   it("keeps deactivated drivers when the flag is on", () => {
-    const { roster: kept } = filterRoster(roster, { ...base, includeDeactivated: true });
+    const { roster: kept } = filterRoster(roster, { ...base, includeDeactivated: true }, DAY);
     expect(kept.map((d) => d.id)).toEqual(["1", "2", "3", "5"]);
+  });
+
+  it("applies a dated hide only from its week on", () => {
+    const dated = { ...base, excludedDrivers: [{ id: "2", hiddenFrom: "2026-11-09" }] };
+    expect(filterRoster(roster, dated, "2026-11-08").roster.map((d) => d.id)).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+    expect(filterRoster(roster, dated, "2026-11-09").roster.map((d) => d.id)).toEqual(["1", "3"]);
   });
 
   it("keeps unlicensed drivers when the license requirement is off", () => {
     const { roster: kept } = filterRoster(
       [{ id: "9", name: "Shop Tablet", licenseNumber: null, driverActivationStatus: "active" }],
       { ...base, requireLicense: false },
+      DAY,
     );
     expect(kept).toHaveLength(1);
   });

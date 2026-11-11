@@ -21,6 +21,7 @@ import {
   type ExcludedDriver,
   type RosterDriver,
 } from "@/lib/driver-time/roster";
+import { hiddenFromFor } from "@/lib/driver-time/exclusions";
 
 type RosterPayload = {
   active: RosterDriver[];
@@ -30,6 +31,16 @@ type RosterPayload = {
 };
 
 type FocusTarget = { key: string; fallback: "roster" | "hidden" | "conflict" };
+
+/** "Nov 9, 2026" for a YYYY-MM-DD date. */
+function weekLabel(date: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 const SOURCE_NOTE: Record<string, string | null> = {
   roster: null,
@@ -59,6 +70,7 @@ function DriverRosterPanelInner() {
   const hiddenHeadingRef = useRef<HTMLDivElement>(null);
   const refreshRef = useRef<HTMLButtonElement>(null);
   const busy = setVisibility.isPending;
+  const thisWeek = hiddenFromFor(new Date());
 
   const payload = q.data as RosterPayload | undefined;
   const active = useMemo(() => payload?.active ?? [], [payload]);
@@ -86,7 +98,10 @@ function DriverRosterPanelInner() {
     else actionRefs.current.delete(key);
   };
 
-  async function change(driver: { id: string; name: string }, hide: boolean): Promise<FocusTarget> {
+  async function change(
+    driver: { id: string; name: string; alsoMatchesPattern?: boolean },
+    hide: boolean,
+  ): Promise<FocusTarget> {
     setFailure(null);
     try {
       const result = await setVisibility.mutateAsync({
@@ -97,21 +112,28 @@ function DriverRosterPanelInner() {
       const refreshed = (await q.refetch()) as { data?: RosterPayload };
       const back = refreshed.data?.active.some((d) => d.id === driver.id) ?? false;
       if (hide) {
+        const from = result.hiddenFrom ?? thisWeek;
         setAnnouncement(
           result.changed
-            ? `Hid ${driver.name}. Their rates, events and history are kept.`
+            ? `Hid ${driver.name} from the week of ${weekLabel(from)} onward. Earlier weeks still include them, and their rates, events and history are kept.`
             : `${driver.name} was already hidden.`,
         );
         return { key: `restore:${driver.id}`, fallback: "hidden" };
       }
-      const where = back
-        ? ""
-        : " They will reappear on the roster once Samsara lists them as a licensed, active driver.";
-      setAnnouncement(
-        result.changed
-          ? `Restored ${driver.name}.${where}`
-          : `${driver.name} was already restored.${where}`,
-      );
+      const lead = result.changed
+        ? `Removed the roster hide for ${driver.name}.`
+        : `${driver.name} was not hidden by the roster.`;
+      let where = "";
+      if (!back && driver.alsoMatchesPattern) {
+        where =
+          " They still match a detection name pattern, so they stay off the roster and the weekly report until that pattern is changed in Detection settings.";
+      } else if (!back) {
+        const samsara = refreshed.data?.rosterError
+          ? "the Samsara driver list is unavailable"
+          : "Samsara does not list them as a licensed, active driver";
+        where = ` They are not on the roster right now: ${samsara}, and Driver Time has no events or rates for them.`;
+      }
+      setAnnouncement(`${lead}${where}`);
       return { key: `hide:${driver.id}`, fallback: "hidden" };
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Could not update the driver list.";
@@ -148,7 +170,8 @@ function DriverRosterPanelInner() {
           </div>
           <p className="text-xs text-muted-foreground">
             Drivers come from Samsara. Hiding someone takes them off Driver rates and the weekly
-            report. Their rates, events and history are kept, and Restore brings them back.
+            report from the current week onward; earlier weeks still include them. Their rates,
+            events and history are kept, and Restore brings them back.
           </p>
         </div>
         <div className="relative w-full sm:max-w-xs">
@@ -270,6 +293,9 @@ function DriverRosterPanelInner() {
                     <div className="break-words font-medium">{d.name}</div>
                     <div className="text-xs text-muted-foreground break-words">
                       <span className="break-all">Samsara id {d.id}</span>
+                      {d.hiddenFrom
+                        ? ` · Hidden from the week of ${weekLabel(d.hiddenFrom)}`
+                        : " · Hidden in all weeks (older hide)"}
                       {d.alsoMatchesPattern
                         ? " · Also matches a detection name pattern, so Restore alone will not bring them back."
                         : ""}
@@ -324,8 +350,9 @@ function DriverRosterPanelInner() {
               Hide {confirming?.name ?? "driver"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              They come off Driver rates and the weekly report, including past weeks. Their pay
-              rates, warehouse events and capacity history are kept. You can restore them from
+              They come off Driver rates and the weekly report from the week of{" "}
+              {weekLabel(thisWeek)} onward. Earlier weeks keep their time and estimated cost. Their
+              pay rates, warehouse events and capacity history are kept. You can restore them from
               Hidden drivers at any time.
             </AlertDialogDescription>
           </AlertDialogHeader>

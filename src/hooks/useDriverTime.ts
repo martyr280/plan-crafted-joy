@@ -82,9 +82,9 @@ export function useSaveDriverTimeConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: {
+      expectedUpdatedAt: string | null;
       warehouseAddressIds?: string[];
       thresholdMinutes?: number;
-      excludedDriverIds?: string[];
       excludedDriverNamePatterns?: string[];
       mergeGapMinutes?: number;
       requireLicense?: boolean;
@@ -95,6 +95,9 @@ export function useSaveDriverTimeConfig() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["driver-time-config"] });
       qc.invalidateQueries({ queryKey: ["driver-time-week"] });
+      // The roster's concurrency token is the same settings row.
+      qc.invalidateQueries({ queryKey: ["driver-roster"] });
+      qc.invalidateQueries({ queryKey: ["driver-pay-rates"] });
     },
   });
 }

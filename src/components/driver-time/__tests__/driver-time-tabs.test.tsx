@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 const week = {
@@ -36,6 +36,8 @@ const week = {
   runs: [],
 };
 
+const cfg = vi.hoisted(() => ({ mutate: vi.fn(), refetch: vi.fn() }));
+
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/lib/usage-log", () => ({ useModuleView: () => {} }));
 vi.mock("@/lib/auth", () => ({
@@ -56,9 +58,15 @@ vi.mock("@/hooks/useDriverTime", () => ({
   useRunDriverTimeSweep: () => ({ mutate: vi.fn(), isPending: false }),
   useDriverTimeConfig: () => ({
     isLoading: false,
-    data: { settings: { warehouseAddressIds: [], thresholdMinutes: 90 }, drivers: [], error: null },
+    data: {
+      settings: { warehouseAddressIds: [], thresholdMinutes: 90 },
+      drivers: [],
+      error: null,
+      settingsUpdatedAt: "settings-stamp-1",
+    },
+    refetch: cfg.refetch,
   }),
-  useSaveDriverTimeConfig: () => ({ mutate: vi.fn(), isPending: false }),
+  useSaveDriverTimeConfig: () => ({ mutate: cfg.mutate, isPending: false }),
   useUpdateDriverTimeEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useSaveWarehouseActual: () => ({ mutate: vi.fn(), isPending: false }),
   useSamsaraDiagnostics: () => ({ data: null, isPending: false, mutate: vi.fn() }),
@@ -80,8 +88,19 @@ vi.mock("@/hooks/useDriverTime", () => ({
 }));
 
 import { Route } from "@/routes/_app.driver-time";
+import { SETTINGS_CONFLICT_MESSAGE } from "@/lib/driver-time/roster";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  cfg.mutate.mockReset();
+  cfg.refetch.mockReset();
+});
+
+function openSettings() {
+  const Page = (Route as { options: { component: React.ComponentType } }).options.component;
+  render(<Page />);
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "Settings" }), { button: 0, ctrlKey: false });
+}
 
 describe("Driver Time tabs", () => {
   it("keeps the weekly report inside the Weekly tab", () => {
@@ -113,5 +132,34 @@ describe("Driver Time tabs", () => {
       ctrlKey: false,
     });
     expect(screen.getByRole("tabpanel").textContent).toMatch(/Drivers in report/);
+  });
+
+  it("Detection save sends the settings token and never the hidden-driver lists", () => {
+    openSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Save detection settings" }));
+    expect(cfg.mutate).toHaveBeenCalledOnce();
+    const patch = cfg.mutate.mock.calls[0][0];
+    expect(patch.expectedUpdatedAt).toBe("settings-stamp-1");
+    expect(patch).not.toHaveProperty("excludedDriverIds");
+    expect(patch).not.toHaveProperty("excludedDrivers");
+  });
+
+  it("a Detection save conflict shows the message and Refresh settings reloads", async () => {
+    cfg.mutate.mockImplementation((_patch, opts) =>
+      opts.onError(new Error(SETTINGS_CONFLICT_MESSAGE)),
+    );
+    openSettings();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save detection settings" }));
+    });
+    expect(screen.getByTestId("detection-conflict").getAttribute("role")).toBe("alert");
+    expect(screen.getByTestId("detection-conflict").textContent).toMatch(
+      /changed since you loaded them/,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh settings" }));
+    });
+    expect(cfg.refetch).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId("detection-conflict")).toBeNull();
   });
 });

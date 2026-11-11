@@ -13,10 +13,14 @@ import { fetchDrivers, fetchAddresses } from "@/lib/samsara/hos.server";
 import { getDriverTimeInputs } from "@/lib/samsara/cache.server";
 import {
   detectWarehouseEvents,
-  isExcludedDriver,
   type HosSegment,
   type WarehouseEvent,
 } from "@/lib/driver-time/detect";
+import {
+  isExcludedDriverOn,
+  normalizeExcludedDrivers,
+  type DatedExclusion,
+} from "@/lib/driver-time/exclusions";
 import type { Geofence } from "@/lib/driver-time/geo";
 import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
 import { driverNameKey } from "@/lib/driver-time/reconciliation";
@@ -26,7 +30,10 @@ const db = () => supabaseAdmin as any;
 export type DriverTimeSettings = {
   warehouseAddressIds: string[];
   thresholdMinutes: number;
+  /** Legacy undated id hides: excluded in every week. */
   excludedDriverIds: string[];
+  /** Dated id hides from the roster control; see driver-time/exclusions.ts. */
+  excludedDrivers: DatedExclusion[];
   excludedDriverNamePatterns: string[];
   mergeGapMinutes: number;
   hubTzByAddress: Record<string, string>;
@@ -44,6 +51,7 @@ export const DEFAULT_DRIVER_TIME_SETTINGS: DriverTimeSettings = {
   warehouseAddressIds: [],
   thresholdMinutes: 90,
   excludedDriverIds: [],
+  excludedDrivers: [],
   excludedDriverNamePatterns: [
     "Birmingham LTL",
     "Birmingham Warehouse",
@@ -77,14 +85,16 @@ export type RosterCandidate = {
 
 /**
  * Pure roster filter shared by the sweep and diagnostics: name/ID exclusions
- * first, then the licence requirement, then activation status.
+ * as of `asOf` (a Central YYYY-MM-DD date) first, then the licence
+ * requirement, then activation status.
  */
 export function filterRoster<T extends RosterCandidate>(
   drivers: T[],
   settings: Pick<
     DriverTimeSettings,
     "excludedDriverIds" | "excludedDriverNamePatterns" | "requireLicense" | "includeDeactivated"
-  >,
+  > & { excludedDrivers?: DatedExclusion[] },
+  asOf: string,
 ): { roster: T[]; counts: RosterCounts } {
   const counts: RosterCounts = {
     total: drivers.length,
@@ -95,15 +105,7 @@ export function filterRoster<T extends RosterCandidate>(
   };
   const roster: T[] = [];
   for (const d of drivers) {
-    if (
-      isExcludedDriver(
-        { id: d.id, name: d.name },
-        {
-          excludedDriverIds: settings.excludedDriverIds,
-          excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
-        },
-      )
-    ) {
+    if (isExcludedDriverOn({ id: d.id, name: d.name }, settings, asOf)) {
       counts.excludedByPattern++;
       continue;
     }
@@ -185,6 +187,10 @@ export async function getDriverTimeSettings(): Promise<DriverTimeSettings> {
       ? saved.warehouseRemarkDriverIds.map(String)
       : [],
     basis: saved.basis === "onduty" ? "onduty" : DEFAULT_DRIVER_TIME_SETTINGS.basis,
+    excludedDriverIds: Array.isArray(saved.excludedDriverIds)
+      ? saved.excludedDriverIds.map(String)
+      : [],
+    excludedDrivers: normalizeExcludedDrivers(saved.excludedDrivers),
     // Shared warehouse/LTL identities are never individual driver records.
     // Older saved settings must not erase the built-in roster exclusions.
     excludedDriverNamePatterns: [
@@ -194,20 +200,6 @@ export async function getDriverTimeSettings(): Promise<DriverTimeSettings> {
       ]),
     ],
   };
-}
-
-export async function saveDriverTimeSettings(
-  patch: Partial<DriverTimeSettings>,
-): Promise<DriverTimeSettings> {
-  const next = { ...(await getDriverTimeSettings()), ...patch };
-  const { error } = await db()
-    .from("app_settings")
-    .upsert(
-      { key: "driver_time", value: next, updated_at: new Date().toISOString() },
-      { onConflict: "key" },
-    );
-  if (error) throw new Error(error.message);
-  return next;
 }
 
 /** The stored driver_time row as saved (no defaults merged) and its updated_at token. */
@@ -225,26 +217,22 @@ export async function getDriverTimeSettingsRow(): Promise<{
 }
 
 /**
- * Soft-hide or restore one driver by Samsara id. Read-modify-write on the raw
- * row, guarded twice: the caller's token must match what was read, and the
- * update only lands if updated_at is still that value. Already-in-state is a
- * no-op success. Only excludedDriverIds changes; nothing else is written.
+ * Compare-and-set write of the raw driver_time row, shared by every settings
+ * writer. `mutate` gets the stored JSON (never the defaults-merged view) and
+ * returns the next value. The caller's token must match what was read, and the
+ * UPDATE only lands while updated_at is still that value; a lost race or an
+ * insert collision is a conflict. `changed: false` skips the write.
  */
-export async function setDriverRosterHidden(input: {
-  driverId: string;
-  hidden: boolean;
-  expectedUpdatedAt: string | null;
-}): Promise<{ changed: boolean; updatedAt: string | null; excludedDriverIds: string[] }> {
-  const { nextDriverTimeValue, rosterTokenMatches, ROSTER_CONFLICT_MESSAGE } =
-    await import("@/lib/driver-time/roster");
+async function writeDriverTimeRow(
+  mutate: (saved: unknown) => { value: Record<string, unknown>; changed: boolean },
+  expectedUpdatedAt: string | null,
+  conflictMessage: string,
+): Promise<{ changed: boolean; updatedAt: string | null; value: Record<string, unknown> }> {
+  const { rosterTokenMatches } = await import("@/lib/driver-time/roster");
   const row = await getDriverTimeSettingsRow();
-  const next = nextDriverTimeValue(row.saved, input.driverId, input.hidden);
-  if (!next.changed) {
-    return { changed: false, updatedAt: row.updatedAt, excludedDriverIds: next.excludedDriverIds };
-  }
-  if (!rosterTokenMatches(input.expectedUpdatedAt, row.updatedAt)) {
-    throw new Error(ROSTER_CONFLICT_MESSAGE);
-  }
+  const next = mutate(row.saved);
+  if (!next.changed) return { changed: false, updatedAt: row.updatedAt, value: next.value };
+  if (!rosterTokenMatches(expectedUpdatedAt, row.updatedAt)) throw new Error(conflictMessage);
   let stamp = new Date().toISOString();
   if (row.updatedAt && Date.parse(row.updatedAt) >= Date.parse(stamp)) {
     stamp = new Date(Date.parse(row.updatedAt) + 1).toISOString();
@@ -256,7 +244,7 @@ export async function setDriverRosterHidden(input: {
       .insert({ key: "driver_time", value: next.value, updated_at: stamp })
       .select("updated_at");
     if (error) {
-      if (error.code === "23505") throw new Error(ROSTER_CONFLICT_MESSAGE);
+      if (error.code === "23505") throw new Error(conflictMessage);
       throw new Error(error.message);
     }
     written = data;
@@ -268,13 +256,88 @@ export async function setDriverRosterHidden(input: {
       .eq("updated_at", row.updatedAt)
       .select("updated_at");
     if (error) throw new Error(error.message);
-    if (!data?.length) throw new Error(ROSTER_CONFLICT_MESSAGE);
+    if (!data?.length) throw new Error(conflictMessage);
     written = data;
   }
+  return { changed: true, updatedAt: written?.[0]?.updated_at ?? stamp, value: next.value };
+}
+
+/** Keys only the roster control may write (driver-pay gate, own endpoint). */
+export const ROSTER_ONLY_KEYS = ["excludedDriverIds", "excludedDrivers"] as const;
+
+export type DetectionSettingsPatch = Partial<
+  Omit<DriverTimeSettings, (typeof ROSTER_ONLY_KEYS)[number]>
+>;
+
+/**
+ * Detection settings save. Applies the patch to the stored JSON with the same
+ * compare-and-set as the roster, and never writes the roster keys: they are
+ * dropped from the patch and the stored values are written back as they are,
+ * so a Detection save cannot undo a hide and a hide cannot undo a Detection edit.
+ */
+export async function saveDriverTimeSettings(
+  patch: DetectionSettingsPatch,
+  expectedUpdatedAt: string | null,
+): Promise<{ settings: DriverTimeSettings; updatedAt: string | null }> {
+  const { SETTINGS_CONFLICT_MESSAGE } = await import("@/lib/driver-time/roster");
+  const safe: Record<string, unknown> = { ...patch };
+  for (const k of ROSTER_ONLY_KEYS) delete safe[k];
+  const result = await writeDriverTimeRow(
+    (saved) => {
+      if (saved != null && (typeof saved !== "object" || Array.isArray(saved))) {
+        throw new Error("Driver Time settings are not in the expected shape. Nothing was changed.");
+      }
+      return { value: { ...((saved ?? {}) as Record<string, unknown>), ...safe }, changed: true };
+    },
+    expectedUpdatedAt,
+    SETTINGS_CONFLICT_MESSAGE,
+  );
+  return { settings: await getDriverTimeSettings(), updatedAt: result.updatedAt };
+}
+
+/**
+ * Soft-hide or restore one driver by Samsara id. Hide adds a dated entry
+ * (hiddenFrom = Monday of the current Central week); Restore removes the id
+ * from both the dated and the legacy list. Already-in-state is a no-op
+ * success. Only excludedDrivers / excludedDriverIds change.
+ */
+export async function setDriverRosterHidden(input: {
+  driverId: string;
+  hidden: boolean;
+  expectedUpdatedAt: string | null;
+  userId?: string | null;
+  now?: Date;
+}): Promise<{
+  changed: boolean;
+  updatedAt: string | null;
+  excludedDriverIds: string[];
+  hiddenFrom: string | null;
+}> {
+  const { nextDriverTimeValue, ROSTER_CONFLICT_MESSAGE } = await import(
+    "@/lib/driver-time/roster"
+  );
+  const { hiddenFromFor } = await import("@/lib/driver-time/exclusions");
+  const now = input.now ?? new Date();
+  const entry = {
+    hiddenFrom: hiddenFromFor(now),
+    hiddenBy: input.userId ?? null,
+    hiddenAt: now.toISOString(),
+  };
+  let ids: string[] = [];
+  const result = await writeDriverTimeRow(
+    (saved) => {
+      const next = nextDriverTimeValue(saved, input.driverId, input.hidden, entry);
+      ids = next.excludedDriverIds;
+      return next;
+    },
+    input.expectedUpdatedAt,
+    ROSTER_CONFLICT_MESSAGE,
+  );
   return {
-    changed: true,
-    updatedAt: written?.[0]?.updated_at ?? stamp,
-    excludedDriverIds: next.excludedDriverIds,
+    changed: result.changed,
+    updatedAt: result.updatedAt,
+    excludedDriverIds: ids,
+    hiddenFrom: input.hidden && result.changed ? entry.hiddenFrom : null,
   };
 }
 
@@ -448,7 +511,13 @@ export async function runDriverTimeSweep(opts?: {
       polygon: a.polygon,
     }));
 
-    const { roster, counts: rosterCounts } = filterRoster(drivers, settings);
+    // Scan anyone visible on any day of the window; the weekly report drops
+    // events on or after a dated hide.
+    const { roster, counts: rosterCounts } = filterRoster(
+      drivers,
+      settings,
+      dateStrInTz(new Date(startMs), CENTRAL_TZ),
+    );
     if (!roster.length)
       return await fail(
         `No drivers to scan after exclusions (roster ${rosterCounts.total}, pattern ${rosterCounts.excludedByPattern}, no licence ${rosterCounts.excludedNoLicense}, deactivated ${rosterCounts.excludedDeactivated}).`,
