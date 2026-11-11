@@ -456,9 +456,7 @@ async function loadDriverRoster() {
  */
 export const listDriverPayRates = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) =>
-    z.object({ includeExcluded: z.boolean().default(false) }).parse(i ?? {}),
-  )
+  .inputValidator((i) => z.object({ includeExcluded: z.boolean().default(false) }).parse(i ?? {}))
   .handler(async ({ data, context }) => {
     await requireDriverPay(context.userId);
     const { active, excluded, rates, rosterError } = await loadDriverRoster();

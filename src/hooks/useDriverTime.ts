@@ -21,7 +21,7 @@ export function useDriverTimeWeek(weekStart?: string, enabled = true, includeWee
   const fn = useServerFn(getDriverTimeWeek);
   return useQuery({
     queryKey: ["driver-time-week", weekStart ?? "current", includeWeekends],
-    queryFn: () => fn({ data: {weekStart, includeWeekends} }),
+    queryFn: () => fn({ data: { weekStart, includeWeekends } }),
     enabled,
   });
 }
@@ -30,8 +30,11 @@ export function useUpdateDriverTimeEvent() {
   const fn = useServerFn(updateDriverTimeEventStatus);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { id: string; status: "new" | "reviewed" | "excused"; notes?: string | null }) =>
-      fn({ data: vars }),
+    mutationFn: (vars: {
+      id: string;
+      status: "new" | "reviewed" | "excused";
+      notes?: string | null;
+    }) => fn({ data: vars }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-time-week"] }),
   });
 }
@@ -40,7 +43,8 @@ export function useSetPaycomHours() {
   const fn = useServerFn(setPaycomHours);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { driverId: string; weekStart: string; paycomHours: number | null }) => fn({ data: vars }),
+    mutationFn: (vars: { driverId: string; weekStart: string; paycomHours: number | null }) =>
+      fn({ data: vars }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-time-week"] }),
   });
 }
@@ -49,7 +53,7 @@ export function useRunDriverTimeSweep() {
   const fn = useServerFn(runDriverTimeSweepNow);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (weekStart?: string) => fn({data:{weekStart}}),
+    mutationFn: (weekStart?: string) => fn({ data: { weekStart } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-time-week"] }),
   });
 }
@@ -58,8 +62,13 @@ export function useSaveWarehouseActual() {
   const fn = useServerFn(saveWarehouseActual);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: {driverId:string;weekStart:string;actual:WarehouseActual|null;expectedUpdatedAt:string|null}) => fn({data}),
-    onSuccess: () => qc.invalidateQueries({queryKey:["driver-time-week"]}),
+    mutationFn: (data: {
+      driverId: string;
+      weekStart: string;
+      actual: WarehouseActual | null;
+      expectedUpdatedAt: string | null;
+    }) => fn({ data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-time-week"] }),
   });
 }
 
@@ -82,7 +91,6 @@ export function useSaveDriverTimeConfig() {
       includeDeactivated?: boolean;
       basis?: "presence" | "onduty";
       warehouseRemarkDriverIds?: string[];
-
     }) => fn({ data: patch }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["driver-time-config"] });
@@ -135,11 +143,21 @@ function useRateMutation<V>(serverFn: any) {
 }
 
 export function useAddDriverPayRate() {
-  return useRateMutation<{ driverId: string; driverName: string | null; hourlyRate: number; effectiveDate: string }>(addDriverPayRate);
+  return useRateMutation<{
+    driverId: string;
+    driverName: string | null;
+    hourlyRate: number;
+    effectiveDate: string;
+  }>(addDriverPayRate);
 }
 
 export function useUpdateDriverPayRate() {
-  return useRateMutation<{ id: string; hourlyRate: number; effectiveDate: string; expectedUpdatedAt: string }>(updateDriverPayRate);
+  return useRateMutation<{
+    id: string;
+    hourlyRate: number;
+    effectiveDate: string;
+    expectedUpdatedAt: string;
+  }>(updateDriverPayRate);
 }
 
 export function useSamsaraDiagnostics() {

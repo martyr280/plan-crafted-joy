@@ -83,7 +83,11 @@ function DriverRatesPanelInner() {
     () => [
       ...(payload?.drivers ?? []),
       ...(showHidden
-        ? (payload?.excludedDrivers ?? []).map((d) => ({ id: d.id, name: d.name, source: "hidden" }))
+        ? (payload?.excludedDrivers ?? []).map((d) => ({
+            id: d.id,
+            name: d.name,
+            source: "hidden",
+          }))
         : []),
     ],
     [payload, showHidden],
