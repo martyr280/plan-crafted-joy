@@ -56,6 +56,18 @@ function DriverRatesPanelInner() {
   const [filter, setFilter] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Editing | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const headingRef = useRef<HTMLDivElement>(null);
+  const openEditor = (next: Editing, opener: HTMLElement) => {
+    openerRef.current = opener;
+    setEditing(next);
+  };
+  // The dialog has no DialogTrigger, so Radix has nothing to restore focus to on close.
+  const returnFocus = () => {
+    const opener = openerRef.current;
+    openerRef.current = null;
+    (opener?.isConnected ? opener : headingRef.current)?.focus();
+  };
   const today = dateStrInTz(new Date());
 
   const payload = q.data as
@@ -81,7 +93,12 @@ function DriverRatesPanelInner() {
     <Card className="p-4 space-y-3" data-testid="driver-rates-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="font-semibold text-sm" data-testid="driver-rates-heading">
+          <div
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-semibold text-sm focus-visible:outline focus-visible:outline-2"
+            data-testid="driver-rates-heading"
+          >
             Driver rates
           </div>
           <p className="text-xs text-muted-foreground">
@@ -165,7 +182,7 @@ function DriverRatesPanelInner() {
                     variant="outline"
                     size="sm"
                     className="h-auto whitespace-normal text-left"
-                    onClick={() => setEditing({ mode: "add", driver: d })}
+                    onClick={(e) => openEditor({ mode: "add", driver: d }, e.currentTarget)}
                   >
                     <Plus className="h-4 w-4" /> Add rate for {d.name}
                   </Button>
@@ -188,13 +205,16 @@ function DriverRatesPanelInner() {
                           size="sm"
                           className="h-7"
                           aria-label={`Edit rate for ${d.name} from ${r.effective_date}`}
-                          onClick={() => {
+                          onClick={(e) => {
                             if (!r.id || !r.updated_at) return;
-                            setEditing({
-                              mode: "edit",
-                              driver: d,
-                              row: { ...r, id: r.id, updated_at: r.updated_at },
-                            });
+                            openEditor(
+                              {
+                                mode: "edit",
+                                driver: d,
+                                row: { ...r, id: r.id, updated_at: r.updated_at },
+                              },
+                              e.currentTarget,
+                            );
                           }}
                         >
                           <Pencil className="h-3.5 w-3.5" /> Edit
@@ -228,6 +248,7 @@ function DriverRatesPanelInner() {
           editing={editing}
           today={today}
           onClose={() => setEditing(null)}
+          onCloseAutoFocus={returnFocus}
           onRefresh={async () => {
             const result = (await q.refetch()) as {
               isSuccess?: boolean;
@@ -251,11 +272,13 @@ function RateDialog({
   editing,
   today,
   onClose,
+  onCloseAutoFocus,
   onRefresh,
 }: {
   editing: Editing;
   today: string;
   onClose: () => void;
+  onCloseAutoFocus: () => void;
   onRefresh: () => Promise<PayRateRow[]>;
 }) {
   const add = useAddDriverPayRate();
@@ -369,7 +392,12 @@ function RateDialog({
         if (!o && !busy) onClose();
       }}
     >
-      <DialogContent>
+      <DialogContent
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          onCloseAutoFocus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {editing.mode === "add" ? "Add rate" : "Edit rate"} · {editing.driver.name}

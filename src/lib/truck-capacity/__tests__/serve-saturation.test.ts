@@ -53,8 +53,14 @@ function makeAdmin(opts: { routeRuns: Row[]; version: Row | null; route: Row }) 
       }
     };
     const builder: any = {
-      select: (s = "") => { state.select = s; return builder; },
-      eq: (k: string, v: any) => { state.eq[k] = v; return builder; },
+      select: (s = "") => {
+        state.select = s;
+        return builder;
+      },
+      eq: (k: string, v: any) => {
+        state.eq[k] = v;
+        return builder;
+      },
       gte: () => builder,
       // serve.ts filters no-run markers with .not("capacity_frac","is",null)
       not: () => builder,
@@ -62,8 +68,14 @@ function makeAdmin(opts: { routeRuns: Row[]; version: Row | null; route: Row }) 
       order: () => builder,
       limit: () => builder,
       range: async () => ({ data: rows(), error: null, count: rows().length }),
-      insert: (payload: any) => { calls.push({ table, op: "insert", payload }); return Promise.resolve({ error: null }); },
-      upsert: (payload: any) => { calls.push({ table, op: "upsert", payload }); return Promise.resolve({ error: null }); },
+      insert: (payload: any) => {
+        calls.push({ table, op: "insert", payload });
+        return Promise.resolve({ error: null });
+      },
+      upsert: (payload: any) => {
+        calls.push({ table, op: "upsert", payload });
+        return Promise.resolve({ error: null });
+      },
       maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
       then: (res: any, rej: any) => Promise.resolve({ data: rows(), error: null }).then(res, rej),
     };
@@ -91,7 +103,12 @@ describe("serving: model saturation must not poison the blend", () => {
   });
 
   it("1a: clamp-floor model output is not averaged against a healthy baseline", async () => {
-    const routeMeta: RouteMeta = { id: ROUTE.id, code: ROUTE.code, hub: ROUTE.hub, truck_type: null };
+    const routeMeta: RouteMeta = {
+      id: ROUTE.id,
+      code: ROUTE.code,
+      hub: ROUTE.hub,
+      truck_type: null,
+    };
     const names = persistedNamesFor(routeMeta, TUESDAY_RUNS[0].run_date);
     const coefficients = names.map((n) => (n === "intercept" ? -5 : 0)); // raw prediction = -5
 
@@ -132,7 +149,12 @@ describe("serving: model saturation must not poison the blend", () => {
 
   it("1c: no baseline and no active weekday must not serve a silent unflagged number", async () => {
     const sparseRoute: Row = { ...ROUTE, code: "SEFL", typical_dow: [] };
-    const routeMeta: RouteMeta = { id: sparseRoute.id, code: "SEFL", hub: "Ocala", truck_type: null };
+    const routeMeta: RouteMeta = {
+      id: sparseRoute.id,
+      code: "SEFL",
+      hub: "Ocala",
+      truck_type: null,
+    };
     const sparseRuns: Row[] = [{ run_date: "2026-07-06", capacity_frac: 0.42 }]; // single Monday run
     const names = persistedNamesFor(routeMeta, sparseRuns[0].run_date);
     const coefficients = names.map((n) => (n === "intercept" ? -5 : 0));

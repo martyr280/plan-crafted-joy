@@ -7,9 +7,15 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { estimatePallets } from "@/lib/truck-capacity/est-pallets";
 import { runJob } from "./p21.server";
 import {
-  computeForecastForRoute, exportCapacityWorkbook, parseImportWorkbook, applyImportRows,
-  runP21Snapshot, DEFAULT_P21_SQL, DEFAULT_P21_TRANSFER_SQL,
-  validateP21SqlText, validateP21SqlOutput,
+  computeForecastForRoute,
+  exportCapacityWorkbook,
+  parseImportWorkbook,
+  applyImportRows,
+  runP21Snapshot,
+  DEFAULT_P21_SQL,
+  DEFAULT_P21_TRANSFER_SQL,
+  validateP21SqlText,
+  validateP21SqlOutput,
 } from "./truck-capacity.server";
 import { validateSelectSql, stripLeadingSqlComments } from "./sql-schedules.server";
 
@@ -35,8 +41,10 @@ export const listTruckRoutes = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data, error } = await supabaseAdmin
-      .from("truck_capacity_routes").select("*")
-      .order("hub", { ascending: true }).order("sort_order", { ascending: true });
+      .from("truck_capacity_routes")
+      .select("*")
+      .order("hub", { ascending: true })
+      .order("sort_order", { ascending: true });
     if (error) throw new Error(error.message);
     return { routes: data ?? [] };
   });
@@ -66,14 +74,17 @@ export const getTruckRunsFreshness = createServerFn({ method: "GET" })
   });
 
 export const listTruckRuns = createServerFn({ method: "POST" })
-
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    routeId: z.string().uuid().optional(),
-    from: z.string().optional(),
-    to: z.string().optional(),
-    limit: z.number().int().min(1).max(5000).optional(),
-  }).parse(i))
+  .inputValidator((i) =>
+    z
+      .object({
+        routeId: z.string().uuid().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      })
+      .parse(i),
+  )
   .handler(async ({ data }) => {
     // Top-N read: only the first `limit` rows (default 500), never the whole table.
     const { fetchFirstRows } = await import("./supabase-fetch-all");
@@ -86,7 +97,10 @@ export const listTruckRuns = createServerFn({ method: "POST" })
         return q as any;
       },
       data.limit ?? 500,
-      { label: "listTruckRuns truck_capacity_runs", orderBy: [{ column: "run_date", ascending: false }, { column: "id" }] },
+      {
+        label: "listTruckRuns truck_capacity_runs",
+        orderBy: [{ column: "run_date", ascending: false }, { column: "id" }],
+      },
     );
     return { rows };
   });
@@ -111,14 +125,18 @@ export const upsertTruckRun = createServerFn({ method: "POST" })
     await requireOpsOrAdmin(context.userId);
     const payload = { ...data, source: "manual", entered_by: context.userId };
     if (data.id) {
-      const { error } = await supabaseAdmin.from("truck_capacity_runs").update(payload).eq("id", data.id);
+      const { error } = await supabaseAdmin
+        .from("truck_capacity_runs")
+        .update(payload)
+        .eq("id", data.id);
       if (error) throw new Error(error.message);
       return { id: data.id };
     }
     const { data: ins, error } = await supabaseAdmin
       .from("truck_capacity_runs")
       .upsert(payload, { onConflict: "route_id,run_date,run_seq" })
-      .select("id").single();
+      .select("id")
+      .single();
     if (error || !ins) throw new Error(error?.message ?? "insert failed");
     return { id: ins.id };
   });
@@ -135,12 +153,18 @@ export const deleteTruckRun = createServerFn({ method: "POST" })
 
 export const getTruckForecast = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    routeId: z.string().uuid(),
-    horizonDays: z.number().int().min(1).max(60).optional(),
-    method: z.enum(["auto", "baseline", "model"]).optional(),
-  }).parse(i))
-  .handler(async ({ data }) => computeForecastForRoute(data.routeId, data.horizonDays ?? 28, data.method ?? "auto"));
+  .inputValidator((i) =>
+    z
+      .object({
+        routeId: z.string().uuid(),
+        horizonDays: z.number().int().min(1).max(60).optional(),
+        method: z.enum(["auto", "baseline", "model"]).optional(),
+      })
+      .parse(i),
+  )
+  .handler(async ({ data }) =>
+    computeForecastForRoute(data.routeId, data.horizonDays ?? 28, data.method ?? "auto"),
+  );
 
 export const retrainTruckModel = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
@@ -155,7 +179,9 @@ export const listTruckModelVersions = createServerFn({ method: "GET" })
   .handler(async () => {
     const { data, error } = await supabaseAdmin
       .from("truck_capacity_model_versions")
-      .select("id, trained_at, lambda, blend_w, train_rows, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, promoted, notes")
+      .select(
+        "id, trained_at, lambda, blend_w, train_rows, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, promoted, notes",
+      )
       .order("trained_at", { ascending: false })
       .limit(20);
     if (error) throw new Error(error.message);
@@ -167,20 +193,32 @@ export const getTruckAccuracy = createServerFn({ method: "GET" })
   .handler(async () => {
     const { data: promoted } = await supabaseAdmin
       .from("truck_capacity_model_versions")
-      .select("id, trained_at, lambda, blend_w, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, per_route_mae, notes")
-      .eq("promoted", true).order("trained_at", { ascending: false }).limit(1).maybeSingle();
+      .select(
+        "id, trained_at, lambda, blend_w, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, per_route_mae, notes",
+      )
+      .eq("promoted", true)
+      .order("trained_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     const { data: latest } = await supabaseAdmin
       .from("truck_capacity_model_versions")
-      .select("id, trained_at, lambda, blend_w, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, per_route_mae, promoted, notes")
-      .order("trained_at", { ascending: false }).limit(1).maybeSingle();
+      .select(
+        "id, trained_at, lambda, blend_w, holdout_mae_baseline, holdout_mae_model, holdout_mae_blend, wape_baseline, wape_model, wape_blend, per_route_mae, promoted, notes",
+      )
+      .order("trained_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     return { promoted: promoted ?? null, latest: latest ?? null };
   });
-
 
 export const getTruckSettings = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async () => {
-    const { data } = await supabaseAdmin.from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+    const { data } = await supabaseAdmin
+      .from("truck_capacity_settings")
+      .select("*")
+      .eq("singleton", true)
+      .maybeSingle();
     return {
       settings: data,
       defaultP21Sql: DEFAULT_P21_SQL,
@@ -190,13 +228,17 @@ export const getTruckSettings = createServerFn({ method: "GET" })
 
 export const updateTruckSettings = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    capacity_basis: z.enum(["pallets", "weight", "cube"]),
-    vendor_pickup_counts: z.boolean(),
-    p21_sql: z.string().max(20000).nullable().optional(),
-    p21_transfer_sql: z.string().max(20000).nullable().optional(),
-    excluded_p21_codes: z.array(z.string().max(64)).max(200).nullable().optional(),
-  }).parse(i))
+  .inputValidator((i) =>
+    z
+      .object({
+        capacity_basis: z.enum(["pallets", "weight", "cube"]),
+        vendor_pickup_counts: z.boolean(),
+        p21_sql: z.string().max(20000).nullable().optional(),
+        p21_transfer_sql: z.string().max(20000).nullable().optional(),
+        excluded_p21_codes: z.array(z.string().max(64)).max(200).nullable().optional(),
+      })
+      .parse(i),
+  )
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
     // Sanity-check any custom SQL text before persisting. Null/empty means
@@ -210,8 +252,11 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
       if (sql == null) continue;
       const trimmed = sql.trim();
       if (!trimmed) continue;
-      try { validateSelectSql(trimmed); }
-      catch (e: any) { throw new Error(`${field}: ${e?.message ?? String(e)}`); }
+      try {
+        validateSelectSql(trimmed);
+      } catch (e: any) {
+        throw new Error(`${field}: ${e?.message ?? String(e)}`);
+      }
       const kind = field === "p21_transfer_sql" ? "transfers" : "orders";
       const check = validateP21SqlText(trimmed, kind);
       if (check.errors.length > 0) {
@@ -222,34 +267,50 @@ export const updateTruckSettings = createServerFn({ method: "POST" })
     // rely on a stable case-insensitive compare and admins see a clean list.
     const patch: Record<string, any> = { ...data, updated_by: context.userId };
     if (data.excluded_p21_codes !== undefined) {
-      const norm = Array.from(new Set(
-        (data.excluded_p21_codes ?? [])
-          .map((s) => String(s ?? "").trim().toUpperCase())
-          .filter(Boolean),
-      ));
+      const norm = Array.from(
+        new Set(
+          (data.excluded_p21_codes ?? [])
+            .map((s) =>
+              String(s ?? "")
+                .trim()
+                .toUpperCase(),
+            )
+            .filter(Boolean),
+        ),
+      );
       patch.excluded_p21_codes = norm;
     }
-    const { error } = await supabaseAdmin.from("truck_capacity_settings")
-      .update(patch as any).eq("singleton", true);
+    const { error } = await supabaseAdmin
+      .from("truck_capacity_settings")
+      .update(patch as any)
+      .eq("singleton", true);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
 
 export const updateRoutePalletsPerTruck = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    updates: z.array(z.object({
-      id: z.string().uuid(),
-      pallets_full_truck: z.number().int().min(1).max(60).nullable().optional(),
-      cube_full_truck_ft3: z.number().min(0).max(20000).nullable().optional(),
-      weight_full_truck_lbs: z.number().min(0).max(200000).nullable().optional(),
-      p21_route_code: z.string().max(128).nullable().optional(),
-      cutoff_time: z.string().max(128).nullable().optional(),
-      p21_cities: z.array(z.string().max(80)).max(50).nullable().optional(),
-      p21_states: z.array(z.string().max(4)).max(20).nullable().optional(),
-      ship_to_zip_prefixes: z.array(z.string().max(6)).max(50).nullable().optional(),
-    })).max(200),
-  }).parse(i))
+  .inputValidator((i) =>
+    z
+      .object({
+        updates: z
+          .array(
+            z.object({
+              id: z.string().uuid(),
+              pallets_full_truck: z.number().int().min(1).max(60).nullable().optional(),
+              cube_full_truck_ft3: z.number().min(0).max(20000).nullable().optional(),
+              weight_full_truck_lbs: z.number().min(0).max(200000).nullable().optional(),
+              p21_route_code: z.string().max(128).nullable().optional(),
+              cutoff_time: z.string().max(128).nullable().optional(),
+              p21_cities: z.array(z.string().max(80)).max(50).nullable().optional(),
+              p21_states: z.array(z.string().max(4)).max(20).nullable().optional(),
+              ship_to_zip_prefixes: z.array(z.string().max(6)).max(50).nullable().optional(),
+            }),
+          )
+          .max(200),
+      })
+      .parse(i),
+  )
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
     for (const u of data.updates) {
@@ -258,7 +319,10 @@ export const updateRoutePalletsPerTruck = createServerFn({ method: "POST" })
       const patch: Record<string, any> = {};
       for (const [k, v] of Object.entries(rest)) if (v !== undefined) patch[k] = v;
       if (Object.keys(patch).length === 0) continue;
-      const { error } = await supabaseAdmin.from("truck_capacity_routes").update(patch as any).eq("id", id);
+      const { error } = await supabaseAdmin
+        .from("truck_capacity_routes")
+        .update(patch as any)
+        .eq("id", id);
       if (error) throw new Error(error.message);
     }
     return { ok: true, updated: data.updates.length };
@@ -287,12 +351,14 @@ export const commitTruckImport = createServerFn({ method: "POST" })
     return { ...result, retrain: null };
   });
 
-
 export const exportTruckWorkbook = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const buf = await exportCapacityWorkbook();
-    return { base64: buf.toString("base64"), filename: `truck-capacity-${new Date().toISOString().slice(0,10)}.xlsx` };
+    return {
+      base64: buf.toString("base64"),
+      filename: `truck-capacity-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    };
   });
 
 async function buildSnapshotReadout(startedAt: Date) {
@@ -301,7 +367,10 @@ async function buildSnapshotReadout(startedAt: Date) {
     () =>
       supabaseAdmin
         .from("truck_capacity_p21_demand")
-        .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, total_weight_lbs, est_pallets, order_count", { count: "exact" })
+        .select(
+          "route_id, ship_date, projected_capacity_frac, total_cube_ft, total_weight_lbs, est_pallets, order_count",
+          { count: "exact" },
+        )
         .gte("snapshot_at", startedAt.toISOString()) as any,
     { label: "snapshot readout truck_capacity_p21_demand", orderBy: [{ column: "id" }] },
   );
@@ -366,13 +435,25 @@ function plausibilityWarnings(
 ) {
   const warnings: string[] = [];
   if (r.count === 0) {
-    warnings.push("No rows have projected_capacity_frac — every route lacks cube/weight full-truck targets, or nothing matched.");
+    warnings.push(
+      "No rows have projected_capacity_frac — every route lacks cube/weight full-truck targets, or nothing matched.",
+    );
   } else {
-    if (r.avg != null && r.avg < 0.02) warnings.push(`Average projection ${r.avg.toFixed(3)} is implausibly low — check that total_cube_ft / total_weight_lbs are populated.`);
-    if (r.max != null && r.max >= 1.5 && r.capped / r.count > 0.5) warnings.push(">50% of rows hit the 1.5 cap — full-truck targets are likely too small.");
-    if (r.min != null && r.min > 0.9) warnings.push(`Minimum projection ${r.min.toFixed(3)} is suspiciously high — every day looks near-capacity.`);
+    if (r.avg != null && r.avg < 0.02)
+      warnings.push(
+        `Average projection ${r.avg.toFixed(3)} is implausibly low — check that total_cube_ft / total_weight_lbs are populated.`,
+      );
+    if (r.max != null && r.max >= 1.5 && r.capped / r.count > 0.5)
+      warnings.push(">50% of rows hit the 1.5 cap — full-truck targets are likely too small.");
+    if (r.min != null && r.min > 0.9)
+      warnings.push(
+        `Minimum projection ${r.min.toFixed(3)} is suspiciously high — every day looks near-capacity.`,
+      );
   }
-  if (unmatched.length > 0) warnings.push(`Unmatched route codes: ${unmatched.join(", ")} — map or exclude them in Settings.`);
+  if (unmatched.length > 0)
+    warnings.push(
+      `Unmatched route codes: ${unmatched.join(", ")} — map or exclude them in Settings.`,
+    );
   return warnings;
 }
 
@@ -385,7 +466,13 @@ export const runP21SnapshotNow = createServerFn({ method: "POST" })
     if (!result.ok) return { ...result, readout: null, warnings: [] as string[] };
     const readout = await buildSnapshotReadout(startedAt);
     const warnings = plausibilityWarnings(
-      { avg: readout.projectedFracAvg, min: readout.projectedFracMin, max: readout.projectedFracMax, count: readout.rowsWithProjection, capped: readout.rowsAtCap_1_5 },
+      {
+        avg: readout.projectedFracAvg,
+        min: readout.projectedFracMin,
+        max: readout.projectedFracMax,
+        count: readout.rowsWithProjection,
+        capped: readout.rowsAtCap_1_5,
+      },
       result.unmatchedRouteCodes,
     );
     return { ...result, readout, warnings };
@@ -400,7 +487,13 @@ export const runP21TransferSnapshotNow = createServerFn({ method: "POST" })
     if (!result.ok) return { ...result, readout: null, warnings: [] as string[] };
     const readout = await buildSnapshotReadout(startedAt);
     const warnings = plausibilityWarnings(
-      { avg: readout.projectedFracAvg, min: readout.projectedFracMin, max: readout.projectedFracMax, count: readout.rowsWithProjection, capped: readout.rowsAtCap_1_5 },
+      {
+        avg: readout.projectedFracAvg,
+        min: readout.projectedFracMin,
+        max: readout.projectedFracMax,
+        count: readout.rowsWithProjection,
+        capped: readout.rowsAtCap_1_5,
+      },
       result.unmatchedRouteCodes,
     );
     return { ...result, readout, warnings };
@@ -418,7 +511,11 @@ export const testP21Sql = createServerFn({ method: "POST" })
     if (textCheck.errors.length > 0) {
       throw new Error(`Output contract failed: ${textCheck.errors.join(" ")}`);
     }
-    const { result } = await runJob("sql.select", { sql: stripLeadingSqlComments(data.sql), params: {}, slug: "truck-capacity-test" }, 60_000);
+    const { result } = await runJob(
+      "sql.select",
+      { sql: stripLeadingSqlComments(data.sql), params: {}, slug: "truck-capacity-test" },
+      60_000,
+    );
     const rows = ((result as any)?.rows ?? []) as any[];
     // Runtime output-shape check against the actual sample. Surface as
     // findings (not a throw) so admins see column/type mismatches side-by-side
@@ -444,7 +541,11 @@ export const testP21TransferSql = createServerFn({ method: "POST" })
     if (textCheck.errors.length > 0) {
       throw new Error(`Output contract failed: ${textCheck.errors.join(" ")}`);
     }
-    const { result } = await runJob("sql.select", { sql: stripLeadingSqlComments(data.sql), params: {}, slug: "truck-capacity-transfer-test" }, 60_000);
+    const { result } = await runJob(
+      "sql.select",
+      { sql: stripLeadingSqlComments(data.sql), params: {}, slug: "truck-capacity-transfer-test" },
+      60_000,
+    );
     const rows = ((result as any)?.rows ?? []) as any[];
     const outCheck = validateP21SqlOutput(rows, "transfers");
     return {
@@ -473,11 +574,15 @@ export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false })
       .limit(40);
     const { data: settings } = await supabaseAdmin
-      .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+      .from("truck_capacity_settings")
+      .select("*")
+      .eq("singleton", true)
+      .maybeSingle();
     const { data: routes } = await supabaseAdmin
       .from("truck_capacity_routes")
       .select("id, code, name, hub, p21_route_code")
-      .order("hub", { ascending: true }).order("sort_order", { ascending: true });
+      .order("hub", { ascending: true })
+      .order("sort_order", { ascending: true });
 
     const ignored: string[] = ((settings as any)?.ignored_p21_route_codes ?? []) as string[];
     const ignoredSet = new Set(ignored.map((s) => String(s).trim().toLowerCase()).filter(Boolean));
@@ -495,7 +600,10 @@ export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
       }
     }
 
-    const agg = new Map<string, { code: string; count: number; lastSeen: string; kinds: Set<string> }>();
+    const agg = new Map<
+      string,
+      { code: string; count: number; lastSeen: string; kinds: Set<string> }
+    >();
     for (const ev of events ?? []) {
       const meta = (ev as any).metadata ?? {};
       const kind = String(meta.kind ?? "orders");
@@ -505,9 +613,15 @@ export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
         if (!raw) continue;
         const key = raw.toLowerCase();
         if (claimed.has(key)) continue; // resolved by a later save
-        const entry = agg.get(key) ?? { code: raw, count: 0, lastSeen: (ev as any).created_at, kinds: new Set() };
+        const entry = agg.get(key) ?? {
+          code: raw,
+          count: 0,
+          lastSeen: (ev as any).created_at,
+          kinds: new Set(),
+        };
         entry.count += 1;
-        if (new Date((ev as any).created_at) > new Date(entry.lastSeen)) entry.lastSeen = (ev as any).created_at;
+        if (new Date((ev as any).created_at) > new Date(entry.lastSeen))
+          entry.lastSeen = (ev as any).created_at;
         entry.kinds.add(kind);
         agg.set(key, entry);
       }
@@ -527,7 +641,11 @@ export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
       unmatched,
       ignored,
       routes: (routes ?? []).map((r) => ({
-        id: r.id, code: r.code, name: r.name, hub: r.hub, p21_route_code: r.p21_route_code,
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        hub: r.hub,
+        p21_route_code: r.p21_route_code,
       })),
     };
   });
@@ -537,10 +655,14 @@ export const listP21UnmatchedRouteCodes = createServerFn({ method: "GET" })
 // present so a previously-ignored code can be reclassified.
 export const assignP21RouteCode = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    code: z.string().min(1).max(64),
-    routeId: z.string().uuid(),
-  }).parse(i))
+  .inputValidator((i) =>
+    z
+      .object({
+        code: z.string().min(1).max(64),
+        routeId: z.string().uuid(),
+      })
+      .parse(i),
+  )
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
     const code = data.code.trim();
@@ -548,11 +670,14 @@ export const assignP21RouteCode = createServerFn({ method: "POST" })
     const { data: route, error: rErr } = await supabaseAdmin
       .from("truck_capacity_routes")
       .select("id, p21_route_code")
-      .eq("id", data.routeId).maybeSingle();
+      .eq("id", data.routeId)
+      .maybeSingle();
     if (rErr) throw new Error(rErr.message);
     if (!route) throw new Error("Route not found");
     const existing = String((route as any).p21_route_code ?? "")
-      .split(",").map((s) => s.trim()).filter(Boolean);
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     const already = existing.some((e) => e.toLowerCase() === code.toLowerCase());
     const next = already ? existing : [...existing, code];
     const { error } = await supabaseAdmin
@@ -563,7 +688,10 @@ export const assignP21RouteCode = createServerFn({ method: "POST" })
 
     // If it was ignored, remove it — assigning takes precedence.
     const { data: settings } = await supabaseAdmin
-      .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+      .from("truck_capacity_settings")
+      .select("*")
+      .eq("singleton", true)
+      .maybeSingle();
     const ignored: string[] = ((settings as any)?.ignored_p21_route_codes ?? []) as string[];
     const filtered = ignored.filter((c) => c.toLowerCase() !== code.toLowerCase());
     if (filtered.length !== ignored.length) {
@@ -586,16 +714,23 @@ export const assignP21RouteCode = createServerFn({ method: "POST" })
 
 export const setP21RouteCodeIgnored = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    code: z.string().min(1).max(64),
-    ignore: z.boolean(),
-  }).parse(i))
+  .inputValidator((i) =>
+    z
+      .object({
+        code: z.string().min(1).max(64),
+        ignore: z.boolean(),
+      })
+      .parse(i),
+  )
   .handler(async ({ data, context }) => {
     await requireLogisticsAdmin(context.userId);
     const code = data.code.trim();
     if (!code) throw new Error("code required");
     const { data: settings } = await supabaseAdmin
-      .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
+      .from("truck_capacity_settings")
+      .select("*")
+      .eq("singleton", true)
+      .maybeSingle();
     const current: string[] = ((settings as any)?.ignored_p21_route_codes ?? []) as string[];
     const lower = code.toLowerCase();
     const withoutIt = current.filter((c) => c.toLowerCase() !== lower);
@@ -606,7 +741,9 @@ export const setP21RouteCodeIgnored = createServerFn({ method: "POST" })
       .eq("singleton", true);
     if (error) throw new Error(error.message);
     await supabaseAdmin.from("activity_events").insert({
-      event_type: data.ignore ? "truck_capacity.route_code_ignored" : "truck_capacity.route_code_unignored",
+      event_type: data.ignore
+        ? "truck_capacity.route_code_ignored"
+        : "truck_capacity.route_code_unignored",
       entity_type: "truck_capacity_settings",
       message: `${data.ignore ? "Ignored" : "Un-ignored"} P21 route code "${code}".`,
       metadata: { code },
@@ -623,12 +760,17 @@ export const setP21RouteCodeIgnored = createServerFn({ method: "POST" })
 // which targets to backfill next.
 export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    days: z.number().int().min(1).max(365).optional(),
-  }).parse(i))
+  .inputValidator((i) =>
+    z
+      .object({
+        days: z.number().int().min(1).max(365).optional(),
+      })
+      .parse(i),
+  )
   .handler(async ({ data }) => {
     const days = data.days ?? 30;
-    const since = new Date(); since.setUTCDate(since.getUTCDate() - days);
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - days);
     const sinceIso = since.toISOString().slice(0, 10);
 
     // Fetch every demand row in window (complete-or-throw paging).
@@ -644,19 +786,24 @@ export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
 
     const { data: routes, error: rErr } = await supabaseAdmin
       .from("truck_capacity_routes")
-      .select("id, code, name, hub, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs, active, sort_order")
-      .order("hub", { ascending: true }).order("sort_order", { ascending: true });
+      .select(
+        "id, code, name, hub, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs, active, sort_order",
+      )
+      .order("hub", { ascending: true })
+      .order("sort_order", { ascending: true });
     if (rErr) throw new Error(rErr.message);
 
     type Agg = { rows: number; covered: number };
     const byRoute = new Map<string, Agg>();
-    let totalRows = 0, totalCovered = 0;
+    let totalRows = 0,
+      totalCovered = 0;
     for (const d of demand ?? []) {
       totalRows += 1;
       const covered = (d as any).projected_capacity_frac != null;
       if (covered) totalCovered += 1;
       const a = byRoute.get((d as any).route_id) ?? { rows: 0, covered: 0 };
-      a.rows += 1; if (covered) a.covered += 1;
+      a.rows += 1;
+      if (covered) a.covered += 1;
       byRoute.set((d as any).route_id, a);
     }
 
@@ -667,13 +814,22 @@ export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
       const hasPallets = r.pallets_full_truck != null;
       const anyTarget = hasCube || hasWeight || hasPallets;
       return {
-        id: r.id, code: r.code, name: r.name, hub: r.hub, active: r.active,
-        rows: a.rows, covered: a.covered,
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        hub: r.hub,
+        active: r.active,
+        rows: a.rows,
+        covered: a.covered,
         pct: a.rows === 0 ? null : a.covered / a.rows,
         cube_full_truck_ft3: r.cube_full_truck_ft3 == null ? null : Number(r.cube_full_truck_ft3),
-        weight_full_truck_lbs: r.weight_full_truck_lbs == null ? null : Number(r.weight_full_truck_lbs),
+        weight_full_truck_lbs:
+          r.weight_full_truck_lbs == null ? null : Number(r.weight_full_truck_lbs),
         pallets_full_truck: r.pallets_full_truck,
-        has_cube: hasCube, has_weight: hasWeight, has_pallets: hasPallets, has_any_target: anyTarget,
+        has_cube: hasCube,
+        has_weight: hasWeight,
+        has_pallets: hasPallets,
+        has_any_target: anyTarget,
       };
     });
 
@@ -708,18 +864,19 @@ export const getTruckCapacityCoverage = createServerFn({ method: "POST" })
     };
   });
 
-
-
-
 /* ============================ FORECAST BOARD ============================ */
 
 // All-routes board (Joe's default landing view). Rep scoping is applied by the
 // caller's route list; this returns every active route the caller may see.
 export const getForecastBoard = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({
-    routeIds: z.array(z.string().uuid()).max(500).optional(),
-  }).parse(i ?? {}))
+  .inputValidator((i) =>
+    z
+      .object({
+        routeIds: z.array(z.string().uuid()).max(500).optional(),
+      })
+      .parse(i ?? {}),
+  )
   .handler(async ({ data }) => {
     const { computeForecastBoard } = await import("./truck-capacity/board");
     return computeForecastBoard({ routeIds: data.routeIds });
@@ -729,7 +886,8 @@ export const listRouteCutoffs = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async () => {
     const { data, error } = await supabaseAdmin
-      .from("route_cutoffs").select("*")
+      .from("route_cutoffs")
+      .select("*")
       .order("route_id", { ascending: true })
       .order("sort_order", { ascending: true })
       .limit(2000);
@@ -767,7 +925,10 @@ export const upsertRouteCutoff = createServerFn({ method: "POST" })
       active: data.active ?? true,
     };
     const { data: saved, error } = await supabaseAdmin
-      .from("route_cutoffs").upsert(row).select("*").maybeSingle();
+      .from("route_cutoffs")
+      .upsert(row)
+      .select("*")
+      .maybeSingle();
     if (error) throw new Error(error.message);
     return { cutoff: saved };
   });
@@ -827,7 +988,9 @@ export const getLastForecastFreeze = createServerFn({ method: "GET" })
  */
 export const getForecastVsActual = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({ days: z.number().int().min(1).max(3650).optional() }).parse(i ?? {}))
+  .inputValidator((i) =>
+    z.object({ days: z.number().int().min(1).max(3650).optional() }).parse(i ?? {}),
+  )
   .handler(async ({ data }) => {
     const { actualsByRouteDay, summarize } = await import("./truck-capacity/score");
     const days = data.days ?? 365;
@@ -839,9 +1002,16 @@ export const getForecastVsActual = createServerFn({ method: "POST" })
         () =>
           supabaseAdmin
             .from("truck_capacity_forecast_log")
-            .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied", { count: "exact" })
+            .select(
+              "route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied",
+              { count: "exact" },
+            )
             .gte("forecast_date", since) as any,
-        { label: "getForecastVsActual forecast_log", orderBy: [{ column: "forecast_date" }, { column: "id" }], concurrency: 4 },
+        {
+          label: "getForecastVsActual forecast_log",
+          orderBy: [{ column: "forecast_date" }, { column: "id" }],
+          concurrency: 4,
+        },
       ),
       fetchAllRows<any>(
         () =>
@@ -882,7 +1052,10 @@ export const getForecastVsActual = createServerFn({ method: "POST" })
     const summary = summarize(scored);
 
     const maxForecastDate = logs.length ? logs[logs.length - 1]!.forecast_date : null;
-    const maxRunDate = runs.reduce<string | null>((m, r: any) => (m && m >= r.run_date ? m : r.run_date), null);
+    const maxRunDate = runs.reduce<string | null>(
+      (m, r: any) => (m && m >= r.run_date ? m : r.run_date),
+      null,
+    );
 
     const { data: routes } = await supabaseAdmin
       .from("truck_capacity_routes")
@@ -913,25 +1086,52 @@ export const getForecastVsActual = createServerFn({ method: "POST" })
 /* ===================== FORECAST VS TRACKER (WP-2) ===================== */
 
 const fvtInput = z.object({
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  madeOnFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  madeOnFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   includeSpecial: z.boolean().optional(),
   hub: z.string().max(64).nullable().optional(),
 });
 
 /** Routes this caller may see: everything for ops/admin roles, own routes for a rep. */
-async function scopedRouteCodesFor(userId: string): Promise<{ scoped: boolean; repCode: string | null; codes: Set<string> | null }> {
-  const full = await hasAnyRoleSrv(userId, ["admin", "ops_logistics_admin", "ops_logistics", "ops_orders", "ops_reports"]);
+async function scopedRouteCodesFor(
+  userId: string,
+): Promise<{ scoped: boolean; repCode: string | null; codes: Set<string> | null }> {
+  const full = await hasAnyRoleSrv(userId, [
+    "admin",
+    "ops_logistics_admin",
+    "ops_logistics",
+    "ops_orders",
+    "ops_reports",
+  ]);
   if (full) return { scoped: false, repCode: null, codes: null };
   const { data: profile } = await supabaseAdmin
-    .from("profiles").select("sales_rep_code").eq("id", userId).maybeSingle();
-  const repCode = (profile as any)?.sales_rep_code ? String((profile as any).sales_rep_code).trim().toUpperCase() : null;
+    .from("profiles")
+    .select("sales_rep_code")
+    .eq("id", userId)
+    .maybeSingle();
+  const repCode = (profile as any)?.sales_rep_code
+    ? String((profile as any).sales_rep_code)
+        .trim()
+        .toUpperCase()
+    : null;
   if (!repCode) return { scoped: true, repCode: null, codes: new Set<string>() };
   const { data: maps } = await supabaseAdmin
-    .from("route_salespeople").select("route_code, rep_code, active").limit(10000);
+    .from("route_salespeople")
+    .select("route_code, rep_code, active")
+    .limit(10000);
   const codes = new Set<string>(
-    (maps ?? []).filter((m: any) => m.active && String(m.rep_code).toUpperCase() === repCode)
+    (maps ?? [])
+      .filter((m: any) => m.active && String(m.rep_code).toUpperCase() === repCode)
       .map((m: any) => String(m.route_code).toUpperCase()),
   );
   return { scoped: true, repCode, codes };
@@ -945,10 +1145,7 @@ async function scopedRouteCodesFor(userId: string): Promise<{ scoped: boolean; r
  * prediction at every lead time. Here there is exactly one forecast per
  * route-day: the one a dispatcher could have acted on.
  */
-export async function buildForecastVsTracker(
-  input: z.infer<typeof fvtInput>,
-  userId: string,
-) {
+export async function buildForecastVsTracker(input: z.infer<typeof fvtInput>, userId: string) {
   type TrackerActual = {
     route_id: string;
     run_date: string;
@@ -961,7 +1158,13 @@ export async function buildForecastVsTracker(
   // Default window: the Sunday 8 weeks before this week's Sunday, through today.
   const todayISO = new Date().toISOString().slice(0, 10);
   const thisSunday = acc.weekStartSunday(todayISO);
-  const from = input.from ?? acc.weekStartSunday(new Date(Date.parse(`${thisSunday}T00:00:00Z`) - 7 * 7 * 86_400_000).toISOString().slice(0, 10));
+  const from =
+    input.from ??
+    acc.weekStartSunday(
+      new Date(Date.parse(`${thisSunday}T00:00:00Z`) - 7 * 7 * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+    );
   const to = input.to ?? todayISO;
   const madeOnFrom = input.madeOnFrom ?? acc.ACCURACY_DEFAULT_MADE_FROM;
   const includeSpecial = input.includeSpecial ?? false;
@@ -986,18 +1189,38 @@ export async function buildForecastVsTracker(
           .not("capacity_frac", "is", null)
           .gte("run_date", from)
           .lte("run_date", to) as any,
-      { label: "scoreboard truck_capacity_runs", orderBy: [{ column: "route_id" }, { column: "run_date" }, { column: "run_seq" }, { column: "id" }] },
+      {
+        label: "scoreboard truck_capacity_runs",
+        orderBy: [
+          { column: "route_id" },
+          { column: "run_date" },
+          { column: "run_seq" },
+          { column: "id" },
+        ],
+      },
     ),
     // (route_id, forecast_date, made_on) is NOT unique (method is part of the key): id tail.
     fetchAllRows<any>(
       () =>
         supabaseAdmin
           .from("truck_capacity_forecast_log")
-          .select("route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied", { count: "exact" })
+          .select(
+            "route_id, forecast_date, made_on, predicted, served, method, p21_guard_applied",
+            { count: "exact" },
+          )
           .gte("forecast_date", from)
           .lte("forecast_date", to)
           .gte("made_on", madeOnFrom) as any,
-      { label: "scoreboard truck_capacity_forecast_log", orderBy: [{ column: "route_id" }, { column: "forecast_date" }, { column: "made_on" }, { column: "id" }], concurrency: 4 },
+      {
+        label: "scoreboard truck_capacity_forecast_log",
+        orderBy: [
+          { column: "route_id" },
+          { column: "forecast_date" },
+          { column: "made_on" },
+          { column: "id" },
+        ],
+        concurrency: 4,
+      },
     ),
     supabaseAdmin
       .from("route_cutoffs")
@@ -1009,7 +1232,8 @@ export async function buildForecastVsTracker(
   const runRes = { data: runRows };
   const logRes = { data: logRows };
 
-  const routes = (routeRes.data ?? []).filter((r: any) => r.active)
+  const routes = (routeRes.data ?? [])
+    .filter((r: any) => r.active)
     .filter((r: any) => includeSpecial || !acc.isSpecialRoute(String(r.code)))
     .filter((r: any) => !hubFilter || r.hub === hubFilter)
     .filter((r: any) => !scope.codes || scope.codes.has(String(r.code).toUpperCase()));
@@ -1039,7 +1263,8 @@ export async function buildForecastVsTracker(
     if (r.capacity_frac == null || !Number.isFinite(Number(r.capacity_frac))) continue;
     const k = `${r.route_id}|${r.run_date}`;
     const cur = actualAcc.get(k) ?? { sum: 0, n: 0, missing: false, invalid: false };
-    cur.sum += Number(r.capacity_frac); cur.n += 1;
+    cur.sum += Number(r.capacity_frac);
+    cur.n += 1;
     cur.missing ||= r.missing_from_sheet === true;
     cur.invalid ||= Number(r.capacity_frac) < 0 || Number(r.capacity_frac) > 1;
     actualAcc.set(k, cur);
@@ -1073,7 +1298,10 @@ export async function buildForecastVsTracker(
     if (!lastActualByHub[hub] || runDate > lastActualByHub[hub]!) lastActualByHub[hub] = runDate;
 
     const actual = agg.sum / agg.n;
-    const { cutoffDate, cutoffKnown } = acc.cutoffDateForRun(runDate, cutoffsByRoute.get(routeId) ?? []);
+    const { cutoffDate, cutoffKnown } = acc.cutoffDateForRun(
+      runDate,
+      cutoffsByRoute.get(routeId) ?? [],
+    );
     const cutoffAtUtc = acc.strictCutoffInstantForRun(runDate, cutoffsByRoute.get(routeId) ?? []);
     const strict = acc.strictComparison({
       runs: agg.n,
@@ -1103,7 +1331,10 @@ export async function buildForecastVsTracker(
       });
     }
     const picked = acc.pickForecastAtCutoff(logByKey.get(key) ?? [], cutoffDate, runDate);
-    if (!picked) { unscoredNoForecast += 1; continue; }
+    if (!picked) {
+      unscoredNoForecast += 1;
+      continue;
+    }
     const forecast = Number(picked.row.served);
     rows.push({
       hub: route.hub ?? null,
@@ -1133,19 +1364,29 @@ export async function buildForecastVsTracker(
     });
   }
 
-  rows.sort((a, b) => a.run_date.localeCompare(b.run_date) || String(a.code).localeCompare(String(b.code)));
+  rows.sort(
+    (a, b) => a.run_date.localeCompare(b.run_date) || String(a.code).localeCompare(String(b.code)),
+  );
   const aggregates = acc.aggregate(rows as any);
 
   // Every hub with an active in-scope route gets a row, even with 0 scored runs.
-  const hubNames = acc.sortHubs(Array.from(new Set<string>([
-    ...routes.map((r: any) => String(r.hub ?? "")),
-    ...rows.map((r) => String(r.hub ?? "")),
-  ])).filter(Boolean));
+  const hubNames = acc.sortHubs(
+    Array.from(
+      new Set<string>([
+        ...routes.map((r: any) => String(r.hub ?? "")),
+        ...rows.map((r) => String(r.hub ?? "")),
+      ]),
+    ).filter(Boolean),
+  );
   const readiness = {
     gate: acc.READINESS_GATE,
     overall: acc.readinessRow("All hubs", aggregates.overall),
     byHub: hubNames.map((h) =>
-      acc.readinessRow(h, acc.metricsOf(rows.filter((r) => (r.hub ?? "") === h).map((r) => r.variance)))),
+      acc.readinessRow(
+        h,
+        acc.metricsOf(rows.filter((r) => (r.hub ?? "") === h).map((r) => r.variance)),
+      ),
+    ),
   };
 
   const madeOns = (logs as any[]).map((l) => l.made_on).sort();
@@ -1258,22 +1499,42 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
     ];
     rd.getRow(1).font = { bold: true };
     for (const h of [...res.readiness.byHub, res.readiness.overall]) {
-      const row = rd.addRow({ hub: h.hub, n: h.n, w5n: h.within5N, w5: P(h.within5, 0), w10n: h.within10N,
-        w10: P(h.within10, 0), g10: accMod.READINESS_LABEL[h.at10.status], g5: accMod.READINESS_LABEL[h.at5.status] });
+      const row = rd.addRow({
+        hub: h.hub,
+        n: h.n,
+        w5n: h.within5N,
+        w5: P(h.within5, 0),
+        w10n: h.within10N,
+        w10: P(h.within10, 0),
+        g10: accMod.READINESS_LABEL[h.at10.status],
+        g5: accMod.READINESS_LABEL[h.at5.status],
+      });
       if (h === res.readiness.overall) row.font = { bold: true };
     }
 
     const rw = wb.addWorksheet("Route-Weeks");
     rw.columns = [
-      { header: "Hub", key: "hub", width: 14 }, { header: "Route", key: "code", width: 16 },
-      { header: "Week of", key: "week", width: 12 }, { header: "Days scored", key: "days", width: 12 },
-      { header: "Forecast %", key: "f", width: 12 }, { header: "Tracker %", key: "t", width: 12 },
-      { header: "Variance pts", key: "v", width: 13 }, { header: "Typical miss pts", key: "m", width: 16 },
+      { header: "Hub", key: "hub", width: 14 },
+      { header: "Route", key: "code", width: 16 },
+      { header: "Week of", key: "week", width: 12 },
+      { header: "Days scored", key: "days", width: 12 },
+      { header: "Forecast %", key: "f", width: 12 },
+      { header: "Tracker %", key: "t", width: 12 },
+      { header: "Variance pts", key: "v", width: 13 },
+      { header: "Typical miss pts", key: "m", width: 16 },
     ];
     rw.getRow(1).font = { bold: true };
     for (const w of res.routeWeeks) {
-      rw.addRow({ hub: w.hub ?? "", code: w.code, week: w.week_start, days: w.days,
-        f: P(w.forecastMean), t: P(w.actualMean), v: P(w.varianceMean), m: P(w.mae) });
+      rw.addRow({
+        hub: w.hub ?? "",
+        code: w.code,
+        week: w.week_start,
+        days: w.days,
+        f: P(w.forecastMean),
+        t: P(w.actualMean),
+        v: P(w.varianceMean),
+        m: P(w.mae),
+      });
     }
 
     const rs = wb.addWorksheet("Runs");
@@ -1340,7 +1601,10 @@ export const exportForecastVsTracker = createServerFn({ method: "POST" })
       ]);
 
     const buf = Buffer.from(await wb.xlsx.writeBuffer());
-    return { base64: buf.toString("base64"), filename: `forecast-vs-tracker-${new Date().toISOString().slice(0, 10)}.xlsx` };
+    return {
+      base64: buf.toString("base64"),
+      filename: `forecast-vs-tracker-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    };
   });
 
 /** Read-only fixed scoreboard v1. The shadow median appears ONLY here, labeled as shadow; it is never served. */

@@ -1,19 +1,37 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-vi.mock("@/hooks/useDriverTime", () => ({ useUpdateDriverTimeEvent: () => ({ mutate: () => {} }) }));
+vi.mock("@/hooks/useDriverTime", () => ({
+  useUpdateDriverTimeEvent: () => ({ mutate: () => {} }),
+}));
 
 import { DriverCard, thresholdLabel } from "../DriverCard";
 
 // Alberto Fiscal, week 2026-09-21: the live screen shows 16h 31m flagged (991 min).
 const driver = {
-  driverId: "d1", driverName: "Alberto Fiscal", hub: "Nashville",
-  flaggedMinutes: 991, automatedMinutes: 991, officialMinutes: 991, varianceMinutes: 0,
+  driverId: "d1",
+  driverName: "Alberto Fiscal",
+  hub: "Nashville",
+  flaggedMinutes: 991,
+  automatedMinutes: 991,
+  officialMinutes: 991,
+  varianceMinutes: 0,
   cost: { cost: null, note: "Enter Paycom paid hours to calculate an estimate" },
   official: { source: "Joe Green sheet", reason: "official", intervals: [] },
   history: [],
-  events: [{ id: "e1", event_date: "2026-09-21", start_ts: "2026-09-21T12:00:00Z", end_ts: "2026-09-21T14:00:00Z",
-    duration_min: 120, address_name: "NDI Nashville", location_source: "log", statuses: ["onDuty", "yardMove"], status: "new" }],
+  events: [
+    {
+      id: "e1",
+      event_date: "2026-09-21",
+      start_ts: "2026-09-21T12:00:00Z",
+      end_ts: "2026-09-21T14:00:00Z",
+      duration_min: 120,
+      address_name: "NDI Nashville",
+      location_source: "log",
+      statuses: ["onDuty", "yardMove"],
+      status: "new",
+    },
+  ],
 };
 
 const render = (isAdmin: boolean, t = 90, canViewPay = false) =>

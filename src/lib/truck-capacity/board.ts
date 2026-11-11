@@ -8,8 +8,12 @@ import { dateStrInTz } from "@/lib/tz";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { computeForecastForRoute } from "./serve";
 import {
-  nextCutoff, runsWeekend, addDaysISO, localDateIn,
-  type RouteCutoff, type NextCutoff,
+  nextCutoff,
+  runsWeekend,
+  addDaysISO,
+  localDateIn,
+  type RouteCutoff,
+  type NextCutoff,
 } from "./cutoffs";
 import { estimateRunPallets } from "./est-pallets";
 
@@ -72,7 +76,11 @@ const STALE_HOURS = 36;
 const HORIZON_DAYS = 21;
 const CONCURRENCY = 4;
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let cursor = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -107,18 +115,25 @@ function serializeCutoff(n: NextCutoff): BoardCutoff {
   };
 }
 
-export async function computeForecastBoard(opts: { now?: Date; routeIds?: string[] } = {}): Promise<BoardResponse> {
+export async function computeForecastBoard(
+  opts: { now?: Date; routeIds?: string[] } = {},
+): Promise<BoardResponse> {
   const now = opts.now ?? new Date();
 
   const [{ data: routesData, error: rErr }, { data: cutoffData, error: cErr }] = await Promise.all([
-    supabaseAdmin.from("truck_capacity_routes")
+    supabaseAdmin
+      .from("truck_capacity_routes")
       .select("id, code, name, hub, sort_order, active, cube_full_truck_ft3, pallets_full_truck")
       .eq("active", true)
       .order("hub", { ascending: true })
       .order("sort_order", { ascending: true })
       .limit(500),
-    supabaseAdmin.from("route_cutoffs")
-      .select("*").eq("active", true).order("sort_order", { ascending: true }).limit(2000),
+    supabaseAdmin
+      .from("route_cutoffs")
+      .select("*")
+      .eq("active", true)
+      .order("sort_order", { ascending: true })
+      .limit(2000),
   ]);
   if (rErr) throw new Error(rErr.message);
   if (cErr) throw new Error(cErr.message);
@@ -151,7 +166,10 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
         })
         .gte("ship_date", addDaysISO(todayUtc, -2))
         .lte("ship_date", windowEnd) as any,
-    { label: "board truck_capacity_p21_demand", orderBy: [{ column: "snapshot_at", ascending: false }, { column: "id" }] },
+    {
+      label: "board truck_capacity_p21_demand",
+      orderBy: [{ column: "snapshot_at", ascending: false }, { column: "id" }],
+    },
   );
   const demandLatest = new Map<string, { frac: number; cube: number | null }>();
   let snapshotAt: string | null = null;
@@ -177,13 +195,20 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
         // Skip no-run markers so "last run" never shows a blank day as 0%.
         .not("capacity_frac", "is", null)
         .gte("run_date", addDaysISO(todayUtc, -120)) as any,
-    { label: "board truck_capacity_runs", orderBy: [{ column: "run_date", ascending: false }, { column: "id" }] },
+    {
+      label: "board truck_capacity_runs",
+      orderBy: [{ column: "run_date", ascending: false }, { column: "id" }],
+    },
   );
   const lastRun = new Map<string, { date: string; capacity_frac: number; driver: string | null }>();
   for (const r of runs ?? []) {
     if (!routeIds.includes(r.route_id)) continue;
     if (lastRun.has(r.route_id)) continue;
-    lastRun.set(r.route_id, { date: r.run_date, capacity_frac: Number(r.capacity_frac), driver: r.driver ?? null });
+    lastRun.set(r.route_id, {
+      date: r.run_date,
+      capacity_frac: Number(r.capacity_frac),
+      driver: r.driver ?? null,
+    });
   }
 
   const rows = await mapLimit(routes, CONCURRENCY, async (route): Promise<BoardRow> => {
@@ -220,8 +245,9 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
     if (targetDate && targetDate <= windowEnd) {
       try {
         const fc = await computeForecastForRoute(route.id, HORIZON_DAYS, "auto");
-        const day = fc.days.find((d) => d.date === targetDate)
-          ?? fc.days.find((d) => d.date >= (localDateIn(tz, now)));
+        const day =
+          fc.days.find((d) => d.date === targetDate) ??
+          fc.days.find((d) => d.date >= localDateIn(tz, now));
         if (day) {
           predicted = day.blend ?? day.forecast ?? null;
           final = day.final ?? null;
@@ -259,7 +285,8 @@ export async function computeForecastBoard(opts: { now?: Date; routeIds?: string
   const ageHours = snapshotAt ? (now.getTime() - new Date(snapshotAt).getTime()) / 3_600_000 : null;
 
   const hubs = [...new Set(rows.map((r) => r.hub))].sort(
-    (a, b) => (HUB_ORDER.indexOf(a) + 1 || 99) - (HUB_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b),
+    (a, b) =>
+      (HUB_ORDER.indexOf(a) + 1 || 99) - (HUB_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b),
   );
 
   return {

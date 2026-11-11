@@ -44,6 +44,7 @@ const route = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   admins.current = null;
   orders.length = 0;
 });
@@ -65,6 +66,10 @@ describe("loadP21Cubes", () => {
   });
 
   it("pages with snapshot_at then id and keeps the newer cube", async () => {
+    // Forecast days start the day after "today" in America/Chicago; pin today to
+    // 2026-11-10 (noon CST) so the 2026-11-11 ship date is always in the window.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-10T18:00:00Z"));
     admins.current = {
       from: (table: string) => {
         if (table === "truck_capacity_routes") return builder(table, [route], null);

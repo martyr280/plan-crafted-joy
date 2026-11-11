@@ -4,7 +4,12 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dateStrInTz } from "@/lib/driver-time/tz";
-import { actualSchema, validateActual, buildReconciledDrivers, weekday } from "@/lib/driver-time/reconciliation";
+import {
+  actualSchema,
+  validateActual,
+  buildReconciledDrivers,
+  weekday,
+} from "@/lib/driver-time/reconciliation";
 import {
   isValidDateStr,
   isValidHourlyRate,
@@ -67,13 +72,20 @@ function compareHubs(a: string, b: string): number {
   return (ia + 1 || 99) - (ib + 1 || 99) || a.localeCompare(b);
 }
 
-
 /* ------------------------------------------------------------------ report */
 
 export const getDriverTimeWeek = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
-    z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), includeWeekends: z.boolean().default(false) }).parse(i ?? {}),
+    z
+      .object({
+        weekStart: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        includeWeekends: z.boolean().default(false),
+      })
+      .parse(i ?? {}),
   )
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
@@ -101,7 +113,8 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       .limit(2000);
 
     if (overrideError) throw new Error(overrideError.message);
-    if ((events?.length ?? 0) >= 5000 || (overrides?.length ?? 0) >= 2000) throw new Error("Report exceeds safe row limit; narrow the window.");
+    if ((events?.length ?? 0) >= 5000 || (overrides?.length ?? 0) >= 2000)
+      throw new Error("Report exceeds safe row limit; narrow the window.");
     // Rates load only for driver-pay managers. Everyone else keeps a null cost
     // and the card hides it. Only rows dated on or before the week end can
     // apply to any day of this week.
@@ -117,16 +130,29 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
     const { flaggedMinutesByDay, priceDriverWeek, applyMissingPaycom } =
       await import("@/lib/driver-time/rates");
     const paycomFor = (driverId: string) =>
-      (overrides ?? []).find((o: any) => String(o.driver_id) === String(driverId))?.paycom_hours ?? null;
+      (overrides ?? []).find((o: any) => String(o.driver_id) === String(driverId))?.paycom_hours ??
+      null;
 
     const { getDriverTimeSettings } = await import("@/lib/driver-time.server");
     const settings = await getDriverTimeSettings();
     const { isExcludedDriver } = await import("@/lib/driver-time/detect");
-    const scopedEvents = (events ?? []).filter((ev:any) => !isExcludedDriver({id:ev.driver_id,name:ev.driver_name}, settings));
-    const driverRows = buildReconciledDrivers(scopedEvents, overrides ?? [], data.includeWeekends).map(b => {
+    const scopedEvents = (events ?? []).filter(
+      (ev: any) => !isExcludedDriver({ id: ev.driver_id, name: ev.driver_name }, settings),
+    );
+    const driverRows = buildReconciledDrivers(
+      scopedEvents,
+      overrides ?? [],
+      data.includeWeekends,
+    ).map((b) => {
       const flaggedHours = b.flaggedMinutes / 60;
       const paidHours = paycomFor(b.driverId);
-      const base = { driverId:b.driverId,driverName:b.driverName,samsaraWeekHours:0,paycomHours:paidHours,flaggedHours };
+      const base = {
+        driverId: b.driverId,
+        driverName: b.driverName,
+        samsaraWeekHours: 0,
+        paycomHours: paidHours,
+        flaggedHours,
+      };
       const split = canManageDriverPay ? flaggedMinutesByDay(b) : { byDay: {}, unsplitMinutes: 0 };
       const splitTotal =
         Object.values(split.byDay).reduce((s, m) => s + m, 0) + split.unsplitMinutes;
@@ -159,7 +185,10 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       .map((hub) => {
         const list = driverRows
           .filter((d) => d.hub === hub)
-          .sort((a, b) => b.flaggedMinutes - a.flaggedMinutes || a.driverName.localeCompare(b.driverName));
+          .sort(
+            (a, b) =>
+              b.flaggedMinutes - a.flaggedMinutes || a.driverName.localeCompare(b.driverName),
+          );
         return {
           hub,
           drivers: list,
@@ -180,12 +209,15 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       totals: {
         drivers: driverRows.length,
         events: scopedEvents.length,
-        flaggedMinutes: driverRows.reduce((s,d)=>s+d.flaggedMinutes,0),
-        officialDrivers: driverRows.filter(d=>d.official != null).length,
-        automatedMinutes: driverRows.reduce((s,d)=>s+d.automatedMinutes,0),
-        unresolvedMinutes: driverRows.reduce((s,d)=>s+d.unresolvedMinutes,0),
-        flaggedHours: Math.round((driverRows.reduce((s, d) => s + d.flaggedMinutes, 0) / 60) * 100) / 100,
-        needsReview: scopedEvents.filter((e: any) => e.needs_review && !e.superseded_at && e.status !== "excused").length,
+        flaggedMinutes: driverRows.reduce((s, d) => s + d.flaggedMinutes, 0),
+        officialDrivers: driverRows.filter((d) => d.official != null).length,
+        automatedMinutes: driverRows.reduce((s, d) => s + d.automatedMinutes, 0),
+        unresolvedMinutes: driverRows.reduce((s, d) => s + d.unresolvedMinutes, 0),
+        flaggedHours:
+          Math.round((driverRows.reduce((s, d) => s + d.flaggedMinutes, 0) / 60) * 100) / 100,
+        needsReview: scopedEvents.filter(
+          (e: any) => e.needs_review && !e.superseded_at && e.status !== "excused",
+        ).length,
         estimatedCost: canManageDriverPay
           ? driverRows.reduce((s, d) => s + (d.cost.cost ?? 0), 0)
           : null,
@@ -196,7 +228,6 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
       runs: runs ?? [],
     };
   });
-
 
 export const updateDriverTimeEventStatus = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
@@ -238,18 +269,16 @@ export const setPaycomHours = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
-    const { error } = await db()
-      .from("driver_time_week_overrides")
-      .upsert(
-        {
-          driver_id: data.driverId,
-          week_start: data.weekStart,
-          paycom_hours: data.paycomHours,
-          updated_by: context.userId,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "driver_id,week_start" },
-      );
+    const { error } = await db().from("driver_time_week_overrides").upsert(
+      {
+        driver_id: data.driverId,
+        week_start: data.weekStart,
+        paycom_hours: data.paycomHours,
+        updated_by: context.userId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "driver_id,week_start" },
+    );
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
@@ -258,12 +287,21 @@ export const setPaycomHours = createServerFn({ method: "POST" })
 
 export const runDriverTimeSweepNow = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator(i => z.object({weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()}).parse(i ?? {}))
+  .inputValidator((i) =>
+    z
+      .object({
+        weekStart: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      })
+      .parse(i ?? {}),
+  )
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     try {
       const { runDriverTimeSweep } = await import("@/lib/driver-time.server");
-      return await runDriverTimeSweep({ triggeredBy: context.userId, weekStart:data.weekStart });
+      return await runDriverTimeSweep({ triggeredBy: context.userId, weekStart: data.weekStart });
     } catch (e: any) {
       return {
         ok: false as const,
@@ -300,7 +338,11 @@ export const getDriverTimeConfig = createServerFn({ method: "GET" })
     }
     return {
       settings,
-      addresses: addresses.map((a) => ({ id: a.id, name: a.name, formattedAddress: a.formattedAddress })),
+      addresses: addresses.map((a) => ({
+        id: a.id,
+        name: a.name,
+        formattedAddress: a.formattedAddress,
+      })),
       drivers: drivers.map((d) => ({ id: d.id, name: d.name, status: d.driverActivationStatus })),
       error,
     };
@@ -320,15 +362,18 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
         includeDeactivated: z.boolean().optional(),
         basis: z.enum(["presence", "onduty"]).optional(),
         warehouseRemarkDriverIds: z.array(z.string().max(64)).max(500).optional(),
-
       })
       .parse(i ?? {}),
   )
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     if (data.warehouseRemarkDriverIds) {
-      const { data: isAdmin } = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
-      if (!isAdmin) throw new Error("Only admins can change the per-driver Warehouse-remark setting");
+      const { data: isAdmin } = await context.supabase.rpc("has_role", {
+        _user_id: context.userId,
+        _role: "admin",
+      });
+      if (!isAdmin)
+        throw new Error("Only admins can change the per-driver Warehouse-remark setting");
     }
     const { saveDriverTimeSettings } = await import("@/lib/driver-time.server");
     return { settings: await saveDriverTimeSettings(data) };
@@ -342,13 +387,25 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
 
 async function loadPayRates(opts: { onOrBefore?: string } = {}): Promise<any[]> {
   const { fetchAllRows } = await import("@/lib/supabase-fetch-all");
-  return fetchAllRows<any>(() => {
-    let q = db()
-      .from("driver_pay_rates")
-      .select("id, driver_id, driver_name, hourly_rate, effective_date, created_at, updated_at", { count: "exact" });
-    if (opts.onOrBefore) q = q.lte("effective_date", opts.onOrBefore);
-    return q;
-  }, { label: "driver_pay_rates", orderBy: [{ column: "driver_id" }, { column: "effective_date", ascending: false }, { column: "id" }] });
+  return fetchAllRows<any>(
+    () => {
+      let q = db()
+        .from("driver_pay_rates")
+        .select("id, driver_id, driver_name, hourly_rate, effective_date, created_at, updated_at", {
+          count: "exact",
+        });
+      if (opts.onOrBefore) q = q.lte("effective_date", opts.onOrBefore);
+      return q;
+    },
+    {
+      label: "driver_pay_rates",
+      orderBy: [
+        { column: "driver_id" },
+        { column: "effective_date", ascending: false },
+        { column: "id" },
+      ],
+    },
+  );
 }
 
 /** Licensed drivers known to Driver Time + every rate row (driver-pay managers). */
@@ -362,19 +419,26 @@ export const listDriverPayRates = createServerFn({ method: "GET" })
     const { fetchAllRows } = await import("@/lib/supabase-fetch-all");
     const settings = await getDriverTimeSettings();
 
-    const drivers = new Map<string, { id: string; name: string; source: "roster" | "events" | "rates" }>();
+    const drivers = new Map<
+      string,
+      { id: string; name: string; source: "roster" | "events" | "rates" }
+    >();
     // 1) The same licensed roster the sweep scans (read-only Samsara list call,
     //    the one the Settings tab already makes).
     let rosterError: string | null = null;
     try {
       const { fetchDrivers } = await import("@/lib/samsara/hos.server");
-      for (const d of filterRoster(await fetchDrivers(), settings).roster) drivers.set(d.id, { id: d.id, name: d.name, source: "roster" });
+      for (const d of filterRoster(await fetchDrivers(), settings).roster)
+        drivers.set(d.id, { id: d.id, name: d.name, source: "roster" });
     } catch (e: any) {
       rosterError = e?.message ?? String(e);
     }
     // 2) Drivers the sweep has already stored events for.
     const events = await fetchAllRows<any>(
-      () => db().from("driver_warehouse_events").select("id, driver_id, driver_name", { count: "exact" }),
+      () =>
+        db()
+          .from("driver_warehouse_events")
+          .select("id, driver_id, driver_name", { count: "exact" }),
       { label: "driver_warehouse_events(drivers)" },
     );
     for (const ev of events) {
@@ -395,7 +459,12 @@ export const listDriverPayRates = createServerFn({ method: "GET" })
   });
 
 const rateInput = z.object({
-  hourlyRate: z.number().refine(isValidHourlyRate, "Hourly rate must be more than $0, up to $500, with at most 2 decimals"),
+  hourlyRate: z
+    .number()
+    .refine(
+      isValidHourlyRate,
+      "Hourly rate must be more than $0, up to $500, with at most 2 decimals",
+    ),
   effectiveDate: z.string().refine(isValidDateStr, "Effective date must be a real YYYY-MM-DD date"),
 });
 
@@ -403,13 +472,23 @@ const rateInput = z.object({
 export const addDriverPayRate = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
   .inputValidator((i) =>
-    rateInput.extend({ driverId: z.string().trim().min(1).max(200), driverName: z.string().trim().max(200).nullable() }).parse(i),
+    rateInput
+      .extend({
+        driverId: z.string().trim().min(1).max(200),
+        driverName: z.string().trim().max(200).nullable(),
+      })
+      .parse(i),
   )
   .handler(async ({ data, context }) => {
     await requireDriverPay(context.userId);
     const { data: row, error } = await db()
       .from("driver_pay_rates")
-      .insert({ driver_id: data.driverId, driver_name: data.driverName, hourly_rate: data.hourlyRate, effective_date: data.effectiveDate })
+      .insert({
+        driver_id: data.driverId,
+        driver_name: data.driverName,
+        hourly_rate: data.hourlyRate,
+        effective_date: data.effectiveDate,
+      })
       .select("id")
       .single();
     if (error) throw payRateWriteError(error, data.effectiveDate);
@@ -419,7 +498,9 @@ export const addDriverPayRate = createServerFn({ method: "POST" })
 /** Edits one row's amount/date (UI confirms first). Compare-and-set on updated_at. */
 export const updateDriverPayRate = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => rateInput.extend({ id: z.string().uuid(), expectedUpdatedAt: z.string().min(1) }).parse(i))
+  .inputValidator((i) =>
+    rateInput.extend({ id: z.string().uuid(), expectedUpdatedAt: z.string().min(1) }).parse(i),
+  )
   .handler(async ({ data, context }) => {
     await requireDriverPay(context.userId);
     const { data: changed, error } = await db()
@@ -437,7 +518,9 @@ export const updateDriverPayRate = createServerFn({ method: "POST" })
 
 export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) => z.object({ lookbackDays: z.number().int().min(1).max(30).optional() }).parse(i ?? {}))
+  .inputValidator((i) =>
+    z.object({ lookbackDays: z.number().int().min(1).max(30).optional() }).parse(i ?? {}),
+  )
   .handler(async ({ data, context }) => {
     await requireAdmin(context.userId);
     try {
@@ -487,12 +570,21 @@ export const getSamsaraDiagnostics = createServerFn({ method: "POST" })
   });
 
 /** Audited warehouse actuals are independent of Paycom paid hours. */
-export const saveWarehouseActual = createServerFn({method:"POST"})
+export const saveWarehouseActual = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator(i => z.object({driverId:z.string().min(1).max(200),weekStart:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    reportName:z.string().max(200).optional(), hub:z.string().max(80).optional(),
-    actual:actualSchema.nullable(), expectedUpdatedAt:z.string().nullable()}).parse(i))
-  .handler(async ({data,context}) => {
+  .inputValidator((i) =>
+    z
+      .object({
+        driverId: z.string().min(1).max(200),
+        weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        reportName: z.string().max(200).optional(),
+        hub: z.string().max(80).optional(),
+        actual: actualSchema.nullable(),
+        expectedUpdatedAt: z.string().nullable(),
+      })
+      .parse(i),
+  )
+  .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     // Official-report rows arrive keyed `report:<hub>:<slug>`. Resolve that to a
     // real Samsara driver when exactly one licence-holding roster name matches,
@@ -505,32 +597,58 @@ export const saveWarehouseActual = createServerFn({method:"POST"})
       try {
         const roster = await fetchDrivers();
         const hub = data.hub ?? driverId.split(":")[1] ?? "";
-        const resolved = resolveReportDriverIdentity({ name: data.reportName ?? driverId.split(":")[2] ?? "", hub, roster });
+        const resolved = resolveReportDriverIdentity({
+          name: data.reportName ?? driverId.split(":")[2] ?? "",
+          hub,
+          roster,
+        });
         driverId = resolved.driverId;
         identityReason = resolved.reason;
       } catch (e: any) {
         identityReason = `Kept report identity: Samsara roster unavailable (${e?.message ?? String(e)}).`;
       }
     }
-    const actual = data.actual ? validateActual(data.actual,data.weekStart) : null;
-    const payload = {warehouse_actual:actual,updated_by:context.userId,updated_at:new Date().toISOString()};
+    const actual = data.actual ? validateActual(data.actual, data.weekStart) : null;
+    const payload = {
+      warehouse_actual: actual,
+      updated_by: context.userId,
+      updated_at: new Date().toISOString(),
+    };
 
     // Compare-and-set prevents one reviewer silently overwriting another.
     if (data.expectedUpdatedAt) {
-      const {data:changed,error} = await db().from("driver_time_week_overrides").update(payload)
-        .eq("driver_id",driverId).eq("week_start",data.weekStart).eq("updated_at",data.expectedUpdatedAt).select("id");
+      const { data: changed, error } = await db()
+        .from("driver_time_week_overrides")
+        .update(payload)
+        .eq("driver_id", driverId)
+        .eq("week_start", data.weekStart)
+        .eq("updated_at", data.expectedUpdatedAt)
+        .select("id");
       if (error) throw new Error(error.message);
-      if (!changed?.length) throw new Error("This week changed. Refresh and review the latest value before saving.");
+      if (!changed?.length)
+        throw new Error("This week changed. Refresh and review the latest value before saving.");
     } else {
       // A Paycom-only row may exist even when this driver has no events.
       // Updating only a still-null actual preserves those paid-hours fields.
-      const {data:changed,error:updateError} = await db().from("driver_time_week_overrides").update(payload)
-        .eq("driver_id",driverId).eq("week_start",data.weekStart).is("warehouse_actual",null).select("id");
+      const { data: changed, error: updateError } = await db()
+        .from("driver_time_week_overrides")
+        .update(payload)
+        .eq("driver_id", driverId)
+        .eq("week_start", data.weekStart)
+        .is("warehouse_actual", null)
+        .select("id");
       if (updateError) throw new Error(updateError.message);
       if (!changed?.length) {
-        const {error} = await db().from("driver_time_week_overrides").insert({...payload,driver_id:driverId,week_start:data.weekStart});
-        if (error) throw new Error(error.code === "23505" ? "This week already has an entry. Refresh before saving." : error.message);
+        const { error } = await db()
+          .from("driver_time_week_overrides")
+          .insert({ ...payload, driver_id: driverId, week_start: data.weekStart });
+        if (error)
+          throw new Error(
+            error.code === "23505"
+              ? "This week already has an entry. Refresh before saving."
+              : error.message,
+          );
       }
     }
-    return {ok:true as const, resolvedDriverId:driverId, identityReason};
+    return { ok: true as const, resolvedDriverId: driverId, identityReason };
   });

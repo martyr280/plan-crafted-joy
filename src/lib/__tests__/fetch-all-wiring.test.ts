@@ -4,13 +4,50 @@ import { readFileSync } from "node:fs";
 // Source-text wiring: each fixed call site goes through the shared pager with
 // count:"exact", the expected unique orderBy, and no .limit( on the query.
 const SITES: Array<{ file: string; label: string; table: string; order: string }> = [
-  { file: "src/lib/truck-capacity.functions.ts", label: "getForecastVsActual forecast_log", table: "truck_capacity_forecast_log", order: '[{ column: "forecast_date" }, { column: "id" }], concurrency: 4' },
-  { file: "src/lib/truck-capacity.functions.ts", label: "getForecastVsActual runs", table: "truck_capacity_runs", order: '[{ column: "run_date" }, { column: "id" }]' },
-  { file: "src/lib/truck-capacity.functions.ts", label: "snapshot readout truck_capacity_p21_demand", table: "truck_capacity_p21_demand", order: '[{ column: "id" }]' },
-  { file: "src/lib/truck-capacity.functions.ts", label: "coverage truck_capacity_p21_demand", table: "truck_capacity_p21_demand", order: '[{ column: "id" }]' },
-  { file: "src/lib/truck-capacity.functions.ts", label: "scoreboard truck_capacity_runs", table: "truck_capacity_runs", order: '[{ column: "route_id" }, { column: "run_date" }, { column: "run_seq" }, { column: "id" }]' },
-  { file: "src/lib/truck-capacity.functions.ts", label: "scoreboard truck_capacity_forecast_log", table: "truck_capacity_forecast_log", order: '[{ column: "route_id" }, { column: "forecast_date" }, { column: "made_on" }, { column: "id" }], concurrency: 4' },
-  { file: "src/lib/truck-capacity/board.ts", label: "board truck_capacity_p21_demand", table: "truck_capacity_p21_demand", order: '[{ column: "snapshot_at", ascending: false }, { column: "id" }]' },
+  {
+    file: "src/lib/truck-capacity.functions.ts",
+    label: "getForecastVsActual forecast_log",
+    table: "truck_capacity_forecast_log",
+    order: '[{ column: "forecast_date" }, { column: "id" }], concurrency: 4',
+  },
+  {
+    file: "src/lib/truck-capacity.functions.ts",
+    label: "getForecastVsActual runs",
+    table: "truck_capacity_runs",
+    order: '[{ column: "run_date" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/truck-capacity.functions.ts",
+    label: "snapshot readout truck_capacity_p21_demand",
+    table: "truck_capacity_p21_demand",
+    order: '[{ column: "id" }]',
+  },
+  {
+    file: "src/lib/truck-capacity.functions.ts",
+    label: "coverage truck_capacity_p21_demand",
+    table: "truck_capacity_p21_demand",
+    order: '[{ column: "id" }]',
+  },
+  {
+    file: "src/lib/truck-capacity.functions.ts",
+    label: "scoreboard truck_capacity_runs",
+    table: "truck_capacity_runs",
+    order:
+      '[{ column: "route_id" }, { column: "run_date" }, { column: "run_seq" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/truck-capacity.functions.ts",
+    label: "scoreboard truck_capacity_forecast_log",
+    table: "truck_capacity_forecast_log",
+    order:
+      '[{ column: "route_id" }, { column: "forecast_date" }, { column: "made_on" }, { column: "id" }], concurrency: 4',
+  },
+  {
+    file: "src/lib/truck-capacity/board.ts",
+    label: "board truck_capacity_p21_demand",
+    table: "truck_capacity_p21_demand",
+    order: '[{ column: "snapshot_at", ascending: false }, { column: "id" }]',
+  },
   {
     file: "src/lib/truck-capacity/serve.ts",
     label: "forecast p21 cubes",
@@ -38,25 +75,85 @@ const SITES: Array<{ file: string; label: string; table: string; order: string }
     table: "dispatch_stops",
     order: '[{ column: "position" }, { column: "id" }]',
   },
-  { file: "src/lib/truck-capacity/board.ts", label: "board truck_capacity_runs", table: "truck_capacity_runs", order: '[{ column: "run_date", ascending: false }, { column: "id" }]' },
-  { file: "src/lib/pricer.functions.ts", label: "listSkuFamilies price_list", table: "price_list", order: '[{ column: "item_short" }, { column: "id" }]' },
-  { file: "src/lib/pricer.functions.ts", label: "listFamilyImages price_list", table: "price_list", order: '[{ column: "id" }]' },
-  { file: "src/lib/pricer.functions.ts", label: "listPricerFilters price_list", table: "price_list", order: '[{ column: "id" }]' },
-  { file: "src/lib/p21.server.ts", label: "p21_sql cleanup price_list", table: "price_list", order: '[{ column: "id" }]' },
-  { file: "src/lib/truck-capacity.server.ts", label: "baseline route runs", table: "truck_capacity_runs", order: '[{ column: "run_date" }, { column: "id" }]' },
-  { file: "src/lib/truck-capacity.server.ts", label: "baseline hub runs", table: "truck_capacity_runs", order: '[{ column: "run_date" }, { column: "id" }]' },
-  { file: "src/lib/truck-capacity.server.ts", label: "exportCapacityWorkbook runs", table: "truck_capacity_runs", order: '[{ column: "run_date" }, { column: "id" }]' },
-  { file: "src/lib/truck-capacity-reps.functions.ts", label: "underfilled truck_capacity_runs", table: "truck_capacity_runs", order: '[{ column: "run_date" }, { column: "id" }]' },
-  { file: "src/lib/capacity-alerts.server.ts", label: "capacity alerts truck_capacity_runs", table: "truck_capacity_runs", order: '[{ column: "run_date" }, { column: "id" }]' },
+  {
+    file: "src/lib/truck-capacity/board.ts",
+    label: "board truck_capacity_runs",
+    table: "truck_capacity_runs",
+    order: '[{ column: "run_date", ascending: false }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/pricer.functions.ts",
+    label: "listSkuFamilies price_list",
+    table: "price_list",
+    order: '[{ column: "item_short" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/pricer.functions.ts",
+    label: "listFamilyImages price_list",
+    table: "price_list",
+    order: '[{ column: "id" }]',
+  },
+  {
+    file: "src/lib/pricer.functions.ts",
+    label: "listPricerFilters price_list",
+    table: "price_list",
+    order: '[{ column: "id" }]',
+  },
+  {
+    file: "src/lib/p21.server.ts",
+    label: "p21_sql cleanup price_list",
+    table: "price_list",
+    order: '[{ column: "id" }]',
+  },
+  {
+    file: "src/lib/truck-capacity.server.ts",
+    label: "baseline route runs",
+    table: "truck_capacity_runs",
+    order: '[{ column: "run_date" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/truck-capacity.server.ts",
+    label: "baseline hub runs",
+    table: "truck_capacity_runs",
+    order: '[{ column: "run_date" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/truck-capacity.server.ts",
+    label: "exportCapacityWorkbook runs",
+    table: "truck_capacity_runs",
+    order: '[{ column: "run_date" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/truck-capacity-reps.functions.ts",
+    label: "underfilled truck_capacity_runs",
+    table: "truck_capacity_runs",
+    order: '[{ column: "run_date" }, { column: "id" }]',
+  },
+  {
+    file: "src/lib/capacity-alerts.server.ts",
+    label: "capacity alerts truck_capacity_runs",
+    table: "truck_capacity_runs",
+    order: '[{ column: "run_date" }, { column: "id" }]',
+  },
 ];
 
+// Formatting-insensitive: no whitespace, no trailing comma before ] or }.
+const compact = (s: string) => s.replace(/\s+/g, "").replace(/,([\]}])/g, "$1");
+
+// The whole fetchAllRows(...) call that carries this label, compacted.
 function block(file: string, label: string): string {
   const src = readFileSync(file, "utf8");
-  const end = src.indexOf(`label: "${label}"`);
-  expect(end, `${label} not found in ${file}`).toBeGreaterThan(0);
-  const start = src.lastIndexOf("fetchAllRows<", end);
-  const lineEnd = src.indexOf("\n", end);
-  return src.slice(start, lineEnd);
+  const at = src.indexOf(`label: "${label}"`);
+  expect(at, `${label} not found in ${file}`).toBeGreaterThan(0);
+  const start = src.lastIndexOf("fetchAllRows<", at);
+  let depth = 0;
+  let end = src.indexOf("(", start);
+  for (; end < src.length; end++) {
+    if (src[end] === "(") depth++;
+    else if (src[end] === ")" && --depth === 0) break;
+  }
+  expect(end, `${label}: unbalanced fetchAllRows call`).toBeGreaterThan(at);
+  return compact(src.slice(start, end + 1));
 }
 
 describe("fixed call sites use the shared pager", () => {
@@ -64,8 +161,8 @@ describe("fixed call sites use the shared pager", () => {
     it(`${s.file} — ${s.label}`, () => {
       const b = block(s.file, s.label);
       expect(b).toContain(`from("${s.table}")`);
-      expect(b).toMatch(/\{\s*count:\s*"exact"/);
-      expect(b).toContain(`orderBy: ${s.order}`);
+      expect(b).toMatch(/\{count:"exact"/);
+      expect(b).toContain(compact(`orderBy: ${s.order}`));
       expect(b).not.toMatch(/\.limit\(/);
       expect(b).not.toMatch(/\.range\(/);
       expect(b).not.toMatch(/\.order\(/);
@@ -76,14 +173,20 @@ describe("fixed call sites use the shared pager", () => {
   it("baseline hub runs keep the inner-join hub filter", () => {
     const b = block("src/lib/truck-capacity.server.ts", "baseline hub runs");
     expect(b).toContain("truck_capacity_routes!inner(hub)");
-    expect(b).toContain('.eq("truck_capacity_routes.hub", route.hub)');
+    expect(b).toContain(compact('.eq("truck_capacity_routes.hub", route.hub)'));
   });
   it("listSkuFamilies keeps the optional search filter", () => {
     const b = block("src/lib/pricer.functions.ts", "listSkuFamilies price_list");
-    expect(b).toContain("q = q.or(`item.ilike.%${esc}%,item_short.ilike.%${esc}%,description.ilike.%${esc}%`)");
+    expect(b).toContain(
+      compact(
+        "q = q.or(`item.ilike.%${esc}%,item_short.ilike.%${esc}%,description.ilike.%${esc}%`)",
+      ),
+    );
   });
   it("only the shared pager module implements paging; serve.ts uses it for cube reads", () => {
-    expect(readFileSync("src/lib/spiff/fetch-all.server.ts", "utf8")).toContain('from "../supabase-fetch-all"');
+    expect(readFileSync("src/lib/spiff/fetch-all.server.ts", "utf8")).toContain(
+      'from "../supabase-fetch-all"',
+    );
     const serve = readFileSync("src/lib/truck-capacity/serve.ts", "utf8");
     expect(serve).toContain('import("../supabase-fetch-all")');
     expect(serve).not.toMatch(/\.range\(/);
@@ -98,11 +201,25 @@ vi.mock("@/integrations/supabase/client.server", () => {
     const rec: any = { table, select: null, eq: [], order: [], range: [] };
     calls.push(rec);
     const q: any = {
-      select(c: string, o: any) { rec.select = [c, o]; return q; },
-      eq(c: string, v: any) { rec.eq.push([c, v]); return q; },
-      in() { return q; },
-      order(c: string, o: any) { rec.order.push([c, o?.ascending]); return q; },
-      range(f: number, t: number) { rec.range.push([f, t]); return Promise.resolve({ data: rows.slice(f, t + 1), error: null, count: 1550 }); },
+      select(c: string, o: any) {
+        rec.select = [c, o];
+        return q;
+      },
+      eq(c: string, v: any) {
+        rec.eq.push([c, v]);
+        return q;
+      },
+      in() {
+        return q;
+      },
+      order(c: string, o: any) {
+        rec.order.push([c, o?.ascending]);
+        return q;
+      },
+      range(f: number, t: number) {
+        rec.range.push([f, t]);
+        return Promise.resolve({ data: rows.slice(f, t + 1), error: null, count: 1550 });
+      },
     };
     return q;
   };
@@ -115,14 +232,29 @@ describe("SPIFF helpers via shared pager", () => {
     const { fetchAllRunLines } = await import("../spiff/fetch-all.server");
     const got = await fetchAllRunLines("run-1", "included");
     expect(got.length).toBe(1550);
-    expect(calls.every((c) => c.table === "spiff_run_lines" && c.select[0] === "id, included" && c.select[1].count === "exact")).toBe(true);
-    expect(calls.flatMap((c) => c.order)).toEqual([["id", true], ["id", true]]);
-    expect(calls.flatMap((c) => c.range)).toEqual([[0, 999], [1000, 1999]]);
+    expect(
+      calls.every(
+        (c) =>
+          c.table === "spiff_run_lines" &&
+          c.select[0] === "id, included" &&
+          c.select[1].count === "exact",
+      ),
+    ).toBe(true);
+    expect(calls.flatMap((c) => c.order)).toEqual([
+      ["id", true],
+      ["id", true],
+    ]);
+    expect(calls.flatMap((c) => c.range)).toEqual([
+      [0, 999],
+      [1000, 1999],
+    ]);
   });
   it("fetchAllRunChecks returns 1,550 rows through the same pager", async () => {
     calls.length = 0;
     const { fetchAllRunChecks } = await import("../spiff/fetch-all.server");
     expect((await fetchAllRunChecks("run-1", "*")).length).toBe(1550);
-    expect(calls.every((c) => c.table === "spiff_checks" && c.select[1].count === "exact")).toBe(true);
+    expect(calls.every((c) => c.table === "spiff_checks" && c.select[1].count === "exact")).toBe(
+      true,
+    );
   });
 });

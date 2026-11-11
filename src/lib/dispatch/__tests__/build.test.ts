@@ -68,8 +68,21 @@ describe("buildDispatchPlanFromRows", () => {
   it("produces one run per run day with stable external ids", () => {
     const rows = [
       row(),
-      row({ order_no: "O2", ship_to_id: "ST2", customer_name: "Branson Furniture", ship2_city: "Branson", ship2_zip: "65616" }),
-      row({ order_no: "O3", ship_to_id: "ST3", customer_name: "Columbia Interiors", ship2_city: "Columbia", ship2_zip: "65201", ship_date: THU }),
+      row({
+        order_no: "O2",
+        ship_to_id: "ST2",
+        customer_name: "Branson Furniture",
+        ship2_city: "Branson",
+        ship2_zip: "65616",
+      }),
+      row({
+        order_no: "O3",
+        ship_to_id: "ST3",
+        customer_name: "Columbia Interiors",
+        ship2_city: "Columbia",
+        ship2_zip: "65201",
+        ship_date: THU,
+      }),
     ];
     const plan = buildDispatchPlanFromRows(rows, MAP, TEMPLATE, CUTOFF, CONFIG);
     expect(plan.runs.map((r) => r.runDate)).toEqual([WED, THU]);
@@ -82,7 +95,10 @@ describe("buildDispatchPlanFromRows", () => {
   });
 
   it("is byte-identical for identical inputs", () => {
-    const rows = [row(), row({ order_no: "O2", ship_to_id: "ST2", ship2_city: "Branson", ship2_zip: "65616" })];
+    const rows = [
+      row(),
+      row({ order_no: "O2", ship_to_id: "ST2", ship2_city: "Branson", ship2_zip: "65616" }),
+    ];
     const a = buildDispatchPlanFromRows(rows, MAP, TEMPLATE, CUTOFF, CONFIG);
     const b = buildDispatchPlanFromRows(rows, MAP, TEMPLATE, CUTOFF, CONFIG);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
@@ -146,7 +162,13 @@ describe("buildDispatchPlanFromRows", () => {
   it("sums totals across live stops and holds", () => {
     const rows = [
       row(),
-      row({ order_no: "O2", ship_to_id: "ST9", est_pallets: 3, est_cube_ft: 60, est_weight_lbs: 900 }),
+      row({
+        order_no: "O2",
+        ship_to_id: "ST9",
+        est_pallets: 3,
+        est_cube_ft: 60,
+        est_weight_lbs: 900,
+      }),
     ];
     const wed = buildDispatchPlanFromRows(rows, MAP, TEMPLATE, CUTOFF, CONFIG).runs[0]!;
     expect(wed.totals.estPallets).toBeNull();
