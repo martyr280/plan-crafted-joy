@@ -35,6 +35,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
 export const SHA_RE = /^[0-9a-f]{40}$/;
@@ -148,45 +149,154 @@ export function mapLine(hunks, line) {
   return line + delta;
 }
 
-// Characters Prettier adds, drops or moves when it rewraps code: whitespace,
-// trailing commas, semicolons, wrapping parentheses, a leading union bar and
-// string quotes.
-const LAYOUT = /[\s,;()|'"]/g;
 // Some messages cite another line ("at line 216"); reformatting moves it.
 const messageShape = (message) => message.replace(/\bline \d+/g, "line N");
-const CONTEXT_CHARS = 32;
 
 /**
- * Layout-insensitive source around a diagnostic: the nearest CONTEXT_CHARS
- * non-layout characters on each side. Null when ESLint gave no source.
+ * Locates each diagnostic's owner: the innermost enclosing function, or the
+ * top-level statement when there is none. The owner is identified by its
+ * layout-insensitive token stream, and the diagnostic by its token index inside
+ * it, so a rewrap of unchanged code keeps both while any token edit to the
+ * owner, or a move into another owner, changes them. Uses the toolchain's own
+ * TypeScript parser; without it no diagnostic gets an owner.
  */
-export function layoutContext(source, line, column) {
-  if (typeof source !== "string" || !line) return null;
-  let offset = 0;
-  for (let n = 1; n < line; n++) {
-    const next = source.indexOf("\n", offset);
-    if (next < 0) return null;
-    offset = next + 1;
+export function ownerAnalyzer(ts) {
+  const FUNCTION_KINDS = new Set(
+    [
+      "FunctionDeclaration",
+      "FunctionExpression",
+      "ArrowFunction",
+      "MethodDeclaration",
+      "Constructor",
+      "GetAccessor",
+      "SetAccessor",
+    ].map((k) => ts.SyntaxKind[k]),
+  );
+  // Tokens Prettier adds, drops or moves when it rewraps code.
+  const LAYOUT_TOKENS = new Set(
+    ["CommaToken", "SemicolonToken", "OpenParenToken", "CloseParenToken", "BarToken"].map(
+      (k) => ts.SyntaxKind[k],
+    ),
+  );
+  const isJsDoc = (n) =>
+    n.kind >= ts.SyntaxKind.FirstJSDocNode && n.kind <= ts.SyntaxKind.LastJSDocNode;
+  const kindFor = (file) => {
+    if (/\.tsx$/i.test(file)) return ts.ScriptKind.TSX;
+    if (/\.[cm]?ts$/i.test(file)) return ts.ScriptKind.TS;
+    if (/\.jsx$/i.test(file)) return ts.ScriptKind.JSX;
+    return ts.ScriptKind.JS;
+  };
+
+  function tokens(node, sf, out) {
+    if (isJsDoc(node)) return;
+    if (
+      node.kind === ts.SyntaxKind.JsxExpression &&
+      node.expression &&
+      ts.isStringLiteral(node.expression) &&
+      !node.expression.text.trim()
+    ) {
+      return;
+    }
+    const kids = node.getChildren(sf);
+    if (kids.length) {
+      for (const k of kids) tokens(k, sf, out);
+      return;
+    }
+    if (node.kind === ts.SyntaxKind.EndOfFileToken || LAYOUT_TOKENS.has(node.kind)) return;
+    let text;
+    if (ts.isStringLiteral(node) || node.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral) {
+      text = `s:${JSON.stringify(node.text)}`;
+    } else if (node.kind === ts.SyntaxKind.JsxText) {
+      text = node.text.replace(/\s+/g, "");
+      if (!text) return;
+      text = `j:${text}`;
+    } else {
+      text = node.getText(sf);
+    }
+    out.push({ end: node.getEnd(), text });
   }
-  offset += Math.max(0, column - 1);
-  const window = CONTEXT_CHARS * 16;
-  const before = source.slice(Math.max(0, offset - window), offset).replace(LAYOUT, "");
-  const after = source.slice(offset, offset + window).replace(LAYOUT, "");
-  return `${before.slice(-CONTEXT_CHARS)}|${after.slice(0, CONTEXT_CHARS)}`;
+
+  return function analyze(file, source) {
+    if (typeof source !== "string") return null;
+    let sf;
+    try {
+      sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kindFor(file));
+    } catch {
+      return null;
+    }
+    const owners = new Map();
+    const ownerData = (node) => {
+      let data = owners.get(node);
+      if (!data) {
+        const list = [];
+        tokens(node, sf, list);
+        data = {
+          list,
+          id: crypto
+            .createHash("sha256")
+            .update(JSON.stringify([ts.SyntaxKind[node.kind], list.map((t) => t.text)]))
+            .digest("hex"),
+        };
+        owners.set(node, data);
+      }
+      return data;
+    };
+    return function locate(line, column) {
+      if (!line) return null;
+      let pos;
+      try {
+        pos = sf.getPositionOfLineAndCharacter(line - 1, Math.max(0, column - 1));
+      } catch {
+        return null;
+      }
+      let node = sf;
+      for (;;) {
+        const next = node
+          .getChildren(sf)
+          .find((c) => !isJsDoc(c) && c.getStart(sf) <= pos && pos < c.getEnd());
+        if (!next) break;
+        node = next;
+      }
+      let owner = null;
+      for (let n = node; n && n !== sf; n = n.parent) {
+        if (FUNCTION_KINDS.has(n.kind)) {
+          owner = n;
+          break;
+        }
+        if (n.parent === sf) owner = n;
+      }
+      if (!owner) return null;
+      const { list, id } = ownerData(owner);
+      const index = list.findIndex((t) => t.end > pos);
+      if (index < 0) return null;
+      return { owner: id, ownerToken: index };
+    };
+  };
 }
 
-export function normalize(results, cwd) {
-  return results.flatMap((r) =>
-    r.messages.map((m) => ({
-      file: path.relative(cwd, r.filePath).split(path.sep).join("/"),
+/** The toolchain's TypeScript, as the owner analyzer; null when unavailable. */
+export function loadOwnerAnalyzer(toolchain) {
+  try {
+    return ownerAnalyzer(createRequire(path.join(toolchain, "package.json"))("typescript"));
+  } catch {
+    return null;
+  }
+}
+
+export function normalize(results, cwd, analyzer = null) {
+  return results.flatMap((r) => {
+    const file = path.relative(cwd, r.filePath).split(path.sep).join("/");
+    const locate = analyzer && r.messages.length ? analyzer(file, r.source) : null;
+    return r.messages.map((m) => ({
+      file,
       rule: m.ruleId ?? (m.fatal ? "fatal/parse" : "eslint/unknown"),
       severity: m.severity,
       line: m.line ?? 0,
       column: m.column ?? 0,
       message: m.message,
-      context: layoutContext(r.source, m.line, m.column),
-    })),
-  );
+      ...(locate?.(m.line, m.column) ?? { owner: null, ownerToken: null }),
+    }));
+  });
 }
 
 export const totals = (items) => ({
@@ -252,19 +362,34 @@ export function compareDiagnostics({ base, head, comparison, scope }) {
   }
 
   // Second pass, after every exact match is taken: a diagnostic whose line was
-  // rewrapped or moved still matches an unused base diagnostic in the same file
-  // with the same rule, severity, message (cited line numbers aside) and
-  // layout-insensitive source context.
-  const byContext = new Map();
+  // rewrapped or moved still matches one unused base diagnostic in the same
+  // (rename-mapped) file with the same rule, severity and message (cited line
+  // numbers aside), the same owner token stream and the same token index in it.
+  // Anything less is introduced.
+  const byOwner = new Map();
   base.forEach((b, i) => {
-    if (used.has(i) || b.context == null) return;
-    const k = JSON.stringify([b.file, b.rule, b.severity, messageShape(b.message), b.context]);
-    byContext.set(k, [...(byContext.get(k) ?? []), i]);
+    if (used.has(i) || b.owner == null) return;
+    const k = JSON.stringify([
+      b.file,
+      b.rule,
+      b.severity,
+      messageShape(b.message),
+      b.owner,
+      b.ownerToken,
+    ]);
+    byOwner.set(k, [...(byOwner.get(k) ?? []), i]);
   });
   for (const { m, diff, baseFile } of unmatched) {
-    if (baseFile != null && m.context != null) {
-      const k = JSON.stringify([baseFile, m.rule, m.severity, messageShape(m.message), m.context]);
-      const index = (byContext.get(k) ?? []).find((i) => !used.has(i));
+    if (baseFile != null && m.owner != null) {
+      const k = JSON.stringify([
+        baseFile,
+        m.rule,
+        m.severity,
+        messageShape(m.message),
+        m.owner,
+        m.ownerToken,
+      ]);
+      const index = (byOwner.get(k) ?? []).find((i) => !used.has(i));
       if (index != null) {
         used.add(index);
         inherited.push(m);
@@ -525,8 +650,12 @@ export async function main(env = process.env) {
     const baseRun = await runEslint(baseTree, toolchain, eslintBin, "base", output);
     const headRun = await runEslint(headTree, toolchain, eslintBin, "head", output);
     summary.runs = [baseRun.record, headRun.record];
-    const base = normalize(baseRun.results, baseTree);
-    const head = normalize(headRun.results, headTree);
+    const analyzer = loadOwnerAnalyzer(toolchain);
+    summary.toolchain.rewrapMatching = analyzer
+      ? "owner scope token stream (toolchain typescript)"
+      : "disabled: typescript not in toolchain; every unmatched diagnostic is introduced";
+    const base = normalize(baseRun.results, baseTree, analyzer);
+    const head = normalize(headRun.results, headTree, analyzer);
 
     const comparison = parseUnifiedDiff(
       git(repo, ["diff", "-M", "--unified=0", "--no-ext-diff", "--no-color", baseSha, headSha]),

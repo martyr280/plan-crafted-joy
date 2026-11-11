@@ -5,13 +5,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   compareDiagnostics,
-  layoutContext,
   main,
   mapLine,
+  ownerAnalyzer,
   parseUnifiedDiff,
   unquoteGitPath,
 } from "./lint-comparison.mjs";
@@ -136,48 +137,77 @@ describe("diff parsing", () => {
 });
 
 describe("rewrap matching", () => {
-  const baseSrc = "const cov = (q.data as any)?.coverage as { n: number };\n";
-  const headSrc = "\nconst cov = (q.data as any)?.coverage as\n  | {\n      n: number;\n    };\n";
-  const finding = (line, column, message, source) => ({
-    file: "a.ts",
+  const analyze = ownerAnalyzer(createRequire(import.meta.url)("typescript"));
+  const finding = (file, source, line, column, message = "m") => ({
+    file,
     rule: "r",
     severity: 2,
     line,
     column,
     message,
-    context: layoutContext(source, line, column),
+    ...analyze(file, source)(line, column),
   });
-  const diff = parseUnifiedDiff(
-    ["diff --git a/a.ts b/a.ts", "--- a/a.ts", "+++ b/a.ts", "@@ -1 +1,5 @@"].join("\n"),
-  );
-
-  it("ignores a leading union bar, quotes and a cited line number", () => {
-    assert.equal(
-      layoutContext(baseSrc, 1, 27),
-      layoutContext(headSrc, 2, 27),
-      "union bar and wrapping",
+  const diffFor = (file, oldLines, newLines) =>
+    parseUnifiedDiff(
+      [
+        `diff --git a/${file} b/${file}`,
+        `--- a/${file}`,
+        `+++ b/${file}`,
+        `@@ -1,${oldLines} +1,${newLines} @@`,
+      ].join("\n"),
     );
-    assert.equal(layoutContext("x = 'a';", 1, 5), layoutContext('x = "a"', 1, 5));
+  const baseSrc = "export function f(q: any) {\n  return (q.data as any)?.c as { n: number };\n}\n";
+  const headSrc =
+    "export function f(q: any) {\n  return (q.data as any)?.c as\n    | {\n        n: number;\n      };\n}\n";
+
+  it("pairs a rewrap in the same function, ignoring a union bar, quotes and a cited line", () => {
+    const quoted = analyze("q.ts", "function g() {\n  return 'a';\n}\n")(2, 10);
+    assert.deepEqual(quoted, analyze("q.ts", 'function g() {\n  return "a"\n}\n')(2, 10));
     const result = compareDiagnostics({
-      base: [finding(1, 27, "Hook deps (at line 3) change", baseSrc)],
-      head: [finding(2, 27, "Hook deps (at line 9) change", headSrc)],
-      comparison: diff,
-      scope: diff,
+      base: [finding("a.ts", baseSrc, 2, 22, "deps (at line 3)")],
+      head: [finding("a.ts", headSrc, 2, 22, "deps (at line 9)")],
+      comparison: diffFor("a.ts", 3, 6),
+      scope: diffFor("a.ts", 3, 6),
     });
     assert.equal(result.introduced.length, 0);
     assert.equal(result.reformatted.length, 1);
   });
 
-  it("does not pair a diagnostic whose surrounding code changed", () => {
-    const edited = headSrc.replace("coverage", "coverage2");
+  it("does not pair a token edit inside the owning function", () => {
+    const edited = headSrc.replace("?.c", "?.d");
     const result = compareDiagnostics({
-      base: [finding(1, 27, "m", baseSrc)],
-      head: [finding(2, 27, "m", edited)],
-      comparison: diff,
-      scope: diff,
+      base: [finding("a.ts", baseSrc, 2, 22)],
+      head: [finding("a.ts", edited, 2, 22)],
+      comparison: diffFor("a.ts", 3, 6),
+      scope: diffFor("a.ts", 3, 6),
     });
     assert.equal(result.introduced.length, 1);
     assert.equal(result.resolved.length, 1);
+  });
+
+  it("is one-to-one: two head copies of one base diagnostic leave one introduced", () => {
+    const one = "function f() {\n  debugger;\n}\n";
+    const two = "function f() {\n  debugger;\n}\nfunction f() {\n  debugger;\n}\n";
+    const result = compareDiagnostics({
+      base: [finding("a.ts", one, 2, 3)],
+      head: [finding("a.ts", two, 2, 3), finding("a.ts", two, 5, 3)],
+      comparison: diffFor("a.ts", 3, 6),
+      scope: diffFor("a.ts", 3, 6),
+    });
+    assert.equal(result.inherited.length, 1);
+    assert.equal(result.introduced.length, 1);
+  });
+
+  it("gives no owner, so no pairing, without a parser or source", () => {
+    assert.equal(analyze("a.ts", undefined), null);
+    const bare = { file: "a.ts", rule: "r", severity: 2, line: 2, column: 3, message: "m" };
+    const result = compareDiagnostics({
+      base: [{ ...bare, line: 1, owner: null, ownerToken: null }],
+      head: [{ ...bare, owner: null, ownerToken: null }],
+      comparison: diffFor("a.ts", 1, 2),
+      scope: diffFor("a.ts", 1, 2),
+    });
+    assert.equal(result.introduced.length, 1);
   });
 });
 
@@ -271,6 +301,51 @@ describe("comparator fixtures", () => {
       read("introduced-findings").map((m) => [m.file, m.line, m.rule, m.classification]),
       [["src/b.js", 2, "no-var", "added_line"]],
     );
+  });
+
+  it("fails a debugger moved from a fixed function into a different, previously clean one (QA Q5-1)", async () => {
+    const pad = '"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"';
+    const fn = (name, withDebugger) =>
+      `export function ${name}() {\n  const paddingBefore = ${pad};\n${
+        withDebugger ? "  debugger;\n" : ""
+      }  return ${pad};\n}\n`;
+    const r = baseRepo("qa-q5-1");
+    const base = r
+      .write("a.js", `${fn("oldFunction", true)}\n${fn("newFunction", false)}`)
+      .commit("base");
+    const head = r
+      .write("a.js", `${fn("oldFunction", false)}\n${fn("newFunction", true)}`)
+      .commit("head");
+    const { code, summary, read } = await compare(r.dir, base, head);
+    assert.equal(code, 1);
+    assert.equal(summary.status, "regression");
+    assert.deepEqual(summary.inheritedAfterReformat, { errors: 0, warnings: 0, files: 0 });
+    assert.deepEqual(
+      read("introduced-findings").map((m) => [m.file, m.line, m.rule, m.classification]),
+      [["a.js", 8, "no-debugger", "added_line"]],
+    );
+    assert.deepEqual(summary.resolvedOrMoved, { errors: 1, warnings: 0, files: 1 });
+  });
+
+  it("still inherits a debugger when only its own function is rewrapped", async () => {
+    const r = baseRepo("rewrap-debugger");
+    const base = r
+      .write(
+        "a.js",
+        "export function oldFunction() { const p = pick('a', 'b'); debugger; return p; }\n\nexport function newFunction() {\n  return 1;\n}\n",
+      )
+      .commit("base");
+    const head = r
+      .write(
+        "a.js",
+        'export function oldFunction() {\n  const p = pick(\n    "a",\n    "b",\n  );\n  debugger;\n  return p;\n}\n\nexport function newFunction() {\n  return 1;\n}\n',
+      )
+      .commit("head");
+    const { code, summary } = await compare(r.dir, base, head);
+    assert.equal(code, 0);
+    assert.equal(summary.status, "pass");
+    assert.deepEqual(summary.inheritedAfterReformat, { errors: 1, warnings: 0, files: 1 });
+    assert.deepEqual(summary.introduced.all, { errors: 0, warnings: 0, files: 0 });
   });
 
   it("treats an edit beside an old diagnostic as new, not as a rewrap", async () => {
