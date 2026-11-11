@@ -7,6 +7,7 @@ import { validateSelectSql, stripLeadingSqlComments } from "./sql-schedules.serv
 import { baselineFromSnapshot, addDaysISO } from "./truck-capacity/baseline";
 import { runDatesInWindow, rollForward } from "./truck-capacity/roll-forward";
 import type { RouteCutoff } from "./truck-capacity/cutoffs";
+import type { PagedQuery } from "./supabase-fetch-all";
 import {
   validateP21SqlText,
   validateP21SqlOutput,
@@ -945,14 +946,25 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
     .order("sort_order", { ascending: true });
 
   const { fetchAllRows } = await import("./supabase-fetch-all");
-  const runs = await fetchAllRows<any>(
+  type RunRow = {
+    route_id: string;
+    run_date: string;
+    run_seq: number;
+    capacity_frac: number | null;
+    vendor_pickup_frac: number | null;
+    driver: string | null;
+    pallet_count: number | null;
+    returned_pallets: number | null;
+    notes: string | null;
+  };
+  const runs = await fetchAllRows<RunRow>(
     () =>
       supabaseAdmin
         .from("truck_capacity_runs")
         .select(
           "route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, driver, pallet_count, returned_pallets, notes",
           { count: "exact" },
-        ) as any,
+        ) as unknown as PagedQuery<RunRow>,
     { label: "exportCapacityWorkbook runs", orderBy: [{ column: "run_date" }, { column: "id" }] },
   );
   const byRoute = new Map<string, any[]>();
