@@ -224,8 +224,10 @@ describe("Driver Time tabs", () => {
     const field = screen.getAllByRole("textbox")[0];
     field.focus();
     fireEvent.keyDown(field, { key: "9" });
+    fireEvent.change(field, { target: { value: "95" } });
     await act(async () => read.resolve(fresh));
     expect(screen.queryByTestId("detection-conflict")).toBeNull();
     expect(document.activeElement).toBe(field);
+    expect((field as HTMLInputElement).value).toBe("95");
   });
 });

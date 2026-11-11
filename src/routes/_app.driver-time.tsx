@@ -427,9 +427,6 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
     }
     setRefreshState("idle");
     setConflict(false);
-    setThreshold("");
-    setMergeGap("");
-    setPatterns("");
     setRefreshResult("Settings refreshed. Review them and save again.");
     setFocusReq({ owner, to: "heading" });
   }
