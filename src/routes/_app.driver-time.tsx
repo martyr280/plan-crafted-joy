@@ -48,6 +48,7 @@ import { DriverTimeReport } from "@/components/driver-time/DriverTimeReport";
 import { driverTimeReportPanels } from "@/lib/driver-time/report-panels";
 import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 import { DriverRatesPanel } from "@/components/driver-time/DriverRatesPanel";
+import { DriverRosterPanel } from "@/components/driver-time/DriverRosterPanel";
 
 export const Route = createFileRoute("/_app/driver-time")({
   head: () => ({
@@ -589,7 +590,8 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
         )}
       </Card>
 
-      {/* Driver Time → Settings → Driver rates. The panel also checks the role and loads nothing otherwise. */}
+      {/* Driver roster and Driver rates. Each panel also checks the role and loads nothing otherwise. */}
+      {canManageDriverPay && <DriverRosterPanel />}
       {canManageDriverPay && <DriverRatesPanel />}
     </div>
   );

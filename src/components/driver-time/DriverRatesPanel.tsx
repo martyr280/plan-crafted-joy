@@ -52,7 +52,8 @@ export function DriverRatesPanel() {
 }
 
 function DriverRatesPanelInner() {
-  const q = useDriverPayRates(true);
+  const [showHidden, setShowHidden] = useState(false);
+  const q = useDriverPayRates(true, showHidden);
   const [filter, setFilter] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -71,9 +72,22 @@ function DriverRatesPanelInner() {
   const today = dateStrInTz(new Date());
 
   const payload = q.data as
-    | { drivers?: Driver[]; rates?: PayRateRow[]; rosterError?: string | null }
+    | {
+        drivers?: Driver[];
+        excludedDrivers?: Array<{ id: string; name: string }>;
+        rates?: PayRateRow[];
+        rosterError?: string | null;
+      }
     | undefined;
-  const drivers: Driver[] = useMemo(() => payload?.drivers ?? [], [payload]);
+  const drivers: Driver[] = useMemo(
+    () => [
+      ...(payload?.drivers ?? []),
+      ...(showHidden
+        ? (payload?.excludedDrivers ?? []).map((d) => ({ id: d.id, name: d.name, source: "hidden" }))
+        : []),
+    ],
+    [payload, showHidden],
+  );
   const rates: PayRateRow[] = payload?.rates ?? [];
   const rosterError = payload?.rosterError;
   const shown = useMemo(() => {
@@ -117,6 +131,15 @@ function DriverRatesPanelInner() {
           />
         </div>
       </div>
+      <label className="flex items-start gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={showHidden}
+          onChange={(e) => setShowHidden(e.target.checked)}
+        />
+        <span>Show hidden drivers (to review their rate history)</span>
+      </label>
 
       {rosterError && (
         <p className="text-xs text-destructive-text">
@@ -154,6 +177,11 @@ function DriverRatesPanelInner() {
                     title={d.name}
                   >
                     {d.name}
+                    {d.source === "hidden" && (
+                      <Badge variant="secondary" className="ml-2">
+                        Hidden
+                      </Badge>
+                    )}
                   </span>
                   <span className="w-full text-muted-foreground text-xs sm:w-auto sm:min-w-48">
                     {current ? (
