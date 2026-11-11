@@ -1,37 +1,100 @@
 name: Linux lint baseline comparison
 
+# Compares the immutable PR base tip with the immutable PR head using one common
+# toolchain (the base commit's frozen install and lint configuration). Full-repo
+# lint stays a separate job in app-qa.yml and is not relabelled here.
 on:
   pull_request:
-  push:
-    branches: ["fix/truck-capacity-import-scoring-2026-10-12"]
 
 permissions:
   contents: read
 
+concurrency:
+  group: lint-comparison-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   compare:
-    name: Compare exact head with untouched reviewed base
+    name: Compare exact head with the actual PR base
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      NODE_VERSION: "22.18.0"
+      BUN_VERSION: "1.3.13"
     steps:
-      - uses: actions/checkout@v4
+      - name: Validate event SHAs
+        run: |
+          for sha in "$BASE_SHA" "$HEAD_SHA"; do
+            if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::Event SHA is not a full commit id"
+              exit 1
+            fi
+          done
+
+      # Head source is checked out only as data; no credentials are persisted and
+      # nothing from it runs with secrets (pull_request, read-only token).
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          ref: ${{ env.HEAD_SHA }}
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+          path: head
+
+      - name: Fetch the exact base commit and build the common toolchain tree
+        working-directory: head
+        run: |
+          git fetch --no-tags --quiet origin "$BASE_SHA"
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git cat-file -e "${HEAD_SHA}^{commit}"
+          git worktree add --detach "$RUNNER_TEMP/toolchain" "$BASE_SHA"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "22.18.0"
-      - uses: oven-sh/setup-bun@v2
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
-          bun-version: "1.3.13"
-      - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Compare unchanged rules and frozen dependencies
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install the base commit's frozen dependencies (common toolchain)
+        working-directory: ${{ runner.temp }}/toolchain
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Install the head's frozen dependencies (native tooling check)
+        id: head-install
+        working-directory: head
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # Tests exercise the comparator code under review (head) on synthetic repos.
+      - name: Comparator fixture tests
+        working-directory: head
+        run: node --test "$GITHUB_WORKSPACE/head/.github/scripts/lint-comparison.test.mjs"
+
+      # The gating comparator comes from the base commit when it has one, so a PR
+      # cannot loosen its own gate. The first PR that adds it bootstraps from head.
+      - name: Compare base tip and head
+        if: always()
         env:
-          LINT_BASE_SHA: "83fd68e03befad3c234dc5c0fbee71f0184bded7"
-          LINT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node .github/scripts/lint-comparison.mjs
-      - uses: actions/upload-artifact@v4
+          LINT_REPO: ${{ github.workspace }}/head
+          LINT_BASE_SHA: ${{ env.BASE_SHA }}
+          LINT_HEAD_SHA: ${{ env.HEAD_SHA }}
+          LINT_TOOLCHAIN: ${{ runner.temp }}/toolchain
+          LINT_HEAD_TOOLCHAIN: ${{ github.workspace }}/head
+          LINT_HEAD_INSTALL: ${{ steps.head-install.outcome }}
+          LINT_OUTPUT: ${{ runner.temp }}/lint-comparison
+        run: |
+          export LINT_BUN_VERSION="$(bun --version)"
+          script="$RUNNER_TEMP/toolchain/.github/scripts/lint-comparison.mjs"
+          if [ ! -f "$script" ] || ! grep -q "LINT_TOOLCHAIN" "$script"; then
+            echo "::notice::Base has no actual-base comparator yet; bootstrapping from head."
+            script="$GITHUB_WORKSPACE/head/.github/scripts/lint-comparison.mjs"
+          fi
+          node "$script"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: linux-lint-comparison
-          path: ${{ runner.temp }}/lint-comparison/*.json
+          path: ${{ runner.temp }}/lint-comparison/
+          if-no-files-found: error
