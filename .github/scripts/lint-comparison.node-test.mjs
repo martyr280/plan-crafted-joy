@@ -623,6 +623,11 @@ describe("diagnostics moved between scopes with identical bodies", () => {
       base: `export function parent(run) { run(() => { debugger; }); run(() => { return 1; }); }\n`,
       head: `export function parent(run) {\n  run(() => {\n    debugger;\n  });\n  run(() => {\n    return 1;\n  });\n}\n`,
     },
+    {
+      name: "a handler whose builder chain gains a trailing comma",
+      base: `export const fn = make({ a: 1 }).check((i) => parse({ x: 1, y: 2 }, i)).handler(async () => { debugger; });\n`,
+      head: `export const fn = make({ a: 1 })\n  .check((i) =>\n    parse(\n      {\n        x: 1,\n        y: 2,\n      },\n      i,\n    ),\n  )\n  .handler(async () => {\n    debugger;\n  });\n`,
+    },
   ];
 
   for (const c of REWRAPS) {

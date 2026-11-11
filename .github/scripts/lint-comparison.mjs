@@ -242,7 +242,11 @@ export function ownerAnalyzer(ts) {
     } catch {
       return null;
     }
-    const compact = (n) => n.getText(sf).replace(/\s+/g, "");
+    const compact = (n) => {
+      const list = [];
+      tokens(n, sf, list);
+      return list.map((t) => t.text).join(" ");
+    };
     const ownName = (n) => (n.name ? compact(n.name) : "");
     const modifiers = (n) =>
       (ts.canHaveModifiers?.(n) ? (ts.getModifiers(n) ?? []) : [])
