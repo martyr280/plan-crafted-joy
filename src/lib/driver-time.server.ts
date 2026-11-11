@@ -11,18 +11,29 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { fetchDrivers, fetchAddresses } from "@/lib/samsara/hos.server";
 import { getDriverTimeInputs } from "@/lib/samsara/cache.server";
-import { detectWarehouseEvents, isExcludedDriver, type HosSegment, type WarehouseEvent } from "@/lib/driver-time/detect";
+import {
+  detectWarehouseEvents,
+  type HosSegment,
+  type WarehouseEvent,
+} from "@/lib/driver-time/detect";
+import {
+  isExcludedDriverOn,
+  normalizeExcludedDrivers,
+  type DatedExclusion,
+} from "@/lib/driver-time/exclusions";
 import type { Geofence } from "@/lib/driver-time/geo";
 import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
 import { driverNameKey } from "@/lib/driver-time/reconciliation";
-
 
 const db = () => supabaseAdmin as any;
 
 export type DriverTimeSettings = {
   warehouseAddressIds: string[];
   thresholdMinutes: number;
+  /** Legacy undated id hides: excluded in every week. */
   excludedDriverIds: string[];
+  /** Dated id hides from the roster control; see driver-time/exclusions.ts. */
+  excludedDrivers: DatedExclusion[];
   excludedDriverNamePatterns: string[];
   mergeGapMinutes: number;
   hubTzByAddress: Record<string, string>;
@@ -40,7 +51,15 @@ export const DEFAULT_DRIVER_TIME_SETTINGS: DriverTimeSettings = {
   warehouseAddressIds: [],
   thresholdMinutes: 90,
   excludedDriverIds: [],
-  excludedDriverNamePatterns: ["Birmingham LTL", "Birmingham Warehouse", "Dallas LTL", "Dallas Warehouse", "Ocala LTL", "Ocala Warehouse"],
+  excludedDrivers: [],
+  excludedDriverNamePatterns: [
+    "Birmingham LTL",
+    "Birmingham Warehouse",
+    "Dallas LTL",
+    "Dallas Warehouse",
+    "Ocala LTL",
+    "Ocala Warehouse",
+  ],
   mergeGapMinutes: 10,
   hubTzByAddress: {},
   requireLicense: true,
@@ -66,14 +85,16 @@ export type RosterCandidate = {
 
 /**
  * Pure roster filter shared by the sweep and diagnostics: name/ID exclusions
- * first, then the licence requirement, then activation status.
+ * as of `asOf` (a Central YYYY-MM-DD date) first, then the licence
+ * requirement, then activation status.
  */
 export function filterRoster<T extends RosterCandidate>(
   drivers: T[],
   settings: Pick<
     DriverTimeSettings,
     "excludedDriverIds" | "excludedDriverNamePatterns" | "requireLicense" | "includeDeactivated"
-  >,
+  > & { excludedDrivers?: DatedExclusion[] },
+  asOf: string,
 ): { roster: T[]; counts: RosterCounts } {
   const counts: RosterCounts = {
     total: drivers.length,
@@ -84,15 +105,7 @@ export function filterRoster<T extends RosterCandidate>(
   };
   const roster: T[] = [];
   for (const d of drivers) {
-    if (
-      isExcludedDriver(
-        { id: d.id, name: d.name },
-        {
-          excludedDriverIds: settings.excludedDriverIds,
-          excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
-        },
-      )
-    ) {
+    if (isExcludedDriverOn({ id: d.id, name: d.name }, settings, asOf)) {
       counts.excludedByPattern++;
       continue;
     }
@@ -133,7 +146,9 @@ export function resolveReportDriverIdentity(input: {
   hub: string;
   roster: RosterCandidate[];
 }): ReportIdentity {
-  const slug = driverNameKey(input.name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const slug = driverNameKey(input.name)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   const fallback = `report:${input.hub.toLowerCase()}:${slug}`;
   const key = driverNameKey(input.name);
   const target = REPORT_NAME_ALIASES[key] ?? key;
@@ -156,7 +171,11 @@ export function resolveReportDriverIdentity(input: {
 }
 
 export async function getDriverTimeSettings(): Promise<DriverTimeSettings> {
-  const { data, error } = await db().from("app_settings").select("value").eq("key", "driver_time").maybeSingle();
+  const { data, error } = await db()
+    .from("app_settings")
+    .select("value")
+    .eq("key", "driver_time")
+    .maybeSingle();
   if (error) throw new Error(error.message);
   const saved = (data?.value ?? {}) as Partial<DriverTimeSettings>;
   return {
@@ -164,26 +183,161 @@ export async function getDriverTimeSettings(): Promise<DriverTimeSettings> {
     ...saved,
     requireLicense: saved.requireLicense ?? DEFAULT_DRIVER_TIME_SETTINGS.requireLicense,
     includeDeactivated: saved.includeDeactivated ?? DEFAULT_DRIVER_TIME_SETTINGS.includeDeactivated,
-    warehouseRemarkDriverIds: Array.isArray(saved.warehouseRemarkDriverIds) ? saved.warehouseRemarkDriverIds.map(String) : [],
+    warehouseRemarkDriverIds: Array.isArray(saved.warehouseRemarkDriverIds)
+      ? saved.warehouseRemarkDriverIds.map(String)
+      : [],
     basis: saved.basis === "onduty" ? "onduty" : DEFAULT_DRIVER_TIME_SETTINGS.basis,
+    excludedDriverIds: Array.isArray(saved.excludedDriverIds)
+      ? saved.excludedDriverIds.map(String)
+      : [],
+    excludedDrivers: normalizeExcludedDrivers(saved.excludedDrivers),
     // Shared warehouse/LTL identities are never individual driver records.
     // Older saved settings must not erase the built-in roster exclusions.
-    excludedDriverNamePatterns: [...new Set([
-      ...DEFAULT_DRIVER_TIME_SETTINGS.excludedDriverNamePatterns,
-      ...(saved.excludedDriverNamePatterns ?? []),
-    ])],
+    excludedDriverNamePatterns: [
+      ...new Set([
+        ...DEFAULT_DRIVER_TIME_SETTINGS.excludedDriverNamePatterns,
+        ...(saved.excludedDriverNamePatterns ?? []),
+      ]),
+    ],
   };
 }
 
-export async function saveDriverTimeSettings(patch: Partial<DriverTimeSettings>): Promise<DriverTimeSettings> {
-  const next = { ...(await getDriverTimeSettings()), ...patch };
-  const { error } = await db()
+/** The stored driver_time row as saved (no defaults merged) and its updated_at token. */
+export async function getDriverTimeSettingsRow(): Promise<{
+  saved: unknown;
+  updatedAt: string | null;
+}> {
+  const { data, error } = await db()
     .from("app_settings")
-    .upsert({ key: "driver_time", value: next, updated_at: new Date().toISOString() }, { onConflict: "key" });
+    .select("value, updated_at")
+    .eq("key", "driver_time")
+    .maybeSingle();
   if (error) throw new Error(error.message);
-  return next;
+  return { saved: data?.value ?? null, updatedAt: data?.updated_at ?? null };
 }
 
+/**
+ * Compare-and-set write of the raw driver_time row, shared by every settings
+ * writer. `mutate` gets the stored JSON (never the defaults-merged view) and
+ * returns the next value. The caller's token must match what was read, and the
+ * UPDATE only lands while updated_at is still that value; a lost race or an
+ * insert collision is a conflict. `changed: false` skips the write.
+ */
+async function writeDriverTimeRow(
+  mutate: (saved: unknown) => { value: Record<string, unknown>; changed: boolean },
+  expectedUpdatedAt: string | null,
+  conflictMessage: string,
+): Promise<{ changed: boolean; updatedAt: string | null; value: Record<string, unknown> }> {
+  const { rosterTokenMatches } = await import("@/lib/driver-time/roster");
+  const row = await getDriverTimeSettingsRow();
+  const next = mutate(row.saved);
+  if (!next.changed) return { changed: false, updatedAt: row.updatedAt, value: next.value };
+  if (!rosterTokenMatches(expectedUpdatedAt, row.updatedAt)) throw new Error(conflictMessage);
+  let stamp = new Date().toISOString();
+  if (row.updatedAt && Date.parse(row.updatedAt) >= Date.parse(stamp)) {
+    stamp = new Date(Date.parse(row.updatedAt) + 1).toISOString();
+  }
+  let written: Array<{ updated_at?: string }> | null;
+  if (row.updatedAt == null) {
+    const { data, error } = await db()
+      .from("app_settings")
+      .insert({ key: "driver_time", value: next.value, updated_at: stamp })
+      .select("updated_at");
+    if (error) {
+      if (error.code === "23505") throw new Error(conflictMessage);
+      throw new Error(error.message);
+    }
+    written = data;
+  } else {
+    const { data, error } = await db()
+      .from("app_settings")
+      .update({ value: next.value, updated_at: stamp })
+      .eq("key", "driver_time")
+      .eq("updated_at", row.updatedAt)
+      .select("updated_at");
+    if (error) throw new Error(error.message);
+    if (!data?.length) throw new Error(conflictMessage);
+    written = data;
+  }
+  return { changed: true, updatedAt: written?.[0]?.updated_at ?? stamp, value: next.value };
+}
+
+/** Keys only the roster control may write (driver-pay gate, own endpoint). */
+export const ROSTER_ONLY_KEYS = ["excludedDriverIds", "excludedDrivers"] as const;
+
+export type DetectionSettingsPatch = Partial<
+  Omit<DriverTimeSettings, (typeof ROSTER_ONLY_KEYS)[number]>
+>;
+
+/**
+ * Detection settings save. Applies the patch to the stored JSON with the same
+ * compare-and-set as the roster, and never writes the roster keys: they are
+ * dropped from the patch and the stored values are written back as they are,
+ * so a Detection save cannot undo a hide and a hide cannot undo a Detection edit.
+ */
+export async function saveDriverTimeSettings(
+  patch: DetectionSettingsPatch,
+  expectedUpdatedAt: string | null,
+): Promise<{ settings: DriverTimeSettings; updatedAt: string | null }> {
+  const { SETTINGS_CONFLICT_MESSAGE } = await import("@/lib/driver-time/roster");
+  const safe: Record<string, unknown> = { ...patch };
+  for (const k of ROSTER_ONLY_KEYS) delete safe[k];
+  const result = await writeDriverTimeRow(
+    (saved) => {
+      if (saved != null && (typeof saved !== "object" || Array.isArray(saved))) {
+        throw new Error("Driver Time settings are not in the expected shape. Nothing was changed.");
+      }
+      return { value: { ...((saved ?? {}) as Record<string, unknown>), ...safe }, changed: true };
+    },
+    expectedUpdatedAt,
+    SETTINGS_CONFLICT_MESSAGE,
+  );
+  return { settings: await getDriverTimeSettings(), updatedAt: result.updatedAt };
+}
+
+/**
+ * Soft-hide or restore one driver by Samsara id. Hide adds a dated entry
+ * (hiddenFrom = Monday of the current Central week); Restore removes the id
+ * from both the dated and the legacy list. Already-in-state is a no-op
+ * success. Only excludedDrivers / excludedDriverIds change.
+ */
+export async function setDriverRosterHidden(input: {
+  driverId: string;
+  hidden: boolean;
+  expectedUpdatedAt: string | null;
+  userId?: string | null;
+  now?: Date;
+}): Promise<{
+  changed: boolean;
+  updatedAt: string | null;
+  excludedDriverIds: string[];
+  hiddenFrom: string | null;
+}> {
+  const { nextDriverTimeValue, ROSTER_CONFLICT_MESSAGE } = await import("@/lib/driver-time/roster");
+  const { hiddenFromFor } = await import("@/lib/driver-time/exclusions");
+  const now = input.now ?? new Date();
+  const entry = {
+    hiddenFrom: hiddenFromFor(now),
+    hiddenBy: input.userId ?? null,
+    hiddenAt: now.toISOString(),
+  };
+  let ids: string[] = [];
+  const result = await writeDriverTimeRow(
+    (saved) => {
+      const next = nextDriverTimeValue(saved, input.driverId, input.hidden, entry);
+      ids = next.excludedDriverIds;
+      return next;
+    },
+    input.expectedUpdatedAt,
+    ROSTER_CONFLICT_MESSAGE,
+  );
+  return {
+    changed: result.changed,
+    updatedAt: result.updatedAt,
+    excludedDriverIds: ids,
+    hiddenFrom: input.hidden && result.changed ? entry.hiddenFrom : null,
+  };
+}
 
 /** Monday-start week containing `d`, anchored to the Central calendar date. */
 export function weekBounds(d: Date): { weekStart: string; weekEnd: string } {
@@ -236,13 +390,14 @@ export type SweepResult = {
   error?: string;
 };
 
-
 /**
  * Watchdog: fail any sweep left `running` for more than 15 minutes.
  * Called at the start of every sweep AND on every scheduled tick, so a run
  * killed mid-flight is retired even when no new sweep starts for a week.
  */
-export async function failStaleDriverTimeRuns(now: Date = new Date()): Promise<{ failedIds: string[]; error?: string }> {
+export async function failStaleDriverTimeRuns(
+  now: Date = new Date(),
+): Promise<{ failedIds: string[]; error?: string }> {
   const cutoff = new Date(now.getTime() - 15 * 60_000).toISOString();
   const { data, error } = await db()
     .from("driver_warehouse_runs")
@@ -268,13 +423,17 @@ export async function runDriverTimeSweep(opts?: {
 }): Promise<SweepResult> {
   const now = opts?.now ?? new Date();
   const lookbackDays = opts?.lookbackDays ?? 8;
-  const { weekStart, weekEnd } = opts?.weekStart ? selectedWeekBounds(opts.weekStart) : weekBounds(now);
+  const { weekStart, weekEnd } = opts?.weekStart
+    ? selectedWeekBounds(opts.weekStart)
+    : weekBounds(now);
   const selectedStart = localMidnight(weekStart, CENTRAL_TZ);
-  const selectedEnd = localMidnight(addDays(weekEnd,1), CENTRAL_TZ);
+  const selectedEnd = localMidnight(addDays(weekEnd, 1), CENTRAL_TZ);
   const endMs = opts?.weekStart ? Math.min(selectedEnd, now.getTime()) : now.getTime();
   // Include both Eastern and Central local midnight. Filtering below uses
   // driver-local dates, not UTC dates.
-  const startMs = opts?.weekStart ? Math.min(selectedStart,localMidnight(weekStart,"America/New_York")) : endMs-lookbackDays*86400000;
+  const startMs = opts?.weekStart
+    ? Math.min(selectedStart, localMidnight(weekStart, "America/New_York"))
+    : endMs - lookbackDays * 86400000;
   if (startMs >= endMs) throw new Error("Cannot scan a future week.");
   const warnings: string[] = [];
 
@@ -294,7 +453,14 @@ export async function runDriverTimeSweep(opts?: {
 
   const { data: runRow, error: runErr } = await db()
     .from("driver_warehouse_runs")
-    .insert({ week_start: labelWeek.weekStart, week_end: labelWeek.weekEnd, window_start:new Date(startMs).toISOString(),window_end:new Date(endMs).toISOString(),status: "running", triggered_by: opts?.triggeredBy ?? null })
+    .insert({
+      week_start: labelWeek.weekStart,
+      week_end: labelWeek.weekEnd,
+      window_start: new Date(startMs).toISOString(),
+      window_end: new Date(endMs).toISOString(),
+      status: "running",
+      triggered_by: opts?.triggeredBy ?? null,
+    })
 
     .select("id")
     .single();
@@ -307,8 +473,17 @@ export async function runDriverTimeSweep(opts?: {
       .update({ status: "failed", error: message, completed_at: new Date().toISOString() })
       .eq("id", runId);
     return {
-      ok: false, runId, weekStart, weekEnd, driversScanned: 0, eventsFound: 0,
-      inserted: 0, updated: 0, reopened: 0, warnings, error: message,
+      ok: false,
+      runId,
+      weekStart,
+      weekEnd,
+      driversScanned: 0,
+      eventsFound: 0,
+      inserted: 0,
+      updated: 0,
+      reopened: 0,
+      warnings,
+      error: message,
     };
   };
 
@@ -334,22 +509,30 @@ export async function runDriverTimeSweep(opts?: {
       polygon: a.polygon,
     }));
 
-    const { roster, counts: rosterCounts } = filterRoster(drivers, settings);
+    // Scan anyone visible on any day of the window; the weekly report drops
+    // events on or after a dated hide.
+    const { roster, counts: rosterCounts } = filterRoster(
+      drivers,
+      settings,
+      dateStrInTz(new Date(startMs), CENTRAL_TZ),
+    );
     if (!roster.length)
       return await fail(
         `No drivers to scan after exclusions (roster ${rosterCounts.total}, pattern ${rosterCounts.excludedByPattern}, no licence ${rosterCounts.excludedNoLicense}, deactivated ${rosterCounts.excludedDeactivated}).`,
       );
 
-
-
     // All Samsara reads go through the cached data layer, so a rescan of the
     // same days reuses what a prior sweep or probe already pulled. Assignments
     // fill in the vehicle on segments Samsara reported without one, which is
     // what makes GPS evidence available for those blocks.
-    const inputs = await getDriverTimeInputs({ startMs, endMs, driverIds: roster.map((d) => d.id), refreshHos: opts?.refreshHos === true });
+    const inputs = await getDriverTimeInputs({
+      startMs,
+      endMs,
+      driverIds: roster.map((d) => d.id),
+      refreshHos: opts?.refreshHos === true,
+    });
     const segments = inputs.segments;
     const gpsSamples = inputs.gpsSamples;
-
 
     const byDriver = new Map<string, HosSegment[]>();
     for (const s of segments) {
@@ -392,10 +575,12 @@ export async function runDriverTimeSweep(opts?: {
     const { data: existing, error: existingError } = await db()
       .from("driver_warehouse_events")
       .select("id, driver_id, start_ts, end_ts, duration_min, status, superseded_at")
-      .gte("start_ts",new Date(startMs).toISOString()).lt("start_ts",new Date(endMs).toISOString())
+      .gte("start_ts", new Date(startMs).toISOString())
+      .lt("start_ts", new Date(endMs).toISOString())
       .limit(10000);
     if (existingError) throw new Error(existingError.message);
-    if ((existing?.length ?? 0) >= 10000) throw new Error("Rescan range exceeds the reconciliation limit.");
+    if ((existing?.length ?? 0) >= 10000)
+      throw new Error("Rescan range exceeds the reconciliation limit.");
     const existingMap = new Map<string, any>();
     for (const row of existing ?? []) {
       existingMap.set(`${row.driver_id}|${new Date(row.start_ts).toISOString()}`, row);
@@ -429,8 +614,13 @@ export async function runDriverTimeSweep(opts?: {
       };
 
       if (!prior) {
-        const { error } = await db().from("driver_warehouse_events").insert({ ...payload, status: "new" });
-        if (error) warnings.push(`insert failed for ${ev.driverName ?? ev.driverId} @ ${startIso}: ${error.message}`);
+        const { error } = await db()
+          .from("driver_warehouse_events")
+          .insert({ ...payload, status: "new" });
+        if (error)
+          warnings.push(
+            `insert failed for ${ev.driverName ?? ev.driverId} @ ${startIso}: ${error.message}`,
+          );
         else inserted++;
         continue;
       }
@@ -450,20 +640,38 @@ export async function runDriverTimeSweep(opts?: {
       else updated++;
     }
 
-    if (warnings.some(w=>w.startsWith("insert failed") || w.startsWith("update failed")))
+    if (warnings.some((w) => w.startsWith("insert failed") || w.startsWith("update failed")))
       throw new Error(`Event reconciliation incomplete: ${warnings.join(" | ")}`);
     // Retire only fully enclosed events for scanned drivers after a complete
     // fetch/write pass. Preserve the old rows for review and source comparison.
     // Retire stale rows for scanned drivers AND for every roster driver now
     // excluded from the scan — those events can never be regenerated.
-    const scanned = new Set(roster.map(d=>d.id));
-    const known = new Set(drivers.map(d=>String(d.id)));
-    const retirable = (id:string)=>scanned.has(id) || known.has(id);
-    const stale = (existing ?? []).filter((e:any)=>retirable(String(e.driver_id)) && !e.superseded_at &&
-      Date.parse(e.start_ts) > startMs && Date.parse(e.end_ts) < endMs &&
-      !seen.has(`${e.driver_id}|${new Date(e.start_ts).toISOString()}`));
-    for (let i=0;i<stale.length;i+=200) {
-      const {error} = await db().from("driver_warehouse_events").update({superseded_at:new Date().toISOString()}).in("id",stale.slice(i,i+200).map((e:any)=>e.id));
+    const scanned = new Set(roster.map((d) => d.id));
+    const known = new Set(drivers.map((d) => String(d.id)));
+    const retirable = (id: string) => scanned.has(id) || known.has(id);
+    type ExistingEvent = {
+      id: string;
+      driver_id: string;
+      start_ts: string;
+      end_ts: string;
+      superseded_at: string | null;
+    };
+    const stale = ((existing ?? []) as ExistingEvent[]).filter(
+      (e) =>
+        retirable(String(e.driver_id)) &&
+        !e.superseded_at &&
+        Date.parse(e.start_ts) > startMs &&
+        Date.parse(e.end_ts) < endMs &&
+        !seen.has(`${e.driver_id}|${new Date(e.start_ts).toISOString()}`),
+    );
+    for (let i = 0; i < stale.length; i += 200) {
+      const { error } = await db()
+        .from("driver_warehouse_events")
+        .update({ superseded_at: new Date().toISOString() })
+        .in(
+          "id",
+          stale.slice(i, i + 200).map((e) => e.id),
+        );
       if (error) throw new Error(error.message);
     }
     await db()
@@ -478,24 +686,39 @@ export async function runDriverTimeSweep(opts?: {
       .eq("id", runId);
 
     return {
-      ok: true, runId, weekStart, weekEnd,
-      driversScanned: roster.length, eventsFound: events.length,
-      inserted, updated, reopened, warnings, roster: rosterCounts,
+      ok: true,
+      runId,
+      weekStart,
+      weekEnd,
+      driversScanned: roster.length,
+      eventsFound: events.length,
+      inserted,
+      updated,
+      reopened,
+      warnings,
+      roster: rosterCounts,
     };
-
   } catch (e: any) {
     return await fail(e?.message ?? String(e));
   }
 }
 
-function addDays(date:string,days:number) { const d=new Date(`${date}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10); }
-function localMidnight(date:string,zone:string) {
-  const anchor=Date.parse(`${date}T12:00:00Z`);
-  return Date.parse(`${date}T00:00:00Z`)-tzOffsetMinutesAt(new Date(anchor),zone)*60000;
+function addDays(date: string, days: number) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
-export function selectedWeekBounds(weekStart:string) {
-  const d=new Date(`${weekStart}T00:00:00Z`);
-  if (!Number.isFinite(d.getTime()) || d.toISOString().slice(0,10)!==weekStart || d.getUTCDay()!==1)
+function localMidnight(date: string, zone: string) {
+  const anchor = Date.parse(`${date}T12:00:00Z`);
+  return Date.parse(`${date}T00:00:00Z`) - tzOffsetMinutesAt(new Date(anchor), zone) * 60000;
+}
+export function selectedWeekBounds(weekStart: string) {
+  const d = new Date(`${weekStart}T00:00:00Z`);
+  if (
+    !Number.isFinite(d.getTime()) ||
+    d.toISOString().slice(0, 10) !== weekStart ||
+    d.getUTCDay() !== 1
+  )
     throw new Error("Select a valid Monday.");
-  return {weekStart,weekEnd:addDays(weekStart,6)};
+  return { weekStart, weekEnd: addDays(weekStart, 6) };
 }

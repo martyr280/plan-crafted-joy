@@ -12,6 +12,7 @@ import {
   type ReportDriver,
 } from "@/lib/driver-time/cost-coverage";
 import { formatMinutes } from "@/lib/driver-time/reconciliation";
+import { hiddenRosterNotice } from "@/lib/driver-time/roster";
 import { DriverCard, hm } from "@/components/driver-time/DriverCard";
 
 type Totals = {
@@ -21,6 +22,7 @@ type Totals = {
   officialDrivers: number;
   estimatedCost?: number;
   driversWithoutRate?: number;
+  hiddenByRoster?: { drivers: number; events: number; officialTotals?: number };
 };
 
 export function DriverTimeReport({
@@ -71,6 +73,7 @@ export function DriverTimeReport({
   const groups = panels.showReport ? (hubGroups ?? []) : [];
   const coverage = driverCostCoverage(drivers);
   const coverageNotice = costCoverageNotice(coverage);
+  const hiddenNotice = hiddenRosterNotice(totals?.hiddenByRoster);
   const costLabel = estimatedCostFigure(canManageDriverPay, drivers);
   const costFigure = costLabel.partial ? (
     <span className={`text-lg font-semibold leading-snug ${warningTextClass}`}>
@@ -149,6 +152,11 @@ export function DriverTimeReport({
       {panels.showReport && canManageDriverPay && coverageNotice && (
         <Card className={`mb-4 border-warning/40 bg-warning/10 p-3 text-xs ${warningTextClass}`}>
           {coverageNotice}
+        </Card>
+      )}
+      {panels.showReport && hiddenNotice && (
+        <Card className="mb-4 p-3 text-xs text-muted-foreground" data-testid="hidden-roster-notice">
+          {hiddenNotice}
         </Card>
       )}
       <Card

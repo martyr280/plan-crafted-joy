@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ import {
   useSaveDriverTimeConfig,
   useSamsaraDiagnostics,
 } from "@/hooks/useDriverTime";
+import { useActionFocus } from "@/hooks/useActionFocus";
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
 import { hubTimezone, reconciliationCsv } from "@/lib/driver-time/reconciliation";
 import { WarehouseActualEditor } from "@/components/driver-time/WarehouseActualEditor";
@@ -48,6 +49,8 @@ import { DriverTimeReport } from "@/components/driver-time/DriverTimeReport";
 import { driverTimeReportPanels } from "@/lib/driver-time/report-panels";
 import { destructiveTextClass, warningTextClass } from "@/components/driver-time/text-classes";
 import { DriverRatesPanel } from "@/components/driver-time/DriverRatesPanel";
+import { DriverRosterPanel } from "@/components/driver-time/DriverRosterPanel";
+import { SETTINGS_CONFLICT_MESSAGE } from "@/lib/driver-time/roster";
 
 export const Route = createFileRoute("/_app/driver-time")({
   head: () => ({
@@ -385,25 +388,136 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
   const [mergeGap, setMergeGap] = useState<string>("");
   const [patterns, setPatterns] = useState<string>("");
 
+  const [conflict, setConflict] = useState(false);
+  const [refreshState, setRefreshState] = useState<"idle" | "pending" | "failed">("idle");
+  const [refreshResult, setRefreshResult] = useState("");
+  const [focusReq, setFocusReq] = useState<{ owner: number; to: "heading" | "retry" } | null>(null);
+  const refreshingRef = useRef(false);
+  const detectionHeadingRef = useRef<HTMLDivElement>(null);
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
+  const focus = useActionFocus();
+
+  useEffect(() => {
+    if (!focusReq) return;
+    setFocusReq(null);
+    focus.restore(
+      focusReq.owner,
+      focusReq.to === "heading" ? detectionHeadingRef.current : refreshButtonRef.current,
+    );
+  }, [focusReq, focus]);
+
+  async function refreshSettings(trigger: HTMLElement) {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshState("pending");
+    setRefreshResult("");
+    const owner = focus.claim(trigger);
+    let ok = false;
+    try {
+      const r = await cfgQ.refetch();
+      ok = !!r && !r.isError && !!r.data;
+    } catch {
+      ok = false;
+    }
+    refreshingRef.current = false;
+    if (!ok) {
+      setRefreshState("failed");
+      setFocusReq({ owner, to: "retry" });
+      return;
+    }
+    setRefreshState("idle");
+    setConflict(false);
+    setRefreshResult("Settings refreshed. Review them and save again.");
+    setFocusReq({ owner, to: "heading" });
+  }
+
   const selected = new Set<string>(settings?.warehouseAddressIds ?? []);
+
+  function saveDetection(
+    patch: Omit<Parameters<typeof save.mutate>[0], "expectedUpdatedAt">,
+    okMessage: string,
+  ) {
+    save.mutate(
+      { ...patch, expectedUpdatedAt: cfgQ.data?.settingsUpdatedAt ?? null },
+      {
+        onSuccess: () => {
+          setConflict(false);
+          setRefreshResult("");
+          toast.success(okMessage);
+        },
+        onError: (e: unknown) => {
+          const message = e instanceof Error ? e.message : String(e);
+          if (message === SETTINGS_CONFLICT_MESSAGE) {
+            setConflict(true);
+            setRefreshState("idle");
+            setRefreshResult("");
+          } else toast.error(message);
+        },
+      },
+    );
+  }
 
   function toggleAddress(id: string) {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    save.mutate(
-      { warehouseAddressIds: Array.from(next) },
-      {
-        onSuccess: () => toast.success("Warehouse geofences updated"),
-        onError: (e: any) => toast.error(e?.message),
-      },
-    );
+    saveDetection({ warehouseAddressIds: Array.from(next) }, "Warehouse geofences updated");
   }
 
   return (
     <div className="space-y-4">
       <Card className="p-4 space-y-3">
-        <div className="font-semibold text-sm">Detection</div>
+        <div
+          ref={detectionHeadingRef}
+          tabIndex={-1}
+          className="font-semibold text-sm focus-visible:outline focus-visible:outline-2"
+          data-testid="detection-heading"
+        >
+          Detection
+        </div>
+        {conflict && (
+          <div
+            role="alert"
+            data-testid="detection-conflict"
+            className="flex flex-col gap-2 rounded-md border p-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0 space-y-1">
+              <p className={destructiveTextClass}>{SETTINGS_CONFLICT_MESSAGE}</p>
+              {refreshState === "failed" && (
+                <p className={destructiveTextClass} data-testid="detection-refresh-error">
+                  Couldn&apos;t refresh the settings. Try Refresh settings again.
+                </p>
+              )}
+            </div>
+            <Button
+              ref={refreshButtonRef}
+              size="sm"
+              variant="outline"
+              aria-disabled={refreshState === "pending" || undefined}
+              onClick={(e) => void refreshSettings(e.currentTarget)}
+            >
+              {refreshState === "pending" && (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              )}
+              Refresh settings
+            </Button>
+          </div>
+        )}
+        <p role="status" aria-live="polite" className="sr-only" data-testid="detection-progress">
+          {refreshState === "pending"
+            ? "Refreshing settings…"
+            : refreshState === "failed" && conflict
+              ? "Couldn't refresh the settings. Try Refresh settings again."
+              : ""}
+        </p>
+        <p
+          role="status"
+          aria-live="polite"
+          className={refreshResult ? "text-xs" : "sr-only"}
+          data-testid="detection-refresh-result"
+        >
+          {refreshResult}
+        </p>
         {cfgQ.data?.error && (
           <div className={`text-xs ${destructiveTextClass}`}>
             Samsara data unavailable: {cfgQ.data.error} — check the API token scopes in Settings →
@@ -444,13 +558,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
             className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
             value={settings?.basis ?? "presence"}
             onChange={(e) =>
-              save.mutate(
-                { basis: e.target.value as "presence" | "onduty" },
-                {
-                  onSuccess: () => toast.success("Settings saved"),
-                  onError: (err: any) => toast.error(err?.message),
-                },
-              )
+              saveDetection({ basis: e.target.value as "presence" | "onduty" }, "Settings saved")
             }
           >
             <option value="presence">Inside geofence, any status (recommended)</option>
@@ -464,13 +572,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               className="mt-0.5"
               checked={settings?.requireLicense ?? true}
               onChange={(e) =>
-                save.mutate(
-                  { requireLicense: e.target.checked },
-                  {
-                    onSuccess: () => toast.success("Settings saved"),
-                    onError: (err: any) => toast.error(err?.message),
-                  },
-                )
+                saveDetection({ requireLicense: e.target.checked }, "Settings saved")
               }
             />
             <span>Require a driver&apos;s-license number (excludes shared logins)</span>
@@ -481,13 +583,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               className="mt-0.5"
               checked={settings?.includeDeactivated ?? false}
               onChange={(e) =>
-                save.mutate(
-                  { includeDeactivated: e.target.checked },
-                  {
-                    onSuccess: () => toast.success("Settings saved"),
-                    onError: (err: any) => toast.error(err?.message),
-                  },
-                )
+                saveDetection({ includeDeactivated: e.target.checked }, "Settings saved")
               }
             />
             <span>Include deactivated drivers</span>
@@ -497,7 +593,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
           size="sm"
           disabled={save.isPending}
           onClick={() =>
-            save.mutate(
+            saveDetection(
               {
                 thresholdMinutes: Number(threshold || settings?.thresholdMinutes || 90),
                 mergeGapMinutes: Number(mergeGap || settings?.mergeGapMinutes || 10),
@@ -508,10 +604,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
                   .map((s) => s.trim())
                   .filter(Boolean),
               },
-              {
-                onSuccess: () => toast.success("Settings saved"),
-                onError: (e: any) => toast.error(e?.message),
-              },
+              "Settings saved",
             )
           }
         >
@@ -544,12 +637,9 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
                       const cur = new Set(settings?.warehouseRemarkDriverIds ?? []);
                       if (on) cur.delete(d.id);
                       else cur.add(d.id);
-                      save.mutate(
+                      saveDetection(
                         { warehouseRemarkDriverIds: Array.from(cur) },
-                        {
-                          onSuccess: () => toast.success("Warehouse-remark setting saved"),
-                          onError: (err: any) => toast.error(err?.message),
-                        },
+                        "Warehouse-remark setting saved",
                       );
                     }}
                   />
@@ -589,7 +679,8 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
         )}
       </Card>
 
-      {/* Driver Time → Settings → Driver rates. The panel also checks the role and loads nothing otherwise. */}
+      {/* Driver roster and Driver rates. Each panel also checks the role and loads nothing otherwise. */}
+      {canManageDriverPay && <DriverRosterPanel />}
       {canManageDriverPay && <DriverRatesPanel />}
     </div>
   );

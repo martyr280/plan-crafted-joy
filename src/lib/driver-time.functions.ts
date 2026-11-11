@@ -135,13 +135,20 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
 
     const { getDriverTimeSettings } = await import("@/lib/driver-time.server");
     const settings = await getDriverTimeSettings();
-    const { isExcludedDriver } = await import("@/lib/driver-time/detect");
-    const scopedEvents = (events ?? []).filter(
-      (ev: any) => !isExcludedDriver({ id: ev.driver_id, name: ev.driver_name }, settings),
-    );
+    // Roster exclusions apply to events on their own date and to official
+    // actuals for the week, so a hidden driver cannot come back through either.
+    const { scopeWeekInputs } = await import("@/lib/driver-time/roster");
+    const scoped = scopeWeekInputs({
+      events: events ?? [],
+      overrides: overrides ?? [],
+      settings,
+      weekStart,
+    });
+    const scopedEvents = scoped.events;
+    const hiddenByRoster = scoped.hidden;
     const driverRows = buildReconciledDrivers(
       scopedEvents,
-      overrides ?? [],
+      scoped.overrides,
       data.includeWeekends,
     ).map((b) => {
       const flaggedHours = b.flaggedMinutes / 60;
@@ -224,6 +231,7 @@ export const getDriverTimeWeek = createServerFn({ method: "POST" })
         driversWithoutRate: canManageDriverPay
           ? driverRows.filter((d) => d.cost.hourlyRate === null).length
           : 0,
+        hiddenByRoster,
       },
       runs: runs ?? [],
     };
@@ -325,7 +333,10 @@ export const getDriverTimeConfig = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
-    const { getDriverTimeSettings } = await import("@/lib/driver-time.server");
+    const { getDriverTimeSettings, getDriverTimeSettingsRow } =
+      await import("@/lib/driver-time.server");
+    // Token first: a write between the two reads then surfaces as a conflict.
+    const { updatedAt: settingsUpdatedAt } = await getDriverTimeSettingsRow();
     const settings = await getDriverTimeSettings();
     let addresses: any[] = [];
     let drivers: any[] = [];
@@ -345,17 +356,29 @@ export const getDriverTimeConfig = createServerFn({ method: "GET" })
       })),
       drivers: drivers.map((d) => ({ id: d.id, name: d.name, status: d.driverActivationStatus })),
       error,
+      settingsUpdatedAt,
     };
   });
 
+export const DETECTION_ROSTER_KEYS_MESSAGE =
+  "Detection settings cannot change hidden drivers. Use Settings → Driver roster.";
+
+/**
+ * Detection settings (any Driver Time viewer). The hidden-driver lists are not
+ * accepted here: they change only through setDriverRosterVisibility, behind the
+ * driver-pay gate. Compare-and-set on the row's updated_at.
+ */
 export const saveDriverTimeConfig = createServerFn({ method: "POST" })
   .middleware([denyLegacyBranchAccess])
-  .inputValidator((i) =>
-    z
+  .inputValidator((i) => {
+    if (i && typeof i === "object" && ("excludedDriverIds" in i || "excludedDrivers" in i)) {
+      throw new Error(DETECTION_ROSTER_KEYS_MESSAGE);
+    }
+    return z
       .object({
+        expectedUpdatedAt: z.string().min(1).max(64).nullable(),
         warehouseAddressIds: z.array(z.string()).max(200).optional(),
         thresholdMinutes: z.number().int().min(5).max(1440).optional(),
-        excludedDriverIds: z.array(z.string()).max(500).optional(),
         excludedDriverNamePatterns: z.array(z.string().max(120)).max(100).optional(),
         mergeGapMinutes: z.number().int().min(0).max(120).optional(),
         requireLicense: z.boolean().optional(),
@@ -363,8 +386,8 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
         basis: z.enum(["presence", "onduty"]).optional(),
         warehouseRemarkDriverIds: z.array(z.string().max(64)).max(500).optional(),
       })
-      .parse(i ?? {}),
-  )
+      .parse(i ?? {});
+  })
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     if (data.warehouseRemarkDriverIds) {
@@ -376,7 +399,9 @@ export const saveDriverTimeConfig = createServerFn({ method: "POST" })
         throw new Error("Only admins can change the per-driver Warehouse-remark setting");
     }
     const { saveDriverTimeSettings } = await import("@/lib/driver-time.server");
-    return { settings: await saveDriverTimeSettings(data) };
+    const { expectedUpdatedAt, ...patch } = data;
+    const saved = await saveDriverTimeSettings(patch, expectedUpdatedAt);
+    return { settings: saved.settings, settingsUpdatedAt: saved.updatedAt };
   });
 
 /* --------------------------------------------------------------- pay rates */
@@ -408,54 +433,106 @@ async function loadPayRates(opts: { onOrBefore?: string } = {}): Promise<any[]> 
   );
 }
 
-/** Licensed drivers known to Driver Time + every rate row (driver-pay managers). */
+/**
+ * Read-only roster build shared by Driver rates and the roster control:
+ * 1) the licensed Samsara roster the sweep scans, 2) drivers with stored
+ * events, 3) drivers with a rate row. Every step honors isExcludedDriverOn as
+ * of today; rate rows of hidden drivers are kept and returned, never deleted.
+ */
+async function loadDriverRoster() {
+  const asOf = dateStrInTz(new Date());
+  const rates = await loadPayRates();
+  const { getDriverTimeSettings, filterRoster } = await import("@/lib/driver-time.server");
+  const { buildDriverRoster } = await import("@/lib/driver-time/roster");
+  const { fetchAllRows } = await import("@/lib/supabase-fetch-all");
+  const settings = await getDriverTimeSettings();
+  let rosterError: string | null = null;
+  let rosterAll: Array<{ id: string; name: string }> = [];
+  let rosterActive: Array<{ id: string; name: string }> = [];
+  try {
+    const { fetchDrivers } = await import("@/lib/samsara/hos.server");
+    const all = await fetchDrivers();
+    rosterAll = all;
+    rosterActive = filterRoster(all, settings, asOf).roster;
+  } catch (e: unknown) {
+    rosterError = e instanceof Error ? e.message : String(e);
+  }
+  const events = await fetchAllRows<{ id: string; driver_id: string; driver_name: string | null }>(
+    () =>
+      db().from("driver_warehouse_events").select("id, driver_id, driver_name", { count: "exact" }),
+    { label: "driver_warehouse_events(drivers)" },
+  );
+  const { active, excluded, patternMatchedIds } = buildDriverRoster({
+    rosterActive,
+    rosterAll,
+    events,
+    rates,
+    settings,
+    asOf,
+  });
+  return { active, excluded, patternMatchedIds, rates, rosterError };
+}
+
+/**
+ * Active drivers + every rate row (driver-pay managers). Hidden drivers stay
+ * off `drivers` even with a rate row; pass includeExcluded to also get them as
+ * `excludedDrivers` so their rate history stays viewable.
+ */
 export const listDriverPayRates = createServerFn({ method: "GET" })
+  .middleware([denyLegacyBranchAccess])
+  .inputValidator((i) => z.object({ includeExcluded: z.boolean().default(false) }).parse(i ?? {}))
+  .handler(async ({ data, context }) => {
+    await requireDriverPay(context.userId);
+    const { active, excluded, rates, rosterError } = await loadDriverRoster();
+    return {
+      drivers: active,
+      rates,
+      rosterError,
+      ...(data.includeExcluded ? { excludedDrivers: excluded } : {}),
+    };
+  });
+
+/** Roster hide/restore view (driver-pay managers). No pay amounts in the payload. */
+export const getDriverRoster = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireDriverPay(context.userId);
-    const rates = await loadPayRates();
-    const { getDriverTimeSettings, filterRoster } = await import("@/lib/driver-time.server");
-    const { isExcludedDriver } = await import("@/lib/driver-time/detect");
-    const { fetchAllRows } = await import("@/lib/supabase-fetch-all");
-    const settings = await getDriverTimeSettings();
-
-    const drivers = new Map<
-      string,
-      { id: string; name: string; source: "roster" | "events" | "rates" }
-    >();
-    // 1) The same licensed roster the sweep scans (read-only Samsara list call,
-    //    the one the Settings tab already makes).
-    let rosterError: string | null = null;
-    try {
-      const { fetchDrivers } = await import("@/lib/samsara/hos.server");
-      for (const d of filterRoster(await fetchDrivers(), settings).roster)
-        drivers.set(d.id, { id: d.id, name: d.name, source: "roster" });
-    } catch (e: any) {
-      rosterError = e?.message ?? String(e);
-    }
-    // 2) Drivers the sweep has already stored events for.
-    const events = await fetchAllRows<any>(
-      () =>
-        db()
-          .from("driver_warehouse_events")
-          .select("id, driver_id, driver_name", { count: "exact" }),
-      { label: "driver_warehouse_events(drivers)" },
-    );
-    for (const ev of events) {
-      const id = String(ev.driver_id);
-      if (drivers.has(id) || isExcludedDriver({ id, name: ev.driver_name }, settings)) continue;
-      drivers.set(id, { id, name: ev.driver_name ?? id, source: "events" });
-    }
-    // 3) Anyone who already has a rate, so no history is ever hidden.
-    for (const r of rates) {
-      const id = String(r.driver_id);
-      if (!drivers.has(id)) drivers.set(id, { id, name: r.driver_name ?? id, source: "rates" });
-    }
+    const { getDriverTimeSettingsRow } = await import("@/lib/driver-time.server");
+    // Token first: a write between the two reads then surfaces as a conflict.
+    const { updatedAt } = await getDriverTimeSettingsRow();
+    const { active, excluded, patternMatchedIds, rosterError } = await loadDriverRoster();
     return {
-      drivers: Array.from(drivers.values()).sort((a, b) => a.name.localeCompare(b.name)),
-      rates,
+      active,
+      hidden: excluded.filter((d) => d.reason === "id"),
+      /** Known drivers a Detection name rule excludes today; names and ids only. */
+      patternMatchedIds,
+      settingsUpdatedAt: updatedAt,
       rosterError,
     };
+  });
+
+/** Soft-hide (dated entry from this week) or restore (remove the id from both hide lists). */
+export const setDriverRosterVisibility = createServerFn({ method: "POST" })
+  .middleware([denyLegacyBranchAccess])
+  .inputValidator((i) =>
+    z
+      .object({
+        driverId: z
+          .string()
+          .trim()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9:_-]+$/, "Driver id has unexpected characters"),
+        hidden: z.boolean(),
+        expectedUpdatedAt: z.string().min(1).max(64).nullable(),
+      })
+      .parse(i),
+  )
+  .handler(async ({ data, context }) => {
+    await requireDriverPay(context.userId);
+    const { setDriverRosterHidden } = await import("@/lib/driver-time.server");
+    const result = await setDriverRosterHidden({ ...data, userId: context.userId });
+    return { ok: true as const, ...result };
   });
 
 const rateInput = z.object({

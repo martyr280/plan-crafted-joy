@@ -32,6 +32,7 @@ const loaded = {
 const ports = vi.hoisted(() => ({
   roles: [] as string[],
   listCalls: vi.fn(),
+  includeCalls: [] as Array<boolean | undefined>,
   query: {
     isLoading: false,
     isError: false,
@@ -51,8 +52,9 @@ vi.mock("@/lib/auth", () => ({
   }),
 }));
 vi.mock("@/hooks/useDriverTime", () => ({
-  useDriverPayRates: (enabled: boolean) => {
+  useDriverPayRates: (enabled: boolean, includeExcluded?: boolean) => {
     ports.listCalls(enabled);
+    ports.includeCalls.push(includeExcluded);
     return ports.query;
   },
   useAddDriverPayRate: () => ({ mutateAsync: ports.add, isPending: false }),
@@ -444,6 +446,41 @@ describe("DriverRatesPanel states", () => {
       effectiveDate: "2026-01-05",
       expectedUpdatedAt: "stamp-1",
     });
+  });
+});
+
+describe("DriverRatesPanel hidden drivers opt-in", () => {
+  it("hidden drivers stay off by default and appear with a badge only when asked for", () => {
+    ports.roles = ["ops_logistics_admin"];
+    ports.includeCalls = [];
+    ports.query = {
+      isLoading: false,
+      isError: false,
+      error: null,
+      data: {
+        ...loaded,
+        rates: [
+          ...loaded.rates,
+          {
+            id: "r9",
+            driver_id: "d9",
+            hourly_rate: 31,
+            effective_date: "2026-01-05",
+            updated_at: "stamp-9",
+          },
+        ],
+        excludedDrivers: [{ id: "d9", name: "Hidden Person" }],
+      },
+      refetch: vi.fn(),
+    };
+    render(<DriverRatesPanel />);
+    expect(ports.includeCalls.at(-1)).toBe(false);
+    expect(screen.queryByText("Hidden Person")).toBeNull();
+    fireEvent.click(screen.getByLabelText(/Show hidden drivers/));
+    expect(ports.includeCalls.at(-1)).toBe(true);
+    expect(screen.getByText("Hidden Person")).toBeTruthy();
+    expect(screen.getByText("Hidden")).toBeTruthy();
+    expect(screen.getByText("$31.00/hr")).toBeTruthy();
   });
 });
 

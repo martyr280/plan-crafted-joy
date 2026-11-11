@@ -90,12 +90,11 @@ export async function readBranchLogistics(userId: string, input: BranchRequest) 
         ),
         getDriverTimeSettings(),
       ]);
-      const { isExcludedDriver } = await import("./driver-time/detect");
+      const { scopeWeekInputs } = await import("./driver-time/roster");
+      const scoped = scopeWeekInputs({ events, overrides, settings, weekStart: from });
       return {
-        events: events.filter(
-          (e) => !isExcludedDriver({ id: e.driver_id, name: e.driver_name }, settings),
-        ),
-        overrides,
+        events: scoped.events,
+        overrides: scoped.overrides,
         thresholdMinutes: settings.thresholdMinutes,
       };
     },

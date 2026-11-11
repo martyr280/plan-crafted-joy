@@ -47,6 +47,13 @@ vi.mock("@/hooks/useDriverTime", () => ({
   }),
   useAddDriverPayRate: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateDriverPayRate: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDriverRoster: () => ({
+    isLoading: false,
+    isError: false,
+    data: { active: [], hidden: [], settingsUpdatedAt: null, rosterError: null },
+    refetch: vi.fn(),
+  }),
+  useSetDriverRosterVisibility: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { Route } from "@/routes/_app.driver-time";
