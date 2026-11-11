@@ -148,8 +148,12 @@ export function mapLine(hunks, line) {
   return line + delta;
 }
 
-// Characters Prettier adds, drops or moves when it rewraps code.
-const LAYOUT = /[\s,;()]/g;
+// Characters Prettier adds, drops or moves when it rewraps code: whitespace,
+// trailing commas, semicolons, wrapping parentheses, a leading union bar and
+// string quotes.
+const LAYOUT = /[\s,;()|'"]/g;
+// Some messages cite another line ("at line 216"); reformatting moves it.
+const messageShape = (message) => message.replace(/\bline \d+/g, "line N");
 const CONTEXT_CHARS = 32;
 
 /**
@@ -249,16 +253,17 @@ export function compareDiagnostics({ base, head, comparison, scope }) {
 
   // Second pass, after every exact match is taken: a diagnostic whose line was
   // rewrapped or moved still matches an unused base diagnostic in the same file
-  // with the same rule, severity, message and layout-insensitive source context.
+  // with the same rule, severity, message (cited line numbers aside) and
+  // layout-insensitive source context.
   const byContext = new Map();
   base.forEach((b, i) => {
     if (used.has(i) || b.context == null) return;
-    const k = JSON.stringify([b.file, b.rule, b.severity, b.message, b.context]);
+    const k = JSON.stringify([b.file, b.rule, b.severity, messageShape(b.message), b.context]);
     byContext.set(k, [...(byContext.get(k) ?? []), i]);
   });
   for (const { m, diff, baseFile } of unmatched) {
     if (baseFile != null && m.context != null) {
-      const k = JSON.stringify([baseFile, m.rule, m.severity, m.message, m.context]);
+      const k = JSON.stringify([baseFile, m.rule, m.severity, messageShape(m.message), m.context]);
       const index = (byContext.get(k) ?? []).find((i) => !used.has(i));
       if (index != null) {
         used.add(index);

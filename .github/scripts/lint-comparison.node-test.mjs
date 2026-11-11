@@ -7,7 +7,14 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { main, mapLine, parseUnifiedDiff, unquoteGitPath } from "./lint-comparison.mjs";
+import {
+  compareDiagnostics,
+  layoutContext,
+  main,
+  mapLine,
+  parseUnifiedDiff,
+  unquoteGitPath,
+} from "./lint-comparison.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const nodeModules = path.resolve(here, "..", "..", "node_modules");
@@ -125,6 +132,52 @@ describe("diff parsing", () => {
       ],
     );
     assert.equal(unquoteGitPath('"tab\\there"'), "tab\there");
+  });
+});
+
+describe("rewrap matching", () => {
+  const baseSrc = "const cov = (q.data as any)?.coverage as { n: number };\n";
+  const headSrc = "\nconst cov = (q.data as any)?.coverage as\n  | {\n      n: number;\n    };\n";
+  const finding = (line, column, message, source) => ({
+    file: "a.ts",
+    rule: "r",
+    severity: 2,
+    line,
+    column,
+    message,
+    context: layoutContext(source, line, column),
+  });
+  const diff = parseUnifiedDiff(
+    ["diff --git a/a.ts b/a.ts", "--- a/a.ts", "+++ b/a.ts", "@@ -1 +1,5 @@"].join("\n"),
+  );
+
+  it("ignores a leading union bar, quotes and a cited line number", () => {
+    assert.equal(
+      layoutContext(baseSrc, 1, 27),
+      layoutContext(headSrc, 2, 27),
+      "union bar and wrapping",
+    );
+    assert.equal(layoutContext("x = 'a';", 1, 5), layoutContext('x = "a"', 1, 5));
+    const result = compareDiagnostics({
+      base: [finding(1, 27, "Hook deps (at line 3) change", baseSrc)],
+      head: [finding(2, 27, "Hook deps (at line 9) change", headSrc)],
+      comparison: diff,
+      scope: diff,
+    });
+    assert.equal(result.introduced.length, 0);
+    assert.equal(result.reformatted.length, 1);
+  });
+
+  it("does not pair a diagnostic whose surrounding code changed", () => {
+    const edited = headSrc.replace("coverage", "coverage2");
+    const result = compareDiagnostics({
+      base: [finding(1, 27, "m", baseSrc)],
+      head: [finding(2, 27, "m", edited)],
+      comparison: diff,
+      scope: diff,
+    });
+    assert.equal(result.introduced.length, 1);
+    assert.equal(result.resolved.length, 1);
   });
 });
 
