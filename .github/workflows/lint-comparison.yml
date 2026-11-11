@@ -69,7 +69,7 @@ jobs:
       # Tests exercise the comparator code under review (head) on synthetic repos.
       - name: Comparator fixture tests
         working-directory: head
-        run: node --test "$GITHUB_WORKSPACE/head/.github/scripts/lint-comparison.test.mjs"
+        run: node --test "$GITHUB_WORKSPACE/head/.github/scripts/lint-comparison.node-test.mjs"
 
       # The gating comparator comes from the base commit when it has one, so a PR
       # cannot loosen its own gate. The first PR that adds it bootstraps from head.
