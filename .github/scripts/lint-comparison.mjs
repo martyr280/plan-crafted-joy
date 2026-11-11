@@ -154,11 +154,16 @@ const messageShape = (message) => message.replace(/\bline \d+/g, "line N");
 
 /**
  * Locates each diagnostic's owner: the innermost enclosing function, or the
- * top-level statement when there is none. The owner is identified by its
- * layout-insensitive token stream, and the diagnostic by its token index inside
- * it, so a rewrap of unchanged code keeps both while any token edit to the
- * owner, or a move into another owner, changes them. Uses the toolchain's own
- * TypeScript parser; without it no diagnostic gets an owner.
+ * top-level statement when there is none. The owner is identified by its full
+ * lexical scope path from the file root and its own layout-insensitive token
+ * stream, and the diagnostic by its token index inside it. Each path step
+ * records the scope's kind, own name, modifiers and syntactic position
+ * (declarator, property key, class field, export default, assignment target,
+ * call callee and argument index, JSX attribute), plus its occurrence index
+ * among identical siblings, so anonymous scopes only match their own position.
+ * A rewrap of unchanged code keeps all of it; a token edit to the owner, a
+ * different binding or parent, or a move between siblings changes it. Uses the
+ * toolchain's own TypeScript parser; without it no diagnostic gets an owner.
  */
 export function ownerAnalyzer(ts) {
   const FUNCTION_KINDS = new Set(
@@ -177,6 +182,19 @@ export function ownerAnalyzer(ts) {
     ["CommaToken", "SemicolonToken", "OpenParenToken", "CloseParenToken", "BarToken"].map(
       (k) => ts.SyntaxKind[k],
     ),
+  );
+  const CLASS_KINDS = new Set(["ClassDeclaration", "ClassExpression"].map((k) => ts.SyntaxKind[k]));
+  // Expression wrappers that do not change which binding a scope belongs to.
+  const WRAPPERS = new Set(
+    [
+      "ParenthesizedExpression",
+      "AsExpression",
+      "SatisfiesExpression",
+      "TypeAssertionExpression",
+      "NonNullExpression",
+    ]
+      .map((k) => ts.SyntaxKind[k])
+      .filter((k) => k != null),
   );
   const isJsDoc = (n) =>
     n.kind >= ts.SyntaxKind.FirstJSDocNode && n.kind <= ts.SyntaxKind.LastJSDocNode;
@@ -224,17 +242,74 @@ export function ownerAnalyzer(ts) {
     } catch {
       return null;
     }
+    const compact = (n) => n.getText(sf).replace(/\s+/g, "");
+    const ownName = (n) => (n.name ? compact(n.name) : "");
+    const modifiers = (n) =>
+      (ts.canHaveModifiers?.(n) ? (ts.getModifiers(n) ?? []) : [])
+        .map((m) => ts.SyntaxKind[m.kind])
+        .join(",");
+    function position(n) {
+      let child = n;
+      let p = n.parent;
+      while (p && WRAPPERS.has(p.kind)) {
+        child = p;
+        p = p.parent;
+      }
+      if (!p) return "";
+      if (ts.isVariableDeclaration(p)) return `decl:${compact(p.name)}`;
+      if (ts.isPropertyAssignment(p) || ts.isPropertyDeclaration(p)) {
+        return `prop:${compact(p.name)}`;
+      }
+      if (ts.isExportAssignment(p)) return "export-default";
+      if (ts.isBinaryExpression(p) && p.right === child) return `assign:${compact(p.left)}`;
+      if ((ts.isCallExpression(p) || ts.isNewExpression(p)) && p.arguments?.includes(child)) {
+        return `arg:${compact(p.expression)}#${p.arguments.indexOf(child)}`;
+      }
+      if (ts.isJsxExpression(p) && p.parent && ts.isJsxAttribute(p.parent)) {
+        return `jsx:${compact(p.parent.name)}`;
+      }
+      return `in:${ts.SyntaxKind[p.kind]}`;
+    }
+    const isScope = (n) => FUNCTION_KINDS.has(n.kind) || CLASS_KINDS.has(n.kind);
+    function segment(n) {
+      let name = ownName(n);
+      if (!isScope(n) && ts.isVariableStatement(n)) {
+        name = n.declarationList.declarations.map((d) => compact(d.name)).join(",");
+      }
+      return [ts.SyntaxKind[n.kind], position(n), name, modifiers(n)].join("|");
+    }
+    // Every function, class and top-level statement gets its path from the root.
+    const paths = new Map();
+    const visit = (node, parentPath, seen) => {
+      let path = parentPath;
+      let childSeen = seen;
+      if (isScope(node) || node.parent === sf) {
+        const seg = segment(node);
+        const n = seen.get(seg) ?? 0;
+        seen.set(seg, n + 1);
+        path = [...parentPath, `${seg}#${n}`];
+        paths.set(node, path);
+        childSeen = new Map();
+      }
+      ts.forEachChild(node, (c) => visit(c, path, childSeen));
+    };
+    const rootSeen = new Map();
+    ts.forEachChild(sf, (c) => visit(c, [], rootSeen));
+
     const owners = new Map();
     const ownerData = (node) => {
       let data = owners.get(node);
       if (!data) {
+        const path = paths.get(node);
+        if (!path) return null;
         const list = [];
         tokens(node, sf, list);
         data = {
           list,
+          scope: path.join(" > "),
           id: crypto
             .createHash("sha256")
-            .update(JSON.stringify([ts.SyntaxKind[node.kind], list.map((t) => t.text)]))
+            .update(JSON.stringify([path, list.map((t) => t.text)]))
             .digest("hex"),
         };
         owners.set(node, data);
@@ -266,10 +341,11 @@ export function ownerAnalyzer(ts) {
         if (n.parent === sf) owner = n;
       }
       if (!owner) return null;
-      const { list, id } = ownerData(owner);
-      const index = list.findIndex((t) => t.end > pos);
+      const data = ownerData(owner);
+      if (!data) return null;
+      const index = data.list.findIndex((t) => t.end > pos);
       if (index < 0) return null;
-      return { owner: id, ownerToken: index };
+      return { owner: data.id, ownerToken: index, ownerScope: data.scope };
     };
   };
 }
@@ -294,7 +370,7 @@ export function normalize(results, cwd, analyzer = null) {
       line: m.line ?? 0,
       column: m.column ?? 0,
       message: m.message,
-      ...(locate?.(m.line, m.column) ?? { owner: null, ownerToken: null }),
+      ...(locate?.(m.line, m.column) ?? { owner: null, ownerToken: null, ownerScope: null }),
     }));
   });
 }

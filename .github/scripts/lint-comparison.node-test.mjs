@@ -510,3 +510,131 @@ describe("comparator fixtures", () => {
     assert.match(unknown.summary.error, /not present/);
   });
 });
+
+describe("diagnostics moved between scopes with identical bodies", () => {
+  const pad = '"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"';
+  // A scope body with an optional debugger; both scopes in a case share it.
+  const body = (indent, withDebugger) =>
+    `${indent}const paddingBefore = ${pad};\n${
+      withDebugger ? `${indent}debugger;\n` : ""
+    }${indent}return ${pad};\n`;
+  const lineOf = (text, needle) => text.slice(0, text.indexOf(needle)).split("\n").length;
+
+  // `template(first, second)` renders the file with a debugger in the first
+  // and/or second scope. Base has it in the first only; head in the second only.
+  const MOVES = [
+    {
+      name: "arrow functions in const bindings (QA Q5-1 arrow repro)",
+      file: "a.js",
+      template: (a, b) =>
+        `export const oldFunction = () => {\n${body("  ", a)}};\n\n` +
+        `export const newFunction = () => {\n${body("  ", b)}};\n`,
+    },
+    {
+      name: "object-literal methods",
+      file: "a.js",
+      template: (a, b) =>
+        `export const api = {\n  oldMethod() {\n${body("    ", a)}  },\n` +
+        `  newMethod() {\n${body("    ", b)}  },\n};\n`,
+    },
+    {
+      name: "object-literal arrow properties",
+      file: "a.js",
+      template: (a, b) =>
+        `export const api = {\n  oldProp: () => {\n${body("    ", a)}  },\n` +
+        `  newProp: () => {\n${body("    ", b)}  },\n};\n`,
+    },
+    {
+      name: "class methods",
+      file: "a.js",
+      template: (a, b) =>
+        `export class Service {\n  oldMethod() {\n${body("    ", a)}  }\n\n` +
+        `  newMethod() {\n${body("    ", b)}  }\n}\n`,
+    },
+    {
+      name: "same-named methods in different classes",
+      file: "a.js",
+      template: (a, b) =>
+        `export class OldService {\n  run() {\n${body("    ", a)}  }\n}\n\n` +
+        `export class NewService {\n  run() {\n${body("    ", b)}  }\n}\n`,
+    },
+    {
+      name: "function expressions in const bindings",
+      file: "a.js",
+      template: (a, b) =>
+        `export const oldFunction = function () {\n${body("  ", a)}};\n\n` +
+        `export const newFunction = function () {\n${body("  ", b)}};\n`,
+    },
+    {
+      name: "nested arrows passed to the same callee inside one parent",
+      file: "a.js",
+      template: (a, b) =>
+        `export function parent(run) {\n  run(() => {\n${body("    ", a)}  });\n` +
+        `  run(() => {\n${body("    ", b)}  });\n}\n`,
+    },
+    {
+      name: "nested arrows passed to different callees inside one parent",
+      file: "a.js",
+      template: (a, b) =>
+        `export function parent(first, second) {\n  first(() => {\n${body("    ", a)}  });\n` +
+        `  second(() => {\n${body("    ", b)}  });\n}\n`,
+    },
+    {
+      name: "export default arrow and a named arrow",
+      file: "a.js",
+      template: (a, b) =>
+        `export default () => {\n${body("  ", a)}};\n\n` +
+        `export const named = () => {\n${body("  ", b)}};\n`,
+    },
+  ];
+
+  for (const c of MOVES) {
+    it(`fails a debugger moved between ${c.name}`, async () => {
+      const r = baseRepo(`move-${c.name.replace(/\W+/g, "-")}`);
+      const baseText = c.template(true, false);
+      const headText = c.template(false, true);
+      const base = r.write(c.file, baseText).commit("base");
+      const head = r.write(c.file, headText).commit("head");
+      const { code, summary, read } = await compare(r.dir, base, head);
+      assert.equal(code, 1);
+      assert.equal(summary.status, "regression");
+      assert.deepEqual(summary.inheritedAfterReformat, { errors: 0, warnings: 0, files: 0 });
+      assert.deepEqual(
+        read("introduced-findings").map((m) => [m.file, m.line, m.rule]),
+        [[c.file, lineOf(headText, "debugger;"), "no-debugger"]],
+      );
+      assert.deepEqual(summary.resolvedOrMoved, { errors: 1, warnings: 0, files: 1 });
+    });
+  }
+
+  const REWRAPS = [
+    {
+      name: "an arrow in its own const binding",
+      base: `export const oldFunction = () => { const p = pick('a', 'b'); debugger; return p; };\nexport const newFunction = () => { const p = pick('a', 'b'); return p; };\n`,
+      head: `export const oldFunction = () => {\n  const p = pick(\n    "a",\n    "b",\n  );\n  debugger;\n  return p;\n};\nexport const newFunction = () => {\n  const p = pick("a", "b");\n  return p;\n};\n`,
+    },
+    {
+      name: "a class method",
+      base: `export class Service { run() { const p = pick('a', 'b'); debugger; return p; } }\n`,
+      head: `export class Service {\n  run() {\n    const p = pick(\n      "a",\n      "b",\n    );\n    debugger;\n    return p;\n  }\n}\n`,
+    },
+    {
+      name: "a nested callback in the same parent",
+      base: `export function parent(run) { run(() => { debugger; }); run(() => { return 1; }); }\n`,
+      head: `export function parent(run) {\n  run(() => {\n    debugger;\n  });\n  run(() => {\n    return 1;\n  });\n}\n`,
+    },
+  ];
+
+  for (const c of REWRAPS) {
+    it(`still inherits a debugger when only ${c.name} is rewrapped`, async () => {
+      const r = baseRepo(`rewrap-${c.name.replace(/\W+/g, "-")}`);
+      const base = r.write("a.js", c.base).commit("base");
+      const head = r.write("a.js", c.head).commit("head");
+      const { code, summary } = await compare(r.dir, base, head);
+      assert.equal(code, 0);
+      assert.equal(summary.status, "pass");
+      assert.deepEqual(summary.inheritedAfterReformat, { errors: 1, warnings: 0, files: 1 });
+      assert.deepEqual(summary.introduced.all, { errors: 0, warnings: 0, files: 0 });
+    });
+  }
+});
