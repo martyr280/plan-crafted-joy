@@ -180,6 +180,62 @@ describe("comparator fixtures", () => {
     );
   });
 
+  it("keeps a diagnostic inherited when Prettier-style rewrapping moves its line", async () => {
+    const r = baseRepo("rewrap");
+    const base = r
+      .write("src/a.js", "export function a() { var total = sum(1, 2, 3); return total; }\n")
+      .commit("base");
+    const head = r
+      .write(
+        "src/a.js",
+        "export function a() {\n  var total = sum(\n    1,\n    2,\n    3,\n  );\n  return total;\n}\n",
+      )
+      .commit("head");
+    const { code, summary } = await compare(r.dir, base, head);
+    assert.equal(code, 0);
+    assert.equal(summary.status, "pass");
+    assert.deepEqual(summary.inheritedAfterReformat, { errors: 0, warnings: 1, files: 1 });
+    assert.deepEqual(summary.introduced.all, { errors: 0, warnings: 0, files: 0 });
+    assert.deepEqual(summary.addedLines.diagnostics, { errors: 0, warnings: 1, files: 1 });
+  });
+
+  it("still fails a new diagnostic added alongside a rewrap of an old one", async () => {
+    const r = baseRepo("rewrap-new");
+    const base = r
+      .write("src/a.js", "export function a() { var total = sum(1, 2, 3); return total; }\n")
+      .commit("base");
+    const head = r
+      .write(
+        "src/a.js",
+        "export function a() {\n  var total = sum(\n    1,\n    2,\n    3,\n  );\n  return total;\n}\n",
+      )
+      .write("src/b.js", "export function b() {\n  var extra = 3;\n  return extra;\n}\n")
+      .commit("head");
+    const { code, summary, read } = await compare(r.dir, base, head);
+    assert.equal(code, 1);
+    assert.deepEqual(summary.inheritedAfterReformat, { errors: 0, warnings: 1, files: 1 });
+    assert.deepEqual(
+      read("introduced-findings").map((m) => [m.file, m.line, m.rule, m.classification]),
+      [["src/b.js", 2, "no-var", "added_line"]],
+    );
+  });
+
+  it("treats an edit beside an old diagnostic as new, not as a rewrap", async () => {
+    const r = baseRepo("rewrap-edit");
+    const base = r
+      .write("src/a.js", "export function a() { var total = sum(1, 2, 3); return total; }\n")
+      .commit("base");
+    const head = r
+      .write("src/a.js", "export function a() {\n  var total = sum(1, 2, 4);\n  return total;\n}\n")
+      .commit("head");
+    const { code, read } = await compare(r.dir, base, head);
+    assert.equal(code, 1);
+    assert.deepEqual(
+      read("introduced-findings").map((m) => [m.line, m.rule]),
+      [[2, "no-var"]],
+    );
+  });
+
   it("follows renames and counts deleted-file diagnostics as resolved", async () => {
     const r = baseRepo("rename");
     const body =

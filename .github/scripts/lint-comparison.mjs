@@ -148,6 +148,29 @@ export function mapLine(hunks, line) {
   return line + delta;
 }
 
+// Characters Prettier adds, drops or moves when it rewraps code.
+const LAYOUT = /[\s,;()]/g;
+const CONTEXT_CHARS = 32;
+
+/**
+ * Layout-insensitive source around a diagnostic: the nearest CONTEXT_CHARS
+ * non-layout characters on each side. Null when ESLint gave no source.
+ */
+export function layoutContext(source, line, column) {
+  if (typeof source !== "string" || !line) return null;
+  let offset = 0;
+  for (let n = 1; n < line; n++) {
+    const next = source.indexOf("\n", offset);
+    if (next < 0) return null;
+    offset = next + 1;
+  }
+  offset += Math.max(0, column - 1);
+  const window = CONTEXT_CHARS * 16;
+  const before = source.slice(Math.max(0, offset - window), offset).replace(LAYOUT, "");
+  const after = source.slice(offset, offset + window).replace(LAYOUT, "");
+  return `${before.slice(-CONTEXT_CHARS)}|${after.slice(0, CONTEXT_CHARS)}`;
+}
+
 export function normalize(results, cwd) {
   return results.flatMap((r) =>
     r.messages.map((m) => ({
@@ -157,6 +180,7 @@ export function normalize(results, cwd) {
       line: m.line ?? 0,
       column: m.column ?? 0,
       message: m.message,
+      context: layoutContext(r.source, m.line, m.column),
     })),
   );
 }
@@ -185,7 +209,9 @@ export function compareDiagnostics({ base, head, comparison, scope }) {
   });
   const used = new Set();
   const inherited = [];
+  const reformatted = [];
   const introduced = [];
+  const unmatched = [];
   for (const m of head) {
     const diff = byNew.get(m.file);
     let baseFile = m.file;
@@ -216,7 +242,30 @@ export function compareDiagnostics({ base, head, comparison, scope }) {
     if (index != null) {
       used.add(index);
       inherited.push(m);
-      continue;
+    } else {
+      unmatched.push({ m, diff, baseFile });
+    }
+  }
+
+  // Second pass, after every exact match is taken: a diagnostic whose line was
+  // rewrapped or moved still matches an unused base diagnostic in the same file
+  // with the same rule, severity, message and layout-insensitive source context.
+  const byContext = new Map();
+  base.forEach((b, i) => {
+    if (used.has(i) || b.context == null) return;
+    const k = JSON.stringify([b.file, b.rule, b.severity, b.message, b.context]);
+    byContext.set(k, [...(byContext.get(k) ?? []), i]);
+  });
+  for (const { m, diff, baseFile } of unmatched) {
+    if (baseFile != null && m.context != null) {
+      const k = JSON.stringify([baseFile, m.rule, m.severity, m.message, m.context]);
+      const index = (byContext.get(k) ?? []).find((i) => !used.has(i));
+      if (index != null) {
+        used.add(index);
+        inherited.push(m);
+        reformatted.push(m);
+        continue;
+      }
     }
     let classification;
     if (touched.has(m.file)) {
@@ -236,7 +285,7 @@ export function compareDiagnostics({ base, head, comparison, scope }) {
     throw new InfrastructureError("Unaccounted lint diagnostics");
   }
   const onAddedLines = head.filter((m) => added.get(m.file)?.has(m.line));
-  return { inherited, introduced, resolved, onAddedLines, touched };
+  return { inherited, reformatted, introduced, resolved, onAddedLines, touched };
 }
 
 function git(repo, args, opts = {}) {
@@ -513,6 +562,7 @@ export async function main(env = process.env) {
         diagnostics: totals(result.onAddedLines),
       },
       inherited: totals(result.inherited),
+      inheritedAfterReformat: totals(result.reformatted),
       resolvedOrMoved: totals(result.resolved),
       introduced: {
         all: totals(result.introduced),
