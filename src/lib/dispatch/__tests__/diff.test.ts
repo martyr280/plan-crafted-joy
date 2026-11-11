@@ -30,7 +30,13 @@ function stop(over: Partial<DispatchPlanStop> = {}): DispatchPlanStop {
 function run(over: Partial<DispatchPlanRun> = {}): DispatchPlanRun {
   const stops = over.stops ?? [
     stop(),
-    stop({ position: 2, orderNo: "O2", p21ShipToId: "ST2", samsaraAddressId: "addr_2", scheduledArrival: "2026-08-26T12:40:00.000Z" }),
+    stop({
+      position: 2,
+      orderNo: "O2",
+      p21ShipToId: "ST2",
+      samsaraAddressId: "addr_2",
+      scheduledArrival: "2026-08-26T12:40:00.000Z",
+    }),
   ];
   const base: DispatchPlanRun = {
     routeCode: "MSL01",
@@ -54,7 +60,6 @@ function run(over: Partial<DispatchPlanRun> = {}): DispatchPlanRun {
   };
   return { ...base, ...over, stops };
 }
-
 
 const NOW = new Date("2026-08-26T11:00:00.000Z");
 

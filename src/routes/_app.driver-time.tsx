@@ -7,7 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { toast } from "sonner";
 import {
@@ -16,14 +23,21 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Loader2, MapPin, Printer, RefreshCw, Users,
+  Loader2,
+  MapPin,
+  Printer,
+  RefreshCw,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { driverTimeGates } from "@/lib/driver-time/access";
 import { useModuleView } from "@/lib/usage-log";
 import {
-  useDriverTimeWeek, useUpdateDriverTimeEvent, useRunDriverTimeSweep,
-  useDriverTimeConfig, useSaveDriverTimeConfig,
+  useDriverTimeWeek,
+  useUpdateDriverTimeEvent,
+  useRunDriverTimeSweep,
+  useDriverTimeConfig,
+  useSaveDriverTimeConfig,
   useSamsaraDiagnostics,
 } from "@/hooks/useDriverTime";
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
@@ -39,16 +53,23 @@ export const Route = createFileRoute("/_app/driver-time")({
   head: () => ({
     meta: [
       { title: "Driver Warehouse Time — Nelson AI for NDI" },
-      { name: "description", content: "Automated audit of driver non-driving time parked at NDI warehouses, with weekly review and cost estimates." },
+      {
+        name: "description",
+        content:
+          "Automated audit of driver non-driving time parked at NDI warehouses, with weekly review and cost estimates.",
+      },
       { property: "og:title", content: "Driver Warehouse Time — Nelson AI for NDI" },
-      { property: "og:description", content: "Automated audit of driver non-driving time parked at NDI warehouses, with weekly review and cost estimates." },
+      {
+        property: "og:description",
+        content:
+          "Automated audit of driver non-driving time parked at NDI warehouses, with weekly review and cost estimates.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
   }),
   component: DriverTimePage,
 });
-
 
 function mondayOf(d: Date) {
   const x = new Date(`${dateStrInTz(d, CENTRAL_TZ)}T00:00:00Z`);
@@ -62,7 +83,6 @@ function shiftWeek(weekStart: string, weeks: number) {
   d.setUTCDate(d.getUTCDate() + weeks * 7);
   return d.toISOString().slice(0, 10);
 }
-
 
 type WeekPayload = NonNullable<ReturnType<typeof useDriverTimeWeek>["data"]>;
 const NO_DRIVERS: WeekPayload["drivers"] = [];
@@ -104,16 +124,35 @@ function DriverTimePage() {
   const totals = data?.totals;
 
   const csv = useMemo(() => {
-    const rows: string[][] = [[
-      "driver", "date", "start", "end", "duration_min", "warehouse", "statuses",
-      "location_source", "needs_review", "status", "notes",
-    ]];
+    const rows: string[][] = [
+      [
+        "driver",
+        "date",
+        "start",
+        "end",
+        "duration_min",
+        "warehouse",
+        "statuses",
+        "location_source",
+        "needs_review",
+        "status",
+        "notes",
+      ],
+    ];
     for (const d of drivers) {
       for (const ev of d.events as any[]) {
         rows.push([
-          d.driverName, ev.event_date, ev.start_ts, ev.end_ts, String(ev.duration_min),
-          ev.address_name ?? "", (ev.statuses ?? []).join("/"), ev.location_source,
-          ev.needs_review ? "yes" : "no", ev.status, (ev.notes ?? "").replace(/"/g, "'"),
+          d.driverName,
+          ev.event_date,
+          ev.start_ts,
+          ev.end_ts,
+          String(ev.duration_min),
+          ev.address_name ?? "",
+          (ev.statuses ?? []).join("/"),
+          ev.location_source,
+          ev.needs_review ? "yes" : "no",
+          ev.status,
+          (ev.notes ?? "").replace(/"/g, "'"),
         ]);
       }
     }
@@ -121,7 +160,9 @@ function DriverTimePage() {
   }, [drivers]);
 
   function downloadCsv(raw = false) {
-    const blob = new Blob([raw ? csv : reconciliationCsv(drivers)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([raw ? csv : reconciliationCsv(drivers)], {
+      type: "text/csv;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -178,14 +219,20 @@ function DriverTimePage() {
                 sweep.mutate(weekStart, {
                   onSuccess: (r: any) =>
                     r?.ok
-                      ? toast.success(`Sweep complete — ${r.eventsFound} event(s) across ${r.driversScanned} driver(s)`)
+                      ? toast.success(
+                          `Sweep complete — ${r.eventsFound} event(s) across ${r.driversScanned} driver(s)`,
+                        )
                       : toast.error(r?.error ?? "Sweep failed"),
                   onError: (e: any) => toast.error(e?.message ?? "Sweep failed"),
                 })
               }
               disabled={sweep.isPending || !report.allowExport}
             >
-              {sweep.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+              {sweep.isPending ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-1" />
+              )}
               Rescan selected week
             </Button>
           </>
@@ -193,19 +240,39 @@ function DriverTimePage() {
       />
 
       <div className="flex items-center gap-2 mb-4">
-        <Button variant="outline" size="icon" aria-label="Previous week" onClick={() => setWeekStart(shiftWeek(weekStart, -1))}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Previous week"
+          onClick={() => setWeekStart(shiftWeek(weekStart, -1))}
+        >
           <ChevronLeft className="w-4 h-4" />
         </Button>
         <div className="text-sm font-medium">
-          Week of {dayLabel(weekStart)}{data ? ` – ${dayLabel(data.weekEnd)}` : ""}
+          Week of {dayLabel(weekStart)}
+          {data ? ` – ${dayLabel(data.weekEnd)}` : ""}
         </div>
-        <Button variant="outline" size="icon" aria-label="Next week" onClick={() => setWeekStart(shiftWeek(weekStart, 1))}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Next week"
+          onClick={() => setWeekStart(shiftWeek(weekStart, 1))}
+        >
           <ChevronRight className="w-4 h-4" />
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => setWeekStart(mondayOf(new Date()))}>This week</Button>
+        <Button variant="ghost" size="sm" onClick={() => setWeekStart(mondayOf(new Date()))}>
+          This week
+        </Button>
       </div>
 
-      <label className="flex gap-2 items-center mb-4 text-sm"><input type="checkbox" checked={includeWeekends} onChange={e=>setIncludeWeekends(e.target.checked)} /> Include weekend automated events</label>
+      <label className="flex gap-2 items-center mb-4 text-sm">
+        <input
+          type="checkbox"
+          checked={includeWeekends}
+          onChange={(e) => setIncludeWeekends(e.target.checked)}
+        />{" "}
+        Include weekend automated events
+      </label>
 
       <Tabs defaultValue="report">
         <TabsList>
@@ -214,7 +281,6 @@ function DriverTimePage() {
           <TabsTrigger value="settings">Settings</TabsTrigger>
           {gates.canOpenDiagnostics && <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>}
         </TabsList>
-
 
         <TabsContent value="report" className="mt-4 space-y-4">
           <DriverTimeReport
@@ -306,9 +372,7 @@ function DriverTimePage() {
   );
 }
 
-
 /* ------------------------------------------------------------- driver card */
-
 
 /* ---------------------------------------------------------------- settings */
 
@@ -325,11 +389,15 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
 
   function toggleAddress(id: string) {
     const next = new Set(selected);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    save.mutate({ warehouseAddressIds: Array.from(next) }, {
-      onSuccess: () => toast.success("Warehouse geofences updated"),
-      onError: (e: any) => toast.error(e?.message),
-    });
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    save.mutate(
+      { warehouseAddressIds: Array.from(next) },
+      {
+        onSuccess: () => toast.success("Warehouse geofences updated"),
+        onError: (e: any) => toast.error(e?.message),
+      },
+    );
   }
 
   return (
@@ -338,7 +406,8 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
         <div className="font-semibold text-sm">Detection</div>
         {cfgQ.data?.error && (
           <div className={`text-xs ${destructiveTextClass}`}>
-            Samsara data unavailable: {cfgQ.data.error} — check the API token scopes in Settings → Integrations.
+            Samsara data unavailable: {cfgQ.data.error} — check the API token scopes in Settings →
+            Integrations.
           </div>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
@@ -365,7 +434,8 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
             onChange={(e) => setPatterns(e.target.value)}
           />
           <p className="text-[11px] text-muted-foreground mt-1">
-            Non-human Samsara accounts (shared LTL / warehouse logins) belong here; they otherwise dominate the report.
+            Non-human Samsara accounts (shared LTL / warehouse logins) belong here; they otherwise
+            dominate the report.
           </p>
         </div>
         <div>
@@ -374,10 +444,13 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
             className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
             value={settings?.basis ?? "presence"}
             onChange={(e) =>
-              save.mutate({ basis: e.target.value as "presence" | "onduty" }, {
-                onSuccess: () => toast.success("Settings saved"),
-                onError: (err: any) => toast.error(err?.message),
-              })
+              save.mutate(
+                { basis: e.target.value as "presence" | "onduty" },
+                {
+                  onSuccess: () => toast.success("Settings saved"),
+                  onError: (err: any) => toast.error(err?.message),
+                },
+              )
             }
           >
             <option value="presence">Inside geofence, any status (recommended)</option>
@@ -391,10 +464,13 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               className="mt-0.5"
               checked={settings?.requireLicense ?? true}
               onChange={(e) =>
-                save.mutate({ requireLicense: e.target.checked }, {
-                  onSuccess: () => toast.success("Settings saved"),
-                  onError: (err: any) => toast.error(err?.message),
-                })
+                save.mutate(
+                  { requireLicense: e.target.checked },
+                  {
+                    onSuccess: () => toast.success("Settings saved"),
+                    onError: (err: any) => toast.error(err?.message),
+                  },
+                )
               }
             />
             <span>Require a driver&apos;s-license number (excludes shared logins)</span>
@@ -405,10 +481,13 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               className="mt-0.5"
               checked={settings?.includeDeactivated ?? false}
               onChange={(e) =>
-                save.mutate({ includeDeactivated: e.target.checked }, {
-                  onSuccess: () => toast.success("Settings saved"),
-                  onError: (err: any) => toast.error(err?.message),
-                })
+                save.mutate(
+                  { includeDeactivated: e.target.checked },
+                  {
+                    onSuccess: () => toast.success("Settings saved"),
+                    onError: (err: any) => toast.error(err?.message),
+                  },
+                )
               }
             />
             <span>Include deactivated drivers</span>
@@ -422,22 +501,32 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               {
                 thresholdMinutes: Number(threshold || settings?.thresholdMinutes || 90),
                 mergeGapMinutes: Number(mergeGap || settings?.mergeGapMinutes || 10),
-                excludedDriverNamePatterns: (patterns || (settings?.excludedDriverNamePatterns ?? []).join("\n"))
-                  .split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+                excludedDriverNamePatterns: (
+                  patterns || (settings?.excludedDriverNamePatterns ?? []).join("\n")
+                )
+                  .split(/\r?\n/)
+                  .map((s) => s.trim())
+                  .filter(Boolean),
               },
-              { onSuccess: () => toast.success("Settings saved"), onError: (e: any) => toast.error(e?.message) },
+              {
+                onSuccess: () => toast.success("Settings saved"),
+                onError: (e: any) => toast.error(e?.message),
+              },
             )
           }
         >
           Save detection settings
         </Button>
-
       </Card>
 
       <Card className="p-4">
-        <div className="font-semibold text-sm">A &apos;Warehouse&apos; remark makes the whole day warehouse time</div>
+        <div className="font-semibold text-sm">
+          A &apos;Warehouse&apos; remark makes the whole day warehouse time
+        </div>
         <p className="text-[11px] text-muted-foreground mb-2">
-          Per driver, admin only. When ticked, a day whose log carries a &quot;Warehouse&quot; remark counts from first work to the last work stop before the drive home. Off for everyone by default.
+          Per driver, admin only. When ticked, a day whose log carries a &quot;Warehouse&quot;
+          remark counts from first work to the last work stop before the drive home. Off for
+          everyone by default.
         </p>
         <div className="max-h-60 overflow-y-auto divide-y">
           {[...(cfgQ.data?.drivers ?? [])]
@@ -453,11 +542,15 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
                     disabled={save.isPending}
                     onChange={() => {
                       const cur = new Set(settings?.warehouseRemarkDriverIds ?? []);
-                      if (on) cur.delete(d.id); else cur.add(d.id);
-                      save.mutate({ warehouseRemarkDriverIds: Array.from(cur) }, {
-                        onSuccess: () => toast.success("Warehouse-remark setting saved"),
-                        onError: (err: any) => toast.error(err?.message),
-                      });
+                      if (on) cur.delete(d.id);
+                      else cur.add(d.id);
+                      save.mutate(
+                        { warehouseRemarkDriverIds: Array.from(cur) },
+                        {
+                          onSuccess: () => toast.success("Warehouse-remark setting saved"),
+                          onError: (err: any) => toast.error(err?.message),
+                        },
+                      );
                     }}
                   />
                   <span>{d.name}</span>
@@ -478,13 +571,19 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
           <div className="max-h-80 overflow-y-auto divide-y">
             {(cfgQ.data?.addresses ?? []).map((a: any) => (
               <label key={a.id} className="flex items-center gap-2 py-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleAddress(a.id)} />
+                <input
+                  type="checkbox"
+                  checked={selected.has(a.id)}
+                  onChange={() => toggleAddress(a.id)}
+                />
                 <span className="font-medium">{a.name}</span>
                 <span className="text-xs text-muted-foreground">{a.formattedAddress ?? ""}</span>
               </label>
             ))}
             {!(cfgQ.data?.addresses ?? []).length && (
-              <div className="text-sm text-muted-foreground py-2">No Samsara addresses visible.</div>
+              <div className="text-sm text-muted-foreground py-2">
+                No Samsara addresses visible.
+              </div>
             )}
           </div>
         )}
@@ -496,7 +595,15 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
   );
 }
 
-function FunnelRow({ label, value, note }: { label: string; value: number | string; note?: string }) {
+function FunnelRow({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: number | string;
+  note?: string;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-b border-border/60 py-2 last:border-0">
       <div>
@@ -533,7 +640,6 @@ function parseMinInput(raw: string, floor: number): number | null {
   return Math.max(floor, Math.round(n));
 }
 
-
 function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
   if (d.fatalError) return { ok: false, text: `Diagnostics could not run: ${d.fatalError}` };
   const f = d.funnel;
@@ -545,7 +651,10 @@ function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
     };
   }
   if (f.segmentsFetched === 0)
-    return { ok: false, text: "Samsara returned no HOS logs for this window. Check the Samsara scopes list below." };
+    return {
+      ok: false,
+      text: "Samsara returned no HOS logs for this window. Check the Samsara scopes list below.",
+    };
   if (!(d.statusVocabulary ?? []).some((s: any) => s.countedAsWarehouseTime))
     return {
       ok: false,
@@ -556,7 +665,8 @@ function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
       ok: false,
       text: "One or more selected warehouse addresses have no geofence shape in Samsara, so nothing can ever match them.",
     };
-  if (f.blocksBuilt === 0) return { ok: false, text: "Logs arrived but no non-driving blocks were built." };
+  if (f.blocksBuilt === 0)
+    return { ok: false, text: "Logs arrived but no non-driving blocks were built." };
   if (f.blocksInsideFence === 0)
     return {
       ok: false,
@@ -577,7 +687,6 @@ function diagnosticsVerdict(d: any): { ok: boolean; text: string } {
     ok: false,
     text: "Blocks cleared the threshold inside a geofence but no events were emitted — this is unexpected, check the driver grid.",
   };
-
 }
 
 function DiagnosticsTab() {
@@ -594,20 +703,46 @@ function DiagnosticsTab() {
   function downloadDiagCsv() {
     if (!d) return;
     const header = [
-      "Driver", "Activation", "License", "Excluded", "Segs", "w/ GPS", "Driving (min)",
-      "On-duty non-driving (min)", "Longest block (min)", "RAG",
-      "Location source", "Matched fence", "Nearest fence", "Nearest fence (m)", "Events",
+      "Driver",
+      "Activation",
+      "License",
+      "Excluded",
+      "Segs",
+      "w/ GPS",
+      "Driving (min)",
+      "On-duty non-driving (min)",
+      "Longest block (min)",
+      "RAG",
+      "Location source",
+      "Matched fence",
+      "Nearest fence",
+      "Nearest fence (m)",
+      "Events",
     ];
-    const rows = [header, ...d.drivers.map((r: any) => [
-      r.driverName, r.activationStatus ?? "", r.hasLicense ? "yes" : "no", r.excluded ? "yes" : "no",
-      String(r.segments), String(r.segmentsWithCoords), String(r.drivingMin),
+    const rows = [
+      header,
+      ...d.drivers.map((r: any) => [
+        r.driverName,
+        r.activationStatus ?? "",
+        r.hasLicense ? "yes" : "no",
+        r.excluded ? "yes" : "no",
+        String(r.segments),
+        String(r.segmentsWithCoords),
+        String(r.drivingMin),
 
-      String(r.onDutyNonDrivingMin), String(r.longestNonDrivingMin),
-      r.excluded ? "" : ragOf(r.longestNonDrivingMin, greenUnder, redAtOrOver),
-      r.longestBlockLocationSource, r.matchedFenceName ?? "", r.nearestFenceName ?? "",
-      r.nearestFenceMeters === null ? "" : String(r.nearestFenceMeters), String(r.eventsEmitted),
-    ])];
-    const csv = (rows as string[][]).map((r) => r.map((c) => `"${String(c ?? "")}"`).join(",")).join("\n");
+        String(r.onDutyNonDrivingMin),
+        String(r.longestNonDrivingMin),
+        r.excluded ? "" : ragOf(r.longestNonDrivingMin, greenUnder, redAtOrOver),
+        r.longestBlockLocationSource,
+        r.matchedFenceName ?? "",
+        r.nearestFenceName ?? "",
+        r.nearestFenceMeters === null ? "" : String(r.nearestFenceMeters),
+        String(r.eventsEmitted),
+      ]),
+    ];
+    const csv = (rows as string[][])
+      .map((r) => r.map((c) => `"${String(c ?? "")}"`).join(","))
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -635,13 +770,20 @@ function DiagnosticsTab() {
           </div>
           <Button
             onClick={() =>
-              diag.mutate({ lookbackDays }, {
-                onError: (e: any) => toast.error(e?.message ?? "Diagnostics failed"),
-              })
+              diag.mutate(
+                { lookbackDays },
+                {
+                  onError: (e: any) => toast.error(e?.message ?? "Diagnostics failed"),
+                },
+              )
             }
             disabled={diag.isPending}
           >
-            {diag.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            {diag.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
             Run diagnostics
           </Button>
           {d && (
@@ -666,7 +808,11 @@ function DiagnosticsTab() {
           <div
             className={`flex items-start gap-3 ${verdict.ok ? "text-success-text" : destructiveTextClass}`}
           >
-            {verdict.ok ? <CheckCircle2 className="mt-0.5 h-6 w-6" /> : <AlertTriangle className="mt-0.5 h-6 w-6" />}
+            {verdict.ok ? (
+              <CheckCircle2 className="mt-0.5 h-6 w-6" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-6 w-6" />
+            )}
             <p className="text-lg font-semibold leading-snug">{verdict.text}</p>
           </div>
         </Card>
@@ -688,7 +834,9 @@ function DiagnosticsTab() {
                 <AlertTriangle className="h-4 w-4" /> Warnings
               </div>
               <ul className="list-inside list-disc space-y-1 text-sm">
-                {d.warnings.map((w: string, i: number) => <li key={i}>{w}</li>)}
+                {d.warnings.map((w: string, i: number) => (
+                  <li key={i}>{w}</li>
+                ))}
               </ul>
             </Card>
           )}
@@ -697,15 +845,19 @@ function DiagnosticsTab() {
             <h3 className="mb-1 text-sm font-semibold">Window</h3>
             <p className="text-xs text-muted-foreground">
               {new Date(d.windowStartIso).toLocaleString("en-US", { timeZone: CENTRAL_TZ })} →{" "}
-              {new Date(d.windowEndIso).toLocaleString("en-US", { timeZone: CENTRAL_TZ })} CT ({d.lookbackDays} days) ·
-              threshold {d.settings.thresholdMinutes} min · merge gap {d.settings.mergeGapMinutes} min
+              {new Date(d.windowEndIso).toLocaleString("en-US", { timeZone: CENTRAL_TZ })} CT (
+              {d.lookbackDays} days) · threshold {d.settings.thresholdMinutes} min · merge gap{" "}
+              {d.settings.mergeGapMinutes} min
             </p>
           </Card>
 
           <div className="grid gap-4 md:grid-cols-2">
             <Card className="p-4">
               <h3 className="mb-2 text-sm font-semibold">Pipeline funnel</h3>
-              <FunnelRow label="Drivers in Samsara (incl. deactivated)" value={d.funnel.driversOnRoster} />
+              <FunnelRow
+                label="Drivers in Samsara (incl. deactivated)"
+                value={d.funnel.driversOnRoster}
+              />
               <FunnelRow label="Excluded: no license" value={d.funnel.excludedNoLicense ?? 0} />
               <FunnelRow label="Excluded: deactivated" value={d.funnel.excludedDeactivated ?? 0} />
               <FunnelRow label="After exclusions" value={d.funnel.driversAfterExclusions} />
@@ -717,7 +869,10 @@ function DiagnosticsTab() {
                 label={`Blocks ≥ ${d.settings.thresholdMinutes} min`}
                 value={d.funnel.blocksOverThreshold}
               />
-              <FunnelRow label="Blocks inside a warehouse fence" value={d.funnel.blocksInsideFence} />
+              <FunnelRow
+                label="Blocks inside a warehouse fence"
+                value={d.funnel.blocksInsideFence}
+              />
               <FunnelRow
                 label="Blocks both in-fence and over threshold"
                 value={d.funnel.blocksOverThresholdAndInsideFence}
@@ -749,7 +904,8 @@ function DiagnosticsTab() {
           <Card className="p-4">
             <h3 className="mb-2 text-sm font-semibold">Raw duty-status vocabulary</h3>
             <p className="mb-2 text-xs text-muted-foreground">
-              Exactly what Samsara sent. A status the engine does not count can never produce an event.
+              Exactly what Samsara sent. A status the engine does not count can never produce an
+              event.
             </p>
             <Table>
               <TableHeader>
@@ -762,7 +918,11 @@ function DiagnosticsTab() {
               </TableHeader>
               <TableBody>
                 {d.statusVocabulary.length === 0 && (
-                  <TableRow><TableCell colSpan={4} className="text-sm text-muted-foreground">No logs in the window.</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                      No logs in the window.
+                    </TableCell>
+                  </TableRow>
                 )}
                 {d.statusVocabulary.map((s: any) => (
                   <TableRow key={s.status}>
@@ -770,9 +930,11 @@ function DiagnosticsTab() {
                     <TableCell className="text-right tabular-nums">{s.segments}</TableCell>
                     <TableCell className="text-right tabular-nums">{s.minutes}</TableCell>
                     <TableCell>
-                      {s.countedAsWarehouseTime
-                        ? <Badge variant="secondary">yes</Badge>
-                        : <Badge variant="outline">no</Badge>}
+                      {s.countedAsWarehouseTime ? (
+                        <Badge variant="secondary">yes</Badge>
+                      ) : (
+                        <Badge variant="outline">no</Badge>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -793,22 +955,40 @@ function DiagnosticsTab() {
               </TableHeader>
               <TableBody>
                 {d.fences.length === 0 && (
-                  <TableRow><TableCell colSpan={4} className="text-sm text-muted-foreground">No warehouse addresses selected in Settings.</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                      No warehouse addresses selected in Settings.
+                    </TableCell>
+                  </TableRow>
                 )}
                 {d.fences.map((f: any) => (
                   <TableRow key={f.id}>
                     <TableCell>
-                      <div className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-muted-foreground" />{f.name}</div>
-                      <div className="text-xs text-muted-foreground">{f.formattedAddress ?? ""}</div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                        {f.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {f.formattedAddress ?? ""}
+                      </div>
                     </TableCell>
                     <TableCell>
-                      {f.kind === "none"
-                        ? <Badge variant="destructive">none</Badge>
-                        : <Badge variant="outline">{f.kind}{f.kind === "polygon" ? ` (${f.vertexCount})` : ""}</Badge>}
+                      {f.kind === "none" ? (
+                        <Badge variant="destructive">none</Badge>
+                      ) : (
+                        <Badge variant="outline">
+                          {f.kind}
+                          {f.kind === "polygon" ? ` (${f.vertexCount})` : ""}
+                        </Badge>
+                      )}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{f.radiusMeters ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {f.radiusMeters ?? "—"}
+                    </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {f.latitude !== null && f.longitude !== null ? `${f.latitude.toFixed(5)}, ${f.longitude.toFixed(5)}` : "—"}
+                      {f.latitude !== null && f.longitude !== null
+                        ? `${f.latitude.toFixed(5)}, ${f.longitude.toFixed(5)}`
+                        : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -842,7 +1022,9 @@ function DiagnosticsTab() {
                 />
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
-                <span className="rounded px-2 py-1 text-success-text bg-success/10">&lt; {greenUnder} min</span>
+                <span className="rounded px-2 py-1 text-success-text bg-success/10">
+                  &lt; {greenUnder} min
+                </span>
                 <span className="rounded px-2 py-1 text-warning-text bg-warning/10">
                   {greenUnder}–{Math.max(greenUnder, redAtOrOver - 1)} min
                 </span>
@@ -851,7 +1033,6 @@ function DiagnosticsTab() {
                 </span>
                 <span className="rounded px-2 py-1 text-muted-foreground bg-muted">no data</span>
               </div>
-
             </div>
             <div className="overflow-x-auto">
               <Table>
@@ -879,16 +1060,24 @@ function DiagnosticsTab() {
                           {r.driverName}
                           {r.excluded && <Badge variant="outline">excluded</Badge>}
                         </div>
-                        <div className="text-xs text-muted-foreground">{r.activationStatus ?? ""}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {r.activationStatus ?? ""}
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs">{r.hasLicense ? "yes" : "no"}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.segments}</TableCell>
-                      <TableCell className="text-right tabular-nums">{r.segmentsWithCoords}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.segmentsWithCoords}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{hm(r.drivingMin)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{hm(r.onDutyNonDrivingMin)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {hm(r.onDutyNonDrivingMin)}
+                      </TableCell>
                       <TableCell
                         className={`text-right tabular-nums ${
-                          r.excluded ? "text-muted-foreground" : RAG_CLASS[ragOf(r.longestNonDrivingMin, greenUnder, redAtOrOver)]
+                          r.excluded
+                            ? "text-muted-foreground"
+                            : RAG_CLASS[ragOf(r.longestNonDrivingMin, greenUnder, redAtOrOver)]
                         }`}
                       >
                         {r.longestNonDrivingMin ? hm(r.longestNonDrivingMin) : "—"}
@@ -901,7 +1090,9 @@ function DiagnosticsTab() {
                       <TableCell className="text-xs">{r.longestBlockLocationSource}</TableCell>
                       <TableCell className="text-xs">{r.matchedFenceName ?? "—"}</TableCell>
                       <TableCell className="text-xs">
-                        {r.nearestFenceName ? `${r.nearestFenceName} · ${r.nearestFenceMeters} m` : "—"}
+                        {r.nearestFenceName
+                          ? `${r.nearestFenceName} · ${r.nearestFenceMeters} m`
+                          : "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{r.eventsEmitted}</TableCell>
                     </TableRow>
@@ -910,8 +1101,8 @@ function DiagnosticsTab() {
               </Table>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Longest block is computed without the ELD-day split the detector applies, so a block spanning midnight
-              may read longer here than the sweep sees.
+              Longest block is computed without the ELD-day split the detector applies, so a block
+              spanning midnight may read longer here than the sweep sees.
             </p>
           </Card>
         </>

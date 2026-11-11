@@ -22,15 +22,21 @@ async function main() {
   console.log(`Running P21 ${kind} snapshot at ${startedAt.toISOString()}…`);
   const result = await runP21Snapshot({ kind, timeoutMs: 180_000 });
 
-  console.log(JSON.stringify({
-    ok: result.ok,
-    kind: result.kind,
-    rowsPulled: result.rowsPulled,
-    snapshotsWritten: result.snapshotsWritten,
-    unmatchedRouteCodes: result.unmatchedRouteCodes,
-    skipped: result.skipped,
-    error: result.error ?? null,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ok: result.ok,
+        kind: result.kind,
+        rowsPulled: result.rowsPulled,
+        snapshotsWritten: result.snapshotsWritten,
+        unmatchedRouteCodes: result.unmatchedRouteCodes,
+        skipped: result.skipped,
+        error: result.error ?? null,
+      },
+      null,
+      2,
+    ),
+  );
 
   if (!result.ok) {
     console.error("Snapshot failed — aborting sanity readout.");
@@ -40,7 +46,9 @@ async function main() {
   // Sanity readout — pull rows inserted since we started the run.
   const { data: newRows, error } = await supabaseAdmin
     .from("truck_capacity_p21_demand")
-    .select("route_id, ship_date, projected_capacity_frac, total_cube_ft, total_weight_lbs, est_pallets, order_count")
+    .select(
+      "route_id, ship_date, projected_capacity_frac, total_cube_ft, total_weight_lbs, est_pallets, order_count",
+    )
     .gte("snapshot_at", startedAt.toISOString())
     .limit(50000);
   if (error) throw new Error(`readout query failed: ${error.message}`);
@@ -83,27 +91,44 @@ async function main() {
     });
 
   console.log("\nSanity readout:");
-  console.log(JSON.stringify({
-    demandRowsWritten: rows.length,
-    rowsWithProjection: withFrac.length,
-    projectedFracMin: min?.toFixed(3) ?? null,
-    projectedFracMax: max?.toFixed(3) ?? null,
-    projectedFracAvg: avg?.toFixed(3) ?? null,
-    rowsAtCap_1_5: capped,
-    top5ByProjectedFrac: top5,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        demandRowsWritten: rows.length,
+        rowsWithProjection: withFrac.length,
+        projectedFracMin: min?.toFixed(3) ?? null,
+        projectedFracMax: max?.toFixed(3) ?? null,
+        projectedFracAvg: avg?.toFixed(3) ?? null,
+        rowsAtCap_1_5: capped,
+        top5ByProjectedFrac: top5,
+      },
+      null,
+      2,
+    ),
+  );
 
   // Plausibility check.
   const warnings: string[] = [];
   if (fracs.length === 0) {
-    warnings.push("No rows have projected_capacity_frac — every route still lacks cube/weight/pallets full-truck targets, OR nothing matched.");
+    warnings.push(
+      "No rows have projected_capacity_frac — every route still lacks cube/weight/pallets full-truck targets, OR nothing matched.",
+    );
   } else {
-    if (avg != null && avg < 0.02) warnings.push(`Average projection is ${avg.toFixed(3)} — implausibly low; check that total_cube_ft / total_weight_lbs are actually populated.`);
-    if (max != null && max >= 1.5 && capped / fracs.length > 0.5) warnings.push(`>50% of rows hit the 1.5 cap — full-truck targets are likely too small.`);
-    if (min != null && min > 0.9) warnings.push(`Minimum projection ${min.toFixed(3)} is suspiciously high — every day looks near-capacity.`);
+    if (avg != null && avg < 0.02)
+      warnings.push(
+        `Average projection is ${avg.toFixed(3)} — implausibly low; check that total_cube_ft / total_weight_lbs are actually populated.`,
+      );
+    if (max != null && max >= 1.5 && capped / fracs.length > 0.5)
+      warnings.push(`>50% of rows hit the 1.5 cap — full-truck targets are likely too small.`);
+    if (min != null && min > 0.9)
+      warnings.push(
+        `Minimum projection ${min.toFixed(3)} is suspiciously high — every day looks near-capacity.`,
+      );
   }
   if (result.unmatchedRouteCodes.length > 0) {
-    warnings.push(`Unmatched route codes still present: ${result.unmatchedRouteCodes.join(", ")} — map or exclude them in Settings.`);
+    warnings.push(
+      `Unmatched route codes still present: ${result.unmatchedRouteCodes.join(", ")} — map or exclude them in Settings.`,
+    );
   }
   if (warnings.length === 0) {
     console.log("\nPlausibility: OK — no red flags.");
@@ -113,4 +138,7 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

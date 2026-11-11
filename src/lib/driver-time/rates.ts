@@ -23,7 +23,11 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * effective_date <= day. Rates dated after `day` are ignored, so a future raise
  * never changes past weeks. Returns null before the driver's first rate.
  */
-export function rateOn(rates: readonly PayRateRow[], driverId: string, day: string): PayRateRow | null {
+export function rateOn(
+  rates: readonly PayRateRow[],
+  driverId: string,
+  day: string,
+): PayRateRow | null {
   let best: PayRateRow | null = null;
   for (const r of rates) {
     if (String(r.driver_id) !== String(driverId)) continue;
@@ -37,17 +41,28 @@ export function rateOn(rates: readonly PayRateRow[], driverId: string, day: stri
 export function rateHistory(rates: readonly PayRateRow[], driverId: string): PayRateRow[] {
   return rates
     .filter((r) => String(r.driver_id) === String(driverId))
-    .sort((a, b) => b.effective_date.localeCompare(a.effective_date) || String(a.id ?? "").localeCompare(String(b.id ?? "")));
+    .sort(
+      (a, b) =>
+        b.effective_date.localeCompare(a.effective_date) ||
+        String(a.id ?? "").localeCompare(String(b.id ?? "")),
+    );
 }
 
 /** Text a person typed → a rate, or an error. USD, > 0, at most 2 decimals. */
 export const MAX_HOURLY_RATE = 500;
-export function parseHourlyRate(raw: string): { ok: true; value: number } | { ok: false; error: string } {
+export function parseHourlyRate(
+  raw: string,
+): { ok: true; value: number } | { ok: false; error: string } {
   const s = raw.trim().replace(/^\$/, "");
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return { ok: false, error: "Enter a dollar amount with at most 2 decimals, for example 24.50." };
+  if (!/^\d+(\.\d{1,2})?$/.test(s))
+    return {
+      ok: false,
+      error: "Enter a dollar amount with at most 2 decimals, for example 24.50.",
+    };
   const value = Number(s);
   if (!(value > 0)) return { ok: false, error: "The hourly rate must be more than $0." };
-  if (value > MAX_HOURLY_RATE) return { ok: false, error: `The hourly rate must be more than $0, up to $${MAX_HOURLY_RATE}.` };
+  if (value > MAX_HOURLY_RATE)
+    return { ok: false, error: `The hourly rate must be more than $0, up to $${MAX_HOURLY_RATE}.` };
   return { ok: true, value };
 }
 
@@ -73,10 +88,15 @@ export function isValidDateStr(s: string): boolean {
  *    when weekends are included).
  *  - excused, superseded and unresolved-location events never count.
  */
-export function flaggedMinutesByDay(b: any): { byDay: Record<string, number>; unsplitMinutes: number } {
+export function flaggedMinutesByDay(b: any): {
+  byDay: Record<string, number>;
+  unsplitMinutes: number;
+} {
   const byDay: Record<string, number> = {};
   let unsplitMinutes = 0;
-  const add = (d: string, m: number) => { if (m) byDay[d] = (byDay[d] ?? 0) + m; };
+  const add = (d: string, m: number) => {
+    if (m) byDay[d] = (byDay[d] ?? 0) + m;
+  };
   const official = b?.official ?? null;
   if (official) {
     if (Array.isArray(official.intervals) && official.intervals.length) {
@@ -88,7 +108,8 @@ export function flaggedMinutesByDay(b: any): { byDay: Record<string, number>; un
   for (const ev of b?.events ?? []) {
     const min = Number(ev.duration_min ?? 0);
     if (ev.superseded_at || ev.status === "excused") continue;
-    if ((ev.needs_review && ev.status === "new") || ev.location_source === "unknown" || !ev.hub) continue;
+    if ((ev.needs_review && ev.status === "new") || ev.location_source === "unknown" || !ev.hub)
+      continue;
     const isWeekday = weekday(ev.event_date);
     if (isWeekday && official) continue; // official weekday total already counted
     add(String(ev.event_date), min);
@@ -96,7 +117,12 @@ export function flaggedMinutesByDay(b: any): { byDay: Record<string, number>; un
   return { byDay, unsplitMinutes };
 }
 
-export type DailyRate = { date: string; minutes: number; hourlyRate: number | null; effectiveDate: string | null };
+export type DailyRate = {
+  date: string;
+  minutes: number;
+  hourlyRate: number | null;
+  effectiveDate: string | null;
+};
 export type PricingCompleteness = {
   cost: number | null;
   pricedMinutes: number;
@@ -144,14 +170,24 @@ export type RatedCostInput = {
  * estimateCost returns for "no rate on file".
  */
 export function estimateCostWithRates(input: RatedCostInput): RatedCostEstimate {
-  const base = { driverId: input.driverId, driverName: input.driverName, samsaraWeekHours: input.samsaraWeekHours,
-    paycomHours: input.paycomHours, flaggedHours: input.flaggedHours };
+  const base = {
+    driverId: input.driverId,
+    driverName: input.driverName,
+    samsaraWeekHours: input.samsaraWeekHours,
+    paycomHours: input.paycomHours,
+    flaggedHours: input.flaggedHours,
+  };
   const num = (r: PayRateRow | null) => (r ? Number(r.hourly_rate) : null);
   const days = Object.keys(input.byDay).sort();
   const dailyRates: DailyRate[] = days.map((date) => {
     const r = rateOn(input.rates, input.driverId, date);
     const n = num(r);
-    return { date, minutes: input.byDay[date], hourlyRate: n && n > 0 ? n : null, effectiveDate: n && n > 0 ? r!.effective_date : null };
+    return {
+      date,
+      minutes: input.byDay[date],
+      hourlyRate: n && n > 0 ? n : null,
+      effectiveDate: n && n > 0 ? r!.effective_date : null,
+    };
   });
 
   // Official total without a daily breakdown: one rate only if the same rate
@@ -182,7 +218,10 @@ export function estimateCostWithRates(input: RatedCostInput): RatedCostEstimate 
   if (!rated.length && unsplitRate === null) {
     // No per-day minutes at all: keep the old behaviour of showing the rate in
     // force at week end (cost 0). No rate anywhere: existing "no rate" note.
-    const fallback = days.length || input.unsplitMinutes > 0 ? null : num(rateOn(input.rates, input.driverId, input.weekEnd));
+    const fallback =
+      days.length || input.unsplitMinutes > 0
+        ? null
+        : num(rateOn(input.rates, input.driverId, input.weekEnd));
     return {
       ...estimateCost({ ...base, hourlyRate: fallback }),
       dailyRates,

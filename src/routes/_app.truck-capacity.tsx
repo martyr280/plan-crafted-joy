@@ -12,11 +12,44 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Plus, Trash2, Upload, Download, Play, RefreshCw, ChevronDown, Truck, TrendingDown, Users, AlertTriangle, Snowflake } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  Upload,
+  Download,
+  Play,
+  RefreshCw,
+  ChevronDown,
+  Truck,
+  TrendingDown,
+  Users,
+  AlertTriangle,
+  Snowflake,
+} from "lucide-react";
 
 /** "3 minutes ago" style relative time for the freeze readout. */
 function formatRelativeTime(iso: string): string {
@@ -31,7 +64,16 @@ function formatRelativeTime(iso: string): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, Legend,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  Area,
+  ComposedChart,
+  Legend,
 } from "recharts";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { KpiCard } from "@/components/shared/KpiCard";
@@ -51,18 +93,41 @@ import { ForecastVsTracker } from "@/components/truck-capacity/ForecastVsTracker
 
 import { useAuth } from "@/lib/auth";
 import {
-  listTruckRoutes, listTruckRuns, getTruckRunsFreshness, upsertTruckRun, deleteTruckRun, getTruckForecast,
-  getTruckSettings, updateTruckSettings, updateRoutePalletsPerTruck,
-  previewTruckImport, commitTruckImport, exportTruckWorkbook,
-  runP21SnapshotNow, testP21Sql, runP21TransferSnapshotNow, testP21TransferSql,
-  retrainTruckModel, listTruckModelVersions, getTruckAccuracy,
-  freezeForecastsNow, getLastForecastFreeze,
-  listP21UnmatchedRouteCodes, assignP21RouteCode, setP21RouteCodeIgnored,
-  getTruckCapacityCoverage, getForecastVsActual,
+  listTruckRoutes,
+  listTruckRuns,
+  getTruckRunsFreshness,
+  upsertTruckRun,
+  deleteTruckRun,
+  getTruckForecast,
+  getTruckSettings,
+  updateTruckSettings,
+  updateRoutePalletsPerTruck,
+  previewTruckImport,
+  commitTruckImport,
+  exportTruckWorkbook,
+  runP21SnapshotNow,
+  testP21Sql,
+  runP21TransferSnapshotNow,
+  testP21TransferSql,
+  retrainTruckModel,
+  listTruckModelVersions,
+  getTruckAccuracy,
+  freezeForecastsNow,
+  getLastForecastFreeze,
+  listP21UnmatchedRouteCodes,
+  assignP21RouteCode,
+  setP21RouteCodeIgnored,
+  getTruckCapacityCoverage,
+  getForecastVsActual,
 } from "@/lib/truck-capacity.functions";
 import {
-  getTruckRepScope, listRouteSalespeople, listKnownRepCodes, setRouteSalespeople,
-  importRouteSalespeople, deleteRouteSalesperson, getUnderfilledRoutes,
+  getTruckRepScope,
+  listRouteSalespeople,
+  listKnownRepCodes,
+  setRouteSalespeople,
+  importRouteSalespeople,
+  deleteRouteSalesperson,
+  getUnderfilledRoutes,
 } from "@/lib/truck-capacity-reps.functions";
 import { listP21SalesReps } from "@/lib/sales-annualized.functions";
 
@@ -73,10 +138,19 @@ const FLAG_CONSOLIDATION = 0.3;
 const HUB_ORDER = ["Dallas", "Birmingham", "Ocala"];
 
 type RouteRow = {
-  id: string; code: string; name: string; hub: string; sort_order: number; active: boolean;
-  has_vendor_pickup: boolean; truck_type: string | null; pallets_full_truck: number | null;
-  p21_route_code: string | null; cutoff_time: string | null;
-  cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
+  id: string;
+  code: string;
+  name: string;
+  hub: string;
+  sort_order: number;
+  active: boolean;
+  has_vendor_pickup: boolean;
+  truck_type: string | null;
+  pallets_full_truck: number | null;
+  p21_route_code: string | null;
+  cutoff_time: string | null;
+  cube_full_truck_ft3: number | null;
+  weight_full_truck_lbs: number | null;
   p21_cities: string[] | null;
   p21_states: string[] | null;
   ship_to_zip_prefixes: string[] | null;
@@ -84,13 +158,25 @@ type RouteRow = {
 type RunRow = {
   // capacity_frac is null on a no-run marker row (a dated tracker row with a
   // blank Capacity cell, e.g. "Labor Day"). Never coerce it to 0.
-  id: string; route_id: string; run_date: string; run_seq: number; capacity_frac: number | null;
-  vendor_pickup_frac: number | null; driver: string | null; pallet_count: number | null;
-  returned_pallets: number | null; notes: string | null; source: string;
+  id: string;
+  route_id: string;
+  run_date: string;
+  run_seq: number;
+  capacity_frac: number | null;
+  vendor_pickup_frac: number | null;
+  driver: string | null;
+  pallet_count: number | null;
+  returned_pallets: number | null;
+  notes: string | null;
+  source: string;
 };
 
-function pct(n: number | null | undefined) { return n == null ? "—" : `${(n * 100).toFixed(1)}%`; }
-function flagFor(cap: number | null): { label: string; tone: "red" | "amber" | "green" | "muted" } | null {
+function pct(n: number | null | undefined) {
+  return n == null ? "—" : `${(n * 100).toFixed(1)}%`;
+}
+function flagFor(
+  cap: number | null,
+): { label: string; tone: "red" | "amber" | "green" | "muted" } | null {
   if (cap == null) return null;
   if (cap >= FLAG_AT_CAPACITY) return { label: "At capacity", tone: "red" };
   if (cap <= FLAG_CONSOLIDATION) return { label: "Consolidate", tone: "amber" };
@@ -117,12 +203,13 @@ function TruckCapacityPage() {
 
   const [viewAsRep, setViewAsRep] = useState<string>("");
   const scoped = scopeQ.data?.scoped ?? false;
-  const effectiveRep = scoped ? (scopeQ.data?.repCode ?? null) : (viewAsRep || null);
+  const effectiveRep = scoped ? (scopeQ.data?.repCode ?? null) : viewAsRep || null;
 
   const routes = useMemo(() => {
     if (!effectiveRep) return allRoutes;
     const codes = new Set(
-      mappings.filter((m) => m.active && m.rep_code.toUpperCase() === effectiveRep.toUpperCase())
+      mappings
+        .filter((m) => m.active && m.rep_code.toUpperCase() === effectiveRep.toUpperCase())
         .map((m) => m.route_code.toUpperCase()),
     );
     return allRoutes.filter((r) => codes.has(r.code.toUpperCase()));
@@ -131,7 +218,8 @@ function TruckCapacityPage() {
   const repOptions = useMemo(() => {
     const m = new Map<string, string | null>();
     for (const x of mappings) if (!m.has(x.rep_code)) m.set(x.rep_code, x.rep_name);
-    return Array.from(m.entries()).map(([rep_code, rep_name]) => ({ rep_code, rep_name }))
+    return Array.from(m.entries())
+      .map(([rep_code, rep_name]) => ({ rep_code, rep_name }))
       .sort((a, b) => a.rep_code.localeCompare(b.rep_code));
   }, [mappings]);
 
@@ -163,18 +251,28 @@ function TruckCapacityPage() {
         <Card className="p-3 mb-4 flex flex-wrap items-center gap-3 text-sm">
           <Users className="w-4 h-4 text-primary" />
           <span className="text-muted-foreground">View as salesperson</span>
-          <Select value={viewAsRep || "__all"} onValueChange={(v) => setViewAsRep(v === "__all" ? "" : v)}>
-            <SelectTrigger className="w-56"><SelectValue placeholder="All routes" /></SelectTrigger>
+          <Select
+            value={viewAsRep || "__all"}
+            onValueChange={(v) => setViewAsRep(v === "__all" ? "" : v)}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="All routes" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all">All routes (full view)</SelectItem>
               {repOptions.map((r) => (
                 <SelectItem key={r.rep_code} value={r.rep_code}>
-                  {r.rep_code}{r.rep_name ? ` — ${r.rep_name}` : ""}
+                  {r.rep_code}
+                  {r.rep_name ? ` — ${r.rep_name}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {viewAsRep && <Badge variant="outline">{routes.length} route{routes.length === 1 ? "" : "s"} visible</Badge>}
+          {viewAsRep && (
+            <Badge variant="outline">
+              {routes.length} route{routes.length === 1 ? "" : "s"} visible
+            </Badge>
+          )}
         </Card>
       )}
 
@@ -189,17 +287,35 @@ function TruckCapacityPage() {
           {isAdmin && <TabsTrigger value="import">Import</TabsTrigger>}
           {isAdmin && <TabsTrigger value="settings">Settings</TabsTrigger>}
         </TabsList>
-        <TabsContent value="overview"><OverviewTab routes={routes} /></TabsContent>
-        <TabsContent value="route"><RouteTab routes={routes} canWrite={canWrite} /></TabsContent>
-        <TabsContent value="forecast"><ForecastTab routes={routes} /></TabsContent>
-        <TabsContent value="fvt"><ForecastVsTracker /></TabsContent>
-        <TabsContent value="underfilled"><UnderfilledTab viewAsRep={scoped ? null : (viewAsRep || null)} /></TabsContent>
-        <TabsContent value="alerts"><AlertsTab routes={allRoutes} isManager={isAdmin} /></TabsContent>
-        {isAdmin && <TabsContent value="import"><ImportTab /></TabsContent>}
-        {isAdmin && <TabsContent value="settings"><SettingsTab routes={allRoutes} /></TabsContent>}
-
+        <TabsContent value="overview">
+          <OverviewTab routes={routes} />
+        </TabsContent>
+        <TabsContent value="route">
+          <RouteTab routes={routes} canWrite={canWrite} />
+        </TabsContent>
+        <TabsContent value="forecast">
+          <ForecastTab routes={routes} />
+        </TabsContent>
+        <TabsContent value="fvt">
+          <ForecastVsTracker />
+        </TabsContent>
+        <TabsContent value="underfilled">
+          <UnderfilledTab viewAsRep={scoped ? null : viewAsRep || null} />
+        </TabsContent>
+        <TabsContent value="alerts">
+          <AlertsTab routes={allRoutes} isManager={isAdmin} />
+        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="import">
+            <ImportTab />
+          </TabsContent>
+        )}
+        {isAdmin && (
+          <TabsContent value="settings">
+            <SettingsTab routes={allRoutes} />
+          </TabsContent>
+        )}
       </Tabs>
-
     </div>
   );
 }
@@ -207,24 +323,44 @@ function TruckCapacityPage() {
 /* ============================== UNDERFILLED ============================== */
 
 type UnderRow = {
-  route_id: string; code: string; name: string; hub: string;
+  route_id: string;
+  code: string;
+  name: string;
+  hub: string;
   reps: Array<{ rep_code: string; rep_name: string | null }>;
-  avg: number | null; weeksBelow: number; weeksWithData: number;
+  avg: number | null;
+  weeksBelow: number;
+  weeksWithData: number;
   worst: { week: string; value: number } | null;
   latest: { week: string; value: number } | null;
   series: Array<{ week: string; value: number | null; runs: number }>;
-  wasted: number; flagged: boolean;
+  wasted: number;
+  flagged: boolean;
 };
 
 function Sparkline({ series, threshold }: { series: UnderRow["series"]; threshold: number }) {
-  const data = series.map((s) => ({ week: s.week.slice(5), value: s.value == null ? null : s.value * 100 }));
+  const data = series.map((s) => ({
+    week: s.week.slice(5),
+    value: s.value == null ? null : s.value * 100,
+  }));
   return (
     <div className="w-28 h-8">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
           <YAxis hide domain={[0, 100]} />
-          <ReferenceLine y={threshold * 100} stroke="var(--muted-foreground)" strokeDasharray="2 2" />
-          <Line type="monotone" dataKey="value" stroke="var(--destructive)" strokeWidth={2} dot={false} connectNulls />
+          <ReferenceLine
+            y={threshold * 100}
+            stroke="var(--muted-foreground)"
+            strokeDasharray="2 2"
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke="var(--destructive)"
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -244,51 +380,99 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
   });
 
   const flagged: UnderRow[] = (q.data?.rows ?? []) as UnderRow[];
-  const all: UnderRow[] = (((q.data as any)?.allRows ?? []) as UnderRow[]);
-  const cov = (q.data as any)?.coverage as {
-    weeksInWindow: number; weeksWithData: number; routesWithRuns: number; routesInScope: number;
-    latestRunDate: string | null; latestRunDateAnyTime: string | null; insufficient: boolean;
-  } | undefined;
+  const all: UnderRow[] = ((q.data as any)?.allRows ?? []) as UnderRow[];
+  const cov = (q.data as any)?.coverage as
+    | {
+        weeksInWindow: number;
+        weeksWithData: number;
+        routesWithRuns: number;
+        routesInScope: number;
+        latestRunDate: string | null;
+        latestRunDateAnyTime: string | null;
+        insufficient: boolean;
+      }
+    | undefined;
   const rows = showAll ? all : flagged;
-
 
   return (
     <div className="space-y-4 pt-4">
       <Card className="p-4 flex flex-wrap items-end gap-4">
         <div>
           <Label className="text-xs">Window (weeks)</Label>
-          <Input type="number" min={1} max={52} className="w-24" value={weeks}
-            onChange={(e) => setWeeks(Math.max(1, Math.min(52, Number(e.target.value) || 4)))} />
+          <Input
+            type="number"
+            min={1}
+            max={52}
+            className="w-24"
+            value={weeks}
+            onChange={(e) => setWeeks(Math.max(1, Math.min(52, Number(e.target.value) || 4)))}
+          />
         </div>
         <div>
           <Label className="text-xs">Threshold %</Label>
-          <Input type="number" min={5} max={100} className="w-24" value={Math.round(threshold * 100)}
-            onChange={(e) => setThreshold(Math.max(0.05, Math.min(1, (Number(e.target.value) || 60) / 100)))} />
+          <Input
+            type="number"
+            min={5}
+            max={100}
+            className="w-24"
+            value={Math.round(threshold * 100)}
+            onChange={(e) =>
+              setThreshold(Math.max(0.05, Math.min(1, (Number(e.target.value) || 60) / 100)))
+            }
+          />
         </div>
         <div>
           <Label className="text-xs">Weeks below (min)</Label>
-          <Input type="number" min={1} max={weeks} className="w-24" value={minWeeksBelow}
-            onChange={(e) => setMinWeeksBelow(Math.max(1, Math.min(52, Number(e.target.value) || 3)))} />
+          <Input
+            type="number"
+            min={1}
+            max={weeks}
+            className="w-24"
+            value={minWeeksBelow}
+            onChange={(e) =>
+              setMinWeeksBelow(Math.max(1, Math.min(52, Number(e.target.value) || 3)))
+            }
+          />
         </div>
         <div className="flex items-center gap-2">
           <Switch checked={showAll} onCheckedChange={setShowAll} id="under-showall" />
-          <Label htmlFor="under-showall" className="text-xs">Show all routes</Label>
+          <Label htmlFor="under-showall" className="text-xs">
+            Show all routes
+          </Label>
         </div>
         <Button variant="outline" size="sm" onClick={() => q.refetch()} disabled={q.isFetching}>
-          {q.isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          {q.isFetching ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4" />
+          )}
         </Button>
         <p className="text-xs text-muted-foreground basis-full">
           A route is flagged when its average utilization over the window is below the threshold
-          <em> and </em> it was below the threshold in at least {minWeeksBelow} of the weeks with runs — consistency, not one bad week.
+          <em> and </em> it was below the threshold in at least {minWeeksBelow} of the weeks with
+          runs — consistency, not one bad week.
         </p>
       </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <KpiCard label="Persistently underfilled" value={q.data?.kpis.underfilledCount ?? "—"}
-          sub={`of ${q.data?.kpis.routesEvaluated ?? 0} routes with runs`} icon={<TrendingDown className="w-5 h-5" />} />
-        <KpiCard label="Wasted capacity" value={q.data ? `${(q.data.kpis.wastedCapacity * 100).toFixed(0)} pts` : "—"}
-          sub={`sum of (${Math.round(threshold * 100)}% − actual) across the window`} icon={<AlertTriangle className="w-5 h-5" />} />
-        <KpiCard label="Window" value={`${weeks} wk`} sub={q.data?.weekStarts?.join(" · ")} icon={<Truck className="w-5 h-5" />} />
+        <KpiCard
+          label="Persistently underfilled"
+          value={q.data?.kpis.underfilledCount ?? "—"}
+          sub={`of ${q.data?.kpis.routesEvaluated ?? 0} routes with runs`}
+          icon={<TrendingDown className="w-5 h-5" />}
+        />
+        <KpiCard
+          label="Wasted capacity"
+          value={q.data ? `${(q.data.kpis.wastedCapacity * 100).toFixed(0)} pts` : "—"}
+          sub={`sum of (${Math.round(threshold * 100)}% − actual) across the window`}
+          icon={<AlertTriangle className="w-5 h-5" />}
+        />
+        <KpiCard
+          label="Window"
+          value={`${weeks} wk`}
+          sub={q.data?.weekStarts?.join(" · ")}
+          icon={<Truck className="w-5 h-5" />}
+        />
       </div>
 
       <Card className="p-0 overflow-hidden">
@@ -306,24 +490,36 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {q.isLoading && <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="w-4 h-4 animate-spin inline" /></TableCell></TableRow>}
+            {q.isLoading && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8">
+                  <Loader2 className="w-4 h-4 animate-spin inline" />
+                </TableCell>
+              </TableRow>
+            )}
             {!q.isLoading && rows.length === 0 && cov?.insufficient && (
-              <TableRow><TableCell colSpan={8} className="py-6">
-                <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-3 text-sm text-left">
-                  <div className="font-medium">Not enough run data to flag anything yet.</div>
-                  <div className="mt-1 text-muted-foreground">
-                    Only {cov.weeksWithData} of the {cov.weeksInWindow} weeks in this window contain any runs
-                    (need at least {minWeeksBelow}), across {cov.routesWithRuns} of {cov.routesInScope} routes.
-                    Latest run on record: {cov.latestRunDateAnyTime ?? cov.latestRunDate ?? "none"}.
-                    Upload a fresh capacity tracker in the Import tab before this report can flag underfilled routes.
+              <TableRow>
+                <TableCell colSpan={8} className="py-6">
+                  <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-3 text-sm text-left">
+                    <div className="font-medium">Not enough run data to flag anything yet.</div>
+                    <div className="mt-1 text-muted-foreground">
+                      Only {cov.weeksWithData} of the {cov.weeksInWindow} weeks in this window
+                      contain any runs (need at least {minWeeksBelow}), across {cov.routesWithRuns}{" "}
+                      of {cov.routesInScope} routes. Latest run on record:{" "}
+                      {cov.latestRunDateAnyTime ?? cov.latestRunDate ?? "none"}. Upload a fresh
+                      capacity tracker in the Import tab before this report can flag underfilled
+                      routes.
+                    </div>
                   </div>
-                </div>
-              </TableCell></TableRow>
+                </TableCell>
+              </TableRow>
             )}
             {!q.isLoading && rows.length === 0 && !cov?.insufficient && (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                No persistently underfilled routes for this window.
-              </TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  No persistently underfilled routes for this window.
+                </TableCell>
+              </TableRow>
             )}
 
             {rows.map((r) => {
@@ -332,26 +528,39 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
                 <TableRow key={r.route_id} className={bad ? "bg-destructive/10" : undefined}>
                   <TableCell>
                     <div className="font-medium">{r.code}</div>
-                    <div className="text-xs text-muted-foreground">{r.hub} · {r.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {r.hub} · {r.name}
+                    </div>
                   </TableCell>
                   <TableCell className="text-xs">
-                    {r.reps.length === 0
-                      ? <span className="text-muted-foreground">Unassigned</span>
-                      : r.reps.map((x) => (
+                    {r.reps.length === 0 ? (
+                      <span className="text-muted-foreground">Unassigned</span>
+                    ) : (
+                      r.reps.map((x) => (
                         <Badge key={x.rep_code} variant="outline" className="mr-1 mb-1">
-                          {x.rep_code}{x.rep_name ? ` · ${x.rep_name}` : ""}
+                          {x.rep_code}
+                          {x.rep_name ? ` · ${x.rep_name}` : ""}
                         </Badge>
-                      ))}
+                      ))
+                    )}
                   </TableCell>
                   <TableCell
                     className={`text-right font-medium ${bad ? destructiveTextClass : ""}`}
                   >
                     {pct(r.avg)}
                   </TableCell>
-                  <TableCell className="text-right">{r.weeksBelow} / {r.weeksWithData}</TableCell>
-                  <TableCell><Sparkline series={r.series} threshold={threshold} /></TableCell>
-                  <TableCell className="text-right">{r.worst ? `${pct(r.worst.value)} (${r.worst.week.slice(5)})` : "—"}</TableCell>
-                  <TableCell className="text-right">{r.latest ? `${pct(r.latest.value)} (${r.latest.week.slice(5)})` : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    {r.weeksBelow} / {r.weeksWithData}
+                  </TableCell>
+                  <TableCell>
+                    <Sparkline series={r.series} threshold={threshold} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {r.worst ? `${pct(r.worst.value)} (${r.worst.week.slice(5)})` : "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {r.latest ? `${pct(r.latest.value)} (${r.latest.week.slice(5)})` : "—"}
+                  </TableCell>
                   <TableCell className="text-right">{(r.wasted * 100).toFixed(0)} pts</TableCell>
                 </TableRow>
               );
@@ -363,14 +572,15 @@ function UnderfilledTab({ viewAsRep }: { viewAsRep: string | null }) {
   );
 }
 
-
 /* ============================== OVERVIEW ============================== */
 
 function OverviewTab({ routes }: { routes: RouteRow[] }) {
   const listRuns = useServerFn(listTruckRuns);
   const freshnessFn = useServerFn(getTruckRunsFreshness);
   const from = useMemo(() => {
-    const d = new Date(); d.setDate(d.getDate() - 84); return d.toISOString().slice(0, 10);
+    const d = new Date();
+    d.setDate(d.getDate() - 84);
+    return d.toISOString().slice(0, 10);
   }, []);
   const runsQ = useQuery({
     queryKey: ["tc-runs-overview", from],
@@ -380,12 +590,12 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
   const freshQ = useQuery({ queryKey: ["tc-runs-freshness"], queryFn: () => freshnessFn() });
   const runs: RunRow[] = runsQ.data?.rows ?? [];
 
-
   const byRoute = useMemo(() => {
     const m = new Map<string, RunRow[]>();
     for (const r of runs) {
       const arr = m.get(r.route_id) ?? [];
-      arr.push(r); m.set(r.route_id, arr);
+      arr.push(r);
+      m.set(r.route_id, arr);
     }
     return m;
   }, [runs]);
@@ -397,11 +607,18 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
       const bin = atob(base64);
       const arr = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      const blob = new Blob([arr], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const blob = new Blob([arr], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) { toast.error(e?.message ?? "Export failed"); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Export failed");
+    }
   }
 
   // Utilization heatmap: 12 weeks × routes, cell = mean(capacity_frac) for that week.
@@ -409,7 +626,9 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
   const heat = useMemo(() => {
     const weekStarts: string[] = [];
     const today = new Date();
-    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const todayUtc = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+    );
     const currentSunday = new Date(todayUtc);
     currentSunday.setUTCDate(currentSunday.getUTCDate() - currentSunday.getUTCDay());
     for (let i = 11; i >= 0; i--) {
@@ -443,25 +662,38 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
     if (mean >= FLAG_AT_CAPACITY) return "bg-red-500/80 text-white";
     if (mean <= FLAG_CONSOLIDATION) return "bg-amber-500/80 text-white";
     // Neutral gradient by intensity between 0.30 and 0.90.
-    const t = Math.max(0, Math.min(1, (mean - FLAG_CONSOLIDATION) / (FLAG_AT_CAPACITY - FLAG_CONSOLIDATION)));
+    const t = Math.max(
+      0,
+      Math.min(1, (mean - FLAG_CONSOLIDATION) / (FLAG_AT_CAPACITY - FLAG_CONSOLIDATION)),
+    );
     if (t < 0.5) return "bg-emerald-500/40";
     return "bg-emerald-500/70 text-white";
   }
 
   const sortedRoutes = useMemo(() => {
     const order = new Map(HUB_ORDER.map((h, i) => [h, i]));
-    return [...routes].filter((r) => r.active).sort((a, b) => {
-      const ha = order.get(a.hub) ?? 99; const hb = order.get(b.hub) ?? 99;
-      if (ha !== hb) return ha - hb;
-      return a.sort_order - b.sort_order;
-    });
+    return [...routes]
+      .filter((r) => r.active)
+      .sort((a, b) => {
+        const ha = order.get(a.hub) ?? 99;
+        const hb = order.get(b.hub) ?? 99;
+        if (ha !== hb) return ha - hb;
+        return a.sort_order - b.sort_order;
+      });
   }, [routes]);
 
   const hubs = HUB_ORDER.filter((h) => routes.some((r) => r.hub === h));
   const flagLegend = (
     <div className="text-xs text-muted-foreground flex gap-4">
-      <span><Badge variant="destructive" className="mr-1">≥ 90%</Badge>at capacity / second-truck risk</span>
-      <span><Badge className="mr-1 bg-amber-500 hover:bg-amber-500">≤ 30%</Badge>consolidation candidate</span>
+      <span>
+        <Badge variant="destructive" className="mr-1">
+          ≥ 90%
+        </Badge>
+        at capacity / second-truck risk
+      </span>
+      <span>
+        <Badge className="mr-1 bg-amber-500 hover:bg-amber-500">≤ 30%</Badge>consolidation candidate
+      </span>
     </div>
   );
 
@@ -469,13 +701,18 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
     <div className="space-y-4 pt-4">
       <div className="flex items-center justify-between gap-3">
         {flagLegend}
-        <Button variant="outline" size="sm" onClick={download}><Download className="w-4 h-4 mr-1" />Export workbook</Button>
+        <Button variant="outline" size="sm" onClick={download}>
+          <Download className="w-4 h-4 mr-1" />
+          Export workbook
+        </Button>
       </div>
       {runsQ.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
 
       {freshQ.data?.maxRunDate && (freshQ.data.ageDays ?? 0) > 10 && (
         <Card className="p-3 border-amber-500/60 bg-amber-500/10 text-sm">
-          <span className="font-medium">Actuals loaded through {freshQ.data.maxRunDate} — {freshQ.data.ageDays} days ago.</span>{" "}
+          <span className="font-medium">
+            Actuals loaded through {freshQ.data.maxRunDate} — {freshQ.data.ageDays} days ago.
+          </span>{" "}
           Upload the latest capacity workbook in the Import tab to refresh.
         </Card>
       )}
@@ -484,12 +721,15 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
         <Card className="p-4">
           <div className="font-semibold text-sm mb-1">Utilization heatmap — last 12 weeks</div>
           <div className="text-xs text-muted-foreground mb-3">
-            One column = one week (Sunday-anchored week start). Mean capacity per (route, week). Empty cell = no runs.
+            One column = one week (Sunday-anchored week start). Mean capacity per (route, week).
+            Empty cell = no runs.
           </div>
           <div className="overflow-x-auto">
             <div
               className="grid gap-[2px] text-[10px]"
-              style={{ gridTemplateColumns: `minmax(140px, 180px) repeat(${heat.weekStarts.length}, minmax(28px, 1fr))` }}
+              style={{
+                gridTemplateColumns: `minmax(140px, 180px) repeat(${heat.weekStarts.length}, minmax(28px, 1fr))`,
+              }}
             >
               <div />
               {heat.weekStarts.map((w, i) => {
@@ -512,7 +752,8 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
               {sortedRoutes.map((r) => (
                 <Fragment key={r.id}>
                   <div className="pr-2 truncate text-xs" title={`${r.hub} — ${r.name}`}>
-                    <span className="text-muted-foreground">{r.hub[0]}·</span>{r.code}
+                    <span className="text-muted-foreground">{r.hub[0]}·</span>
+                    {r.code}
                   </div>
                   {heat.weekStarts.map((w) => {
                     const cell = heat.acc.get(r.id)?.get(w);
@@ -521,9 +762,11 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
                       <div
                         key={`${r.id}-${w}`}
                         className={`h-6 rounded-sm flex items-center justify-center ${heatColor(m)}`}
-                        title={m == null
-                          ? `${r.code} · ${w}: no runs`
-                          : `${r.code} · week of ${w}: ${(m * 100).toFixed(0)}% (n=${cell!.n})`}
+                        title={
+                          m == null
+                            ? `${r.code} · ${w}: no runs`
+                            : `${r.code} · week of ${w}: ${(m * 100).toFixed(0)}% (n=${cell!.n})`
+                        }
                       >
                         {m == null ? "" : `${Math.round(m * 100)}`}
                       </div>
@@ -531,7 +774,6 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
                   })}
                 </Fragment>
               ))}
-
             </div>
           </div>
         </Card>
@@ -541,41 +783,72 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
         <Card key={hub} className="p-4">
           <div className="font-semibold text-sm mb-3">{hub}</div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {routes.filter((r) => r.hub === hub && r.active).map((r) => {
-              // No-run markers (null capacity) are dropped here: they are not runs,
-              // and averaging them as 0 would fake a collapse in load.
-              const rr = (byRoute.get(r.id) ?? []).filter((x) => x.capacity_frac != null)
-                .slice().sort((a, b) => a.run_date.localeCompare(b.run_date));
-              const last = rr.at(-1);
-              const avg8 = rr.length ? rr.slice(-8).reduce((s, x) => s + Number(x.capacity_frac), 0) / Math.min(8, rr.length) : null;
-              const flag = flagFor(last ? Number(last.capacity_frac) : null);
-              return (
-                <Card key={r.id} className="p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium">{r.name}</div>
-                      <div className="text-xs text-muted-foreground">{r.code}</div>
+            {routes
+              .filter((r) => r.hub === hub && r.active)
+              .map((r) => {
+                // No-run markers (null capacity) are dropped here: they are not runs,
+                // and averaging them as 0 would fake a collapse in load.
+                const rr = (byRoute.get(r.id) ?? [])
+                  .filter((x) => x.capacity_frac != null)
+                  .slice()
+                  .sort((a, b) => a.run_date.localeCompare(b.run_date));
+                const last = rr.at(-1);
+                const avg8 = rr.length
+                  ? rr.slice(-8).reduce((s, x) => s + Number(x.capacity_frac), 0) /
+                    Math.min(8, rr.length)
+                  : null;
+                const flag = flagFor(last ? Number(last.capacity_frac) : null);
+                return (
+                  <Card key={r.id} className="p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-medium">{r.name}</div>
+                        <div className="text-xs text-muted-foreground">{r.code}</div>
+                      </div>
+                      {flag && (
+                        <Badge
+                          variant={flag.tone === "red" ? "destructive" : "secondary"}
+                          className={
+                            flag.tone === "amber"
+                              ? "bg-amber-500 hover:bg-amber-500 text-white"
+                              : ""
+                          }
+                        >
+                          {flag.label}
+                        </Badge>
+                      )}
                     </div>
-                    {flag && <Badge variant={flag.tone === "red" ? "destructive" : "secondary"} className={flag.tone === "amber" ? "bg-amber-500 hover:bg-amber-500 text-white" : ""}>{flag.label}</Badge>}
-                  </div>
-                  <div className="mt-2 flex justify-between text-xs">
-                    <span>Last: <b>{pct(last ? Number(last.capacity_frac) : null)}</b> {last?.run_date}</span>
-                    <span>8-wk avg: <b>{pct(avg8)}</b></span>
-                  </div>
-                  <div className="h-14 mt-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={rr.slice(-12).map((x) => ({ d: x.run_date, cap: Number(x.capacity_frac) }))}>
-                        <YAxis hide domain={[0, 1.25]} />
-                        <XAxis dataKey="d" hide />
-                        <Line dataKey="cap" stroke="var(--primary)" dot={false} strokeWidth={2} />
-                        <ReferenceLine y={0.9} stroke="var(--destructive)" strokeDasharray="3 3" />
-                        <ReferenceLine y={0.3} stroke="orange" strokeDasharray="3 3" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-              );
-            })}
+                    <div className="mt-2 flex justify-between text-xs">
+                      <span>
+                        Last: <b>{pct(last ? Number(last.capacity_frac) : null)}</b>{" "}
+                        {last?.run_date}
+                      </span>
+                      <span>
+                        8-wk avg: <b>{pct(avg8)}</b>
+                      </span>
+                    </div>
+                    <div className="h-14 mt-2">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={rr
+                            .slice(-12)
+                            .map((x) => ({ d: x.run_date, cap: Number(x.capacity_frac) }))}
+                        >
+                          <YAxis hide domain={[0, 1.25]} />
+                          <XAxis dataKey="d" hide />
+                          <Line dataKey="cap" stroke="var(--primary)" dot={false} strokeWidth={2} />
+                          <ReferenceLine
+                            y={0.9}
+                            stroke="var(--destructive)"
+                            strokeDasharray="3 3"
+                          />
+                          <ReferenceLine y={0.3} stroke="orange" strokeDasharray="3 3" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </Card>
+                );
+              })}
           </div>
         </Card>
       ))}
@@ -583,12 +856,13 @@ function OverviewTab({ routes }: { routes: RouteRow[] }) {
   );
 }
 
-
 /* ============================== ROUTE ============================== */
 
 function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean }) {
   const [routeId, setRouteId] = useState<string>("");
-  useEffect(() => { if (!routeId && routes[0]) setRouteId(routes[0].id); }, [routes, routeId]);
+  useEffect(() => {
+    if (!routeId && routes[0]) setRouteId(routes[0].id);
+  }, [routes, routeId]);
   const route = routes.find((r) => r.id === routeId);
 
   const listRuns = useServerFn(listTruckRuns);
@@ -605,32 +879,63 @@ function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean 
   const del = useServerFn(deleteTruckRun);
   const mUpsert = useMutation({
     mutationFn: (r: any) => upsert({ data: r }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tc-runs"] }); qc.invalidateQueries({ queryKey: ["tc-runs-overview"] }); setEditing(null); toast.success("Saved"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tc-runs"] });
+      qc.invalidateQueries({ queryKey: ["tc-runs-overview"] });
+      setEditing(null);
+      toast.success("Saved");
+    },
     onError: (e: any) => toast.error(e?.message ?? "Save failed"),
   });
   const mDel = useMutation({
     mutationFn: (id: string) => del({ data: { id } }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tc-runs"] }); toast.success("Deleted"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tc-runs"] });
+      toast.success("Deleted");
+    },
     onError: (e: any) => toast.error(e?.message ?? "Delete failed"),
   });
 
-  const chartData = rows.filter((r) => r.capacity_frac != null)
-    .slice().sort((a, b) => a.run_date.localeCompare(b.run_date))
-    .map((r) => ({ d: r.run_date, capacity: Number(r.capacity_frac), unused: Math.max(0, 1 - Number(r.capacity_frac)) }));
+  const chartData = rows
+    .filter((r) => r.capacity_frac != null)
+    .slice()
+    .sort((a, b) => a.run_date.localeCompare(b.run_date))
+    .map((r) => ({
+      d: r.run_date,
+      capacity: Number(r.capacity_frac),
+      unused: Math.max(0, 1 - Number(r.capacity_frac)),
+    }));
 
   return (
     <div className="space-y-4 pt-4">
       <div className="flex items-center gap-3">
         <Label className="text-sm">Route</Label>
         <Select value={routeId} onValueChange={setRouteId}>
-          <SelectTrigger className="w-72"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-72">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
-            {routes.map((r) => (<SelectItem key={r.id} value={r.id}>{r.hub} — {r.name} ({r.code})</SelectItem>))}
+            {routes.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {r.hub} — {r.name} ({r.code})
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         {canWrite && route && (
-          <Button size="sm" onClick={() => setEditing({ route_id: route.id, run_date: new Date().toISOString().slice(0,10), run_seq: 1, capacity_frac: 0.5 })}>
-            <Plus className="w-4 h-4 mr-1" />Add run
+          <Button
+            size="sm"
+            onClick={() =>
+              setEditing({
+                route_id: route.id,
+                run_date: new Date().toISOString().slice(0, 10),
+                run_seq: 1,
+                capacity_frac: 0.5,
+              })
+            }
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add run
           </Button>
         )}
       </div>
@@ -642,17 +947,27 @@ function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean 
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData}>
                 <XAxis dataKey="d" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 1.25]} tickFormatter={(v) => `${Math.round(v * 100)}%`} tick={{ fontSize: 10 }} />
+                <YAxis
+                  domain={[0, 1.25]}
+                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                  tick={{ fontSize: 10 }}
+                />
                 <Tooltip formatter={(v: any) => `${(Number(v) * 100).toFixed(1)}%`} />
                 <Legend />
                 {/* The "unused" companion area is gone: stacked on a muted card it
                     swallowed the capacity line (Joe, 2026-07-16 and 2026-08-26).
                     Capacity is now the single dominant series. */}
-                <Line type="monotone" dataKey="capacity" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="Capacity" />
+                <Line
+                  type="monotone"
+                  dataKey="capacity"
+                  stroke="var(--primary)"
+                  strokeWidth={2.5}
+                  dot={false}
+                  name="Capacity"
+                />
 
                 <ReferenceLine y={0.9} stroke="var(--destructive)" strokeDasharray="3 3" />
               </ComposedChart>
-
             </ResponsiveContainer>
           </div>
         </Card>
@@ -660,56 +975,174 @@ function RouteTab({ routes, canWrite }: { routes: RouteRow[]; canWrite: boolean 
 
       <Card className="p-3">
         <Table>
-          <TableHeader><TableRow>
-            <TableHead>Date</TableHead><TableHead>Run</TableHead><TableHead>Capacity</TableHead>
-            <TableHead>Vendor Pickup</TableHead><TableHead>Driver</TableHead><TableHead>Pallets</TableHead>
-            <TableHead>Returned</TableHead><TableHead>Notes</TableHead><TableHead>Source</TableHead><TableHead></TableHead>
-          </TableRow></TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Run</TableHead>
+              <TableHead>Capacity</TableHead>
+              <TableHead>Vendor Pickup</TableHead>
+              <TableHead>Driver</TableHead>
+              <TableHead>Pallets</TableHead>
+              <TableHead>Returned</TableHead>
+              <TableHead>Notes</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
             {rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell>{r.run_date}</TableCell>
                 <TableCell>{r.run_seq}</TableCell>
-                <TableCell>{r.capacity_frac == null ? <span className="text-muted-foreground">No run</span> : pct(Number(r.capacity_frac))}</TableCell>
-                <TableCell>{pct(r.vendor_pickup_frac == null ? null : Number(r.vendor_pickup_frac))}</TableCell>
+                <TableCell>
+                  {r.capacity_frac == null ? (
+                    <span className="text-muted-foreground">No run</span>
+                  ) : (
+                    pct(Number(r.capacity_frac))
+                  )}
+                </TableCell>
+                <TableCell>
+                  {pct(r.vendor_pickup_frac == null ? null : Number(r.vendor_pickup_frac))}
+                </TableCell>
                 <TableCell className="text-xs">{r.driver}</TableCell>
                 <TableCell>{r.pallet_count}</TableCell>
                 <TableCell>{r.returned_pallets}</TableCell>
                 <TableCell className="text-xs max-w-[240px] truncate">{r.notes}</TableCell>
-                <TableCell><Badge variant="outline" className="text-xs">{r.source}</Badge></TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-xs">
+                    {r.source}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-right">
                   {canWrite && (
                     <div className="flex gap-1 justify-end">
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(r)}>Edit</Button>
-                      <Button size="sm" variant="ghost" onClick={() => { if (confirm("Delete run?")) mDel.mutate(r.id); }}><Trash2 className="w-4 h-4" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(r)}>
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (confirm("Delete run?")) mDel.mutate(r.id);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   )}
                 </TableCell>
               </TableRow>
             ))}
-            {rows.length === 0 && <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground text-sm py-6">No runs yet</TableCell></TableRow>}
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={10} className="text-center text-muted-foreground text-sm py-6">
+                  No runs yet
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </Card>
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editing?.id ? "Edit run" : "Add run"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editing?.id ? "Edit run" : "Add run"}</DialogTitle>
+          </DialogHeader>
           {editing && (
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Date</Label><Input type="date" value={editing.run_date ?? ""} onChange={(e) => setEditing({ ...editing, run_date: e.target.value })} /></div>
-              <div><Label>Run #</Label><Input type="number" min={1} value={editing.run_seq ?? 1} onChange={(e) => setEditing({ ...editing, run_seq: Number(e.target.value) })} /></div>
-              <div><Label>Capacity (0–1.25)</Label><Input type="number" step="0.01" value={editing.capacity_frac ?? 0} onChange={(e) => setEditing({ ...editing, capacity_frac: Number(e.target.value) })} /></div>
-              <div><Label>Vendor Pickup (optional)</Label><Input type="number" step="0.01" value={editing.vendor_pickup_frac ?? ""} onChange={(e) => setEditing({ ...editing, vendor_pickup_frac: e.target.value === "" ? null : Number(e.target.value) })} /></div>
-              <div><Label>Driver</Label><Input value={editing.driver ?? ""} onChange={(e) => setEditing({ ...editing, driver: e.target.value })} /></div>
-              <div><Label>Pallet count</Label><Input type="number" value={editing.pallet_count ?? ""} onChange={(e) => setEditing({ ...editing, pallet_count: e.target.value === "" ? null : Number(e.target.value) })} /></div>
-              <div><Label>Returned pallets</Label><Input type="number" value={editing.returned_pallets ?? ""} onChange={(e) => setEditing({ ...editing, returned_pallets: e.target.value === "" ? null : Number(e.target.value) })} /></div>
-              <div className="col-span-2"><Label>Notes</Label><Textarea rows={2} value={editing.notes ?? ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} /></div>
+              <div>
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={editing.run_date ?? ""}
+                  onChange={(e) => setEditing({ ...editing, run_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Run #</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={editing.run_seq ?? 1}
+                  onChange={(e) => setEditing({ ...editing, run_seq: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>Capacity (0–1.25)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editing.capacity_frac ?? 0}
+                  onChange={(e) =>
+                    setEditing({ ...editing, capacity_frac: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Vendor Pickup (optional)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editing.vendor_pickup_frac ?? ""}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      vendor_pickup_frac: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Driver</Label>
+                <Input
+                  value={editing.driver ?? ""}
+                  onChange={(e) => setEditing({ ...editing, driver: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Pallet count</Label>
+                <Input
+                  type="number"
+                  value={editing.pallet_count ?? ""}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      pallet_count: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Returned pallets</Label>
+                <Input
+                  type="number"
+                  value={editing.returned_pallets ?? ""}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      returned_pallets: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Notes</Label>
+                <Textarea
+                  rows={2}
+                  value={editing.notes ?? ""}
+                  onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+                />
+              </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
-            <Button onClick={() => editing && mUpsert.mutate(editing)} disabled={mUpsert.isPending}>{mUpsert.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Save</Button>
+            <Button variant="outline" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => editing && mUpsert.mutate(editing)} disabled={mUpsert.isPending}>
+              {mUpsert.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Save
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -745,8 +1178,12 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
     if (typeof window === "undefined") return "auto";
     return (localStorage.getItem("tc-method") as any) ?? "auto";
   });
-  useEffect(() => { if (!routeId && routes[0]) setRouteId(routes[0].id); }, [routes, routeId]);
-  useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tc-method", method); }, [method]);
+  useEffect(() => {
+    if (!routeId && routes[0]) setRouteId(routes[0].id);
+  }, [routes, routeId]);
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("tc-method", method);
+  }, [method]);
 
   const fFn = useServerFn(getTruckForecast);
   const q = useQuery({
@@ -774,7 +1211,12 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
   if (view === "board") {
     return (
       <div className="space-y-4 pt-4">
-        <ForecastBoard onSelectRoute={(id) => { setRouteId(id); setView("route"); }} />
+        <ForecastBoard
+          onSelectRoute={(id) => {
+            setRouteId(id);
+            setView("route");
+          }}
+        />
       </div>
     );
   }
@@ -787,14 +1229,22 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
         </Button>
         <Label className="text-sm">Route</Label>
         <Select value={routeId} onValueChange={setRouteId}>
-          <SelectTrigger className="w-72"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-72">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
-            {routes.map((r) => (<SelectItem key={r.id} value={r.id}>{r.hub} — {r.name}</SelectItem>))}
+            {routes.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {r.hub} — {r.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Label className="text-sm ml-4">Method</Label>
         <Select value={method} onValueChange={(v: any) => setMethod(v)}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="auto">Auto (promoted)</SelectItem>
             <SelectItem value="baseline">Baseline only</SelectItem>
@@ -803,23 +1253,33 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
         </Select>
         {version ? (
           <Badge variant={version.promoted ? "default" : "outline"} className="text-xs">
-            {version.promoted ? "Model promoted" : "Model available"} · λ={version.lambda} w={version.blend_w}
+            {version.promoted ? "Model promoted" : "Model available"} · λ={version.lambda} w=
+            {version.blend_w}
             {version.holdout_mae_blend != null && version.holdout_mae_baseline != null
               ? ` · MAE ${Number(version.holdout_mae_blend).toFixed(3)} vs ${Number(version.holdout_mae_baseline).toFixed(3)}`
               : ""}
           </Badge>
         ) : (
-          <Badge variant="outline" className="text-xs">Baseline serving · no model yet</Badge>
+          <Badge variant="outline" className="text-xs">
+            Baseline serving · no model yet
+          </Badge>
         )}
-        <Badge variant="secondary" className="text-xs">Serving: {servingMethod}</Badge>
+        <Badge variant="secondary" className="text-xs">
+          Serving: {servingMethod}
+        </Badge>
       </div>
 
       <Collapsible>
         <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="sm" className="text-xs"><ChevronDown className="w-3 h-3 mr-1" />How this forecast works</Button>
+          <Button variant="ghost" size="sm" className="text-xs">
+            <ChevronDown className="w-3 h-3 mr-1" />
+            How this forecast works
+          </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <Card className="p-3 text-xs whitespace-pre-line text-muted-foreground">{FORECAST_METHOD}</Card>
+          <Card className="p-3 text-xs whitespace-pre-line text-muted-foreground">
+            {FORECAST_METHOD}
+          </Card>
         </CollapsibleContent>
       </Collapsible>
 
@@ -830,16 +1290,74 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={days}>
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 1.5]} tickFormatter={(v) => `${Math.round(v * 100)}%`} tick={{ fontSize: 10 }} />
+                <YAxis
+                  domain={[0, 1.5]}
+                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                  tick={{ fontSize: 10 }}
+                />
                 <Tooltip content={<ForecastTooltip />} />
                 <Legend />
-                <Area type="monotone" dataKey="upper" stroke="none" fill="var(--primary)" fillOpacity={0.15} name="±MAD upper" />
-                <Area type="monotone" dataKey="lower" stroke="none" fill="var(--card)" name="±MAD lower" />
-                <Line type="monotone" dataKey="forecastPct" stroke="var(--primary)" strokeWidth={2} dot={false} name="Baseline" />
-                {version && <Line type="monotone" dataKey="modelPct" stroke="var(--chart-2)" strokeWidth={1} strokeDasharray="5 3" dot={false} name="Model" />}
-                {version && <Line type="monotone" dataKey="blendPct" stroke="var(--foreground)" strokeWidth={2} dot={false} name="Blend" />}
-                <Line type="monotone" dataKey="p21Pct" stroke="var(--destructive)" strokeWidth={1} dot={{ r: 3 }} name="P21 projection" />
-                <Line type="monotone" dataKey="finalPct" stroke="var(--foreground)" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Final (served)" />
+                <Area
+                  type="monotone"
+                  dataKey="upper"
+                  stroke="none"
+                  fill="var(--primary)"
+                  fillOpacity={0.15}
+                  name="±MAD upper"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="lower"
+                  stroke="none"
+                  fill="var(--card)"
+                  name="±MAD lower"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="forecastPct"
+                  stroke="var(--primary)"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Baseline"
+                />
+                {version && (
+                  <Line
+                    type="monotone"
+                    dataKey="modelPct"
+                    stroke="var(--chart-2)"
+                    strokeWidth={1}
+                    strokeDasharray="5 3"
+                    dot={false}
+                    name="Model"
+                  />
+                )}
+                {version && (
+                  <Line
+                    type="monotone"
+                    dataKey="blendPct"
+                    stroke="var(--foreground)"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Blend"
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="p21Pct"
+                  stroke="var(--destructive)"
+                  strokeWidth={1}
+                  dot={{ r: 3 }}
+                  name="P21 projection"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="finalPct"
+                  stroke="var(--foreground)"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  dot={false}
+                  name="Final (served)"
+                />
                 <ReferenceLine y={0.9} stroke="var(--destructive)" strokeDasharray="3 3" />
                 <ReferenceLine y={0.3} stroke="orange" strokeDasharray="3 3" />
               </ComposedChart>
@@ -851,17 +1369,25 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
       {days.length > 0 && (
         <Card className="p-3">
           <Table>
-            <TableHeader><TableRow>
-              <TableHead>Date</TableHead><TableHead>DoW</TableHead><TableHead>Baseline</TableHead>
-              <TableHead>Model</TableHead><TableHead>Blend</TableHead><TableHead>P21</TableHead>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>DoW</TableHead>
+                <TableHead>Baseline</TableHead>
+                <TableHead>Model</TableHead>
+                <TableHead>Blend</TableHead>
+                <TableHead>P21</TableHead>
                 <TableHead>Est. pallets</TableHead>
-              <TableHead>Final</TableHead><TableHead>Method</TableHead><TableHead>Drivers</TableHead>
-            </TableRow></TableHeader>
+                <TableHead>Final</TableHead>
+                <TableHead>Method</TableHead>
+                <TableHead>Drivers</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {days.map((d) => (
                 <TableRow key={d.date}>
                   <TableCell>{d.date}</TableCell>
-                  <TableCell>{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.dow]}</TableCell>
+                  <TableCell>{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.dow]}</TableCell>
                   <TableCell>{pct(d.baseline)}</TableCell>
                   <TableCell>{pct(d.model)}</TableCell>
                   <TableCell>{pct(d.blend)}</TableCell>
@@ -870,8 +1396,14 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
                     {formatEstPallets(d.est_pallets)}
                   </TableCell>
                   <TableCell className="font-medium">{pct(d.final)}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-xs">{d.method}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground max-w-[320px]">{d.driverSummary ?? "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {d.method}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-[320px]">
+                    {d.driverSummary ?? "—"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -881,7 +1413,6 @@ function ForecastTab({ routes }: { routes: RouteRow[] }) {
 
       <ForecastVsActualPanel />
       <AccuracyPanel accQuery={accQ} routes={routes} />
-
     </div>
   );
 }
@@ -914,10 +1445,13 @@ function ForecastVsActualPanel() {
     <Card className="p-3">
       <div className="text-sm font-medium">Forecast vs actual (logged predictions)</div>
       <div className="mb-3 text-xs text-muted-foreground">
-        Scored against predictions Nelson logged at the time and the real runs you uploaded. This is not a backtest.
+        Scored against predictions Nelson logged at the time and the real runs you uploaded. This is
+        not a backtest.
       </div>
 
-      {q.isLoading && <div className="text-xs text-muted-foreground">Scoring logged forecasts…</div>}
+      {q.isLoading && (
+        <div className="text-xs text-muted-foreground">Scoring logged forecasts…</div>
+      )}
       {q.error && (
         <div className={`text-xs ${destructiveTextClass}`}>{(q.error as Error).message}</div>
       )}
@@ -931,10 +1465,10 @@ function ForecastVsActualPanel() {
             <div className="mt-1 text-muted-foreground">
               Scored {d.coverage.scoredRows} of {d.coverage.loggedRows} logged forecasts across{" "}
               {d.coverage.routesScored} of {d.coverage.routesLogged} routes. The remaining{" "}
-              {d.coverage.unscoredRows} are unscored because no actual run is on record for that route and date —
-              actuals stop at {d.coverage.maxRunDate ?? "—"}, while forecasts run out to{" "}
-              {d.coverage.maxForecastDate ?? "—"}. Upload the tracker through {d.coverage.maxForecastDate ?? "—"} to
-              score the rest.
+              {d.coverage.unscoredRows} are unscored because no actual run is on record for that
+              route and date — actuals stop at {d.coverage.maxRunDate ?? "—"}, while forecasts run
+              out to {d.coverage.maxForecastDate ?? "—"}. Upload the tracker through{" "}
+              {d.coverage.maxForecastDate ?? "—"} to score the rest.
             </div>
           </div>
 
@@ -948,14 +1482,20 @@ function ForecastVsActualPanel() {
             </div>
           </div>
           <div className="mb-3 text-[11px] text-muted-foreground">
-            Bias is served − actual: positive means Nelson forecast high, negative means it forecast low.
+            Bias is served − actual: positive means Nelson forecast high, negative means it forecast
+            low.
           </div>
 
           <div className="mb-1 text-xs font-medium">By lead time (forecast date − date made)</div>
           <Table>
-            <TableHeader><TableRow>
-              <TableHead>Lead (days)</TableHead><TableHead>n</TableHead><TableHead>MAE</TableHead><TableHead>Bias</TableHead>
-            </TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lead (days)</TableHead>
+                <TableHead>n</TableHead>
+                <TableHead>MAE</TableHead>
+                <TableHead>Bias</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {d.byBucket.map((b) => (
                 <TableRow key={b.bucket}>
@@ -973,9 +1513,14 @@ function ForecastVsActualPanel() {
             <div className="text-xs text-muted-foreground">No route has a scored forecast yet.</div>
           ) : (
             <Table>
-              <TableHeader><TableRow>
-                <TableHead>Lane</TableHead><TableHead>n</TableHead><TableHead>MAE</TableHead><TableHead>Bias</TableHead>
-              </TableRow></TableHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Lane</TableHead>
+                  <TableHead>n</TableHead>
+                  <TableHead>MAE</TableHead>
+                  <TableHead>Bias</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {d.byRoute.map((r) => (
                   <TableRow key={r.routeId}>
@@ -1005,14 +1550,26 @@ function ForecastVsActualPanel() {
 }
 
 function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[] }) {
-
   const v = accQuery.data?.promoted ?? accQuery.data?.latest;
-  if (!v) return <Card className="p-3 text-xs text-muted-foreground">No trained model yet. Import history and run a retrain to populate accuracy.</Card>;
-  const per = (v.per_route_mae ?? {}) as Record<string, { baseline: number; model: number; blend: number; n: number }>;
+  if (!v)
+    return (
+      <Card className="p-3 text-xs text-muted-foreground">
+        No trained model yet. Import history and run a retrain to populate accuracy.
+      </Card>
+    );
+  const per = (v.per_route_mae ?? {}) as Record<
+    string,
+    { baseline: number; model: number; blend: number; n: number }
+  >;
   const routeName = new Map(routes.map((r) => [r.id, `${r.hub[0]}·${r.code}`]));
   const rows = Object.entries(per)
     .filter(([, m]) => (m.n ?? 0) > 0)
-    .map(([rid, m]) => ({ rid, name: routeName.get(rid) ?? rid.slice(0, 8), ...m, delta: m.baseline - m.blend }))
+    .map(([rid, m]) => ({
+      rid,
+      name: routeName.get(rid) ?? rid.slice(0, 8),
+      ...m,
+      delta: m.baseline - m.blend,
+    }))
     .sort((a, b) => b.delta - a.delta);
   return (
     <Card className="p-3">
@@ -1020,11 +1577,13 @@ function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[]
         <div>
           <div className="text-sm font-medium">Model accuracy (holdout backtest)</div>
           <div className="text-xs text-muted-foreground">
-            MAE from the trained model's holdout split, not from predictions scored against real runs.
+            MAE from the trained model's holdout split, not from predictions scored against real
+            runs.
           </div>
         </div>
         <div className="text-xs text-muted-foreground">
-          {v.promoted ? "Promoted" : "Latest (not promoted)"} · trained {new Date(v.trained_at).toLocaleString()}
+          {v.promoted ? "Promoted" : "Latest (not promoted)"} · trained{" "}
+          {new Date(v.trained_at).toLocaleString()}
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3 mb-3">
@@ -1036,10 +1595,16 @@ function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[]
         <StatCell label="Blend WAPE" value={v.wape_blend} pct />
       </div>
       <Table>
-        <TableHeader><TableRow>
-          <TableHead>Lane</TableHead><TableHead>n</TableHead>
-          <TableHead>Baseline</TableHead><TableHead>Model</TableHead><TableHead>Blend</TableHead><TableHead>Δ vs baseline</TableHead>
-        </TableRow></TableHeader>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Lane</TableHead>
+            <TableHead>n</TableHead>
+            <TableHead>Baseline</TableHead>
+            <TableHead>Model</TableHead>
+            <TableHead>Blend</TableHead>
+            <TableHead>Δ vs baseline</TableHead>
+          </TableRow>
+        </TableHeader>
         <TableBody>
           {rows.map((r) => (
             <TableRow key={r.rid}>
@@ -1051,7 +1616,8 @@ function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[]
               <TableCell
                 className={`text-xs ${r.delta >= 0 ? successTextClass : destructiveTextClass}`}
               >
-                {r.delta >= 0 ? "+" : ""}{r.delta?.toFixed(3)}
+                {r.delta >= 0 ? "+" : ""}
+                {r.delta?.toFixed(3)}
               </TableCell>
             </TableRow>
           ))}
@@ -1061,7 +1627,15 @@ function AccuracyPanel({ accQuery, routes }: { accQuery: any; routes: RouteRow[]
   );
 }
 
-function StatCell({ label, value, pct: isPct }: { label: string; value: number | null | undefined; pct?: boolean }) {
+function StatCell({
+  label,
+  value,
+  pct: isPct,
+}: {
+  label: string;
+  value: number | null | undefined;
+  pct?: boolean;
+}) {
   const num = value == null ? null : Number(value);
   const display = num == null ? "—" : isPct ? `${(num * 100).toFixed(1)}%` : num.toFixed(3);
   return (
@@ -1072,7 +1646,6 @@ function StatCell({ label, value, pct: isPct }: { label: string; value: number |
   );
 }
 
-
 /* ============================== IMPORT ============================== */
 
 function ImportTab() {
@@ -1082,17 +1655,22 @@ function ImportTab() {
   const commit = useServerFn(commitTruckImport);
 
   async function onFile(file: File) {
-    setBusy(true); setReport(null);
+    setBusy(true);
+    setReport(null);
     try {
       const b64 = await new Promise<string>((resolve, reject) => {
         const r = new FileReader();
         r.onload = () => resolve((r.result as string).split(",")[1] ?? "");
-        r.onerror = reject; r.readAsDataURL(file);
+        r.onerror = reject;
+        r.readAsDataURL(file);
       });
       const rep = await preview({ data: { fileBase64: b64 } });
       setReport(rep);
-    } catch (e: any) { toast.error(e?.message ?? "Preview failed"); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Preview failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function onCommit() {
@@ -1102,8 +1680,11 @@ function ImportTab() {
       const { inserted } = await commit({ data: { fileBase64: report.fileBase64 } });
       toast.success(`Imported ${inserted} runs`);
       setReport(null);
-    } catch (e: any) { toast.error(e?.message ?? "Import failed"); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Import failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -1204,14 +1785,14 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
   const defaultSql: string = q.data?.defaultP21Sql ?? "";
   const defaultTransferSql: string = (q.data as any)?.defaultP21TransferSql ?? "";
 
-  const [basis, setBasis] = useState<"pallets"|"weight"|"cube">("pallets");
+  const [basis, setBasis] = useState<"pallets" | "weight" | "cube">("pallets");
   const [vendorCounts, setVendorCounts] = useState(false);
   const [sql, setSql] = useState("");
   const [transferSql, setTransferSql] = useState("");
   const [excludedCodes, setExcludedCodes] = useState("");
   useEffect(() => {
     if (s) {
-      setBasis(s.capacity_basis as "pallets"|"weight"|"cube");
+      setBasis(s.capacity_basis as "pallets" | "weight" | "cube");
       setVendorCounts(s.vendor_pickup_counts);
       setSql(s.p21_sql ?? defaultSql);
       setTransferSql((s as any).p21_transfer_sql ?? defaultTransferSql);
@@ -1232,16 +1813,17 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
   const [routeEdits, setRouteEdits] = useState<Record<string, RouteEdit>>({});
   useEffect(() => {
     const m: Record<string, RouteEdit> = {};
-    for (const r of routes) m[r.id] = {
-      pallets_full_truck: r.pallets_full_truck?.toString() ?? "",
-      cube_full_truck_ft3: r.cube_full_truck_ft3?.toString() ?? "",
-      weight_full_truck_lbs: r.weight_full_truck_lbs?.toString() ?? "",
-      p21_route_code: r.p21_route_code ?? "",
-      cutoff_time: r.cutoff_time ?? "",
-      p21_cities: (r.p21_cities ?? []).join(", "),
-      p21_states: (r.p21_states ?? []).join(", "),
-      ship_to_zip_prefixes: (r.ship_to_zip_prefixes ?? []).join(", "),
-    };
+    for (const r of routes)
+      m[r.id] = {
+        pallets_full_truck: r.pallets_full_truck?.toString() ?? "",
+        cube_full_truck_ft3: r.cube_full_truck_ft3?.toString() ?? "",
+        weight_full_truck_lbs: r.weight_full_truck_lbs?.toString() ?? "",
+        p21_route_code: r.p21_route_code ?? "",
+        cutoff_time: r.cutoff_time ?? "",
+        p21_cities: (r.p21_cities ?? []).join(", "),
+        p21_states: (r.p21_states ?? []).join(", "),
+        ship_to_zip_prefixes: (r.ship_to_zip_prefixes ?? []).join(", "),
+      };
     setRouteEdits(m);
   }, [routes]);
   function patchRoute(id: string, patch: Partial<RouteEdit>) {
@@ -1257,26 +1839,39 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
   async function save() {
     setBusy("save");
     try {
-      await updateFn({ data: {
-        capacity_basis: basis,
-        vendor_pickup_counts: vendorCounts,
-        p21_sql: sql,
-        p21_transfer_sql: transferSql,
-        excluded_p21_codes: excludedCodes
-          .split(",").map((x) => x.trim()).filter(Boolean),
-      } });
-      const numOrNull = (v: string) => v === "" ? null : Number(v);
-      const strOrNull = (v: string) => v.trim() === "" ? null : v.trim();
+      await updateFn({
+        data: {
+          capacity_basis: basis,
+          vendor_pickup_counts: vendorCounts,
+          p21_sql: sql,
+          p21_transfer_sql: transferSql,
+          excluded_p21_codes: excludedCodes
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean),
+        },
+      });
+      const numOrNull = (v: string) => (v === "" ? null : Number(v));
+      const strOrNull = (v: string) => (v.trim() === "" ? null : v.trim());
       const listOrNull = (v: string) => {
-        const parts = v.split(",").map((s) => s.trim()).filter(Boolean);
+        const parts = v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
         return parts.length === 0 ? null : parts;
       };
       const statesOrNull = (v: string) => {
-        const parts = v.split(",").map((s) => s.trim().toUpperCase()).filter((s) => /^[A-Z]{2}$/.test(s));
+        const parts = v
+          .split(",")
+          .map((s) => s.trim().toUpperCase())
+          .filter((s) => /^[A-Z]{2}$/.test(s));
         return parts.length === 0 ? null : parts;
       };
       const zipsOrNull = (v: string) => {
-        const parts = v.split(",").map((s) => s.replace(/\D/g, "")).filter(Boolean);
+        const parts = v
+          .split(",")
+          .map((s) => s.replace(/\D/g, ""))
+          .filter(Boolean);
         return parts.length === 0 ? null : parts;
       };
       const updates = routes.map((r) => {
@@ -1298,36 +1893,61 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       invalidateAfterCapacitySave((queryKey) => {
         void qc.invalidateQueries({ queryKey: [...queryKey] });
       });
-    } catch (e: any) { toast.error(e?.message ?? "Save failed"); }
-    finally { setBusy(null); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Save failed");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function test() {
-    setBusy("test"); setTestResult(null);
-    try { setTestResult(await testFn({ data: { sql } })); }
-    catch (e: any) { toast.error(e?.message ?? "Test failed"); }
-    finally { setBusy(null); }
+    setBusy("test");
+    setTestResult(null);
+    try {
+      setTestResult(await testFn({ data: { sql } }));
+    } catch (e: any) {
+      toast.error(e?.message ?? "Test failed");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function snap() {
-    setBusy("snap"); setSnapResult(null);
-    try { setSnapResult(await snapFn()); toast.success("Snapshot run"); }
-    catch (e: any) { toast.error(e?.message ?? "Snapshot failed"); }
-    finally { setBusy(null); }
+    setBusy("snap");
+    setSnapResult(null);
+    try {
+      setSnapResult(await snapFn());
+      toast.success("Snapshot run");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Snapshot failed");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function testTransfer() {
-    setBusy("testTransfer"); setTestTransferResult(null);
-    try { setTestTransferResult(await testTransferFn({ data: { sql: transferSql } })); }
-    catch (e: any) { toast.error(e?.message ?? "Transfer test failed"); }
-    finally { setBusy(null); }
+    setBusy("testTransfer");
+    setTestTransferResult(null);
+    try {
+      setTestTransferResult(await testTransferFn({ data: { sql: transferSql } }));
+    } catch (e: any) {
+      toast.error(e?.message ?? "Transfer test failed");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function snapTransfer() {
-    setBusy("snapTransfer"); setSnapTransferResult(null);
-    try { setSnapTransferResult(await snapTransferFn()); toast.success("Transfer snapshot run"); }
-    catch (e: any) { toast.error(e?.message ?? "Transfer snapshot failed"); }
-    finally { setBusy(null); }
+    setBusy("snapTransfer");
+    setSnapTransferResult(null);
+    try {
+      setSnapTransferResult(await snapTransferFn());
+      toast.success("Transfer snapshot run");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Transfer snapshot failed");
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -1343,20 +1963,26 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
           <div>
             <Label className="text-xs">Capacity basis</Label>
             <Select value={basis} onValueChange={(v: any) => setBasis(v)}>
-              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pallets">Pallets</SelectItem>
                 <SelectItem value="weight">Weight</SelectItem>
                 <SelectItem value="cube">Cube</SelectItem>
               </SelectContent>
             </Select>
-            <div className="text-xs text-muted-foreground mt-1">Which physical dimension defines "full truck". Client to confirm.</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Which physical dimension defines "full truck". Client to confirm.
+            </div>
           </div>
           <div>
             <Label className="text-xs">Vendor pickups count against forecast</Label>
             <div className="flex items-center gap-2 h-9">
               <Switch checked={vendorCounts} onCheckedChange={setVendorCounts} />
-              <span className="text-xs text-muted-foreground">When on, vendor pickup capacity is added to the run baseline.</span>
+              <span className="text-xs text-muted-foreground">
+                When on, vendor pickup capacity is added to the run baseline.
+              </span>
             </div>
           </div>
         </div>
@@ -1369,10 +1995,14 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
             onChange={(ev) => setExcludedCodes(ev.target.value)}
           />
           <div className="text-xs text-muted-foreground mt-1">
-            Comma-separated. Rows with these route codes are silently skipped during snapshots (no demand row, not reported as unmatched). Per Joe: <code>WCALL</code> (Will Call) and <code>KCKS1</code> aren&apos;t truck demand.
+            Comma-separated. Rows with these route codes are silently skipped during snapshots (no
+            demand row, not reported as unmatched). Per Joe: <code>WCALL</code> (Will Call) and{" "}
+            <code>KCKS1</code> aren&apos;t truck demand.
           </div>
           <div className="text-xs text-muted-foreground mt-2">
-            Cube targets: 28&apos;=1,830 / 48&apos;=3,570 / 53&apos;=4,050 ft³ (per NDI). Box-truck lanes seeded at 1,830, all others default to the 53&apos; figure — adjust any lane running 48&apos; or 28&apos; equipment.
+            Cube targets: 28&apos;=1,830 / 48&apos;=3,570 / 53&apos;=4,050 ft³ (per NDI). Box-truck
+            lanes seeded at 1,830, all others default to the 53&apos; figure — adjust any lane
+            running 48&apos; or 28&apos; equipment.
           </div>
         </div>
       </Card>
@@ -1392,18 +2022,38 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
       <Card className="p-4">
         <div className="text-sm font-medium mb-2">Route metadata &amp; truck-full targets</div>
         <div className="text-xs text-muted-foreground mb-3">
-          P21 route code (Order Entry → Ship Info → Route) drives the projection match. Multiple codes allowed — enter comma-separated (e.g. <code>ARK01,ARK02</code>). Leave blank for lanes the client hasn&apos;t confirmed.
-          When a P21 code is claimed by more than one route, the server resolves per row by (1) <b>ship_city</b> against Cities (with alias fuzzing — <code>St./Ste./Ft./Mt.</code> expand, trailing state tokens strip), then (2) <b>ship_zip</b> against Zip prefixes, then (3) <b>ship_state</b> against States, then (4) shipment weekday, then (5) lowest sort_order (with an audit warning). Each cascade only narrows when it actually splits the claimants — a signal that hits zero or all is skipped, so partial data still helps. Populate Cities / Zips / States for shared codes like <code>NSC01</code> (Carolinas).
-          Truck-full targets compute projected_capacity_frac = min(1.5, max of pallets/cube/weight ratios).
-          Estimated pallets = cube ÷ (cube/full ÷ pallets/full), using the Pallets/full and cube/full figures on this screen. Missing, zero, or negative inputs show as unavailable. Editing Pallets/full here changes the next estimate; cube/full is left as entered.
-          Per Joe: pallet counts are approximate (pallet sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with loose product), so cube or weight is often the binding constraint.
-          Cutoff time is display-only for now (from the Driver Routes sheet).
+          P21 route code (Order Entry → Ship Info → Route) drives the projection match. Multiple
+          codes allowed — enter comma-separated (e.g. <code>ARK01,ARK02</code>). Leave blank for
+          lanes the client hasn&apos;t confirmed. When a P21 code is claimed by more than one route,
+          the server resolves per row by (1) <b>ship_city</b> against Cities (with alias fuzzing —{" "}
+          <code>St./Ste./Ft./Mt.</code> expand, trailing state tokens strip), then (2){" "}
+          <b>ship_zip</b> against Zip prefixes, then (3) <b>ship_state</b> against States, then (4)
+          shipment weekday, then (5) lowest sort_order (with an audit warning). Each cascade only
+          narrows when it actually splits the claimants — a signal that hits zero or all is skipped,
+          so partial data still helps. Populate Cities / Zips / States for shared codes like{" "}
+          <code>NSC01</code> (Carolinas). Truck-full targets compute projected_capacity_frac =
+          min(1.5, max of pallets/cube/weight ratios). Estimated pallets = cube ÷ (cube/full ÷
+          pallets/full), using the Pallets/full and cube/full figures on this screen. Missing, zero,
+          or negative inputs show as unavailable. Editing Pallets/full here changes the next
+          estimate; cube/full is left as entered. Per Joe: pallet counts are approximate (pallet
+          sizes vary 48&quot;–104&quot;, small orders load loose, maxed trailers are topped off with
+          loose product), so cube or weight is often the binding constraint. Cutoff time is
+          display-only for now (from the Driver Routes sheet).
           <br />
           <span className={warningTextClass}>Pending client confirmation:</span> <code>SOCA1</code>{" "}
           (Carolinas code on the Ocala tab).
-          <br /><span className="text-muted-foreground">Transfer lanes (<code>BHM-XFER-DAL</code>, <code>DAL-XFER-BHM</code>, <code>BHM-XFER-OCA</code>) are pulled by the separate <code>transfer_hdr</code>/<code>transfer_line</code> query below. Pin each transfer route&apos;s P21 code to the synthesized <code>&lt;from&gt;-&gt;&lt;to&gt;</code> pair (e.g. <code>BHM-&gt;DAL</code>) so the same matcher can route it.</span>
-          <br /><span className="text-muted-foreground">Note:</span> <code>DAL-XFER-BHM</code> (Dallas Transfer) also carries Ocala → Dallas freight per Joe, so its utilization reads higher than Birmingham-only demand would suggest.
-
+          <br />
+          <span className="text-muted-foreground">
+            Transfer lanes (<code>BHM-XFER-DAL</code>, <code>DAL-XFER-BHM</code>,{" "}
+            <code>BHM-XFER-OCA</code>) are pulled by the separate <code>transfer_hdr</code>/
+            <code>transfer_line</code> query below. Pin each transfer route&apos;s P21 code to the
+            synthesized <code>&lt;from&gt;-&gt;&lt;to&gt;</code> pair (e.g. <code>BHM-&gt;DAL</code>
+            ) so the same matcher can route it.
+          </span>
+          <br />
+          <span className="text-muted-foreground">Note:</span> <code>DAL-XFER-BHM</code> (Dallas
+          Transfer) also carries Ocala → Dallas freight per Joe, so its utilization reads higher
+          than Birmingham-only demand would suggest.
         </div>
         <div className="overflow-auto max-h-[420px] border rounded">
           <table className="w-full text-xs">
@@ -1426,15 +2076,82 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
                 if (!e) return null;
                 return (
                   <tr key={r.id} className="border-t">
-                    <td className="p-2 whitespace-nowrap"><span className="font-medium">{r.code}</span> <span className="text-muted-foreground">· {r.hub}</span></td>
-                    <td className="p-1"><Input className="h-7" value={e.p21_route_code} placeholder="e.g. ARK01,ARK02" onChange={(ev) => patchRoute(r.id, { p21_route_code: ev.target.value })} /></td>
-                    <td className="p-1"><Input className="h-7" value={e.p21_cities} placeholder="Charlotte, Columbia, …" onChange={(ev) => patchRoute(r.id, { p21_cities: ev.target.value })} /></td>
-                    <td className="p-1"><Input className="h-7 w-28" value={e.ship_to_zip_prefixes} placeholder="280, 290, 3…" onChange={(ev) => patchRoute(r.id, { ship_to_zip_prefixes: ev.target.value })} /></td>
-                    <td className="p-1"><Input className="h-7 w-20" value={e.p21_states} placeholder="NC, SC" onChange={(ev) => patchRoute(r.id, { p21_states: ev.target.value.toUpperCase() })} /></td>
-                    <td className="p-1"><Input className="h-7 w-24" value={e.cutoff_time} placeholder="—" onChange={(ev) => patchRoute(r.id, { cutoff_time: ev.target.value })} /></td>
-                    <td className="p-1"><Input type="number" className="h-7 w-20 ml-auto text-right" value={e.pallets_full_truck} onChange={(ev) => patchRoute(r.id, { pallets_full_truck: ev.target.value })} /></td>
-                    <td className="p-1"><Input type="number" className="h-7 w-24 ml-auto text-right" value={e.cube_full_truck_ft3} onChange={(ev) => patchRoute(r.id, { cube_full_truck_ft3: ev.target.value })} /></td>
-                    <td className="p-1"><Input type="number" className="h-7 w-24 ml-auto text-right" value={e.weight_full_truck_lbs} onChange={(ev) => patchRoute(r.id, { weight_full_truck_lbs: ev.target.value })} /></td>
+                    <td className="p-2 whitespace-nowrap">
+                      <span className="font-medium">{r.code}</span>{" "}
+                      <span className="text-muted-foreground">· {r.hub}</span>
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        className="h-7"
+                        value={e.p21_route_code}
+                        placeholder="e.g. ARK01,ARK02"
+                        onChange={(ev) => patchRoute(r.id, { p21_route_code: ev.target.value })}
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        className="h-7"
+                        value={e.p21_cities}
+                        placeholder="Charlotte, Columbia, …"
+                        onChange={(ev) => patchRoute(r.id, { p21_cities: ev.target.value })}
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        className="h-7 w-28"
+                        value={e.ship_to_zip_prefixes}
+                        placeholder="280, 290, 3…"
+                        onChange={(ev) =>
+                          patchRoute(r.id, { ship_to_zip_prefixes: ev.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        className="h-7 w-20"
+                        value={e.p21_states}
+                        placeholder="NC, SC"
+                        onChange={(ev) =>
+                          patchRoute(r.id, { p21_states: ev.target.value.toUpperCase() })
+                        }
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        className="h-7 w-24"
+                        value={e.cutoff_time}
+                        placeholder="—"
+                        onChange={(ev) => patchRoute(r.id, { cutoff_time: ev.target.value })}
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        type="number"
+                        className="h-7 w-20 ml-auto text-right"
+                        value={e.pallets_full_truck}
+                        onChange={(ev) => patchRoute(r.id, { pallets_full_truck: ev.target.value })}
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        type="number"
+                        className="h-7 w-24 ml-auto text-right"
+                        value={e.cube_full_truck_ft3}
+                        onChange={(ev) =>
+                          patchRoute(r.id, { cube_full_truck_ft3: ev.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        type="number"
+                        className="h-7 w-24 ml-auto text-right"
+                        value={e.weight_full_truck_lbs}
+                        onChange={(ev) =>
+                          patchRoute(r.id, { weight_full_truck_lbs: ev.target.value })
+                        }
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -1447,13 +2164,40 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-medium">P21 projection SQL</div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={test} disabled={busy === "test"}>{busy === "test" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}Test</Button>
-            <Button size="sm" variant="outline" onClick={snap} disabled={busy === "snap"}>{busy === "snap" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}Run snapshot now</Button>
+            <Button size="sm" variant="outline" onClick={test} disabled={busy === "test"}>
+              {busy === "test" ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : (
+                <Play className="w-4 h-4 mr-1" />
+              )}
+              Test
+            </Button>
+            <Button size="sm" variant="outline" onClick={snap} disabled={busy === "snap"}>
+              {busy === "snap" ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-1" />
+              )}
+              Run snapshot now
+            </Button>
           </div>
         </div>
-        <div className="text-xs text-muted-foreground mb-2">Must return: <code>route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets</code>.</div>
-        <Textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={14} className="font-mono text-xs" />
-        {testResult && <div className="text-xs mt-2">Test: <b>{testResult.rowCount}</b> rows.
+        <div className="text-xs text-muted-foreground mb-2">
+          Must return:{" "}
+          <code>
+            route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets
+          </code>
+          .
+        </div>
+        <Textarea
+          value={sql}
+          onChange={(e) => setSql(e.target.value)}
+          rows={14}
+          className="font-mono text-xs"
+        />
+        {testResult && (
+          <div className="text-xs mt-2">
+            Test: <b>{testResult.rowCount}</b> rows.
             {testResult.validation?.errors?.length ? (
               <div className={`mt-1 ${destructiveTextClass}`}>
                 <b>Errors:</b>
@@ -1474,7 +2218,12 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
                 </ul>
               </div>
             ) : null}
-          Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testResult.sample, null, 2)}</pre></div>}
+            Sample:{" "}
+            <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">
+              {JSON.stringify(testResult.sample, null, 2)}
+            </pre>
+          </div>
+        )}
         {snapResult && <SnapshotResultView result={snapResult} />}
       </Card>
 
@@ -1482,15 +2231,55 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-medium">P21 transfer SQL (phase 2)</div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={testTransfer} disabled={busy === "testTransfer"}>{busy === "testTransfer" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}Test</Button>
-            <Button size="sm" variant="outline" onClick={snapTransfer} disabled={busy === "snapTransfer"}>{busy === "snapTransfer" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}Run transfer snapshot now</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={testTransfer}
+              disabled={busy === "testTransfer"}
+            >
+              {busy === "testTransfer" ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : (
+                <Play className="w-4 h-4 mr-1" />
+              )}
+              Test
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={snapTransfer}
+              disabled={busy === "snapTransfer"}
+            >
+              {busy === "snapTransfer" ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-1" />
+              )}
+              Run transfer snapshot now
+            </Button>
           </div>
         </div>
         <div className="text-xs text-muted-foreground mb-2">
-          Pulls warehouse transfers from <code>transfer_hdr</code>/<code>transfer_line</code> and feeds the same demand table used by the projection guard. Same output contract as the orders query — <code>route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets</code> — but <code>route_code</code> is synthesized as <code>&lt;from_loc&gt;-&gt;&lt;to_loc&gt;</code>. Pin each transfer route&apos;s <b>P21 code</b> to the matching pair (e.g. <code>BHM-&gt;DAL</code> on <code>BHM-XFER-DAL</code>). Runs nightly alongside the orders snapshot.
+          Pulls warehouse transfers from <code>transfer_hdr</code>/<code>transfer_line</code> and
+          feeds the same demand table used by the projection guard. Same output contract as the
+          orders query —{" "}
+          <code>
+            route_code, ship_date, order_count, total_weight_lbs, total_cube_ft, est_pallets
+          </code>{" "}
+          — but <code>route_code</code> is synthesized as{" "}
+          <code>&lt;from_loc&gt;-&gt;&lt;to_loc&gt;</code>. Pin each transfer route&apos;s{" "}
+          <b>P21 code</b> to the matching pair (e.g. <code>BHM-&gt;DAL</code> on{" "}
+          <code>BHM-XFER-DAL</code>). Runs nightly alongside the orders snapshot.
         </div>
-        <Textarea value={transferSql} onChange={(e) => setTransferSql(e.target.value)} rows={14} className="font-mono text-xs" />
-        {testTransferResult && <div className="text-xs mt-2">Test: <b>{testTransferResult.rowCount}</b> rows.
+        <Textarea
+          value={transferSql}
+          onChange={(e) => setTransferSql(e.target.value)}
+          rows={14}
+          className="font-mono text-xs"
+        />
+        {testTransferResult && (
+          <div className="text-xs mt-2">
+            Test: <b>{testTransferResult.rowCount}</b> rows.
             {testTransferResult.validation?.errors?.length ? (
               <div className={`mt-1 ${destructiveTextClass}`}>
                 <b>Errors:</b>
@@ -1511,7 +2300,12 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
                 </ul>
               </div>
             ) : null}
-          Sample: <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">{JSON.stringify(testTransferResult.sample, null, 2)}</pre></div>}
+            Sample:{" "}
+            <pre className="bg-muted p-2 rounded max-h-40 overflow-auto">
+              {JSON.stringify(testTransferResult.sample, null, 2)}
+            </pre>
+          </div>
+        )}
         {snapTransferResult && <SnapshotResultView result={snapTransferResult} />}
       </Card>
 
@@ -1521,12 +2315,12 @@ function SettingsTab({ routes }: { routes: RouteRow[] }) {
 
       <UnmatchedRouteCodesCard routes={routes} />
 
-
-
       <RetrainCard />
 
       <div className="flex justify-end">
-        <Button onClick={save} disabled={busy === "save"}>{busy === "save" && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Save settings</Button>
+        <Button onClick={save} disabled={busy === "save"}>
+          {busy === "save" && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Save settings
+        </Button>
       </div>
     </div>
   );
@@ -1545,28 +2339,39 @@ function RetrainCard() {
   const [freezing, setFreezing] = useState(false);
   const [freezeResult, setFreezeResult] = useState<any>(null);
   async function run() {
-    setBusy(true); setLast(null);
+    setBusy(true);
+    setLast(null);
     try {
       const r = await retrainFn();
       setLast(r);
-      if (r?.ok) toast.success(`Retrained: blend MAE ${Number(r.holdout_mae_blend).toFixed(3)} vs baseline ${Number(r.holdout_mae_baseline).toFixed(3)} — ${r.promoted ? "promoted" : "kept baseline"}`);
+      if (r?.ok)
+        toast.success(
+          `Retrained: blend MAE ${Number(r.holdout_mae_blend).toFixed(3)} vs baseline ${Number(r.holdout_mae_baseline).toFixed(3)} — ${r.promoted ? "promoted" : "kept baseline"}`,
+        );
       else toast.error(r?.error ?? "Retrain failed");
       qc.invalidateQueries({ queryKey: ["tc-model-versions"] });
       qc.invalidateQueries({ queryKey: ["tc-accuracy"] });
       qc.invalidateQueries({ queryKey: ["tc-forecast"] });
-    } catch (e: any) { toast.error(e?.message ?? "Retrain failed"); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Retrain failed");
+    } finally {
+      setBusy(false);
+    }
   }
   async function freeze() {
-    setFreezing(true); setFreezeResult(null);
+    setFreezing(true);
+    setFreezeResult(null);
     try {
       const r = await freezeFn();
       setFreezeResult(r);
       toast.success(`Froze ${r.routes} routes — ${r.rows_inserted} rows written`);
       qc.invalidateQueries({ queryKey: ["tc-last-freeze"] });
       qc.invalidateQueries({ queryKey: ["tc-forecast-vs-actual"] });
-    } catch (e: any) { toast.error(e?.message ?? "Freeze failed"); }
-    finally { setFreezing(false); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Freeze failed");
+    } finally {
+      setFreezing(false);
+    }
   }
   const lastFreeze = freezeQ.data?.last ?? null;
   return (
@@ -1575,34 +2380,60 @@ function RetrainCard() {
         <div className="text-sm font-medium">Forecast model</div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={freeze} disabled={freezing}>
-            {freezing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Snowflake className="w-4 h-4 mr-1" />}Freeze today's forecasts
+            {freezing ? (
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            ) : (
+              <Snowflake className="w-4 h-4 mr-1" />
+            )}
+            Freeze today's forecasts
           </Button>
           <Button size="sm" variant="outline" onClick={run} disabled={busy}>
-            {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}Retrain now
+            {busy ? (
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-1" />
+            )}
+            Retrain now
           </Button>
         </div>
       </div>
-      <div className="text-xs text-muted-foreground mb-3">Nightly retrain runs automatically at ~03:00 EDT, followed by a forecast freeze that records what the board would show for every active route. Manual retrain trains + backtests + promotes if the blend beats baseline.</div>
+      <div className="text-xs text-muted-foreground mb-3">
+        Nightly retrain runs automatically at ~03:00 EDT, followed by a forecast freeze that records
+        what the board would show for every active route. Manual retrain trains + backtests +
+        promotes if the blend beats baseline.
+      </div>
       {freezeResult && (
         <div className="text-xs mb-1">
-          Froze {freezeResult.routes} routes — {freezeResult.rows_inserted} rows written, {freezeResult.rows_existing} already present (made on {freezeResult.made_on})
+          Froze {freezeResult.routes} routes — {freezeResult.rows_inserted} rows written,{" "}
+          {freezeResult.rows_existing} already present (made on {freezeResult.made_on})
         </div>
       )}
       {lastFreeze && (
         <div className="text-xs text-muted-foreground mb-3">
-          Last freeze: {formatRelativeTime(lastFreeze.created_at)} · {lastFreeze.trigger ?? "unknown"}
+          Last freeze: {formatRelativeTime(lastFreeze.created_at)} ·{" "}
+          {lastFreeze.trigger ?? "unknown"}
         </div>
       )}
       {last && (
         <div className="text-xs mb-3">
-          Last: λ={last.chosenLambda}, w={last.chosenW}, blend MAE {Number(last.holdout_mae_blend ?? 0).toFixed(4)} vs baseline {Number(last.holdout_mae_baseline ?? 0).toFixed(4)} · {last.promoted ? "PROMOTED" : "not promoted"} · folds {last.fold_count}
+          Last: λ={last.chosenLambda}, w={last.chosenW}, blend MAE{" "}
+          {Number(last.holdout_mae_blend ?? 0).toFixed(4)} vs baseline{" "}
+          {Number(last.holdout_mae_baseline ?? 0).toFixed(4)} ·{" "}
+          {last.promoted ? "PROMOTED" : "not promoted"} · folds {last.fold_count}
         </div>
       )}
       <Table>
-        <TableHeader><TableRow>
-          <TableHead>Trained</TableHead><TableHead>λ</TableHead><TableHead>w</TableHead>
-          <TableHead>Rows</TableHead><TableHead>Baseline MAE</TableHead><TableHead>Blend MAE</TableHead><TableHead>Promoted</TableHead>
-        </TableRow></TableHeader>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Trained</TableHead>
+            <TableHead>λ</TableHead>
+            <TableHead>w</TableHead>
+            <TableHead>Rows</TableHead>
+            <TableHead>Baseline MAE</TableHead>
+            <TableHead>Blend MAE</TableHead>
+            <TableHead>Promoted</TableHead>
+          </TableRow>
+        </TableHeader>
         <TableBody>
           {(vQ.data?.versions ?? []).map((v: any) => (
             <TableRow key={v.id}>
@@ -1610,9 +2441,17 @@ function RetrainCard() {
               <TableCell className="text-xs">{v.lambda}</TableCell>
               <TableCell className="text-xs">{v.blend_w}</TableCell>
               <TableCell className="text-xs">{v.train_rows}</TableCell>
-              <TableCell className="text-xs">{v.holdout_mae_baseline == null ? "—" : Number(v.holdout_mae_baseline).toFixed(4)}</TableCell>
-              <TableCell className="text-xs">{v.holdout_mae_blend == null ? "—" : Number(v.holdout_mae_blend).toFixed(4)}</TableCell>
-              <TableCell><Badge variant={v.promoted ? "default" : "outline"} className="text-xs">{v.promoted ? "yes" : "no"}</Badge></TableCell>
+              <TableCell className="text-xs">
+                {v.holdout_mae_baseline == null ? "—" : Number(v.holdout_mae_baseline).toFixed(4)}
+              </TableCell>
+              <TableCell className="text-xs">
+                {v.holdout_mae_blend == null ? "—" : Number(v.holdout_mae_blend).toFixed(4)}
+              </TableCell>
+              <TableCell>
+                <Badge variant={v.promoted ? "default" : "outline"} className="text-xs">
+                  {v.promoted ? "yes" : "no"}
+                </Badge>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -1634,7 +2473,10 @@ function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
 
   async function assign(code: string) {
     const routeId = choice[code];
-    if (!routeId) { toast.error("Pick a route first"); return; }
+    if (!routeId) {
+      toast.error("Pick a route first");
+      return;
+    }
     setBusy(`assign:${code}`);
     try {
       await assignFn({ data: { code, routeId } });
@@ -1643,7 +2485,9 @@ function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
       await qc.invalidateQueries({ queryKey: ["tc-routes"] });
     } catch (e: any) {
       toast.error(e?.message ?? "Assign failed");
-    } finally { setBusy(null); }
+    } finally {
+      setBusy(null);
+    }
   }
   async function toggleIgnore(code: string, ignore: boolean) {
     setBusy(`ignore:${code}`);
@@ -1653,7 +2497,9 @@ function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
       await qc.invalidateQueries({ queryKey: ["tc-unmatched-p21"] });
     } catch (e: any) {
       toast.error(e?.message ?? "Update failed");
-    } finally { setBusy(null); }
+    } finally {
+      setBusy(null);
+    }
   }
 
   const rows = q.data?.unmatched ?? [];
@@ -1665,18 +2511,30 @@ function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
         <div>
           <div className="text-sm font-medium">Unmatched P21 route codes</div>
           <div className="text-xs text-muted-foreground">
-            Codes P21 has sent in recent snapshots that don&apos;t map to any internal route. Assign each to the right lane, or ignore codes that aren&apos;t truck demand (e.g. <code>wcall</code>). Changes take effect on the next snapshot.
+            Codes P21 has sent in recent snapshots that don&apos;t map to any internal route. Assign
+            each to the right lane, or ignore codes that aren&apos;t truck demand (e.g.{" "}
+            <code>wcall</code>). Changes take effect on the next snapshot.
           </div>
         </div>
-        <Button size="sm" variant="outline" onClick={() => qc.invalidateQueries({ queryKey: ["tc-unmatched-p21"] })}>
-          <RefreshCw className="w-4 h-4 mr-1" />Refresh
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => qc.invalidateQueries({ queryKey: ["tc-unmatched-p21"] })}
+        >
+          <RefreshCw className="w-4 h-4 mr-1" />
+          Refresh
         </Button>
       </div>
 
       {q.isLoading ? (
-        <div className="text-xs text-muted-foreground py-4"><Loader2 className="w-4 h-4 animate-spin inline mr-1" />Loading…</div>
+        <div className="text-xs text-muted-foreground py-4">
+          <Loader2 className="w-4 h-4 animate-spin inline mr-1" />
+          Loading…
+        </div>
       ) : rows.length === 0 ? (
-        <div className="text-xs text-muted-foreground py-4">No unmatched codes in the last 40 snapshots.</div>
+        <div className="text-xs text-muted-foreground py-4">
+          No unmatched codes in the last 40 snapshots.
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <Table>
@@ -1693,27 +2551,63 @@ function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
             <TableBody>
               {rows.map((u: any) => (
                 <TableRow key={u.code} className={u.ignored ? "opacity-60" : ""}>
-                  <TableCell className="font-mono">{u.code}{u.ignored ? <Badge variant="outline" className="ml-2">ignored</Badge> : null}</TableCell>
+                  <TableCell className="font-mono">
+                    {u.code}
+                    {u.ignored ? (
+                      <Badge variant="outline" className="ml-2">
+                        ignored
+                      </Badge>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="text-xs">{u.kinds.join(", ")}</TableCell>
                   <TableCell className="text-right">{u.occurrences}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{new Date(u.last_seen).toLocaleString()}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {new Date(u.last_seen).toLocaleString()}
+                  </TableCell>
                   <TableCell>
-                    <Select value={choice[u.code] ?? ""} onValueChange={(v) => setChoice((s) => ({ ...s, [u.code]: v }))}>
-                      <SelectTrigger className="h-8 w-64"><SelectValue placeholder="Choose route…" /></SelectTrigger>
+                    <Select
+                      value={choice[u.code] ?? ""}
+                      onValueChange={(v) => setChoice((s) => ({ ...s, [u.code]: v }))}
+                    >
+                      <SelectTrigger className="h-8 w-64">
+                        <SelectValue placeholder="Choose route…" />
+                      </SelectTrigger>
                       <SelectContent>
                         {routes.map((r) => (
-                          <SelectItem key={r.id} value={r.id}>{r.code} — {r.name} ({r.hub})</SelectItem>
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.code} — {r.name} ({r.hub})
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="default" disabled={busy === `assign:${u.code}` || !choice[u.code]} onClick={() => assign(u.code)}>
-                        {busy === `assign:${u.code}` ? <Loader2 className="w-3 h-3 animate-spin" /> : "Assign"}
+                      <Button
+                        size="sm"
+                        variant="default"
+                        disabled={busy === `assign:${u.code}` || !choice[u.code]}
+                        onClick={() => assign(u.code)}
+                      >
+                        {busy === `assign:${u.code}` ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          "Assign"
+                        )}
                       </Button>
-                      <Button size="sm" variant="outline" disabled={busy === `ignore:${u.code}`} onClick={() => toggleIgnore(u.code, !u.ignored)}>
-                        {busy === `ignore:${u.code}` ? <Loader2 className="w-3 h-3 animate-spin" /> : (u.ignored ? "Un-ignore" : "Ignore")}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy === `ignore:${u.code}`}
+                        onClick={() => toggleIgnore(u.code, !u.ignored)}
+                      >
+                        {busy === `ignore:${u.code}` ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : u.ignored ? (
+                          "Un-ignore"
+                        ) : (
+                          "Ignore"
+                        )}
                       </Button>
                     </div>
                   </TableCell>
@@ -1726,12 +2620,15 @@ function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
 
       {ignored.length > 0 && (
         <div className="text-xs text-muted-foreground mt-3">
-          Currently ignored: {ignored.map((c: string) => (
+          Currently ignored:{" "}
+          {ignored.map((c: string) => (
             <button
               key={c}
               className="font-mono underline decoration-dotted mr-2 hover:text-foreground"
               onClick={() => toggleIgnore(c, false)}
-            >{c}</button>
+            >
+              {c}
+            </button>
           ))}
         </div>
       )}
@@ -1741,7 +2638,10 @@ function UnmatchedRouteCodesCard({ routes }: { routes: RouteRow[] }) {
 
 /* ============ BULK FILL FULL-TRUCK TARGETS ============ */
 
-type BulkFillPatch = Record<string, { cube_full_truck_ft3?: string; weight_full_truck_lbs?: string }>;
+type BulkFillPatch = Record<
+  string,
+  { cube_full_truck_ft3?: string; weight_full_truck_lbs?: string }
+>;
 
 function BulkFillFullTruckCard({
   routes,
@@ -1759,9 +2659,13 @@ function BulkFillFullTruckCard({
   const [onlyBlanks, setOnlyBlanks] = useState(true);
   const [hub, setHub] = useState<string>("all");
 
-  const targets = useMemo(() => routes.filter((r) => hub === "all" || r.hub === hub), [routes, hub]);
+  const targets = useMemo(
+    () => routes.filter((r) => hub === "all" || r.hub === hub),
+    [routes, hub],
+  );
   const preview = useMemo(() => {
-    let willFill = 0, skipped = 0;
+    let willFill = 0,
+      skipped = 0;
     for (const r of targets) {
       const e = routeEdits[r.id];
       const curCube = e?.cube_full_truck_ft3 ?? "";
@@ -1769,7 +2673,8 @@ function BulkFillFullTruckCard({
       let touched = false;
       if (fillCube && (!onlyBlanks || curCube === "")) touched = true;
       if (fillWeight && (!onlyBlanks || curWeight === "")) touched = true;
-      if (touched) willFill += 1; else skipped += 1;
+      if (touched) willFill += 1;
+      else skipped += 1;
     }
     return { willFill, skipped };
   }, [targets, routeEdits, fillCube, fillWeight, onlyBlanks]);
@@ -1777,9 +2682,18 @@ function BulkFillFullTruckCard({
   function apply() {
     const cubeNum = Number(cube);
     const weightNum = Number(weight);
-    if (fillCube && (!Number.isFinite(cubeNum) || cubeNum <= 0)) { toast.error("Cube must be a positive number"); return; }
-    if (fillWeight && (!Number.isFinite(weightNum) || weightNum <= 0)) { toast.error("Weight must be a positive number"); return; }
-    if (!fillCube && !fillWeight) { toast.error("Pick at least one field to fill"); return; }
+    if (fillCube && (!Number.isFinite(cubeNum) || cubeNum <= 0)) {
+      toast.error("Cube must be a positive number");
+      return;
+    }
+    if (fillWeight && (!Number.isFinite(weightNum) || weightNum <= 0)) {
+      toast.error("Weight must be a positive number");
+      return;
+    }
+    if (!fillCube && !fillWeight) {
+      toast.error("Pick at least one field to fill");
+      return;
+    }
     const patch: BulkFillPatch = {};
     for (const r of targets) {
       const e = routeEdits[r.id];
@@ -1787,11 +2701,15 @@ function BulkFillFullTruckCard({
       const curWeight = e?.weight_full_truck_lbs ?? "";
       const p: { cube_full_truck_ft3?: string; weight_full_truck_lbs?: string } = {};
       if (fillCube && (!onlyBlanks || curCube === "")) p.cube_full_truck_ft3 = String(cubeNum);
-      if (fillWeight && (!onlyBlanks || curWeight === "")) p.weight_full_truck_lbs = String(weightNum);
+      if (fillWeight && (!onlyBlanks || curWeight === ""))
+        p.weight_full_truck_lbs = String(weightNum);
       if (Object.keys(p).length > 0) patch[r.id] = p;
     }
     const n = Object.keys(patch).length;
-    if (n === 0) { toast.info("Nothing to fill with these options"); return; }
+    if (n === 0) {
+      toast.info("Nothing to fill with these options");
+      return;
+    }
     onFill(patch);
     toast.success(`Filled ${n} route${n === 1 ? "" : "s"} — click "Save settings" to persist.`);
   }
@@ -1802,7 +2720,10 @@ function BulkFillFullTruckCard({
         <div>
           <div className="text-sm font-medium">Bulk fill full-truck targets</div>
           <div className="text-xs text-muted-foreground mt-1">
-            Populate <code>cube_full_truck_ft3</code> and <code>weight_full_truck_lbs</code> from a shared trailer assumption. Reasonable starting points for a standard 53&apos; dry van: <b>3,800–4,000 ft³</b> usable cube, <b>44,000–46,000 lbs</b> legal payload. Values apply to the edit form below — click <b>Save settings</b> to persist.
+            Populate <code>cube_full_truck_ft3</code> and <code>weight_full_truck_lbs</code> from a
+            shared trailer assumption. Reasonable starting points for a standard 53&apos; dry van:{" "}
+            <b>3,800–4,000 ft³</b> usable cube, <b>44,000–46,000 lbs</b> legal payload. Values apply
+            to the edit form below — click <b>Save settings</b> to persist.
           </div>
         </div>
       </div>
@@ -1812,23 +2733,41 @@ function BulkFillFullTruckCard({
           <Label className="text-xs">Cube (ft³) per full truck</Label>
           <div className="flex items-center gap-2">
             <Switch checked={fillCube} onCheckedChange={setFillCube} />
-            <Input type="number" className="h-8" value={cube} onChange={(e) => setCube(e.target.value)} disabled={!fillCube} />
+            <Input
+              type="number"
+              className="h-8"
+              value={cube}
+              onChange={(e) => setCube(e.target.value)}
+              disabled={!fillCube}
+            />
           </div>
         </div>
         <div>
           <Label className="text-xs">Weight (lbs) per full truck</Label>
           <div className="flex items-center gap-2">
             <Switch checked={fillWeight} onCheckedChange={setFillWeight} />
-            <Input type="number" className="h-8" value={weight} onChange={(e) => setWeight(e.target.value)} disabled={!fillWeight} />
+            <Input
+              type="number"
+              className="h-8"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              disabled={!fillWeight}
+            />
           </div>
         </div>
         <div>
           <Label className="text-xs">Hub filter</Label>
           <Select value={hub} onValueChange={setHub}>
-            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All hubs</SelectItem>
-              {HUB_ORDER.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+              {HUB_ORDER.map((h) => (
+                <SelectItem key={h} value={h}>
+                  {h}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -1836,16 +2775,21 @@ function BulkFillFullTruckCard({
           <Label className="text-xs">Scope</Label>
           <div className="flex items-center gap-2 h-8">
             <Switch checked={onlyBlanks} onCheckedChange={setOnlyBlanks} />
-            <span className="text-xs text-muted-foreground">{onlyBlanks ? "Only blanks" : "Overwrite all"}</span>
+            <span className="text-xs text-muted-foreground">
+              {onlyBlanks ? "Only blanks" : "Overwrite all"}
+            </span>
           </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between">
         <div className="text-xs text-muted-foreground">
-          {targets.length} route{targets.length === 1 ? "" : "s"} in scope · will update <b>{preview.willFill}</b>, skip <b>{preview.skipped}</b>.
+          {targets.length} route{targets.length === 1 ? "" : "s"} in scope · will update{" "}
+          <b>{preview.willFill}</b>, skip <b>{preview.skipped}</b>.
         </div>
-        <Button size="sm" onClick={apply} disabled={preview.willFill === 0}>Fill targets</Button>
+        <Button size="sm" onClick={apply} disabled={preview.willFill === 0}>
+          Fill targets
+        </Button>
       </div>
     </Card>
   );
@@ -1857,11 +2801,21 @@ function CapacityCoverageCard() {
   const covFn = useServerFn(getTruckCapacityCoverage);
   const [days, setDays] = useState(30);
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ["tc-capacity-coverage", days], queryFn: () => covFn({ data: { days } }) });
+  const q = useQuery({
+    queryKey: ["tc-capacity-coverage", days],
+    queryFn: () => covFn({ data: { days } }),
+  });
   const d = q.data;
 
   const overall = d?.overallPct == null ? "—" : `${(d.overallPct * 100).toFixed(1)}%`;
-  const tone = d?.overallPct == null ? "muted" : d.overallPct >= 0.9 ? "green" : d.overallPct >= 0.5 ? "amber" : "red";
+  const tone =
+    d?.overallPct == null
+      ? "muted"
+      : d.overallPct >= 0.9
+        ? "green"
+        : d.overallPct >= 0.5
+          ? "amber"
+          : "red";
   const toneClass =
     tone === "green"
       ? successTextClass
@@ -1877,12 +2831,16 @@ function CapacityCoverageCard() {
         <div>
           <div className="text-sm font-medium">Capacity coverage</div>
           <div className="text-xs text-muted-foreground mt-1">
-            Share of P21 demand rows in the window that got a <code>projected_capacity_frac</code>. Under Kevin&apos;s verified SQL, <code>est_pallets</code> is null, so coverage depends on the route having <b>cube_full_truck_ft3</b> or <b>weight_full_truck_lbs</b>.
+            Share of P21 demand rows in the window that got a <code>projected_capacity_frac</code>.
+            Under Kevin&apos;s verified SQL, <code>est_pallets</code> is null, so coverage depends
+            on the route having <b>cube_full_truck_ft3</b> or <b>weight_full_truck_lbs</b>.
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-            <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-32">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="7">Last 7 days</SelectItem>
               <SelectItem value="30">Last 30 days</SelectItem>
@@ -1890,14 +2848,22 @@ function CapacityCoverageCard() {
               <SelectItem value="180">Last 180 days</SelectItem>
             </SelectContent>
           </Select>
-          <Button size="sm" variant="outline" onClick={() => qc.invalidateQueries({ queryKey: ["tc-capacity-coverage", days] })}>
-            <RefreshCw className="w-4 h-4 mr-1" />Refresh
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => qc.invalidateQueries({ queryKey: ["tc-capacity-coverage", days] })}
+          >
+            <RefreshCw className="w-4 h-4 mr-1" />
+            Refresh
           </Button>
         </div>
       </div>
 
       {q.isLoading ? (
-        <div className="text-xs text-muted-foreground py-4"><Loader2 className="w-4 h-4 animate-spin inline mr-1" />Loading…</div>
+        <div className="text-xs text-muted-foreground py-4">
+          <Loader2 className="w-4 h-4 animate-spin inline mr-1" />
+          Loading…
+        </div>
       ) : !d ? (
         <div className="text-xs text-muted-foreground py-4">No data.</div>
       ) : (
@@ -1906,14 +2872,18 @@ function CapacityCoverageCard() {
             <div className="rounded border p-3">
               <div className="text-xs text-muted-foreground">Overall</div>
               <div className={`text-2xl font-semibold ${toneClass}`}>{overall}</div>
-              <div className="text-xs text-muted-foreground">{d.totalCovered.toLocaleString()} / {d.totalRows.toLocaleString()} rows</div>
+              <div className="text-xs text-muted-foreground">
+                {d.totalCovered.toLocaleString()} / {d.totalRows.toLocaleString()} rows
+              </div>
             </div>
             <div className="rounded border p-3">
               <div className="text-xs text-muted-foreground">Routes missing cube AND weight</div>
               <div className={`text-2xl font-semibold ${destructiveTextClass}`}>
                 {d.missingCubeAndWeight.length}
               </div>
-              <div className="text-xs text-muted-foreground">rows with no way to compute a fraction</div>
+              <div className="text-xs text-muted-foreground">
+                rows with no way to compute a fraction
+              </div>
             </div>
             <div className="rounded border p-3">
               <div className="text-xs text-muted-foreground">Routes with only one target</div>
@@ -1926,7 +2896,9 @@ function CapacityCoverageCard() {
 
           {d.missingCubeAndWeight.length > 0 && (
             <div>
-              <div className="text-xs font-medium mt-2 mb-1">Routes with demand but no cube/weight target</div>
+              <div className="text-xs font-medium mt-2 mb-1">
+                Routes with demand but no cube/weight target
+              </div>
               <div className="overflow-x-auto border rounded">
                 <Table>
                   <TableHeader>
@@ -1943,7 +2915,9 @@ function CapacityCoverageCard() {
                   <TableBody>
                     {d.missingCubeAndWeight.map((r: any) => (
                       <TableRow key={r.id}>
-                        <TableCell className="font-mono text-xs">{r.code} <span className="text-muted-foreground">— {r.name}</span></TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {r.code} <span className="text-muted-foreground">— {r.name}</span>
+                        </TableCell>
                         <TableCell className="text-xs">{r.hub}</TableCell>
                         <TableCell className="text-right">{r.rows}</TableCell>
                         <TableCell className={`text-right ${destructiveTextClass}`}>
@@ -1951,7 +2925,9 @@ function CapacityCoverageCard() {
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">—</TableCell>
                         <TableCell className="text-right text-muted-foreground">—</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{r.pallets_full_truck ?? "—"}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {r.pallets_full_truck ?? "—"}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1962,7 +2938,9 @@ function CapacityCoverageCard() {
 
           {d.partialTargets.length > 0 && (
             <div>
-              <div className="text-xs font-medium mt-2 mb-1">Routes with only one full-truck target</div>
+              <div className="text-xs font-medium mt-2 mb-1">
+                Routes with only one full-truck target
+              </div>
               <div className="overflow-x-auto border rounded">
                 <Table>
                   <TableHeader>
@@ -1978,10 +2956,14 @@ function CapacityCoverageCard() {
                   <TableBody>
                     {d.partialTargets.map((r: any) => (
                       <TableRow key={r.id}>
-                        <TableCell className="font-mono text-xs">{r.code} <span className="text-muted-foreground">— {r.name}</span></TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {r.code} <span className="text-muted-foreground">— {r.name}</span>
+                        </TableCell>
                         <TableCell className="text-xs">{r.hub}</TableCell>
                         <TableCell className="text-right">{r.rows}</TableCell>
-                        <TableCell className="text-right">{r.pct == null ? "—" : `${(r.pct * 100).toFixed(0)}%`}</TableCell>
+                        <TableCell className="text-right">
+                          {r.pct == null ? "—" : `${(r.pct * 100).toFixed(0)}%`}
+                        </TableCell>
                         <TableCell className="text-right">
                           {r.cube_full_truck_ft3 ?? (
                             <span className={destructiveTextClass}>missing</span>
@@ -2004,16 +2986,20 @@ function CapacityCoverageCard() {
             <div className="text-xs text-muted-foreground">
               <b>Also missing targets (no demand yet in window):</b>{" "}
               {d.noDemandNoTargets.map((r: any) => (
-                <span key={r.id} className="font-mono mr-2">{r.code}</span>
+                <span key={r.id} className="font-mono mr-2">
+                  {r.code}
+                </span>
               ))}
             </div>
           )}
 
-          {d.totalRows > 0 && d.missingCubeAndWeight.length === 0 && d.partialTargets.length === 0 && (
+          {d.totalRows > 0 &&
+            d.missingCubeAndWeight.length === 0 &&
+            d.partialTargets.length === 0 && (
               <div className={`text-xs ${successTextClass}`}>
                 Every route with demand in the window has both cube and weight targets set.
               </div>
-          )}
+            )}
         </>
       )}
     </Card>
@@ -2032,20 +3018,41 @@ function SnapshotResultView({ result }: { result: any }) {
           Status:{" "}
           <b className={r.ok ? successTextClass : destructiveTextClass}>{r.ok ? "OK" : "FAILED"}</b>
         </span>
-        <span>Kind: <b>{r.kind}</b></span>
-        <span>Pulled: <b>{r.rowsPulled}</b></span>
-        <span>Written: <b>{r.snapshotsWritten}</b></span>
+        <span>
+          Kind: <b>{r.kind}</b>
+        </span>
+        <span>
+          Pulled: <b>{r.rowsPulled}</b>
+        </span>
+        <span>
+          Written: <b>{r.snapshotsWritten}</b>
+        </span>
         {r.skipped && <span className={warningTextClass}>skipped</span>}
       </div>
       {r.error && <div className={destructiveTextClass}>Error: {r.error}</div>}
-      <div>Unmatched codes: {r.unmatchedRouteCodes?.length ? <code>{r.unmatchedRouteCodes.join(", ")}</code> : "—"}</div>
+      <div>
+        Unmatched codes:{" "}
+        {r.unmatchedRouteCodes?.length ? <code>{r.unmatchedRouteCodes.join(", ")}</code> : "—"}
+      </div>
       {readout && (
         <div className="space-y-1">
           <div className="flex flex-wrap gap-x-4 gap-y-1">
-            <span>Demand rows: <b>{readout.demandRowsWritten}</b></span>
-            <span>With projection: <b>{readout.rowsWithProjection}</b></span>
-            <span>Frac min/avg/max: <b>{fmt(readout.projectedFracMin)} / {fmt(readout.projectedFracAvg)} / {fmt(readout.projectedFracMax)}</b></span>
-            <span>At 1.5 cap: <b>{readout.rowsAtCap_1_5}</b></span>
+            <span>
+              Demand rows: <b>{readout.demandRowsWritten}</b>
+            </span>
+            <span>
+              With projection: <b>{readout.rowsWithProjection}</b>
+            </span>
+            <span>
+              Frac min/avg/max:{" "}
+              <b>
+                {fmt(readout.projectedFracMin)} / {fmt(readout.projectedFracAvg)} /{" "}
+                {fmt(readout.projectedFracMax)}
+              </b>
+            </span>
+            <span>
+              At 1.5 cap: <b>{readout.rowsAtCap_1_5}</b>
+            </span>
           </div>
           {readout.top5ByProjectedFrac?.length > 0 && (
             <div>
@@ -2083,7 +3090,11 @@ function SnapshotResultView({ result }: { result: any }) {
       {warnings.length > 0 && (
         <div className={`p-2 ${warningNoticeClass}`}>
           <div className="font-medium">Plausibility warnings</div>
-          <ul className="list-disc ml-4">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+          <ul className="list-disc ml-4">
+            {warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
         </div>
       )}
       {r.ok && warnings.length === 0 && readout && (
@@ -2092,7 +3103,6 @@ function SnapshotResultView({ result }: { result: any }) {
     </div>
   );
 }
-
 
 /* ==================== ROUTE → SALESPERSON ASSIGNMENTS ==================== */
 
@@ -2110,7 +3120,11 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
   const p21Q = useQuery({
     queryKey: ["tc-p21-reps"],
     queryFn: async () => {
-      try { return await p21Fn(); } catch { return { reps: [] as any[] }; }
+      try {
+        return await p21Fn();
+      } catch {
+        return { reps: [] as any[] };
+      }
     },
     retry: false,
   });
@@ -2120,11 +3134,14 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
   const repOptions = useMemo(() => {
     const m = new Map<string, string | null>();
     for (const r of ((p21Q.data as any)?.reps ?? []) as any[]) {
-      const code = String(r.rep_code ?? r.salesrep_id ?? r.code ?? "").trim().toUpperCase();
+      const code = String(r.rep_code ?? r.salesrep_id ?? r.code ?? "")
+        .trim()
+        .toUpperCase();
       if (code) m.set(code, r.rep_name ?? r.name ?? null);
     }
     for (const r of knownQ.data?.reps ?? []) if (!m.has(r.rep_code)) m.set(r.rep_code, r.rep_name);
-    return Array.from(m.entries()).map(([rep_code, rep_name]) => ({ rep_code, rep_name }))
+    return Array.from(m.entries())
+      .map(([rep_code, rep_name]) => ({ rep_code, rep_name }))
       .sort((a, b) => a.rep_code.localeCompare(b.rep_code));
   }, [p21Q.data, knownQ.data]);
 
@@ -2143,11 +3160,17 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
   };
 
   async function add() {
-    if (!addRoute || !addRep) { toast.error("Pick a route and a salesperson"); return; }
+    if (!addRoute || !addRep) {
+      toast.error("Pick a route and a salesperson");
+      return;
+    }
     const existing = mappings.filter((m) => m.route_code.toUpperCase() === addRoute.toUpperCase());
     const next = [
       ...existing.map((m) => ({ rep_code: m.rep_code, rep_name: m.rep_name })),
-      { rep_code: addRep, rep_name: repOptions.find((r) => r.rep_code === addRep)?.rep_name ?? null },
+      {
+        rep_code: addRep,
+        rep_name: repOptions.find((r) => r.rep_code === addRep)?.rep_name ?? null,
+      },
     ];
     setBusy(true);
     try {
@@ -2155,26 +3178,38 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
       toast.success(`${addRep} assigned to ${addRoute}`);
       setAddRep("");
       invalidate();
-    } catch (e: any) { toast.error(e?.message ?? "Failed to assign"); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to assign");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(id: string) {
     setBusy(true);
-    try { await delFn({ data: { id } }); invalidate(); }
-    catch (e: any) { toast.error(e?.message ?? "Failed to remove"); }
-    finally { setBusy(false); }
+    try {
+      await delFn({ data: { id } });
+      invalidate();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to remove");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function runImport() {
-    setBusy(true); setImportResult(null);
+    setBusy(true);
+    setImportResult(null);
     try {
       const res = await importFn({ data: { text: pasteText, replaceAll } });
       setImportResult(res);
       toast.success(`Imported ${res.inserted} assignment${res.inserted === 1 ? "" : "s"}`);
       invalidate();
-    } catch (e: any) { toast.error(e?.message ?? "Import failed"); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Import failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const byRoute = useMemo(() => {
@@ -2190,9 +3225,12 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
     <Card className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h3 className="font-semibold flex items-center gap-2"><Users className="w-4 h-4" /> Route salespeople</h3>
+          <h3 className="font-semibold flex items-center gap-2">
+            <Users className="w-4 h-4" /> Route salespeople
+          </h3>
           <p className="text-xs text-muted-foreground">
-            Assign one or more salespeople per route. Reps with the sales rep role only see their own routes.
+            Assign one or more salespeople per route. Reps with the sales rep role only see their
+            own routes.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => setPasteOpen(true)}>
@@ -2204,10 +3242,14 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
         <div>
           <Label className="text-xs">Route</Label>
           <Select value={addRoute} onValueChange={setAddRoute}>
-            <SelectTrigger className="w-64"><SelectValue placeholder="Select route" /></SelectTrigger>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Select route" />
+            </SelectTrigger>
             <SelectContent>
               {routes.map((r) => (
-                <SelectItem key={r.id} value={r.code}>{r.code} — {r.hub} · {r.name}</SelectItem>
+                <SelectItem key={r.id} value={r.code}>
+                  {r.code} — {r.hub} · {r.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -2215,18 +3257,26 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
         <div>
           <Label className="text-xs">Salesperson</Label>
           <Select value={addRep} onValueChange={setAddRep}>
-            <SelectTrigger className="w-64"><SelectValue placeholder="Select rep" /></SelectTrigger>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Select rep" />
+            </SelectTrigger>
             <SelectContent>
               {repOptions.map((r) => (
                 <SelectItem key={r.rep_code} value={r.rep_code}>
-                  {r.rep_code}{r.rep_name ? ` — ${r.rep_name}` : ""}
+                  {r.rep_code}
+                  {r.rep_name ? ` — ${r.rep_name}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
         <Button size="sm" onClick={add} disabled={busy}>
-          {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}Assign
+          {busy ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-1" />
+          ) : (
+            <Plus className="w-4 h-4 mr-1" />
+          )}
+          Assign
         </Button>
       </div>
 
@@ -2244,14 +3294,18 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
               <TableRow key={r.id}>
                 <TableCell>
                   <div className="font-medium">{r.code}</div>
-                  <div className="text-xs text-muted-foreground">{r.hub} · {r.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {r.hub} · {r.name}
+                  </div>
                 </TableCell>
                 <TableCell>
-                  {assigned.length === 0
-                    ? <span className="text-xs text-muted-foreground">Unassigned</span>
-                    : assigned.map((m) => (
+                  {assigned.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Unassigned</span>
+                  ) : (
+                    assigned.map((m) => (
                       <Badge key={m.id} variant="outline" className="mr-1 mb-1 gap-1">
-                        {m.rep_code}{m.rep_name ? ` · ${m.rep_name}` : ""}
+                        {m.rep_code}
+                        {m.rep_name ? ` · ${m.rep_name}` : ""}
                         <button
                           type="button"
                           onClick={() => remove(m.id)}
@@ -2260,7 +3314,8 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </Badge>
-                    ))}
+                    ))
+                  )}
                 </TableCell>
               </TableRow>
             );
@@ -2270,28 +3325,41 @@ function RouteSalespeopleCard({ routes }: { routes: RouteRow[] }) {
 
       <Dialog open={pasteOpen} onOpenChange={setPasteOpen}>
         <DialogContent className="max-w-xl">
-          <DialogHeader><DialogTitle>Paste route / salesperson pairs</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Paste route / salesperson pairs</DialogTitle>
+          </DialogHeader>
           <p className="text-xs text-muted-foreground">
-            One pair per line: <code>route_code, rep_code[, rep name]</code>. Tabs, commas, semicolons and pipes all work.
+            One pair per line: <code>route_code, rep_code[, rep name]</code>. Tabs, commas,
+            semicolons and pipes all work.
           </p>
-          <Textarea rows={10} value={pasteText} onChange={(e) => setPasteText(e.target.value)}
-            placeholder={"DAL-1, 101, Jane Doe\nBHM-2, 214"} />
+          <Textarea
+            rows={10}
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            placeholder={"DAL-1, 101, Jane Doe\nBHM-2, 214"}
+          />
           <div className="flex items-center gap-2">
             <Switch id="rs-replace" checked={replaceAll} onCheckedChange={setReplaceAll} />
-            <Label htmlFor="rs-replace" className="text-xs">Replace all existing assignments</Label>
+            <Label htmlFor="rs-replace" className="text-xs">
+              Replace all existing assignments
+            </Label>
           </div>
           {importResult && (
             <div className="text-xs">
               Imported {importResult.inserted}, skipped {importResult.skipped}.
               {importResult.errors?.length ? (
                 <ul className={`list-disc ml-4 mt-1 ${destructiveTextClass}`}>
-                  {importResult.errors.map((m: string, i: number) => <li key={i}>{m}</li>)}
+                  {importResult.errors.map((m: string, i: number) => (
+                    <li key={i}>{m}</li>
+                  ))}
                 </ul>
               ) : null}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPasteOpen(false)}>Close</Button>
+            <Button variant="outline" onClick={() => setPasteOpen(false)}>
+              Close
+            </Button>
             <Button onClick={runImport} disabled={busy || !pasteText.trim()}>
               {busy && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}Import
             </Button>

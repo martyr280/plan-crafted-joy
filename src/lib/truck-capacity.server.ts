@@ -26,7 +26,6 @@ export type { ForecastDay, ForecastResponse, ServingMethod } from "./truck-capac
 export { trainAndMaybePromote } from "./truck-capacity/train";
 export type { TrainSummary } from "./truck-capacity/train";
 
-
 export const DEFAULT_P21_SQL = `-- Truck Capacity :: open routed demand snapshot (backlog included).
 -- Verified against NDI production Sep 2026 (310 rows / 690 open routed orders).
 --
@@ -81,7 +80,6 @@ SELECT sr.route_code                                                        AS r
        CASE WHEN l.required_date < CAST(GETDATE() AS DATE) OR l.required_date IS NULL
             THEN CAST(GETDATE() AS DATE) ELSE CAST(l.required_date AS DATE) END,
        h.ship2_city, h.ship2_state, h.ship2_zip;`;
-
 
 // -----------------------------------------------------------------------------
 // Phase-2 transfer demand.
@@ -139,9 +137,7 @@ SELECT (CAST(fl.location_id AS varchar(20)) + '->' + CAST(tl.location_id AS varc
    AND h.required_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 28, CAST(GETDATE() AS DATE))
  GROUP BY fl.location_id, tl.location_id, CAST(h.required_date AS DATE);`;
 
-
 // (Route / Run types defined below alongside the forecast helper.)
-
 
 /* ============================== FORECAST DESCRIPTION ============================== */
 
@@ -175,21 +171,36 @@ export const FLAG_AT_CAPACITY = 0.9;
 export const FLAG_CONSOLIDATION = 0.3;
 
 export type Route = {
-  id: string; code: string; name: string; hub: string; sort_order: number;
-  active: boolean; has_vendor_pickup: boolean; truck_type: string | null;
-  pallets_full_truck: number | null; typical_dow: number[] | null;
+  id: string;
+  code: string;
+  name: string;
+  hub: string;
+  sort_order: number;
+  active: boolean;
+  has_vendor_pickup: boolean;
+  truck_type: string | null;
+  pallets_full_truck: number | null;
+  typical_dow: number[] | null;
   ship_to_zip_prefixes: string[] | null;
-  p21_route_code: string | null; cutoff_time: string | null;
-  cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
+  p21_route_code: string | null;
+  cutoff_time: string | null;
+  cube_full_truck_ft3: number | null;
+  weight_full_truck_lbs: number | null;
   p21_cities: string[] | null;
 };
 
-
 export type Run = {
-  id: string; route_id: string; run_date: string; run_seq: number;
-  capacity_frac: number; vendor_pickup_frac: number | null;
-  driver: string | null; pallet_count: number | null; returned_pallets: number | null;
-  notes: string | null; source: string;
+  id: string;
+  route_id: string;
+  run_date: string;
+  run_seq: number;
+  capacity_frac: number;
+  vendor_pickup_frac: number | null;
+  driver: string | null;
+  pallet_count: number | null;
+  returned_pallets: number | null;
+  notes: string | null;
+  source: string;
 };
 
 /**
@@ -200,7 +211,10 @@ export type Run = {
  */
 export async function computeBaselineForecastForRoute(routeId: string, horizonDays = 28) {
   const { data: route } = await supabaseAdmin
-    .from("truck_capacity_routes").select("*").eq("id", routeId).maybeSingle();
+    .from("truck_capacity_routes")
+    .select("*")
+    .eq("id", routeId)
+    .maybeSingle();
   if (!route) return { route: null, days: [] };
   const today = dateStrInTz(new Date());
   const from = addDaysISO(today, -84);
@@ -208,29 +222,37 @@ export async function computeBaselineForecastForRoute(routeId: string, horizonDa
   const runsRaw = await fetchAllRows<any>(
     () =>
       supabaseAdmin
-        .from("truck_capacity_runs").select("run_date, capacity_frac", { count: "exact" })
+        .from("truck_capacity_runs")
+        .select("run_date, capacity_frac", { count: "exact" })
         // NULL capacity = no-run marker; excluded from the baseline.
         .not("capacity_frac", "is", null)
-        .eq("route_id", routeId).gte("run_date", from) as any,
+        .eq("route_id", routeId)
+        .gte("run_date", from) as any,
     { label: "baseline route runs", orderBy: [{ column: "run_date" }, { column: "id" }] },
   );
-  const routeRuns = (runsRaw ?? []).map((r: any) => ({ date: r.run_date, cap: Number(r.capacity_frac) }));
+  const routeRuns = (runsRaw ?? []).map((r: any) => ({
+    date: r.run_date,
+    cap: Number(r.capacity_frac),
+  }));
   const hubRuns = await fetchAllRows<any>(
     () =>
       supabaseAdmin
         .from("truck_capacity_runs")
         .select("capacity_frac, truck_capacity_routes!inner(hub)", { count: "exact" })
         .not("capacity_frac", "is", null)
-        .gte("run_date", from).eq("truck_capacity_routes.hub", route.hub) as any,
+        .gte("run_date", from)
+        .eq("truck_capacity_routes.hub", route.hub) as any,
     { label: "baseline hub runs", orderBy: [{ column: "run_date" }, { column: "id" }] },
   );
   const days = baselineFromSnapshot(
-    routeRuns, (hubRuns ?? []).map((r: any) => Number(r.capacity_frac)),
-    today, horizonDays, route.typical_dow ?? [],
+    routeRuns,
+    (hubRuns ?? []).map((r: any) => Number(r.capacity_frac)),
+    today,
+    horizonDays,
+    route.typical_dow ?? [],
   );
   return { route, days };
 }
-
 
 /* ============================== P21 SNAPSHOT ============================== */
 
@@ -251,11 +273,7 @@ const TRANSFER_QTY_CANDIDATES = [
   "qty",
 ] as const;
 
-async function discoverColumns(
-  table: string,
-  slug: string,
-  timeoutMs: number,
-): Promise<string[]> {
+async function discoverColumns(table: string, slug: string, timeoutMs: number): Promise<string[]> {
   const introspectSql =
     "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS " +
     `WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '${table}'`;
@@ -273,7 +291,11 @@ async function discoverColumns(
 async function discoverTransferQtyColumn(
   timeoutMs: number,
 ): Promise<{ col: string | null; found: string[] }> {
-  const found = await discoverColumns("transfer_line", "truck-capacity-p21-transfers-schema", timeoutMs);
+  const found = await discoverColumns(
+    "transfer_line",
+    "truck-capacity-p21-transfers-schema",
+    timeoutMs,
+  );
   const set = new Set(found);
   const col = TRANSFER_QTY_CANDIDATES.find((c) => set.has(c)) ?? null;
   return { col, found };
@@ -314,20 +336,28 @@ function neutralizeMissingFlagPredicates(
   return { sql: out, neutralized };
 }
 
-
 export async function runP21Snapshot(
   opts: { timeoutMs?: number; kind?: SnapshotKind } = {},
 ): Promise<{
-  ok: boolean; rowsPulled: number; snapshotsWritten: number;
-  unmatchedRouteCodes: string[]; skipped: boolean; error?: string; kind: SnapshotKind;
+  ok: boolean;
+  rowsPulled: number;
+  snapshotsWritten: number;
+  unmatchedRouteCodes: string[];
+  skipped: boolean;
+  error?: string;
+  kind: SnapshotKind;
 }> {
   const timeoutMs = opts.timeoutMs ?? 90_000;
   const kind: SnapshotKind = opts.kind ?? "orders";
   const { data: settings } = await supabaseAdmin
-    .from("truck_capacity_settings").select("*").eq("singleton", true).maybeSingle();
-  const configuredSql = kind === "transfers"
-    ? ((settings as any)?.p21_transfer_sql ?? "")
-    : ((settings as any)?.p21_sql ?? "");
+    .from("truck_capacity_settings")
+    .select("*")
+    .eq("singleton", true)
+    .maybeSingle();
+  const configuredSql =
+    kind === "transfers"
+      ? ((settings as any)?.p21_transfer_sql ?? "")
+      : ((settings as any)?.p21_sql ?? "");
   const defaultSql = kind === "transfers" ? DEFAULT_P21_TRANSFER_SQL : DEFAULT_P21_SQL;
   let sqlText = String(configuredSql).trim() || defaultSql;
   const slug = kind === "transfers" ? "truck-capacity-p21-transfers" : "truck-capacity-p21";
@@ -345,7 +375,15 @@ export async function runP21Snapshot(
       message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
       metadata: { stage: "validate", kind },
     });
-    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    return {
+      ok: false,
+      rowsPulled: 0,
+      snapshotsWritten: 0,
+      unmatchedRouteCodes: [],
+      skipped: false,
+      error,
+      kind,
+    };
   }
 
   // Contract check on the SQL text itself — confirms every required output
@@ -361,7 +399,15 @@ export async function runP21Snapshot(
         message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
         metadata: { stage: "validate_columns", kind, errors: textCheck.errors },
       });
-      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+      return {
+        ok: false,
+        rowsPulled: 0,
+        snapshotsWritten: 0,
+        unmatchedRouteCodes: [],
+        skipped: false,
+        error,
+        kind,
+      };
     }
   }
 
@@ -375,7 +421,11 @@ export async function runP21Snapshot(
     let hdrCols: string[];
     try {
       discovered = await discoverTransferQtyColumn(timeoutMs);
-      hdrCols = await discoverColumns("transfer_hdr", "truck-capacity-p21-transfers-hdr-schema", timeoutMs);
+      hdrCols = await discoverColumns(
+        "transfer_hdr",
+        "truck-capacity-p21-transfers-hdr-schema",
+        timeoutMs,
+      );
     } catch (e: any) {
       const error = `transfer schema discovery failed: ${e?.message ?? String(e)}`;
       await supabaseAdmin.from("activity_events").insert({
@@ -384,7 +434,15 @@ export async function runP21Snapshot(
         message: `Truck Capacity P21 transfers snapshot rejected: ${error}`,
         metadata: { stage: "discover_schema", kind },
       });
-      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+      return {
+        ok: false,
+        rowsPulled: 0,
+        snapshotsWritten: 0,
+        unmatchedRouteCodes: [],
+        skipped: false,
+        error,
+        kind,
+      };
     }
     if (!discovered.col) {
       const error =
@@ -396,7 +454,15 @@ export async function runP21Snapshot(
         message: `Truck Capacity P21 transfers snapshot rejected: ${error}`,
         metadata: { stage: "discover_schema", kind, columns_found: discovered.found },
       });
-      return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+      return {
+        ok: false,
+        rowsPulled: 0,
+        snapshotsWritten: 0,
+        unmatchedRouteCodes: [],
+        skipped: false,
+        error,
+        kind,
+      };
     }
     // Substitute any candidate token referenced as `l.<cand>` (the transfer_line
     // alias used in both the default SQL and any admin-authored SQL that
@@ -431,17 +497,19 @@ export async function runP21Snapshot(
     });
   }
 
-
-
   const { data: routes } = await supabaseAdmin
     .from("truck_capacity_routes")
-    .select("id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs");
+    .select(
+      "id, code, p21_route_code, p21_cities, p21_states, ship_to_zip_prefixes, typical_dow, sort_order, pallets_full_truck, cube_full_truck_ft3, weight_full_truck_lbs",
+    );
 
   // Active cutoffs per route — used to roll each demand row forward to the
   // next run date the route can actually ship on. Routes with no active
   // cutoffs (the *-SPECIAL routes) keep their raw ship date.
   const { data: cutoffData } = await supabaseAdmin
-    .from("route_cutoffs").select("*").eq("active", true);
+    .from("route_cutoffs")
+    .select("*")
+    .eq("active", true);
   const cutoffsByRoute = new Map<string, RouteCutoff[]>();
   for (const c of (cutoffData ?? []) as unknown as RouteCutoff[]) {
     const list = cutoffsByRoute.get(c.route_id) ?? [];
@@ -461,7 +529,6 @@ export async function runP21Snapshot(
   let rolledForwardCount = 0;
   let backlogRows = 0;
   const todayLocal = dateStrInTz(now);
-
 
   // Build code → claimants[] map. p21_route_code may be a comma-separated list
   // (e.g. "ARK01,ARK02"), and a single P21 code may legitimately be claimed
@@ -488,13 +555,19 @@ export async function runP21Snapshot(
   // on another route).
   for (const [key, arr] of codeToRoutes) {
     const maxP = Math.max(...arr.map((x) => x._priority));
-    codeToRoutes.set(key, arr.filter((x) => x._priority === maxP));
+    codeToRoutes.set(
+      key,
+      arr.filter((x) => x._priority === maxP),
+    );
   }
-
 
   let rows: any[] = [];
   try {
-    const { result } = await runJob("sql.select", { sql: stripLeadingSqlComments(sqlText), params: {}, slug }, timeoutMs);
+    const { result } = await runJob(
+      "sql.select",
+      { sql: stripLeadingSqlComments(sqlText), params: {}, slug },
+      timeoutMs,
+    );
     rows = ((result as any)?.rows ?? []) as any[];
   } catch (e: any) {
     const error = e?.message ?? String(e);
@@ -504,13 +577,28 @@ export async function runP21Snapshot(
       message: `Truck Capacity P21 ${kindLabel} snapshot failed: ${error}`,
       metadata: { stage: "execute", kind },
     });
-    return { ok: false, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+    return {
+      ok: false,
+      rowsPulled: 0,
+      snapshotsWritten: 0,
+      unmatchedRouteCodes: [],
+      skipped: false,
+      error,
+      kind,
+    };
   }
 
   // Zero rows against a well-formed query (e.g. the WHERE 1=0 stub) is a valid
   // no-op, not an error.
   if (rows.length === 0) {
-    return { ok: true, rowsPulled: 0, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: true, kind };
+    return {
+      ok: true,
+      rowsPulled: 0,
+      snapshotsWritten: 0,
+      unmatchedRouteCodes: [],
+      skipped: true,
+      kind,
+    };
   }
 
   // Runtime output-shape check. If the bridge returned rows whose columns
@@ -524,9 +612,23 @@ export async function runP21Snapshot(
         event_type: "truck_capacity.snapshot_failed",
         entity_type: "truck_capacity_p21_demand",
         message: `Truck Capacity P21 ${kindLabel} snapshot rejected: ${error}`,
-        metadata: { stage: "validate_output", kind, errors: outCheck.errors, warnings: outCheck.warnings, sampleKeys: Object.keys(rows[0] ?? {}) },
+        metadata: {
+          stage: "validate_output",
+          kind,
+          errors: outCheck.errors,
+          warnings: outCheck.warnings,
+          sampleKeys: Object.keys(rows[0] ?? {}),
+        },
       });
-      return { ok: false, rowsPulled: rows.length, snapshotsWritten: 0, unmatchedRouteCodes: [], skipped: false, error, kind };
+      return {
+        ok: false,
+        rowsPulled: rows.length,
+        snapshotsWritten: 0,
+        unmatchedRouteCodes: [],
+        skipped: false,
+        error,
+        kind,
+      };
     }
     if (outCheck.warnings.length > 0) {
       await supabaseAdmin.from("activity_events").insert({
@@ -557,14 +659,14 @@ export async function runP21Snapshot(
     if (v == null) return null;
     let s = String(v).trim();
     if (!s) return null;
-    s = s.replace(/[,\s]+[A-Za-z]{2}\s*$/, "");    // trailing state
+    s = s.replace(/[,\s]+[A-Za-z]{2}\s*$/, ""); // trailing state
     s = s.toLowerCase();
-    s = s.replace(/\./g, " ");                      // "St." → "st "
+    s = s.replace(/\./g, " "); // "St." → "st "
     s = s.replace(/\bst\b/g, "saint");
     s = s.replace(/\bste\b/g, "sainte");
     s = s.replace(/\bft\b/g, "fort");
     s = s.replace(/\bmt\b/g, "mount");
-    s = s.replace(/[^a-z0-9\s-]/g, " ");            // drop punctuation
+    s = s.replace(/[^a-z0-9\s-]/g, " "); // drop punctuation
     s = s.replace(/\s+/g, " ").trim();
     return s || null;
   };
@@ -595,12 +697,20 @@ export async function runP21Snapshot(
   const ambiguousResolved = new Map<string, { kept: string[]; dropped: string[] }>();
   // Aggregate to (route_id, ship_date) — an optional ship_city column can
   // produce many rows per route/date that must be summed before insert.
-  const agg = new Map<string, {
-    route_id: string; ship_date: string;
-    order_count: number; total_weight_lbs: number | null;
-    total_cube_ft: number | null; est_pallets: number | null;
-    pallets_full_truck: number | null; cube_full_truck_ft3: number | null; weight_full_truck_lbs: number | null;
-  }>();
+  const agg = new Map<
+    string,
+    {
+      route_id: string;
+      ship_date: string;
+      order_count: number;
+      total_weight_lbs: number | null;
+      total_cube_ft: number | null;
+      est_pallets: number | null;
+      pallets_full_truck: number | null;
+      cube_full_truck_ft3: number | null;
+      weight_full_truck_lbs: number | null;
+    }
+  >();
   const addNullable = (a: number | null, b: number | null): number | null =>
     a == null && b == null ? null : (a ?? 0) + (b ?? 0);
 
@@ -613,17 +723,28 @@ export async function runP21Snapshot(
   // row, NOT reported as unmatched). Two sources, unioned:
   //   • ignored_p21_route_codes — per-code toggles from the Unmatched Codes UI
   //   • excluded_p21_codes — permanent exclusions (per Joe: WCALL, KCKS1)
-  const ignoredSet = new Set([
-    ...(((settings as any)?.ignored_p21_route_codes ?? []) as string[]),
-    ...(((settings as any)?.excluded_p21_codes ?? []) as string[]),
-  ].map((s) => String(s ?? "").trim().toLowerCase()).filter(Boolean));
+  const ignoredSet = new Set(
+    [
+      ...(((settings as any)?.ignored_p21_route_codes ?? []) as string[]),
+      ...(((settings as any)?.excluded_p21_codes ?? []) as string[]),
+    ]
+      .map((s) =>
+        String(s ?? "")
+          .trim()
+          .toLowerCase(),
+      )
+      .filter(Boolean),
+  );
   for (const r of rows) {
     const code = String(r.route_code ?? "").trim();
     const ship = iso(r.ship_date);
     if (!code || !ship) continue;
     if (ignoredSet.has(code.toLowerCase())) continue;
     const claimants = codeToRoutes.get(code.toLowerCase());
-    if (!claimants || claimants.length === 0) { unmatched.add(code); continue; }
+    if (!claimants || claimants.length === 0) {
+      unmatched.add(code);
+      continue;
+    }
 
     let route: any;
     if (claimants.length === 1) {
@@ -636,38 +757,50 @@ export async function runP21Snapshot(
       let cands = claimants;
       const city = normCity(r.ship_city);
       if (city) {
-        cands = narrow(cands, (c) => Array.isArray(c.p21_cities)
-          && c.p21_cities.some((x: string) => normCity(x) === city));
+        cands = narrow(
+          cands,
+          (c) =>
+            Array.isArray(c.p21_cities) && c.p21_cities.some((x: string) => normCity(x) === city),
+        );
       }
       if (cands.length > 1) {
         const zip = normZip(r.ship_zip);
         if (zip) {
-          cands = narrow(cands, (c) => Array.isArray(c.ship_to_zip_prefixes)
-            && c.ship_to_zip_prefixes.length > 0
-            && zipMatches(zip, c.ship_to_zip_prefixes));
+          cands = narrow(
+            cands,
+            (c) =>
+              Array.isArray(c.ship_to_zip_prefixes) &&
+              c.ship_to_zip_prefixes.length > 0 &&
+              zipMatches(zip, c.ship_to_zip_prefixes),
+          );
         }
       }
       if (cands.length > 1) {
         const st = normState(r.ship_state);
         if (st) {
-          cands = narrow(cands, (c) => Array.isArray(c.p21_states)
-            && c.p21_states.some((x: string) => normState(x) === st));
+          cands = narrow(
+            cands,
+            (c) =>
+              Array.isArray(c.p21_states) && c.p21_states.some((x: string) => normState(x) === st),
+          );
         }
       }
       if (cands.length > 1) {
         const dow = new Date(ship + "T00:00:00Z").getUTCDay();
-        cands = narrow(cands, (c) => Array.isArray(c.typical_dow)
-          && c.typical_dow.includes(dow));
+        cands = narrow(cands, (c) => Array.isArray(c.typical_dow) && c.typical_dow.includes(dow));
       }
       if (cands.length === 1) {
         route = cands[0];
       } else {
-        const sorted = [...cands].sort((a, b) =>
-          (a.sort_order ?? Number.POSITIVE_INFINITY) - (b.sort_order ?? Number.POSITIVE_INFINITY));
+        const sorted = [...cands].sort(
+          (a, b) =>
+            (a.sort_order ?? Number.POSITIVE_INFINITY) - (b.sort_order ?? Number.POSITIVE_INFINITY),
+        );
         route = sorted[0];
         const entry = ambiguousResolved.get(code) ?? { kept: [], dropped: [] };
         if (!entry.kept.includes(route.code)) entry.kept.push(route.code);
-        for (const c of sorted.slice(1)) if (!entry.dropped.includes(c.code)) entry.dropped.push(c.code);
+        for (const c of sorted.slice(1))
+          if (!entry.dropped.includes(c.code)) entry.dropped.push(c.code);
         ambiguousResolved.set(code, entry);
       }
     }
@@ -688,20 +821,26 @@ export async function runP21Snapshot(
       prev.total_cube_ft = addNullable(prev.total_cube_ft, cube);
     } else {
       agg.set(key, {
-        route_id: route.id, ship_date: rolled,
-        order_count: oc, total_weight_lbs: weight,
+        route_id: route.id,
+        ship_date: rolled,
+        order_count: oc,
+        total_weight_lbs: weight,
         total_cube_ft: cube,
         est_pallets: null,
         pallets_full_truck: route.pallets_full_truck,
-        cube_full_truck_ft3: route.cube_full_truck_ft3 == null ? null : Number(route.cube_full_truck_ft3),
-        weight_full_truck_lbs: route.weight_full_truck_lbs == null ? null : Number(route.weight_full_truck_lbs),
+        cube_full_truck_ft3:
+          route.cube_full_truck_ft3 == null ? null : Number(route.cube_full_truck_ft3),
+        weight_full_truck_lbs:
+          route.weight_full_truck_lbs == null ? null : Number(route.weight_full_truck_lbs),
       });
     }
   }
 
   if (ambiguousResolved.size > 0) {
     const collisions = Array.from(ambiguousResolved.entries()).map(([code, v]) => ({
-      code, kept: v.kept, dropped: v.dropped,
+      code,
+      kept: v.kept,
+      dropped: v.dropped,
     }));
     await supabaseAdmin.from("activity_events").insert({
       event_type: "truck_capacity.route_code_ambiguous",
@@ -742,7 +881,6 @@ export async function runP21Snapshot(
     });
   }
 
-
   let written = 0;
   try {
     for (let i = 0; i < inserts.length; i += 500) {
@@ -759,19 +897,39 @@ export async function runP21Snapshot(
       message: `Truck Capacity P21 ${kindLabel} snapshot insert failed: ${error}`,
       metadata: { stage: "insert", written, kind },
     });
-    return { ok: false, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, error, kind };
+    return {
+      ok: false,
+      rowsPulled: rows.length,
+      snapshotsWritten: written,
+      unmatchedRouteCodes: Array.from(unmatched),
+      skipped: false,
+      error,
+      kind,
+    };
   }
 
   await supabaseAdmin.from("activity_events").insert({
     event_type: "truck_capacity.p21_snapshot",
     entity_type: "truck_capacity_p21_demand",
     message: `Truck Capacity P21 ${kindLabel} snapshot: ${written} rows, ${unmatched.size} unmatched route codes (${rolledForwardCount} rolled to next run)`,
-    metadata: { written, unmatched: Array.from(unmatched), kind, rolled_forward: rolledForwardCount, backlog_rows: backlogRows },
+    metadata: {
+      written,
+      unmatched: Array.from(unmatched),
+      kind,
+      rolled_forward: rolledForwardCount,
+      backlog_rows: backlogRows,
+    },
   });
 
-  return { ok: true, rowsPulled: rows.length, snapshotsWritten: written, unmatchedRouteCodes: Array.from(unmatched), skipped: false, kind };
+  return {
+    ok: true,
+    rowsPulled: rows.length,
+    snapshotsWritten: written,
+    unmatchedRouteCodes: Array.from(unmatched),
+    skipped: false,
+    kind,
+  };
 }
-
 
 /* ============================== EXCEL EXPORT ============================== */
 
@@ -780,15 +938,21 @@ const VENDOR_PICKUP_CODES = new Set(["MOAR", "HOU", "WTN-LONG", "WTN-SHORT", "NG
 
 export async function exportCapacityWorkbook(): Promise<Buffer> {
   const { data: routes } = await supabaseAdmin
-    .from("truck_capacity_routes").select("*").eq("active", true)
-    .order("hub", { ascending: true }).order("sort_order", { ascending: true });
+    .from("truck_capacity_routes")
+    .select("*")
+    .eq("active", true)
+    .order("hub", { ascending: true })
+    .order("sort_order", { ascending: true });
 
   const { fetchAllRows } = await import("./supabase-fetch-all");
   const runs = await fetchAllRows<any>(
     () =>
       supabaseAdmin
         .from("truck_capacity_runs")
-        .select("route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, driver, pallet_count, returned_pallets, notes", { count: "exact" }) as any,
+        .select(
+          "route_id, run_date, run_seq, capacity_frac, vendor_pickup_frac, driver, pallet_count, returned_pallets, notes",
+          { count: "exact" },
+        ) as any,
     { label: "exportCapacityWorkbook runs", orderBy: [{ column: "run_date" }, { column: "id" }] },
   );
   const byRoute = new Map<string, any[]>();
@@ -803,7 +967,8 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
   wb.created = new Date();
 
   const sortedRoutes = [...(routes ?? [])].sort((a, b) => {
-    const ha = HUB_ORDER.indexOf(a.hub); const hb = HUB_ORDER.indexOf(b.hub);
+    const ha = HUB_ORDER.indexOf(a.hub);
+    const hb = HUB_ORDER.indexOf(b.hub);
     if (ha !== hb) return ha - hb;
     return a.sort_order - b.sort_order;
   });
@@ -811,9 +976,27 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
   for (const route of sortedRoutes) {
     const withVendor = VENDOR_PICKUP_CODES.has(route.code) || route.has_vendor_pickup;
     const headers = withVendor
-      ? ["Date", "Capacity", "Unused Capacity", "Vendor Pickup Capacity", "Driver", "Pallet Count", "Notes", "Returned Pallets"]
-      : ["Date", "Capacity", "Unused Capacity", "Driver", "Pallet Count", "Notes", "Returned Pallets"];
-    const sheetName = route.name.replace(/[\\/*?:\[\]]/g, "").slice(0, 31) || route.code.slice(0, 31);
+      ? [
+          "Date",
+          "Capacity",
+          "Unused Capacity",
+          "Vendor Pickup Capacity",
+          "Driver",
+          "Pallet Count",
+          "Notes",
+          "Returned Pallets",
+        ]
+      : [
+          "Date",
+          "Capacity",
+          "Unused Capacity",
+          "Driver",
+          "Pallet Count",
+          "Notes",
+          "Returned Pallets",
+        ];
+    const sheetName =
+      route.name.replace(/[\\/*?:[\]]/g, "").slice(0, 31) || route.code.slice(0, 31);
     const ws = wb.addWorksheet(sheetName);
     ws.addRow(headers);
     ws.getRow(1).font = { bold: true };
@@ -822,7 +1005,8 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
     const list = byRoute.get(route.id) ?? [];
     let rowIdx = 2;
     for (const r of list) {
-      const dateLabel = r.run_seq && r.run_seq > 1 ? `${r.run_date} - Run ${r.run_seq}` : r.run_date;
+      const dateLabel =
+        r.run_seq && r.run_seq > 1 ? `${r.run_date} - Run ${r.run_seq}` : r.run_date;
       if (withVendor) {
         ws.addRow([
           dateLabel,
@@ -851,7 +1035,9 @@ export async function exportCapacityWorkbook(): Promise<Buffer> {
       if (withVendor) row.getCell(4).numFmt = "0.00%";
       rowIdx++;
     }
-    ws.columns.forEach((c) => { c.width = 16; });
+    ws.columns.forEach((c) => {
+      c.width = 16;
+    });
   }
 
   const buf = await wb.xlsx.writeBuffer();
