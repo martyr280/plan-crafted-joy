@@ -13,6 +13,7 @@ type Payload = {
     alsoMatchesPattern: boolean;
     hasRates: boolean;
   }>;
+  patternMatchedIds?: string[];
   settingsUpdatedAt: string | null;
   rosterError: string | null;
 };
@@ -238,12 +239,13 @@ describe("DriverRosterPanel hide / restore", () => {
     });
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(screen.getByTestId("driver-roster-live").textContent).toBe(
-      "Removed the roster hide for Avery Active.",
+      "Removed the hide for Avery Active. They are back on the roster.",
     );
+    expect(screen.getByTestId("driver-roster-live").className).not.toMatch(/sr-only/);
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Hide Avery Active" }));
   });
 
-  it("Restore of someone Samsara no longer lists says why they are not on the roster", async () => {
+  it("Restore of someone not in the refreshed roster gives neutral guidance, not a reason", async () => {
     ports.roles = ["admin"];
     const gone: Payload = { ...before, hidden: [] };
     load(before, { ...gone, active: before.active });
@@ -254,7 +256,10 @@ describe("DriverRosterPanel hide / restore", () => {
     });
     await settle();
     expect(screen.getByTestId("driver-roster-live").textContent).toBe(
-      "Removed the roster hide for Harper Hidden. They are not on the roster right now: Samsara does not list them as a licensed, active driver, and Driver Time has no events or rates for them.",
+      "Removed the hide for Harper Hidden, but they are not shown in the refreshed roster. Check Detection rules and Samsara driver status.",
+    );
+    expect(screen.getByTestId("driver-roster-live").textContent).not.toMatch(
+      /no events or rates|licensed|active driver/,
     );
     expect(document.activeElement).toBe(screen.getByTestId("driver-roster-hidden-heading"));
   });
@@ -333,16 +338,48 @@ describe("DriverRosterPanel hide / restore", () => {
     ports.roles = ["admin"];
     load({ ...before, hidden: [{ ...before.hidden[0], alsoMatchesPattern: true }] });
     render(<DriverRosterPanel />);
-    expect(screen.getByText(/Restore alone will not bring them back/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Hidden in all weeks — matches a name rule in Detection. Restore removes the hide set here, but the name rule must also be changed before the driver can return.",
+      ),
+    ).toBeTruthy();
   });
 
   it("labels older all-week hides and dated hides", () => {
     ports.roles = ["admin"];
     load(afterHide);
     render(<DriverRosterPanel />);
+    const labels = screen.getAllByTestId("driver-roster-hidden-label").map((l) => l.textContent);
+    expect(labels).toEqual([
+      "Hidden from the week of Nov 9, 2026 (Central Time).",
+      "Hidden in all weeks — older hide.",
+    ]);
+  });
+
+  it("a dated hide that also matches a name rule is labelled all weeks, with the hide start secondary", () => {
+    ports.roles = ["admin"];
+    load({
+      ...before,
+      hidden: [{ ...afterHide.hidden[0], alsoMatchesPattern: true }],
+    });
+    render(<DriverRosterPanel />);
     const list = screen.getByRole("list", { name: "Hidden drivers" });
-    expect(within(list).getByText(/Hidden in all weeks \(older hide\)/)).toBeTruthy();
-    expect(within(list).getByText(/Hidden from the week of Nov 9, 2026/)).toBeTruthy();
+    expect(within(list).getByTestId("driver-roster-hidden-label").textContent).toMatch(
+      /^Hidden in all weeks — matches a name rule in Detection\./,
+    );
+    expect(
+      within(list).getByText("Hide set here starts the week of Nov 9, 2026 (Central Time)."),
+    ).toBeTruthy();
+    expect(list.textContent).not.toMatch(/Hidden from the week/);
+  });
+
+  it("the intro states the dated rule and what Restore can and cannot undo", () => {
+    ports.roles = ["admin"];
+    load(before);
+    render(<DriverRosterPanel />);
+    expect(screen.getByTestId("driver-roster-intro").textContent?.replace(/\s+/g, " ")).toBe(
+      "Drivers come from Samsara, saved warehouse events and pay rates. A new hide starts on Monday of the current Central Time week and excludes the driver from that week and later reports and estimated costs. It does not change earlier weeks. Older hides and name rules can exclude all weeks. Stored rates, events and history are kept. Restore removes the hide set here; a matching name rule must be changed separately in Detection.",
+    );
   });
 
   for (const name of ["Enyi Ukairo", "Scott Smith"]) {
@@ -361,21 +398,21 @@ describe("DriverRosterPanel hide / restore", () => {
           },
         ],
       };
-      // After Restore the id hide is gone, but the pattern still keeps them off both lists.
-      load(hiddenByBoth, { ...before, hidden: [] });
+      // After Restore the id hide is gone; the fresh read verifies the name rule still matches.
+      load(hiddenByBoth, { ...before, hidden: [], patternMatchedIds: ["55"] });
       ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-3" });
       render(<DriverRosterPanel />);
-      expect(screen.getByText(/Restore alone will not bring them back/)).toBeTruthy();
+      expect(screen.getByText(/matches a name rule in Detection/)).toBeTruthy();
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: `Restore ${name}` }));
       });
       await settle();
       const live = screen.getByTestId("driver-roster-live").textContent ?? "";
       expect(live).toBe(
-        `Removed the roster hide for ${name}. They still match a detection name pattern, so they stay off the roster and the weekly report until that pattern is changed in Detection settings.`,
+        `Removed the hide set here for ${name}. A name rule in Detection still excludes them from all weeks. Change that rule before they can return.`,
       );
       expect(live).not.toMatch(/Samsara/);
-      expect(live).not.toMatch(/reappear/);
+      expect(screen.getByTestId("driver-roster-live").className).not.toMatch(/sr-only/);
     });
 
     it(`Restore of ${name} once the pattern is gone brings them back`, async () => {
@@ -405,9 +442,226 @@ describe("DriverRosterPanel hide / restore", () => {
       });
       await settle();
       expect(screen.getByTestId("driver-roster-live").textContent).toBe(
-        `Removed the roster hide for ${name}.`,
+        `Removed the hide for ${name}. They are back on the roster.`,
       );
       expect(document.activeElement).toBe(screen.getByRole("button", { name: `Hide ${name}` }));
     });
   }
+});
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+const harperBack: Payload = {
+  ...before,
+  active: [...before.active, { id: "900", name: "Harper Hidden", source: "rates" }],
+  hidden: [],
+};
+
+describe("DriverRosterPanel verified results", () => {
+  it("write succeeds but the refresh fails: visibility is unverified, never 'no events or rates'", async () => {
+    ports.roles = ["admin"];
+    load(before);
+    // Harper has known rate history; the refetch fails and returns stale cached data.
+    expect(before.hidden[0].hasRates).toBe(true);
+    ports.query.refetch = vi.fn(async () => ({ isError: true, data: before }));
+    ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-3" });
+    render(<DriverRosterPanel />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Restore Harper Hidden" }));
+    });
+    await settle();
+    const live = screen.getByTestId("driver-roster-live");
+    expect(live.textContent).toBe(
+      "Removed the hide for Harper Hidden. Couldn't refresh the driver list, so their current visibility is unverified. Refresh the list to check.",
+    );
+    expect(live.textContent).not.toMatch(/no events or rates|licensed|active driver|name rule/);
+    expect(live.className).not.toMatch(/sr-only/);
+    const refresh = screen.getByTestId("driver-roster-status-refresh");
+    expect(refresh.textContent).toBe("Refresh list");
+    expect(document.activeElement).toBe(refresh);
+
+    ports.query.refetch = vi.fn(async () => {
+      ports.query.data = harperBack;
+      return { isError: false, data: harperBack };
+    });
+    await act(async () => {
+      fireEvent.click(refresh);
+    });
+    await settle();
+    expect(live.textContent).toBe(
+      "Removed the hide for Harper Hidden. They are back on the roster.",
+    );
+    expect(screen.queryByTestId("driver-roster-status-refresh")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Hide Harper Hidden" }));
+  });
+
+  it("a successful refresh that does not list them, with no verified rule, stays neutral", async () => {
+    ports.roles = ["admin"];
+    load(before, { ...before, hidden: [], rosterError: "Samsara timeout", patternMatchedIds: [] });
+    ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-3" });
+    render(<DriverRosterPanel />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Restore Harper Hidden" }));
+    });
+    await settle();
+    expect(screen.getByTestId("driver-roster-live").textContent).toBe(
+      "Removed the hide for Harper Hidden, but they are not shown in the refreshed roster. Check Detection rules and Samsara driver status.",
+    );
+  });
+
+  it("uses the fresh read, not stale row metadata, to say a name rule still applies", async () => {
+    ports.roles = ["admin"];
+    // Row was loaded without a pattern match; the fresh read verifies one.
+    load(before, { ...before, hidden: [], patternMatchedIds: ["900"] });
+    ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-3" });
+    render(<DriverRosterPanel />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Restore Harper Hidden" }));
+    });
+    await settle();
+    expect(screen.getByTestId("driver-roster-live").textContent).toBe(
+      "Removed the hide set here for Harper Hidden. A name rule in Detection still excludes them from all weeks. Change that rule before they can return.",
+    );
+  });
+});
+
+describe("DriverRosterPanel action focus", () => {
+  it("deferred Restore: trigger unmounts (focus on BODY), focus recovers to the moved Hide button", async () => {
+    ports.roles = ["admin"];
+    load(before);
+    const read = deferred<unknown>();
+    ports.query.refetch = vi.fn(() => read.promise);
+    ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-3" });
+    render(<DriverRosterPanel />);
+    const restore = screen.getByRole("button", { name: "Restore Harper Hidden" });
+    restore.focus();
+    fireEvent.click(restore);
+    await act(async () => {});
+    // Native disable during the write drops focus in browsers.
+    restore.blur();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => {
+      ports.query.data = harperBack;
+      read.resolve({ isError: false, data: harperBack });
+    });
+    await settle();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Hide Harper Hidden" }));
+  });
+
+  it("deferred Restore: typing in the filter while it settles keeps focus in the filter", async () => {
+    ports.roles = ["admin"];
+    load(before);
+    const read = deferred<unknown>();
+    ports.query.refetch = vi.fn(() => read.promise);
+    ports.mutate.mockResolvedValue({ ok: true, changed: true, updatedAt: "stamp-3" });
+    render(<DriverRosterPanel />);
+    const restore = screen.getByRole("button", { name: "Restore Harper Hidden" });
+    restore.focus();
+    fireEvent.click(restore);
+    await act(async () => {});
+    const filter = screen.getByLabelText("Filter roster") as HTMLInputElement;
+    filter.focus();
+    fireEvent.keyDown(filter, { key: "H" });
+    fireEvent.change(filter, { target: { value: "Harper" } });
+    await act(async () => {
+      ports.query.data = harperBack;
+      read.resolve({ isError: false, data: harperBack });
+    });
+    await settle();
+    expect(document.activeElement).toBe(filter);
+    expect(filter.value).toBe("Harper");
+    expect(screen.getByTestId("driver-roster-live").textContent).toMatch(/back on the roster/);
+  });
+
+  async function openConflict() {
+    ports.mutate.mockRejectedValue(new Error(ROSTER_CONFLICT_MESSAGE));
+    render(<DriverRosterPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Hide Avery Active" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Hide driver" }));
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await settle();
+    const refresh = screen.getByRole("button", { name: "Refresh list" });
+    expect(document.activeElement).toBe(refresh);
+    return refresh;
+  }
+
+  it("conflict Refresh: stays mounted while pending, blocks duplicates, failure keeps a retry target", async () => {
+    ports.roles = ["admin"];
+    load(before);
+    const refresh = await openConflict();
+    const read = deferred<unknown>();
+    ports.query.refetch = vi.fn(() => read.promise);
+    fireEvent.click(refresh);
+    await act(async () => {});
+    expect(refresh.isConnected).toBe(true);
+    expect(refresh.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByTestId("driver-roster-progress").textContent).toBe(
+      "Refreshing the driver list…",
+    );
+    fireEvent.click(refresh);
+    expect(ports.query.refetch).toHaveBeenCalledOnce();
+    refresh.blur();
+    await act(async () => read.resolve({ isError: true, data: before }));
+    await settle();
+    expect(screen.getByRole("alert").textContent).toMatch(/changed since you loaded it/);
+    expect(screen.getByTestId("driver-roster-refresh-error").textContent).toBe(
+      "Couldn't refresh the driver list. Try Refresh list again.",
+    );
+    expect(refresh.getAttribute("aria-disabled")).toBeNull();
+    expect(document.activeElement).toBe(refresh);
+  });
+
+  it("conflict Refresh success: the alert unmounts (BODY) and focus moves to the roster heading", async () => {
+    ports.roles = ["admin"];
+    load(before);
+    const refresh = await openConflict();
+    const read = deferred<unknown>();
+    ports.query.refetch = vi.fn(() => read.promise);
+    fireEvent.click(refresh);
+    await act(async () => read.resolve({ isError: false, data: before }));
+    await settle();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByTestId("driver-roster-live").textContent).toBe(
+      "Driver list refreshed. Review it and try again.",
+    );
+    expect(document.activeElement).toBe(screen.getByTestId("driver-roster-heading"));
+  });
+
+  it("conflict Refresh: typing in the filter during the read keeps focus there", async () => {
+    ports.roles = ["admin"];
+    load(before);
+    const refresh = await openConflict();
+    const read = deferred<unknown>();
+    ports.query.refetch = vi.fn(() => read.promise);
+    fireEvent.click(refresh);
+    const filter = screen.getByLabelText("Filter roster") as HTMLInputElement;
+    filter.focus();
+    fireEvent.change(filter, { target: { value: "Evan" } });
+    await act(async () => read.resolve({ isError: false, data: before }));
+    await settle();
+    expect(document.activeElement).toBe(filter);
+  });
+
+  it("passive background reads never move focus", async () => {
+    ports.roles = ["admin"];
+    load(before);
+    const { rerender } = render(<DriverRosterPanel />);
+    const filter = screen.getByLabelText("Filter roster");
+    filter.focus();
+    ports.query = { ...ports.query, data: afterHide };
+    rerender(<DriverRosterPanel />);
+    await settle();
+    expect(document.activeElement).toBe(filter);
+    filter.blur();
+    ports.query = { ...ports.query, data: before };
+    rerender(<DriverRosterPanel />);
+    await settle();
+    expect(document.activeElement).toBe(document.body);
+  });
 });

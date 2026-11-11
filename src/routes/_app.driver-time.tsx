@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ import {
   useSaveDriverTimeConfig,
   useSamsaraDiagnostics,
 } from "@/hooks/useDriverTime";
+import { useActionFocus } from "@/hooks/useActionFocus";
 import { CENTRAL_TZ, dateStrInTz } from "@/lib/driver-time/tz";
 import { hubTimezone, reconciliationCsv } from "@/lib/driver-time/reconciliation";
 import { WarehouseActualEditor } from "@/components/driver-time/WarehouseActualEditor";
@@ -388,6 +389,50 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
   const [patterns, setPatterns] = useState<string>("");
 
   const [conflict, setConflict] = useState(false);
+  const [refreshState, setRefreshState] = useState<"idle" | "pending" | "failed">("idle");
+  const [refreshResult, setRefreshResult] = useState("");
+  const [focusReq, setFocusReq] = useState<{ owner: number; to: "heading" | "retry" } | null>(null);
+  const refreshingRef = useRef(false);
+  const detectionHeadingRef = useRef<HTMLDivElement>(null);
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
+  const focus = useActionFocus();
+
+  useEffect(() => {
+    if (!focusReq) return;
+    setFocusReq(null);
+    focus.restore(
+      focusReq.owner,
+      focusReq.to === "heading" ? detectionHeadingRef.current : refreshButtonRef.current,
+    );
+  }, [focusReq, focus]);
+
+  async function refreshSettings(trigger: HTMLElement) {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshState("pending");
+    setRefreshResult("");
+    const owner = focus.claim(trigger);
+    let ok = false;
+    try {
+      const r = await cfgQ.refetch();
+      ok = !!r && !r.isError && !!r.data;
+    } catch {
+      ok = false;
+    }
+    refreshingRef.current = false;
+    if (!ok) {
+      setRefreshState("failed");
+      setFocusReq({ owner, to: "retry" });
+      return;
+    }
+    setRefreshState("idle");
+    setConflict(false);
+    setThreshold("");
+    setMergeGap("");
+    setPatterns("");
+    setRefreshResult("Settings refreshed. Review them and save again.");
+    setFocusReq({ owner, to: "heading" });
+  }
 
   const selected = new Set<string>(settings?.warehouseAddressIds ?? []);
 
@@ -400,12 +445,16 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
       {
         onSuccess: () => {
           setConflict(false);
+          setRefreshResult("");
           toast.success(okMessage);
         },
         onError: (e: unknown) => {
           const message = e instanceof Error ? e.message : String(e);
-          if (message === SETTINGS_CONFLICT_MESSAGE) setConflict(true);
-          else toast.error(message);
+          if (message === SETTINGS_CONFLICT_MESSAGE) {
+            setConflict(true);
+            setRefreshState("idle");
+            setRefreshResult("");
+          } else toast.error(message);
         },
       },
     );
@@ -421,26 +470,57 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
   return (
     <div className="space-y-4">
       <Card className="p-4 space-y-3">
-        <div className="font-semibold text-sm">Detection</div>
+        <div
+          ref={detectionHeadingRef}
+          tabIndex={-1}
+          className="font-semibold text-sm focus-visible:outline focus-visible:outline-2"
+          data-testid="detection-heading"
+        >
+          Detection
+        </div>
         {conflict && (
           <div
             role="alert"
             data-testid="detection-conflict"
             className="flex flex-col gap-2 rounded-md border p-3 text-xs sm:flex-row sm:items-center sm:justify-between"
           >
-            <span className={destructiveTextClass}>{SETTINGS_CONFLICT_MESSAGE}</span>
+            <div className="min-w-0 space-y-1">
+              <p className={destructiveTextClass}>{SETTINGS_CONFLICT_MESSAGE}</p>
+              {refreshState === "failed" && (
+                <p className={destructiveTextClass} data-testid="detection-refresh-error">
+                  Couldn&apos;t refresh the settings. Try Refresh settings again.
+                </p>
+              )}
+            </div>
             <Button
+              ref={refreshButtonRef}
               size="sm"
               variant="outline"
-              onClick={() => {
-                setConflict(false);
-                void cfgQ.refetch();
-              }}
+              aria-disabled={refreshState === "pending" || undefined}
+              onClick={(e) => void refreshSettings(e.currentTarget)}
             >
+              {refreshState === "pending" && (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              )}
               Refresh settings
             </Button>
           </div>
         )}
+        <p role="status" aria-live="polite" className="sr-only" data-testid="detection-progress">
+          {refreshState === "pending"
+            ? "Refreshing settings…"
+            : refreshState === "failed" && conflict
+              ? "Couldn't refresh the settings. Try Refresh settings again."
+              : ""}
+        </p>
+        <p
+          role="status"
+          aria-live="polite"
+          className={refreshResult ? "text-xs" : "sr-only"}
+          data-testid="detection-refresh-result"
+        >
+          {refreshResult}
+        </p>
         {cfgQ.data?.error && (
           <div className={`text-xs ${destructiveTextClass}`}>
             Samsara data unavailable: {cfgQ.data.error} — check the API token scopes in Settings →

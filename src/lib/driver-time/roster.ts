@@ -67,7 +67,7 @@ export function buildDriverRoster(input: {
   rates: Row[];
   settings: RosterExclusions;
   asOf: string;
-}): { active: RosterDriver[]; excluded: ExcludedDriver[] } {
+}): { active: RosterDriver[]; excluded: ExcludedDriver[]; patternMatchedIds: string[] } {
   const { settings, asOf } = input;
   const active = new Map<string, RosterDriver>();
   for (const d of input.rosterActive) {
@@ -127,9 +127,14 @@ export function buildDriverRoster(input: {
 
   const byName = <T extends { name: string; id: string }>(a: T, b: T) =>
     a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+  const patternMatchedIds = new Set<string>();
+  for (const [id, name] of nameOf)
+    if (matchesNamePattern(name, settings)) patternMatchedIds.add(id);
+  for (const d of excluded.values()) if (d.alsoMatchesPattern) patternMatchedIds.add(d.id);
   return {
     active: Array.from(active.values()).sort(byName),
     excluded: Array.from(excluded.values()).sort(byName),
+    patternMatchedIds: Array.from(patternMatchedIds).sort(),
   };
 }
 
@@ -304,7 +309,7 @@ export function hiddenRosterNotice(hidden?: Partial<HiddenByRoster>): string | n
   if (official) parts.push(`${official} official weekly total${official === 1 ? "" : "s"}`);
   const who =
     hidden.drivers === 1
-      ? "1 driver hidden from the roster has"
-      : `${hidden.drivers} drivers hidden from the roster have`;
-  return `${who} ${parts.join(" and ")} in this window. They are not in this report or the estimated cost. Weeks before a driver was hidden still include them. Their events, official totals and rates are kept; a driver-pay manager can restore them in Settings → Driver roster.`;
+      ? "1 driver hidden in Driver roster has"
+      : `${hidden.drivers} drivers hidden in Driver roster have`;
+  return `${who} ${parts.join(" and ")} in this window. This report's time totals and estimated cost do not include them. New hides apply from their shown start week; older hides and name rules may exclude all weeks. Stored events, official totals and rates are kept. An admin or logistics admin can review the hide and any name rule in Settings → Driver roster.`;
 }

@@ -406,20 +406,54 @@ describe("scopeWeekInputs", () => {
     expect(out.overrides).toEqual([]);
     expect(out.hidden).toEqual({ drivers: 0, events: 0, officialTotals: 0 });
   });
+  it("an older all-week hide in an old window never claims earlier weeks still include the driver", () => {
+    const old = scopeWeekInputs({
+      events: [ev("900", "2026-10-20")],
+      overrides: [official("900", "Driver 900")],
+      settings,
+      weekStart: "2026-10-19",
+    });
+    expect(old.hidden).toEqual({ drivers: 1, events: 1, officialTotals: 1 });
+    const notice = hiddenRosterNotice(old.hidden) ?? "";
+    expect(notice).toMatch(
+      /^1 driver hidden in Driver roster has 1 warehouse event and 1 official weekly total in this window\./,
+    );
+    expect(notice).toMatch(/older hides and name rules may exclude all weeks/);
+    expect(notice).not.toMatch(/still include/);
+    expect(notice).not.toMatch(/restore them/i);
+  });
 });
 
 describe("hiddenRosterNotice", () => {
   it("says so in plain words, and nothing when no one is hidden", () => {
     expect(hiddenRosterNotice({ drivers: 0, events: 0, officialTotals: 0 })).toBeNull();
     expect(hiddenRosterNotice(undefined)).toBeNull();
-    expect(hiddenRosterNotice({ drivers: 1, events: 1, officialTotals: 0 })).toMatch(
-      /^1 driver hidden from the roster has 1 warehouse event in this window\. They are not in this report or the estimated cost\. Weeks before a driver was hidden still include them\./,
+    expect(hiddenRosterNotice({ drivers: 1, events: 1, officialTotals: 0 })).toBe(
+      "1 driver hidden in Driver roster has 1 warehouse event in this window. This report's time totals and estimated cost do not include them. New hides apply from their shown start week; older hides and name rules may exclude all weeks. Stored events, official totals and rates are kept. An admin or logistics admin can review the hide and any name rule in Settings → Driver roster.",
     );
     expect(hiddenRosterNotice({ drivers: 2, events: 5, officialTotals: 1 })).toMatch(
-      /^2 drivers .* have 5 warehouse events and 1 official weekly total in this window/,
+      /^2 drivers hidden in Driver roster have 5 warehouse events and 1 official weekly total in this window/,
     );
     expect(hiddenRosterNotice({ drivers: 1, events: 0, officialTotals: 2 })).toMatch(
-      /^1 driver hidden from the roster has 2 official weekly totals in this window/,
+      /^1 driver hidden in Driver roster has 2 official weekly totals in this window/,
     );
+  });
+});
+
+describe("buildDriverRoster patternMatchedIds", () => {
+  it("lists every known driver a name rule excludes today, hidden here or not", () => {
+    const { patternMatchedIds } = buildDriverRoster({
+      rosterActive: [],
+      rosterAll: [{ id: "55", name: "Birmingham LTL" }],
+      events: [{ driver_id: "56", driver_name: "Birmingham Warehouse 2" }],
+      rates: [{ driver_id: "1", driver_name: "Plain Person" }],
+      settings: {
+        excludedDriverIds: ["57"],
+        excludedDriverNamePatterns: ["Birmingham LTL", "Birmingham Warehouse"],
+        excludedDrivers: [{ id: "55", hiddenFrom: "2026-11-09" }],
+      },
+      asOf: TODAY,
+    });
+    expect(patternMatchedIds).toEqual(["55", "56"]);
   });
 });

@@ -462,7 +462,7 @@ async function loadDriverRoster() {
       db().from("driver_warehouse_events").select("id, driver_id, driver_name", { count: "exact" }),
     { label: "driver_warehouse_events(drivers)" },
   );
-  const { active, excluded } = buildDriverRoster({
+  const { active, excluded, patternMatchedIds } = buildDriverRoster({
     rosterActive,
     rosterAll,
     events,
@@ -470,7 +470,7 @@ async function loadDriverRoster() {
     settings,
     asOf,
   });
-  return { active, excluded, rates, rosterError };
+  return { active, excluded, patternMatchedIds, rates, rosterError };
 }
 
 /**
@@ -500,10 +500,12 @@ export const getDriverRoster = createServerFn({ method: "GET" })
     const { getDriverTimeSettingsRow } = await import("@/lib/driver-time.server");
     // Token first: a write between the two reads then surfaces as a conflict.
     const { updatedAt } = await getDriverTimeSettingsRow();
-    const { active, excluded, rosterError } = await loadDriverRoster();
+    const { active, excluded, patternMatchedIds, rosterError } = await loadDriverRoster();
     return {
       active,
       hidden: excluded.filter((d) => d.reason === "id"),
+      /** Known drivers a Detection name rule excludes today; names and ids only. */
+      patternMatchedIds,
       settingsUpdatedAt: updatedAt,
       rosterError,
     };

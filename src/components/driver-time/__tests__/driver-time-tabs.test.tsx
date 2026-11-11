@@ -144,7 +144,7 @@ describe("Driver Time tabs", () => {
     expect(patch).not.toHaveProperty("excludedDrivers");
   });
 
-  it("a Detection save conflict shows the message and Refresh settings reloads", async () => {
+  async function openDetectionConflict() {
     cfg.mutate.mockImplementation((_patch, opts) =>
       opts.onError(new Error(SETTINGS_CONFLICT_MESSAGE)),
     );
@@ -156,10 +156,76 @@ describe("Driver Time tabs", () => {
     expect(screen.getByTestId("detection-conflict").textContent).toMatch(
       /changed since you loaded them/,
     );
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Refresh settings" }));
-    });
+    const refresh = screen.getByRole("button", { name: "Refresh settings" });
+    refresh.focus();
+    return refresh;
+  }
+
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  }
+  const fresh = { isError: false, data: { settings: {}, settingsUpdatedAt: "settings-stamp-2" } };
+
+  it("Detection Refresh keeps the alert while pending, blocks duplicates, and focuses the heading on success", async () => {
+    const refresh = await openDetectionConflict();
+    const read = deferred<unknown>();
+    cfg.refetch.mockImplementation(() => read.promise);
+    fireEvent.click(refresh);
+    await act(async () => {});
+    expect(screen.getByTestId("detection-conflict")).toBeTruthy();
+    expect(refresh.isConnected).toBe(true);
+    expect(refresh.getAttribute("aria-disabled")).toBe("true");
+    expect(document.activeElement).toBe(refresh);
+    expect(screen.getByTestId("detection-progress").textContent).toBe("Refreshing settings…");
+    fireEvent.click(refresh);
     expect(cfg.refetch).toHaveBeenCalledOnce();
+    await act(async () => read.resolve(fresh));
     expect(screen.queryByTestId("detection-conflict")).toBeNull();
+    const result = screen.getByTestId("detection-refresh-result");
+    expect(result.textContent).toBe("Settings refreshed. Review them and save again.");
+    expect(result.className).not.toMatch(/sr-only/);
+    expect(document.activeElement).toBe(screen.getByTestId("detection-heading"));
+  });
+
+  it("Detection Refresh failure keeps the conflict and a focused retry, and announces the error", async () => {
+    const refresh = await openDetectionConflict();
+    const read = deferred<unknown>();
+    cfg.refetch.mockImplementation(() => read.promise);
+    fireEvent.click(refresh);
+    refresh.blur();
+    await act(async () => read.resolve({ isError: true, data: undefined }));
+    expect(screen.getByTestId("detection-conflict")).toBeTruthy();
+    expect(screen.getByTestId("detection-refresh-error").textContent).toBe(
+      "Couldn't refresh the settings. Try Refresh settings again.",
+    );
+    expect(screen.getByTestId("detection-progress").textContent).toBe(
+      "Couldn't refresh the settings. Try Refresh settings again.",
+    );
+    expect(refresh.getAttribute("aria-disabled")).toBeNull();
+    expect(document.activeElement).toBe(refresh);
+    expect(screen.getByTestId("detection-refresh-result").textContent).toBe("");
+
+    cfg.refetch.mockResolvedValue(fresh);
+    await act(async () => {
+      fireEvent.click(refresh);
+    });
+    expect(cfg.refetch).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId("detection-conflict")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId("detection-heading"));
+  });
+
+  it("Detection Refresh does not steal focus from a field the user moved to", async () => {
+    const refresh = await openDetectionConflict();
+    const read = deferred<unknown>();
+    cfg.refetch.mockImplementation(() => read.promise);
+    fireEvent.click(refresh);
+    const field = screen.getAllByRole("textbox")[0];
+    field.focus();
+    fireEvent.keyDown(field, { key: "9" });
+    await act(async () => read.resolve(fresh));
+    expect(screen.queryByTestId("detection-conflict")).toBeNull();
+    expect(document.activeElement).toBe(field);
   });
 });

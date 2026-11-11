@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EyeOff, Loader2, RotateCcw, Search } from "lucide-react";
+import { CheckCircle2, EyeOff, Info, Loader2, RotateCcw, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { canManageDriverPay } from "@/lib/driver-time/access";
 import { useDriverRoster, useSetDriverRosterVisibility } from "@/hooks/useDriverTime";
+import { useActionFocus } from "@/hooks/useActionFocus";
 import {
   ROSTER_CONFLICT_MESSAGE,
   type ExcludedDriver,
@@ -26,11 +27,17 @@ import { hiddenFromFor } from "@/lib/driver-time/exclusions";
 type RosterPayload = {
   active: RosterDriver[];
   hidden: ExcludedDriver[];
+  /** Absent from older servers; then a name rule can't be verified. */
+  patternMatchedIds?: string[];
   settingsUpdatedAt: string | null;
   rosterError: string | null;
 };
 
-type FocusTarget = { key: string; fallback: "roster" | "hidden" | "conflict" };
+type Fallback = "roster" | "hidden" | "conflict" | "status";
+/** owner: an action claimed via useActionFocus; without it focus moves unconditionally (post-dialog). */
+type FocusTarget = { key: string; fallback: Fallback; owner?: number };
+type Notice = { text: string; tone: "ok" | "warn"; needsRefresh?: boolean };
+type Verify = { id: string; name: string; changed: boolean };
 
 /** "Nov 9, 2026" for a YYYY-MM-DD date. */
 function weekLabel(date: string): string {
@@ -48,6 +55,42 @@ const SOURCE_NOTE: Record<string, string | null> = {
   rates: "Not on the current Samsara roster; has a pay rate.",
 };
 
+const UNVERIFIED =
+  "Couldn't refresh the driver list, so their current visibility is unverified. Refresh the list to check.";
+
+/** Result of a Restore, judged only from a successful fresh read (null = the read failed). */
+function restoreNotice(v: Verify, fresh: RosterPayload | null): Notice {
+  const { id, name, changed } = v;
+  if (!fresh) {
+    const lead = changed ? `Removed the hide for ${name}.` : `${name} had no hide set here.`;
+    return { text: `${lead} ${UNVERIFIED}`, tone: "warn", needsRefresh: true };
+  }
+  if (fresh.active.some((d) => d.id === id)) {
+    return {
+      text: changed
+        ? `Removed the hide for ${name}. They are back on the roster.`
+        : `${name} had no hide set here and is on the roster.`,
+      tone: "ok",
+    };
+  }
+  if (fresh.hidden.some((d) => d.id === id)) {
+    return {
+      text: `${changed ? `Removed the hide for ${name}` : `${name} had no hide set here`}, but the refreshed roster still lists them under Hidden drivers. Review the list and try again.`,
+      tone: "warn",
+    };
+  }
+  if (fresh.patternMatchedIds?.includes(id)) {
+    return {
+      text: `${changed ? `Removed the hide set here for ${name}.` : `${name} had no hide set here.`} A name rule in Detection still excludes them from all weeks. Change that rule before they can return.`,
+      tone: "warn",
+    };
+  }
+  return {
+    text: `${changed ? `Removed the hide for ${name}` : `${name} had no hide set here`}, but they are not shown in the refreshed roster. Check Detection rules and Samsara driver status.`,
+    tone: "warn",
+  };
+}
+
 /** Driver-pay managers only. Renders nothing (and loads nothing) for anyone else. */
 export function DriverRosterPanel() {
   const { roles } = useAuth();
@@ -58,17 +101,23 @@ export function DriverRosterPanel() {
 function DriverRosterPanelInner() {
   const q = useDriverRoster(true);
   const setVisibility = useSetDriverRosterVisibility();
+  const focus = useActionFocus();
   const [filter, setFilter] = useState("");
   const [confirming, setConfirming] = useState<RosterDriver | null>(null);
-  const [announcement, setAnnouncement] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const afterHideRef = useRef<FocusTarget | null>(null);
+  const verifyRef = useRef<Verify | null>(null);
+  const refreshingRef = useRef(false);
   const actionRefs = useRef(new Map<string, HTMLButtonElement>());
   const rosterHeadingRef = useRef<HTMLDivElement>(null);
   const hiddenHeadingRef = useRef<HTMLDivElement>(null);
   const refreshRef = useRef<HTMLButtonElement>(null);
+  const statusRefreshRef = useRef<HTMLButtonElement>(null);
   const busy = setVisibility.isPending;
   const thisWeek = hiddenFromFor(new Date());
 
@@ -85,75 +134,128 @@ function DriverRosterPanelInner() {
   // Runs after the refreshed list renders, so the moved row's button exists.
   useEffect(() => {
     if (!focusTarget) return;
-    const el = actionRefs.current.get(focusTarget.key);
-    if (el?.isConnected) el.focus();
-    else if (focusTarget.fallback === "conflict") refreshRef.current?.focus();
-    else if (focusTarget.fallback === "hidden") hiddenHeadingRef.current?.focus();
-    else rosterHeadingRef.current?.focus();
     setFocusTarget(null);
-  }, [focusTarget, payload]);
+    const fallbacks: Record<Fallback, HTMLElement | null> = {
+      roster: rosterHeadingRef.current,
+      hidden: hiddenHeadingRef.current,
+      conflict: refreshRef.current,
+      status: statusRefreshRef.current,
+    };
+    const byKey = focusTarget.key ? actionRefs.current.get(focusTarget.key) : undefined;
+    const el =
+      byKey?.isConnected && !byKey.disabled
+        ? byKey
+        : (fallbacks[focusTarget.fallback] ?? rosterHeadingRef.current);
+    if (focusTarget.owner == null) el?.focus();
+    else focus.restore(focusTarget.owner, el);
+  }, [focusTarget, payload, focus]);
 
   const refFor = (key: string) => (el: HTMLButtonElement | null) => {
     if (el) actionRefs.current.set(key, el);
     else actionRefs.current.delete(key);
   };
 
-  async function change(
-    driver: { id: string; name: string; alsoMatchesPattern?: boolean },
-    hide: boolean,
-  ): Promise<FocusTarget> {
-    setFailure(null);
+  /** A fresh roster from a successful read, or null when the read failed. */
+  async function readFresh(): Promise<RosterPayload | null> {
     try {
-      const result = await setVisibility.mutateAsync({
+      const r = (await q.refetch()) as { isError?: boolean; data?: unknown };
+      return !r.isError && r.data ? (r.data as RosterPayload) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function change(driver: { id: string; name: string }, hide: boolean): Promise<FocusTarget> {
+    setFailure(null);
+    setRefreshError(null);
+    setNotice(null);
+    verifyRef.current = null;
+    let result: { changed: boolean; hiddenFrom?: string | null };
+    try {
+      result = await setVisibility.mutateAsync({
         driverId: driver.id,
         hidden: hide,
         expectedUpdatedAt: payload?.settingsUpdatedAt ?? null,
       });
-      const refreshed = (await q.refetch()) as { data?: RosterPayload };
-      const back = refreshed.data?.active.some((d) => d.id === driver.id) ?? false;
-      if (hide) {
-        const from = result.hiddenFrom ?? thisWeek;
-        setAnnouncement(
-          result.changed
-            ? `Hid ${driver.name} from the week of ${weekLabel(from)} onward. Earlier weeks still include them, and their rates, events and history are kept.`
-            : `${driver.name} was already hidden.`,
-        );
-        return { key: `restore:${driver.id}`, fallback: "hidden" };
-      }
-      const lead = result.changed
-        ? `Removed the roster hide for ${driver.name}.`
-        : `${driver.name} was not hidden by the roster.`;
-      let where = "";
-      if (!back && driver.alsoMatchesPattern) {
-        where =
-          " They still match a detection name pattern, so they stay off the roster and the weekly report until that pattern is changed in Detection settings.";
-      } else if (!back) {
-        const samsara = refreshed.data?.rosterError
-          ? "the Samsara driver list is unavailable"
-          : "Samsara does not list them as a licensed, active driver";
-        where = ` They are not on the roster right now: ${samsara}, and Driver Time has no events or rates for them.`;
-      }
-      setAnnouncement(`${lead}${where}`);
-      return { key: `hide:${driver.id}`, fallback: "hidden" };
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Could not update the driver list.";
       setFailure(message);
-      setAnnouncement("");
       return message === ROSTER_CONFLICT_MESSAGE
         ? { key: "", fallback: "conflict" }
         : { key: `${hide ? "hide" : "restore"}:${driver.id}`, fallback: "roster" };
     }
+    const fresh = await readFresh();
+    if (hide) {
+      const from = result.hiddenFrom ?? thisWeek;
+      const lead = result.changed
+        ? `Hid ${driver.name} from the week of ${weekLabel(from)} onward. Earlier weeks still include them, and their rates, events and history are kept.`
+        : `${driver.name} was already hidden.`;
+      if (!fresh) {
+        setNotice({
+          text: `${lead} Couldn't refresh the driver list. Refresh the list to check.`,
+          tone: "warn",
+          needsRefresh: true,
+        });
+        return { key: "", fallback: "status" };
+      }
+      setNotice({ text: lead, tone: "ok" });
+      return { key: `restore:${driver.id}`, fallback: "hidden" };
+    }
+    const v = { id: driver.id, name: driver.name, changed: result.changed };
+    const n = restoreNotice(v, fresh);
+    setNotice(n);
+    if (n.needsRefresh) {
+      verifyRef.current = v;
+      return { key: "", fallback: "status" };
+    }
+    return { key: `hide:${driver.id}`, fallback: "hidden" };
   }
 
-  async function refreshAfterConflict() {
-    const result = (await q.refetch()) as { isError?: boolean };
-    if (result.isError) {
-      setAnnouncement("Could not refresh the driver list.");
+  async function restore(driver: ExcludedDriver, trigger: HTMLElement) {
+    const owner = focus.claim(trigger);
+    const target = await change(driver, false);
+    setFocusTarget({ ...target, owner });
+  }
+
+  /** Conflict "Refresh list" and the unverified-result "Refresh list". */
+  async function refreshList(trigger: HTMLElement, from: "conflict" | "status") {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    setRefreshError(null);
+    const owner = focus.claim(trigger);
+    const fresh = await readFresh();
+    refreshingRef.current = false;
+    setRefreshing(false);
+    if (!fresh) {
+      if (from === "conflict") {
+        setRefreshError("Couldn't refresh the driver list. Try Refresh list again.");
+      } else {
+        setNotice((n) => ({
+          text: `${n?.text ?? ""} Still couldn't refresh the driver list. Try Refresh list again.`.trim(),
+          tone: "warn",
+          needsRefresh: true,
+        }));
+      }
+      setFocusTarget({ key: "", fallback: from, owner });
       return;
     }
     setFailure(null);
-    setAnnouncement("Driver list refreshed. Review it and try again.");
-    setFocusTarget({ key: "", fallback: "roster" });
+    const v = verifyRef.current;
+    verifyRef.current = null;
+    if (from === "status" && v) {
+      setNotice(restoreNotice(v, fresh));
+      setFocusTarget({ key: `hide:${v.id}`, fallback: "hidden", owner });
+      return;
+    }
+    setNotice({
+      text:
+        from === "conflict"
+          ? "Driver list refreshed. Review it and try again."
+          : "Driver list refreshed.",
+      tone: "ok",
+    });
+    setFocusTarget({ key: "", fallback: "roster", owner });
   }
 
   return (
@@ -168,10 +270,12 @@ function DriverRosterPanelInner() {
           >
             Driver roster
           </div>
-          <p className="text-xs text-muted-foreground">
-            Drivers come from Samsara. Hiding someone takes them off Driver rates and the weekly
-            report from the current week onward; earlier weeks still include them. Their rates,
-            events and history are kept, and Restore brings them back.
+          <p className="text-xs text-muted-foreground" data-testid="driver-roster-intro">
+            Drivers come from Samsara, saved warehouse events and pay rates. A new hide starts on
+            Monday of the current Central Time week and excludes the driver from that week and later
+            reports and estimated costs. It does not change earlier weeks. Older hides and name
+            rules can exclude all weeks. Stored rates, events and history are kept. Restore removes
+            the hide set here; a matching name rule must be changed separately in Detection.
           </p>
         </div>
         <div className="relative w-full sm:max-w-xs">
@@ -189,22 +293,67 @@ function DriverRosterPanelInner() {
         </div>
       </div>
 
-      <p role="status" aria-live="polite" className="sr-only" data-testid="driver-roster-live">
-        {announcement}
+      <div
+        className={notice ? "flex items-start gap-2 rounded-md border p-3" : undefined}
+        data-testid="driver-roster-result"
+        data-tone={notice?.tone}
+      >
+        {notice &&
+          (notice.tone === "ok" ? (
+            <CheckCircle2
+              className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+          ) : (
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          ))}
+        <div className="min-w-0 flex-1 space-y-2">
+          <p
+            role="status"
+            aria-live="polite"
+            className={notice ? "text-sm break-words" : "sr-only"}
+            data-testid="driver-roster-live"
+          >
+            {notice?.text ?? ""}
+          </p>
+          {notice?.needsRefresh && (
+            <Button
+              ref={statusRefreshRef}
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-disabled={refreshing || undefined}
+              data-testid="driver-roster-status-refresh"
+              onClick={(e) => void refreshList(e.currentTarget, "status")}
+            >
+              {refreshing && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              Refresh list
+            </Button>
+          )}
+        </div>
+      </div>
+      <p className="sr-only" role="status" aria-live="polite" data-testid="driver-roster-progress">
+        {refreshing ? "Refreshing the driver list…" : (refreshError ?? "")}
       </p>
 
       {failure && (
         <div className="space-y-2" role="alert">
           <p className="text-sm text-destructive-text">{failure}</p>
+          {isConflict && refreshError && (
+            <p className="text-sm text-destructive-text" data-testid="driver-roster-refresh-error">
+              {refreshError}
+            </p>
+          )}
           {isConflict && (
             <Button
               ref={refreshRef}
               type="button"
               size="sm"
               variant="outline"
-              disabled={q.isFetching}
-              onClick={() => void refreshAfterConflict()}
+              aria-disabled={refreshing || undefined}
+              onClick={(e) => void refreshList(e.currentTarget, "conflict")}
             >
+              {refreshing && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               Refresh list
             </Button>
           )}
@@ -222,7 +371,7 @@ function DriverRosterPanelInner() {
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading roster…
         </div>
       )}
-      {q.isError && (
+      {q.isError && !notice?.needsRefresh && !isConflict && (
         <div className="space-y-2" role="alert">
           <p className="text-sm text-destructive-text">
             Roster unavailable: {(q.error as Error).message}
@@ -293,13 +442,22 @@ function DriverRosterPanelInner() {
                     <div className="break-words font-medium">{d.name}</div>
                     <div className="text-xs text-muted-foreground break-words">
                       <span className="break-all">Samsara id {d.id}</span>
-                      {d.hiddenFrom
-                        ? ` · Hidden from the week of ${weekLabel(d.hiddenFrom)}`
-                        : " · Hidden in all weeks (older hide)"}
-                      {d.alsoMatchesPattern
-                        ? " · Also matches a detection name pattern, so Restore alone will not bring them back."
-                        : ""}
                     </div>
+                    <div
+                      className="text-xs text-muted-foreground break-words"
+                      data-testid="driver-roster-hidden-label"
+                    >
+                      {d.alsoMatchesPattern
+                        ? "Hidden in all weeks — matches a name rule in Detection. Restore removes the hide set here, but the name rule must also be changed before the driver can return."
+                        : d.hiddenFrom
+                          ? `Hidden from the week of ${weekLabel(d.hiddenFrom)} (Central Time).`
+                          : "Hidden in all weeks — older hide."}
+                    </div>
+                    {d.alsoMatchesPattern && d.hiddenFrom && (
+                      <div className="text-xs text-muted-foreground break-words">
+                        Hide set here starts the week of {weekLabel(d.hiddenFrom)} (Central Time).
+                      </div>
+                    )}
                   </div>
                   <Button
                     ref={refFor(`restore:${d.id}`)}
@@ -309,7 +467,7 @@ function DriverRosterPanelInner() {
                     className="w-full sm:w-auto"
                     disabled={busy}
                     aria-label={`Restore ${d.name}`}
-                    onClick={async () => setFocusTarget(await change(d, false))}
+                    onClick={(e) => void restore(d, e.currentTarget)}
                   >
                     <RotateCcw className="h-4 w-4" aria-hidden="true" /> Restore
                   </Button>
