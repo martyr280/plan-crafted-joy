@@ -70,6 +70,13 @@ vi.mock("@/hooks/useDriverTime", () => ({
   }),
   useAddDriverPayRate: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateDriverPayRate: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDriverRoster: () => ({
+    isLoading: false,
+    isError: false,
+    data: { active: [], hidden: [], settingsUpdatedAt: null, rosterError: null },
+    refetch: vi.fn(),
+  }),
+  useSetDriverRosterVisibility: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { Route } from "@/routes/_app.driver-time";
@@ -91,6 +98,7 @@ describe("Driver Time tabs", () => {
     expect(settings.textContent).not.toMatch(/Drivers in report/);
     expect(settings.textContent).not.toMatch(/Needs review/);
     expect(settings.textContent).toMatch(/Detection/);
+    expect(screen.getByTestId("driver-roster-heading").textContent).toBe("Driver roster");
 
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Sweeps" }), {
       button: 0,
