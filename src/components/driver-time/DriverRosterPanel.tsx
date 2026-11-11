@@ -220,8 +220,8 @@ function DriverRosterPanelInner() {
               >
                 <div className="min-w-0 sm:flex-1">
                   <div className="break-words font-medium">{d.name}</div>
-                  <div className="text-xs text-muted-foreground break-all">
-                    Samsara id {d.id}
+                  <div className="text-xs text-muted-foreground break-words">
+                    <span className="break-all">Samsara id {d.id}</span>
                     {SOURCE_NOTE[d.source] ? ` · ${SOURCE_NOTE[d.source]}` : ""}
                   </div>
                 </div>
@@ -268,8 +268,8 @@ function DriverRosterPanelInner() {
                 >
                   <div className="min-w-0 sm:flex-1">
                     <div className="break-words font-medium">{d.name}</div>
-                    <div className="text-xs text-muted-foreground break-all">
-                      Samsara id {d.id}
+                    <div className="text-xs text-muted-foreground break-words">
+                      <span className="break-all">Samsara id {d.id}</span>
                       {d.alsoMatchesPattern
                         ? " · Also matches a detection name pattern, so Restore alone will not bring them back."
                         : ""}
