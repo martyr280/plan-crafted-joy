@@ -442,7 +442,6 @@ export async function runSamsaraDiagnostics(opts?: {
     blocksInsideFence += counts.blocksInsideFence;
     blocksOverThresholdAndInsideFence += counts.blocksOverThresholdAndInsideFence;
 
-
     const longest = blocks.reduce<(typeof blocks)[number] | null>(
       (best, b) => (!best || b.endMs - b.startMs > best.endMs - best.startMs ? b : best),
       null,

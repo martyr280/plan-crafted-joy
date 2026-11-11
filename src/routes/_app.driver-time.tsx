@@ -560,7 +560,10 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
                       const cur = new Set(settings?.warehouseRemarkDriverIds ?? []);
                       if (on) cur.delete(d.id);
                       else cur.add(d.id);
-                      saveDetection({ warehouseRemarkDriverIds: Array.from(cur) }, "Warehouse-remark setting saved");
+                      saveDetection(
+                        { warehouseRemarkDriverIds: Array.from(cur) },
+                        "Warehouse-remark setting saved",
+                      );
                     }}
                   />
                   <span>{d.name}</span>
