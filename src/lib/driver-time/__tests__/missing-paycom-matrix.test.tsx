@@ -93,7 +93,7 @@ function mount(week: WeekResponse) {
       isLoading={false}
       hasData
       onRetry={vi.fn()}
-      totals={week.totals}
+      totals={{ ...week.totals, estimatedCost: week.totals.estimatedCost ?? undefined }}
       canManageDriverPay={week.canManageDriverPay}
       drivers={week.drivers}
       hubGroups={week.hubGroups}
