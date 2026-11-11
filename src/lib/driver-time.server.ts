@@ -313,9 +313,7 @@ export async function setDriverRosterHidden(input: {
   excludedDriverIds: string[];
   hiddenFrom: string | null;
 }> {
-  const { nextDriverTimeValue, ROSTER_CONFLICT_MESSAGE } = await import(
-    "@/lib/driver-time/roster"
-  );
+  const { nextDriverTimeValue, ROSTER_CONFLICT_MESSAGE } = await import("@/lib/driver-time/roster");
   const { hiddenFromFor } = await import("@/lib/driver-time/exclusions");
   const now = input.now ?? new Date();
   const entry = {
@@ -651,8 +649,15 @@ export async function runDriverTimeSweep(opts?: {
     const scanned = new Set(roster.map((d) => d.id));
     const known = new Set(drivers.map((d) => String(d.id)));
     const retirable = (id: string) => scanned.has(id) || known.has(id);
-    const stale = (existing ?? []).filter(
-      (e: any) =>
+    type ExistingEvent = {
+      id: string;
+      driver_id: string;
+      start_ts: string;
+      end_ts: string;
+      superseded_at: string | null;
+    };
+    const stale = ((existing ?? []) as ExistingEvent[]).filter(
+      (e) =>
         retirable(String(e.driver_id)) &&
         !e.superseded_at &&
         Date.parse(e.start_ts) > startMs &&
@@ -665,7 +670,7 @@ export async function runDriverTimeSweep(opts?: {
         .update({ superseded_at: new Date().toISOString() })
         .in(
           "id",
-          stale.slice(i, i + 200).map((e: any) => e.id),
+          stale.slice(i, i + 200).map((e) => e.id),
         );
       if (error) throw new Error(error.message);
     }

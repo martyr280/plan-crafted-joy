@@ -364,7 +364,6 @@ export async function runSamsaraDiagnostics(opts?: {
   );
   const rosterIds = new Set(roster.map((d) => d.id));
 
-
   const driverIds = roster.map((d) => d.id);
   // Reads the cached Samsara layer, the same source the sweep uses, so running
   // diagnostics no longer re-pulls the whole window from Samsara.

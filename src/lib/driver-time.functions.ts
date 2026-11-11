@@ -333,9 +333,8 @@ export const getDriverTimeConfig = createServerFn({ method: "GET" })
   .middleware([denyLegacyBranchAccess])
   .handler(async ({ context }) => {
     await requireViewer(context.userId);
-    const { getDriverTimeSettings, getDriverTimeSettingsRow } = await import(
-      "@/lib/driver-time.server"
-    );
+    const { getDriverTimeSettings, getDriverTimeSettingsRow } =
+      await import("@/lib/driver-time.server");
     // Token first: a write between the two reads then surfaces as a conflict.
     const { updatedAt: settingsUpdatedAt } = await getDriverTimeSettingsRow();
     const settings = await getDriverTimeSettings();

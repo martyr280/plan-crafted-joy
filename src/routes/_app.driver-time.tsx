@@ -415,10 +415,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    saveDetection(
-      { warehouseAddressIds: Array.from(next) },
-      "Warehouse geofences updated",
-    );
+    saveDetection({ warehouseAddressIds: Array.from(next) }, "Warehouse geofences updated");
   }
 
   return (
@@ -484,10 +481,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
             className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
             value={settings?.basis ?? "presence"}
             onChange={(e) =>
-              saveDetection(
-                { basis: e.target.value as "presence" | "onduty" },
-                "Settings saved",
-              )
+              saveDetection({ basis: e.target.value as "presence" | "onduty" }, "Settings saved")
             }
           >
             <option value="presence">Inside geofence, any status (recommended)</option>
@@ -501,10 +495,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               className="mt-0.5"
               checked={settings?.requireLicense ?? true}
               onChange={(e) =>
-                saveDetection(
-                  { requireLicense: e.target.checked },
-                  "Settings saved",
-                )
+                saveDetection({ requireLicense: e.target.checked }, "Settings saved")
               }
             />
             <span>Require a driver&apos;s-license number (excludes shared logins)</span>
@@ -515,10 +506,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
               className="mt-0.5"
               checked={settings?.includeDeactivated ?? false}
               onChange={(e) =>
-                saveDetection(
-                  { includeDeactivated: e.target.checked },
-                  "Settings saved",
-                )
+                saveDetection({ includeDeactivated: e.target.checked }, "Settings saved")
               }
             />
             <span>Include deactivated drivers</span>
@@ -572,10 +560,7 @@ function DriverTimeSettings({ canManageDriverPay }: { canManageDriverPay: boolea
                       const cur = new Set(settings?.warehouseRemarkDriverIds ?? []);
                       if (on) cur.delete(d.id);
                       else cur.add(d.id);
-                      saveDetection(
-                        { warehouseRemarkDriverIds: Array.from(cur) },
-                        "Warehouse-remark setting saved",
-                      );
+                      saveDetection({ warehouseRemarkDriverIds: Array.from(cur) }, "Warehouse-remark setting saved");
                     }}
                   />
                   <span>{d.name}</span>
