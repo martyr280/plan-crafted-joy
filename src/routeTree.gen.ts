@@ -50,6 +50,7 @@ import { Route as ApiPublicSyncE2gRouteImport } from './routes/api/public/sync-e
 import { Route as ApiPublicRunSqlSchedulesRouteImport } from './routes/api/public/run-sql-schedules'
 import { Route as ApiPublicP21BridgeRouteImport } from './routes/api/public/p21-bridge'
 import { Route as ApiPublicInboundEmailRouteImport } from './routes/api/public/inbound-email'
+import { Route as ApiPublicDriverTimeTickRouteImport } from './routes/api/public/driver-time-tick'
 import { Route as AppReportsE2gRouteImport } from './routes/_app.reports.e2g'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
@@ -261,6 +262,11 @@ const ApiPublicInboundEmailRoute = ApiPublicInboundEmailRouteImport.update({
   path: '/api/public/inbound-email',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicDriverTimeTickRoute = ApiPublicDriverTimeTickRouteImport.update({
+  id: '/api/public/driver-time-tick',
+  path: '/api/public/driver-time-tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppReportsE2gRoute = AppReportsE2gRouteImport.update({
   id: '/reports/e2g',
   path: '/reports/e2g',
@@ -316,6 +322,7 @@ export interface FileRoutesByFullPath {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/reports/e2g': typeof AppReportsE2gRoute
+  '/api/public/driver-time-tick': typeof ApiPublicDriverTimeTickRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/run-sql-schedules': typeof ApiPublicRunSqlSchedulesRoute
@@ -361,6 +368,7 @@ export interface FileRoutesByTo {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/reports/e2g': typeof AppReportsE2gRoute
+  '/api/public/driver-time-tick': typeof ApiPublicDriverTimeTickRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/run-sql-schedules': typeof ApiPublicRunSqlSchedulesRoute
@@ -408,6 +416,7 @@ export interface FileRoutesById {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_app/reports/e2g': typeof AppReportsE2gRoute
+  '/api/public/driver-time-tick': typeof ApiPublicDriverTimeTickRoute
   '/api/public/inbound-email': typeof ApiPublicInboundEmailRoute
   '/api/public/p21-bridge': typeof ApiPublicP21BridgeRoute
   '/api/public/run-sql-schedules': typeof ApiPublicRunSqlSchedulesRoute
@@ -455,6 +464,7 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/reports/e2g'
+    | '/api/public/driver-time-tick'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/run-sql-schedules'
@@ -500,6 +510,7 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/reports/e2g'
+    | '/api/public/driver-time-tick'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/run-sql-schedules'
@@ -546,6 +557,7 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/_app/reports/e2g'
+    | '/api/public/driver-time-tick'
     | '/api/public/inbound-email'
     | '/api/public/p21-bridge'
     | '/api/public/run-sql-schedules'
@@ -563,6 +575,7 @@ export interface RootRouteChildren {
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
+  ApiPublicDriverTimeTickRoute: typeof ApiPublicDriverTimeTickRoute
   ApiPublicInboundEmailRoute: typeof ApiPublicInboundEmailRoute
   ApiPublicP21BridgeRoute: typeof ApiPublicP21BridgeRoute
   ApiPublicRunSqlSchedulesRoute: typeof ApiPublicRunSqlSchedulesRoute
@@ -859,6 +872,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicInboundEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/driver-time-tick': {
+      id: '/api/public/driver-time-tick'
+      path: '/api/public/driver-time-tick'
+      fullPath: '/api/public/driver-time-tick'
+      preLoaderRoute: typeof ApiPublicDriverTimeTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/reports/e2g': {
       id: '/_app/reports/e2g'
       path: '/reports/e2g'
@@ -963,6 +983,7 @@ const rootRouteChildren: RootRouteChildren = {
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
+  ApiPublicDriverTimeTickRoute: ApiPublicDriverTimeTickRoute,
   ApiPublicInboundEmailRoute: ApiPublicInboundEmailRoute,
   ApiPublicP21BridgeRoute: ApiPublicP21BridgeRoute,
   ApiPublicRunSqlSchedulesRoute: ApiPublicRunSqlSchedulesRoute,
