@@ -9,6 +9,7 @@
 // No I/O here: everything is passed in so the rules are unit-testable.
 
 import { matchGeofence, usableCoordinates, type Geofence, type LatLon } from "./geo";
+import { buildGpsIndex, type GpsIndex } from "./gps-index";
 
 export type DutyStatus =
   | "onDuty"
@@ -210,6 +211,16 @@ type Block = {
   segments: HosSegment[];
 };
 
+/** One index per sample array (built lazily, reused across every lookup). */
+const gpsIndexCache = new WeakMap<readonly GpsSample[], { len: number; idx: GpsIndex }>();
+function gpsIndexFor(gps: readonly GpsSample[]): GpsIndex {
+  const hit = gpsIndexCache.get(gps);
+  if (hit && hit.len === gps.length) return hit.idx;
+  const idx = buildGpsIndex(gps);
+  gpsIndexCache.set(gps, { len: gps.length, idx });
+  return idx;
+}
+
 function resolveLocation(
   block: Block,
   gps: GpsSample[],
@@ -224,16 +235,12 @@ function resolveLocation(
     block.segments.filter((s) => !s.vehicleBackfilled || BACKFILL_PLACES_STATUSES.has(s.status)).map((s) => s.vehicleId).filter(Boolean) as string[],
   );
   if (vehicleIds.size !== 1) return { point: null, source: "unknown" };
-  let best: { sample: GpsSample; delta: number } | null = null;
-  for (const sample of gps) {
-    if (!vehicleIds.has(sample.vehicleId) || !usableCoordinates(sample.latitude, sample.longitude)) continue;
-    const delta = Math.abs(sample.timeMs - block.startMs);
-    if (delta > toleranceMs) continue;
-    if (!best || delta < best.delta) best = { sample, delta };
-  }
-  if (best) {
+  // vehicleIds has exactly one member here, so this is one indexed lookup.
+  const [onlyVehicle] = [...vehicleIds];
+  const hit = gpsIndexFor(gps).nearest(onlyVehicle, block.startMs, toleranceMs);
+  if (hit) {
     return {
-      point: { latitude: best.sample.latitude, longitude: best.sample.longitude },
+      point: { latitude: hit.latitude, longitude: hit.longitude },
       source: "vehicle_gps",
     };
   }
@@ -381,18 +388,11 @@ function locateSegment(seg: HosSegment, gps: GpsSample[], toleranceMs: number): 
   // was, not the driver: never locate the driver from it.
   if (hasVehicle(seg) && (!seg.vehicleBackfilled || BACKFILL_PLACES_STATUSES.has(seg.status))) {
     const vehicleId = String(seg.vehicleId);
-    let best: { sample: GpsSample; delta: number } | null = null;
-    for (const sample of gps) {
-      if (String(sample.vehicleId) !== vehicleId) continue;
-      if (!usableCoordinates(sample.latitude, sample.longitude)) continue;
-      const delta = Math.abs(sample.timeMs - seg.startMs);
-      if (delta > toleranceMs) continue;
-      if (!best || delta < best.delta) best = { sample, delta };
-    }
-    if (best) {
+    const hit = gpsIndexFor(gps).nearest(vehicleId, seg.startMs, toleranceMs);
+    if (hit) {
       return {
         seg,
-        point: { latitude: best.sample.latitude, longitude: best.sample.longitude },
+        point: { latitude: hit.latitude, longitude: hit.longitude },
         source: "vehicle_gps",
       };
     }

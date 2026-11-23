@@ -23,7 +23,14 @@ export function useDriverTimeWeek(weekStart?: string, enabled = true, includeWee
     queryKey: ["driver-time-week", weekStart ?? "current", includeWeekends],
     queryFn: () => fn({ data: { weekStart, includeWeekends } }),
     enabled,
+    // Refresh every 5 s while a sweep is queued or running, so progress moves.
+    refetchInterval: (q) => (hasActiveSweep((q.state.data as any)?.runs) ? 5000 : false),
   });
+}
+
+/** True while any listed sweep is still queued or running. */
+export function hasActiveSweep(runs: Array<{ status?: string | null }> | null | undefined): boolean {
+  return (runs ?? []).some((r) => r?.status === "queued" || r?.status === "running");
 }
 
 export function useUpdateDriverTimeEvent() {

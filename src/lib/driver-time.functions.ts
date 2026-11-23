@@ -308,22 +308,17 @@ export const runDriverTimeSweepNow = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await requireViewer(context.userId);
     try {
-      const { runDriverTimeSweep } = await import("@/lib/driver-time.server");
-      return await runDriverTimeSweep({ triggeredBy: context.userId, weekStart: data.weekStart });
+      // Queue only: the driver-time tick advances the run in 15-second slices.
+      if (data.weekStart) {
+        const { selectedWeekBounds, computeSweepWindow } = await import("@/lib/driver-time.server");
+        selectedWeekBounds(data.weekStart); // throws on a non-Monday / bad date
+        computeSweepWindow({ now: new Date(), weekStart: data.weekStart }); // throws on a future week
+      }
+      const { enqueueDriverTimeSweep } = await import("@/lib/driver-time/sweep-job.server");
+      const q = await enqueueDriverTimeSweep({ triggeredBy: context.userId, weekStart: data.weekStart });
+      return { ok: true as const, queued: true as const, existing: q.existing, runId: q.runId, weekStart: q.weekStart, weekEnd: q.weekEnd, error: null as string | null };
     } catch (e: any) {
-      return {
-        ok: false as const,
-        error: e?.message ?? String(e),
-        runId: null,
-        weekStart: "",
-        weekEnd: "",
-        driversScanned: 0,
-        eventsFound: 0,
-        inserted: 0,
-        updated: 0,
-        reopened: 0,
-        warnings: [] as string[],
-      };
+      return { ok: false as const, queued: false as const, existing: false, runId: null, weekStart: "", weekEnd: "", error: e?.message ?? String(e) };
     }
   });
 

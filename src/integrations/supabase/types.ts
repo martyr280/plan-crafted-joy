@@ -2151,12 +2151,23 @@ export type Database = {
         Row: {
           completed_at: string | null
           created_at: string
+          cursor: Json
+          days_fetched: number
           drivers_scanned: number
+          drivers_total: number | null
           error: string | null
           events_found: number
+          heartbeat_at: string | null
           id: string
+          last_step: Json | null
+          lease_until: string | null
+          phase: string | null
+          refresh_hos: boolean
+          requested_week_start: string | null
           started_at: string
           status: string
+          step_log: Json
+          steps: number
           triggered_by: string | null
           updated_at: string
           week_end: string
@@ -2167,12 +2178,23 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           created_at?: string
+          cursor?: Json
+          days_fetched?: number
           drivers_scanned?: number
+          drivers_total?: number | null
           error?: string | null
           events_found?: number
+          heartbeat_at?: string | null
           id?: string
+          last_step?: Json | null
+          lease_until?: string | null
+          phase?: string | null
+          refresh_hos?: boolean
+          requested_week_start?: string | null
           started_at?: string
           status?: string
+          step_log?: Json
+          steps?: number
           triggered_by?: string | null
           updated_at?: string
           week_end: string
@@ -2183,12 +2205,23 @@ export type Database = {
         Update: {
           completed_at?: string | null
           created_at?: string
+          cursor?: Json
+          days_fetched?: number
           drivers_scanned?: number
+          drivers_total?: number | null
           error?: string | null
           events_found?: number
+          heartbeat_at?: string | null
           id?: string
+          last_step?: Json | null
+          lease_until?: string | null
+          phase?: string | null
+          refresh_hos?: boolean
+          requested_week_start?: string | null
           started_at?: string
           status?: string
+          step_log?: Json
+          steps?: number
           triggered_by?: string | null
           updated_at?: string
           week_end?: string
@@ -5184,6 +5217,7 @@ export type Database = {
         Args: { p_id: string; p_request_key: string; p_user_id: string }
         Returns: undefined
       }
+      can_manage_driver_pay: { Args: { _user_id: string }; Returns: boolean }
       claim_admin_if_none: { Args: never; Returns: boolean }
       current_sales_rep_code: { Args: never; Returns: string }
       current_user_is_branch_bound: { Args: never; Returns: boolean }

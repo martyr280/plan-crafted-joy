@@ -10,6 +10,12 @@
 - [x] Admin-only Driver rates panel (add/edit with confirm, history, no delete), per-day effective-date cost, tests; 859 tests in 85 files pass, typecheck OK.
 - [ ] First real rates entered by Joe Green (admin) after publish — not done by Nelson.
 
+## Driver Time resumable sweep — 2026-11-23
+- [x] Build the plan: migrations 0021/0022 (journal-numbered), tick cron job 5, chunked phases, heartbeat watchdog, 12 s Samsara timeout, GPS index, append-only GPS repair, tests 1–15.
+- [ ] Publish so the production tick endpoint exists (cron job 5 hits the published URL) — user's call.
+- [ ] Backfill 8 weeks (2026-09-28 … 2026-11-16) — user queues them after verifying.
+- [ ] Test runner: platform bumped @lovable.dev/vite-tanstack-config to 2.27.1, which runs the TanStack Start plugin under vitest and breaks 61 server-fn/route tests (all pass without it) — needs a decision.
+
 ## Open
 
 - [ ] **Bridge agent TLS trust failure (NDI P21 server)** — v1.2.0 compiled agent

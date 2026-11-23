@@ -207,8 +207,9 @@ export const Route = createFileRoute("/api/public/run-sql-schedules")({
               if (alreadySwept && alreadySwept.length > 0) {
                 driverTime = { ok: true, skipped: true, reason: "already_swept_today" };
               } else {
-                const { runDriverTimeSweep } = await import("@/lib/driver-time.server");
-                driverTime = await runDriverTimeSweep({ now, triggeredBy: null });
+                // Enqueue only; /api/public/driver-time-tick does the work in slices.
+                const { enqueueDriverTimeSweep } = await import("@/lib/driver-time/sweep-job.server");
+                driverTime = { ok: true, queued: true, ...(await enqueueDriverTimeSweep({ now, triggeredBy: null })) };
               }
             } catch (e: any) { driverTime = { ok: false, error: e?.message ?? String(e) }; }
           }

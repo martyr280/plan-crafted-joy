@@ -7,8 +7,10 @@
 // one fetch instead of hammering the org's 5 req/s budget three times over.
 //
 // Cache semantics: a closed day fetched after it closed is permanent; a day
-// that was still in progress when fetched goes stale after 30 minutes. Pass
-// `refresh: true` to force a re-fetch of every day in the window.
+// that was still in progress when fetched goes stale after 30 minutes, and so
+// does any day whose stored rows don't add up to row_count. Pass
+// `refresh: true` to force a re-fetch of every day in the window. GPS rows are
+// append-only (never deleted); other datasets use a staged, kill-safe replace.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
@@ -56,14 +58,18 @@ async function readCache(
   const dates = days.map((d) => d.date);
   const { data: dayRows, error } = await db()
     .from("samsara_cache_days")
-    .select("id, day_date, fetched_at, complete, coverage")
+    .select("id, day_date, fetched_at, complete, coverage, row_count")
     .eq("dataset", dataset)
     .in("day_date", dates);
   if (error) throw new Error(`Samsara cache read failed (${dataset} days): ${error.message}`);
 
   const fresh = new Map<string, string>(); // day_date -> day_id
   for (const row of dayRows ?? []) {
-    if (isCacheDayFresh(row, nowMs) && coversEntities(row.coverage, entityIds)) fresh.set(row.day_date, row.id);
+    if (!isCacheDayFresh(row, nowMs) || !coversEntities(row.coverage, entityIds)) continue;
+    // A day whose stored rows don't add up to its row_count was cut off mid-write
+    // (pre-2026-11-23 writer marked the day complete before inserting): stale.
+    if (!(await cacheDayRowsMatch(row.id, row.row_count))) continue;
+    fresh.set(row.day_date, row.id);
   }
 
   const staleDays = days.filter((d) => !fresh.has(d.date));
@@ -86,16 +92,64 @@ async function readCache(
   return { staleDays, rows };
 }
 
-/** Replace one day's cached rows atomically enough for a cache: delete, then insert. */
-async function writeCacheDay(
+/** Does the day hold exactly row_count rows? */
+export async function cacheDayRowsMatch(dayId: string, rowCount: number | null | undefined): Promise<boolean> {
+  const { count, error } = await db()
+    .from("samsara_cache_rows")
+    .select("id", { count: "exact", head: true })
+    .eq("day_id", dayId);
+  if (error) throw new Error(`Samsara cache count failed: ${error.message}`);
+  return typeof count === "number" && count === Number(rowCount ?? 0);
+}
+
+type CacheEntry = { entityKind: string; entityId: string; startMs: number | null; endMs: number | null; payload: unknown };
+
+function toRow(dataset: Dataset, day: CacheDay, dayId: string, e: CacheEntry) {
+  return {
+    day_id: dayId,
+    dataset,
+    day_date: day.date,
+    entity_kind: e.entityKind,
+    entity_id: e.entityId,
+    start_ts: iso(e.startMs),
+    end_ts: iso(e.endMs),
+    payload: e.payload,
+  };
+}
+
+/**
+ * Kill-safe replace of one NON-GPS day (hos_logs, daily_logs, assignments):
+ *   1. mark the day complete=false, coverage=[]  (nobody can read it as fresh)
+ *   2. delete that day's rows                     (approved 2026-11-23, non-GPS only)
+ *   3. insert in chunks of 500
+ *   4. flip complete / coverage / row_count / fetched_at
+ * A kill anywhere before 4 leaves a day that covers no entity, so it is re-fetched.
+ * GPS never comes through here: see appendGpsChunk.
+ */
+export async function writeCacheDay(
   dataset: Dataset,
   day: CacheDay,
-  entries: Array<{ entityKind: string; entityId: string; startMs: number | null; endMs: number | null; payload: unknown }>,
+  entries: CacheEntry[],
   complete: boolean,
   error: string | null,
   coverage: string[],
 ) {
-  const { data: dayRow, error: upsertError } = await db()
+  if (dataset === "gps") throw new Error("GPS cache days are append-only; use appendGpsChunk.");
+  const dayId = await beginCacheDay(dataset, day);
+  const { error: deleteError } = await db().from("samsara_cache_rows").delete().eq("day_id", dayId);
+  if (deleteError) throw new Error(`Samsara cache write failed (${dataset} ${day.date}): ${deleteError.message}`);
+  for (let i = 0; i < entries.length; i += 500) {
+    const chunk = entries.slice(i, i + 500).map((e) => toRow(dataset, day, dayId, e));
+    const { error: insertError } = await db().from("samsara_cache_rows").insert(chunk);
+    if (insertError) throw new Error(`Samsara cache write failed (${dataset} ${day.date}): ${insertError.message}`);
+  }
+  await finishCacheDay(dataset, day, dayId, { complete, error, coverage, rowCount: entries.length });
+  return dayId;
+}
+
+/** Step 1 of a staged write: the day exists and reads as stale. Returns its id. */
+export async function beginCacheDay(dataset: Dataset, day: CacheDay): Promise<string> {
+  const { data, error } = await db()
     .from("samsara_cache_days")
     .upsert(
       {
@@ -104,36 +158,156 @@ async function writeCacheDay(
         window_start: new Date(day.startMs).toISOString(),
         window_end: new Date(day.endMs).toISOString(),
         fetched_at: new Date().toISOString(),
-        complete,
-        row_count: entries.length,
-        error,
-        coverage,
+        complete: false,
+        coverage: [],
+        error: null,
       },
       { onConflict: "dataset,day_date" },
     )
     .select("id")
     .single();
-  if (upsertError) throw new Error(`Samsara cache write failed (${dataset} ${day.date}): ${upsertError.message}`);
-  const dayId = dayRow.id as string;
+  if (error) throw new Error(`Samsara cache write failed (${dataset} ${day.date}): ${error.message}`);
+  return data.id as string;
+}
 
-  const { error: deleteError } = await db().from("samsara_cache_rows").delete().eq("day_id", dayId);
-  if (deleteError) throw new Error(`Samsara cache write failed (${dataset} ${day.date}): ${deleteError.message}`);
+/** Last step of a staged write: the day becomes readable. */
+export async function finishCacheDay(
+  dataset: Dataset,
+  day: CacheDay,
+  dayId: string,
+  v: { complete: boolean; error: string | null; coverage: string[]; rowCount: number },
+) {
+  const { error } = await db()
+    .from("samsara_cache_days")
+    .update({
+      fetched_at: new Date().toISOString(),
+      complete: v.complete,
+      row_count: v.rowCount,
+      error: v.error,
+      coverage: v.coverage,
+    })
+    .eq("id", dayId);
+  if (error) throw new Error(`Samsara cache write failed (${dataset} ${day.date}): ${error.message}`);
+}
 
-  for (let i = 0; i < entries.length; i += 500) {
-    const chunk = entries.slice(i, i + 500).map((e) => ({
-      day_id: dayId,
-      dataset,
-      day_date: day.date,
-      entity_kind: e.entityKind,
-      entity_id: e.entityId,
-      start_ts: iso(e.startMs),
-      end_ts: iso(e.endMs),
-      payload: e.payload,
-    }));
-    const { error: insertError } = await db().from("samsara_cache_rows").insert(chunk);
-    if (insertError) throw new Error(`Samsara cache write failed (${dataset} ${day.date}): ${insertError.message}`);
+const gpsKey = (vehicleId: string, timeMs: number, lat: number, lon: number) => `${vehicleId}|${timeMs}|${lat}|${lon}`;
+
+/**
+ * Append-only GPS fill for one day and a chunk of vehicles. Reads what is
+ * already stored for those vehicles on that day and inserts only the samples
+ * still missing (multiset diff, so Samsara's own duplicate samples survive
+ * exactly as a fresh write would store them). Never deletes. A retry after a
+ * kill inserts only what the killed attempt didn't.
+ */
+export async function appendGpsChunk(
+  day: CacheDay,
+  dayId: string,
+  vehicleIds: string[],
+  samples: GpsSample[],
+): Promise<{ inserted: number; existing: number }> {
+  const have = new Map<string, number>();
+  let existing = 0;
+  let after: string | null = null;
+  for (let guard = 0; guard < 2000; guard++) {
+    let q = db()
+      .from("samsara_cache_rows")
+      .select("id, payload")
+      .eq("day_id", dayId)
+      .in("entity_id", vehicleIds)
+      .order("id", { ascending: true })
+      .limit(1000);
+    if (after) q = q.gt("id", after);
+    const { data, error } = await q;
+    if (error) throw new Error(`Samsara cache read failed (gps ${day.date}): ${error.message}`);
+    for (const r of data ?? []) {
+      const p = r.payload as GpsSample;
+      const k = gpsKey(String(p.vehicleId), p.timeMs, p.latitude, p.longitude);
+      have.set(k, (have.get(k) ?? 0) + 1);
+      existing++;
+    }
+    if ((data?.length ?? 0) < 1000) break;
+    after = data[data.length - 1].id;
   }
-  return dayId;
+  const missing: GpsSample[] = [];
+  for (const g of samples) {
+    const k = gpsKey(String(g.vehicleId), g.timeMs, g.latitude, g.longitude);
+    const n = have.get(k) ?? 0;
+    if (n > 0) have.set(k, n - 1);
+    else missing.push(g);
+  }
+  for (let i = 0; i < missing.length; i += 1000) {
+    const chunk = missing.slice(i, i + 1000).map((g) =>
+      toRow("gps", day, dayId, { entityKind: "vehicle", entityId: g.vehicleId, startMs: g.timeMs, endMs: g.timeMs, payload: g }),
+    );
+    const { error } = await db().from("samsara_cache_rows").insert(chunk);
+    if (error) throw new Error(`Samsara cache write failed (gps ${day.date}): ${error.message}`);
+  }
+  return { inserted: missing.length, existing };
+}
+
+/** Exact stored row count for a day (used to close a GPS day after its last chunk). */
+export async function countCacheDayRows(dayId: string): Promise<number> {
+  const { count, error } = await db()
+    .from("samsara_cache_rows")
+    .select("id", { count: "exact", head: true })
+    .eq("day_id", dayId);
+  if (error || typeof count !== "number") throw new Error(`Samsara cache count failed: ${error?.message ?? "no count"}`);
+  return count;
+}
+
+/**
+ * Keyset read of one entity's cached payloads across a fixed set of days, on
+ * the (dataset, entity_id, start_ts, id) index. No OFFSET. Returned in id order,
+ * which is the order the old whole-window read (order by id) produced, so
+ * detection's array-order tie-breaks are unchanged.
+ */
+export async function readEntityRows<T>(dataset: Dataset, entityId: string, dayIds: string[]): Promise<T[]> {
+  if (!dayIds.length) return [];
+  const out: Array<{ id: string; payload: T }> = [];
+  let last: { ts: string; id: string } | null = null;
+  for (let guard = 0; guard < 5000; guard++) {
+    let q = db()
+      .from("samsara_cache_rows")
+      .select("id, start_ts, payload")
+      .eq("dataset", dataset)
+      .eq("entity_id", entityId)
+      .in("day_id", dayIds)
+      .order("start_ts", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(1000);
+    if (last) q = q.or(`start_ts.gt."${last.ts}",and(start_ts.eq."${last.ts}",id.gt.${last.id})`);
+    const { data, error } = await q;
+    if (error) throw new Error(`Samsara cache read failed (${dataset} ${entityId}): ${error.message}`);
+    const rows = (data ?? []) as Array<{ id: string; start_ts: string; payload: T }>;
+    out.push(...rows.map((r) => ({ id: r.id, payload: r.payload })));
+    if (rows.length < 1000) break;
+    const tail = rows[rows.length - 1];
+    last = { ts: tail.start_ts, id: tail.id };
+  }
+  out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return out.map((r) => r.payload);
+}
+
+/** Fresh, covering, fully-written cache days for a window: date -> day id. */
+export async function freshCacheDays(
+  dataset: Dataset,
+  days: CacheDay[],
+  entityIds: string[],
+  nowMs: number,
+): Promise<Map<string, string>> {
+  const { data, error } = await db()
+    .from("samsara_cache_days")
+    .select("id, day_date, fetched_at, complete, coverage, row_count")
+    .eq("dataset", dataset)
+    .in("day_date", days.map((d) => d.date));
+  if (error) throw new Error(`Samsara cache read failed (${dataset} days): ${error.message}`);
+  const out = new Map<string, string>();
+  for (const row of data ?? []) {
+    if (!isCacheDayFresh(row, nowMs) || !coversEntities(row.coverage, entityIds)) continue;
+    if (!(await cacheDayRowsMatch(row.id, row.row_count))) continue;
+    out.set(row.day_date, row.id);
+  }
+  return out;
 }
 
 /**
@@ -171,6 +345,17 @@ async function loadDataset<T>(args: {
     if (!(dayEnd > day.startMs)) continue;
     const rows = await args.fetchDay({ ...day, endMs: dayEnd });
     fetched.push(...rows);
+    if (args.dataset === "gps") {
+      const dayId = await beginCacheDay("gps", day);
+      await appendGpsChunk(day, dayId, args.entityIds, rows as unknown as GpsSample[]);
+      await finishCacheDay("gps", day, dayId, {
+        complete: day.endMs <= nowMs,
+        error: null,
+        coverage: args.entityIds,
+        rowCount: await countCacheDayRows(dayId),
+      });
+      continue;
+    }
     await writeCacheDay(
       args.dataset,
       day,

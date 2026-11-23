@@ -9,19 +9,11 @@
 // No emails, no notifications — this is a report surface.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { fetchDrivers, fetchAddresses } from "@/lib/samsara/hos.server";
-import { getDriverTimeInputs } from "@/lib/samsara/cache.server";
-import {
-  detectWarehouseEvents,
-  type HosSegment,
-  type WarehouseEvent,
-} from "@/lib/driver-time/detect";
 import {
   isExcludedDriverOn,
   normalizeExcludedDrivers,
   type DatedExclusion,
 } from "@/lib/driver-time/exclusions";
-import type { Geofence } from "@/lib/driver-time/geo";
 import { CENTRAL_TZ, dateStrInTz, tzOffsetMinutesAt } from "@/lib/driver-time/tz";
 import { driverNameKey } from "@/lib/driver-time/reconciliation";
 
@@ -370,7 +362,7 @@ function ianaZoneFor(tz: string | null | undefined): string {
 }
 
 /** Hub offset (minutes from UTC) at `at`, DST-aware. */
-function offsetForTz(tz: string | null | undefined, at: Date): number {
+export function offsetForTz(tz: string | null | undefined, at: Date): number {
   return tzOffsetMinutesAt(at, ianaZoneFor(tz));
 }
 
@@ -391,316 +383,75 @@ export type SweepResult = {
 };
 
 /**
- * Watchdog: fail any sweep left `running` for more than 15 minutes.
- * Called at the start of every sweep AND on every scheduled tick, so a run
- * killed mid-flight is retired even when no new sweep starts for a week.
+ * Watchdog: fail any `running` sweep whose heartbeat (or, for rows written
+ * before heartbeats existed, start) is older than 15 minutes. Called on every
+ * scheduled tick and every driver-time tick. The message names the phase and
+ * the cursor position the run stalled at.
  */
 export async function failStaleDriverTimeRuns(
   now: Date = new Date(),
 ): Promise<{ failedIds: string[]; error?: string }> {
-  const cutoff = new Date(now.getTime() - 15 * 60_000).toISOString();
-  const { data, error } = await db()
-    .from("driver_warehouse_runs")
-    .update({
-      status: "failed",
-      error: "Timed out: no completion recorded within 15 minutes",
-      completed_at: new Date().toISOString(),
-    })
-    .eq("status", "running")
-    .lt("started_at", cutoff)
-    .select("id");
-  if (error) return { failedIds: [], error: error.message };
-  return { failedIds: (data ?? []).map((r: any) => String(r.id)) };
+  const { failStalledRuns } = await import("@/lib/driver-time/sweep-job.server");
+  return failStalledRuns(now);
 }
 
-export async function runDriverTimeSweep(opts?: {
-  now?: Date;
-  triggeredBy?: string | null;
-  lookbackDays?: number;
-  weekStart?: string;
-  /** Re-pull HOS logs instead of serving cached days (cached days predating `remark`). */
-  refreshHos?: boolean;
-}): Promise<SweepResult> {
-  const now = opts?.now ?? new Date();
-  const lookbackDays = opts?.lookbackDays ?? 8;
-  const { weekStart, weekEnd } = opts?.weekStart
-    ? selectedWeekBounds(opts.weekStart)
-    : weekBounds(now);
+/** The scan window and report week for a sweep, exactly as the single-shot sweep computed it. */
+export function computeSweepWindow(opts: { now: Date; lookbackDays?: number; weekStart?: string }) {
+  const now = opts.now;
+  const lookbackDays = opts.lookbackDays ?? 8;
+  const { weekStart, weekEnd } = opts.weekStart ? selectedWeekBounds(opts.weekStart) : weekBounds(now);
   const selectedStart = localMidnight(weekStart, CENTRAL_TZ);
   const selectedEnd = localMidnight(addDays(weekEnd, 1), CENTRAL_TZ);
-  const endMs = opts?.weekStart ? Math.min(selectedEnd, now.getTime()) : now.getTime();
-  // Include both Eastern and Central local midnight. Filtering below uses
+  const endMs = opts.weekStart ? Math.min(selectedEnd, now.getTime()) : now.getTime();
+  // Include both Eastern and Central local midnight. Filtering uses
   // driver-local dates, not UTC dates.
-  const startMs = opts?.weekStart
+  const startMs = opts.weekStart
     ? Math.min(selectedStart, localMidnight(weekStart, "America/New_York"))
     : endMs - lookbackDays * 86400000;
   if (startMs >= endMs) throw new Error("Cannot scan a future week.");
-  const warnings: string[] = [];
+  return { weekStart, weekEnd, startMs, endMs };
+}
 
-  // A run row left `running` means the process died without recording an
-  // outcome. Retire stragglers so the runs list never shows a phantom sweep.
-  {
-    const res = await failStaleDriverTimeRuns(now);
-    if (res.error) warnings.push(`stale run cleanup failed: ${res.error}`);
+/**
+ * Enqueue a sweep and drive it to completion in-process. Production never
+ * calls this (the tick advances queued runs in 15-second slices); it exists
+ * for tests and one-off scripts so the resumable path has a single-call form.
+ */
+export async function runDriverTimeSweep(opts?: {
+  now?: Date;
+  triggeredBy?: string | null;
+  weekStart?: string;
+  refreshHos?: boolean;
+  maxUnits?: number;
+}): Promise<SweepResult> {
+  const job = await import("@/lib/driver-time/sweep-job.server");
+  const q = await job.enqueueDriverTimeSweep({
+    now: opts?.now,
+    triggeredBy: opts?.triggeredBy ?? null,
+    weekStart: opts?.weekStart,
+    refreshHos: opts?.refreshHos,
+  });
+  const limit = opts?.maxUnits ?? 100_000;
+  for (let i = 0; i < limit; i++) {
+    const t = await job.runDriverTimeTick({ budgetMs: Number.POSITIVE_INFINITY, maxUnits: 1 });
+    if (!t.runId || t.status !== "running") break;
   }
-
-  // The cron sweep reports on the week that just ended: label it with the
-  // Monday (Central) of the week containing (run's local date − 7 days).
-  // Computed from the run date, not from the scan window (which starts on a
-  // Sunday and used to label the previous week).
-  const { scheduledSweepWeek } = await import("@/lib/driver-time/week-label");
-  const labelWeek = opts?.weekStart ? { weekStart, weekEnd } : scheduledSweepWeek(now);
-
-  const { data: runRow, error: runErr } = await db()
-    .from("driver_warehouse_runs")
-    .insert({
-      week_start: labelWeek.weekStart,
-      week_end: labelWeek.weekEnd,
-      window_start: new Date(startMs).toISOString(),
-      window_end: new Date(endMs).toISOString(),
-      status: "running",
-      triggered_by: opts?.triggeredBy ?? null,
-    })
-
-    .select("id")
-    .single();
-  if (runErr) throw new Error(runErr.message);
-  const runId = runRow.id as string;
-
-  const fail = async (message: string): Promise<SweepResult> => {
-    await db()
-      .from("driver_warehouse_runs")
-      .update({ status: "failed", error: message, completed_at: new Date().toISOString() })
-      .eq("id", runId);
-    return {
-      ok: false,
-      runId,
-      weekStart,
-      weekEnd,
-      driversScanned: 0,
-      eventsFound: 0,
-      inserted: 0,
-      updated: 0,
-      reopened: 0,
-      warnings,
-      error: message,
-    };
+  const { data } = await db().from("driver_warehouse_runs").select("*").eq("id", q.runId).maybeSingle();
+  const c = (data?.cursor ?? {}) as any;
+  return {
+    ok: data?.status === "completed",
+    runId: q.runId,
+    weekStart: q.weekStart,
+    weekEnd: q.weekEnd,
+    driversScanned: data?.drivers_scanned ?? 0,
+    eventsFound: data?.events_found ?? 0,
+    inserted: c.counters?.inserted ?? 0,
+    updated: c.counters?.updated ?? 0,
+    reopened: c.counters?.reopened ?? 0,
+    warnings: c.warnings ?? [],
+    roster: c.rosterCounts,
+    ...(data?.status === "completed" ? {} : { error: data?.error ?? "Sweep did not finish" }),
   };
-
-  try {
-    const settings = await getDriverTimeSettings();
-    const [drivers, addresses] = await Promise.all([fetchDrivers(), fetchAddresses()]);
-
-    const selected = settings.warehouseAddressIds.length
-      ? addresses.filter((a) => settings.warehouseAddressIds.includes(a.id))
-      : [];
-    if (!selected.length) {
-      return await fail(
-        "No warehouse addresses selected. Pick the warehouse geofences in Driver Time → Settings before running a sweep.",
-      );
-    }
-
-    const warehouses: Geofence[] = selected.map((a) => ({
-      id: a.id,
-      name: a.name,
-      hub: a.name,
-      tz: settings.hubTzByAddress[a.id] ?? null,
-      circle: a.circle,
-      polygon: a.polygon,
-    }));
-
-    // Scan anyone visible on any day of the window; the weekly report drops
-    // events on or after a dated hide.
-    const { roster, counts: rosterCounts } = filterRoster(
-      drivers,
-      settings,
-      dateStrInTz(new Date(startMs), CENTRAL_TZ),
-    );
-    if (!roster.length)
-      return await fail(
-        `No drivers to scan after exclusions (roster ${rosterCounts.total}, pattern ${rosterCounts.excludedByPattern}, no licence ${rosterCounts.excludedNoLicense}, deactivated ${rosterCounts.excludedDeactivated}).`,
-      );
-
-    // All Samsara reads go through the cached data layer, so a rescan of the
-    // same days reuses what a prior sweep or probe already pulled. Assignments
-    // fill in the vehicle on segments Samsara reported without one, which is
-    // what makes GPS evidence available for those blocks.
-    const inputs = await getDriverTimeInputs({
-      startMs,
-      endMs,
-      driverIds: roster.map((d) => d.id),
-      refreshHos: opts?.refreshHos === true,
-    });
-    const segments = inputs.segments;
-    const gpsSamples = inputs.gpsSamples;
-
-    const byDriver = new Map<string, HosSegment[]>();
-    for (const s of segments) {
-      const arr = byDriver.get(s.driverId) ?? [];
-      arr.push(s as HosSegment);
-      byDriver.set(s.driverId, arr);
-    }
-
-    const events: WarehouseEvent[] = [];
-    for (const d of roster) {
-      const segs = byDriver.get(d.id);
-      if (!segs?.length) continue;
-      const tzOffsetMinutes = offsetForTz(d.timezone, new Date(startMs));
-      events.push(
-        ...detectWarehouseEvents({
-          driver: { id: d.id, name: d.name },
-          segments: segs,
-          warehouses,
-          gpsSamples,
-          options: {
-            thresholdMinutes: settings.thresholdMinutes,
-            mergeGapMinutes: settings.mergeGapMinutes,
-            eldDayStartHour: d.eldDayStartHour ?? 0,
-            tzOffsetMinutes,
-            excludedDriverIds: settings.excludedDriverIds,
-            excludedDriverNamePatterns: settings.excludedDriverNamePatterns,
-            basis: settings.basis,
-            hubTags: (d as any).tags ?? [],
-            remarkRule: settings.warehouseRemarkDriverIds.includes(d.id),
-          },
-        }),
-      );
-    }
-
-    // Reconcile.
-    let inserted = 0;
-    let updated = 0;
-    let reopened = 0;
-
-    const { data: existing, error: existingError } = await db()
-      .from("driver_warehouse_events")
-      .select("id, driver_id, start_ts, end_ts, duration_min, status, superseded_at")
-      .gte("start_ts", new Date(startMs).toISOString())
-      .lt("start_ts", new Date(endMs).toISOString())
-      .limit(10000);
-    if (existingError) throw new Error(existingError.message);
-    if ((existing?.length ?? 0) >= 10000)
-      throw new Error("Rescan range exceeds the reconciliation limit.");
-    const existingMap = new Map<string, any>();
-    for (const row of existing ?? []) {
-      existingMap.set(`${row.driver_id}|${new Date(row.start_ts).toISOString()}`, row);
-    }
-
-    const seen = new Set<string>();
-    for (const ev of events) {
-      if (opts?.weekStart && (ev.eventDate < weekStart || ev.eventDate > weekEnd)) continue;
-      const startIso = new Date(ev.startMs).toISOString();
-      const eventKey = `${ev.driverId}|${startIso}`;
-      if (seen.has(eventKey)) continue;
-      seen.add(eventKey);
-      const prior = existingMap.get(eventKey);
-      const payload = {
-        run_id: runId,
-        driver_id: ev.driverId,
-        driver_name: ev.driverName,
-        event_date: ev.eventDate,
-        start_ts: startIso,
-        end_ts: new Date(ev.endMs).toISOString(),
-        duration_min: ev.durationMin,
-        address_id: ev.addressId,
-        address_name: ev.addressName,
-        hub: ev.hub,
-        statuses: ev.statuses,
-        location_source: ev.locationSource,
-        needs_review: ev.needsReview,
-        superseded_at: null,
-        // Remark-rule events carry the remark text; other events leave reviewer notes alone.
-        ...(ev.locationSource === "remark" && ev.notes ? { notes: ev.notes } : {}),
-      };
-
-      if (!prior) {
-        const { error } = await db()
-          .from("driver_warehouse_events")
-          .insert({ ...payload, status: "new" });
-        if (error)
-          warnings.push(
-            `insert failed for ${ev.driverName ?? ev.driverId} @ ${startIso}: ${error.message}`,
-          );
-        else inserted++;
-        continue;
-      }
-
-      const timingChanged =
-        prior.duration_min !== ev.durationMin ||
-        new Date(prior.end_ts).toISOString() !== payload.end_ts;
-      const patch: any = { ...payload };
-      if (timingChanged && prior.status !== "new") {
-        patch.status = "new";
-        patch.reviewed_by = null;
-        patch.reviewed_at = null;
-        reopened++;
-      }
-      const { error } = await db().from("driver_warehouse_events").update(patch).eq("id", prior.id);
-      if (error) warnings.push(`update failed for id ${prior.id}: ${error.message}`);
-      else updated++;
-    }
-
-    if (warnings.some((w) => w.startsWith("insert failed") || w.startsWith("update failed")))
-      throw new Error(`Event reconciliation incomplete: ${warnings.join(" | ")}`);
-    // Retire only fully enclosed events for scanned drivers after a complete
-    // fetch/write pass. Preserve the old rows for review and source comparison.
-    // Retire stale rows for scanned drivers AND for every roster driver now
-    // excluded from the scan — those events can never be regenerated.
-    const scanned = new Set(roster.map((d) => d.id));
-    const known = new Set(drivers.map((d) => String(d.id)));
-    const retirable = (id: string) => scanned.has(id) || known.has(id);
-    type ExistingEvent = {
-      id: string;
-      driver_id: string;
-      start_ts: string;
-      end_ts: string;
-      superseded_at: string | null;
-    };
-    const stale = ((existing ?? []) as ExistingEvent[]).filter(
-      (e) =>
-        retirable(String(e.driver_id)) &&
-        !e.superseded_at &&
-        Date.parse(e.start_ts) > startMs &&
-        Date.parse(e.end_ts) < endMs &&
-        !seen.has(`${e.driver_id}|${new Date(e.start_ts).toISOString()}`),
-    );
-    for (let i = 0; i < stale.length; i += 200) {
-      const { error } = await db()
-        .from("driver_warehouse_events")
-        .update({ superseded_at: new Date().toISOString() })
-        .in(
-          "id",
-          stale.slice(i, i + 200).map((e) => e.id),
-        );
-      if (error) throw new Error(error.message);
-    }
-    await db()
-      .from("driver_warehouse_runs")
-      .update({
-        status: "completed",
-        completed_at: new Date().toISOString(),
-        drivers_scanned: roster.length,
-        events_found: events.length,
-        error: warnings.length ? warnings.slice(0, 5).join(" | ") : null,
-      })
-      .eq("id", runId);
-
-    return {
-      ok: true,
-      runId,
-      weekStart,
-      weekEnd,
-      driversScanned: roster.length,
-      eventsFound: events.length,
-      inserted,
-      updated,
-      reopened,
-      warnings,
-      roster: rosterCounts,
-    };
-  } catch (e: any) {
-    return await fail(e?.message ?? String(e));
-  }
 }
 
 function addDays(date: string, days: number) {

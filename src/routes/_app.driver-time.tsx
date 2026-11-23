@@ -51,6 +51,7 @@ import { destructiveTextClass, warningTextClass } from "@/components/driver-time
 import { DriverRatesPanel } from "@/components/driver-time/DriverRatesPanel";
 import { DriverRosterPanel } from "@/components/driver-time/DriverRosterPanel";
 import { SETTINGS_CONFLICT_MESSAGE } from "@/lib/driver-time/roster";
+import { describeCursor } from "@/lib/driver-time/sweep-progress";
 
 export const Route = createFileRoute("/_app/driver-time")({
   head: () => ({
@@ -100,7 +101,16 @@ type SweepRun = {
   drivers_scanned: number;
   events_found: number;
   error?: string | null;
+  phase?: string | null;
+  cursor?: any;
+  drivers_total?: number | null;
 };
+
+/** "GPS day 2 of 9, chunk 1 of 6" style progress for a queued/running sweep. */
+function sweepProgressText(r: SweepRun): string {
+  if (r.status === "queued") return "Queued — starts within a minute";
+  return describeCursor(r.phase ?? null, r.cursor);
+}
 
 function DriverTimePage() {
   useModuleView("driver-time");
@@ -223,7 +233,9 @@ function DriverTimePage() {
                   onSuccess: (r: any) =>
                     r?.ok
                       ? toast.success(
-                          `Sweep complete — ${r.eventsFound} event(s) across ${r.driversScanned} driver(s)`,
+                          r.existing
+                            ? "A sweep for this week is already queued — see the Sweeps tab for progress"
+                            : "Sweep queued — it runs in the background; see the Sweeps tab for progress",
                         )
                       : toast.error(r?.error ?? "Sweep failed"),
                   onError: (e: any) => toast.error(e?.message ?? "Sweep failed"),
@@ -336,9 +348,22 @@ function DriverTimePage() {
                           {r.week_start} → {r.week_end}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={r.status === "completed" ? "secondary" : "destructive"}>
+                          <Badge
+                            variant={
+                              r.status === "completed"
+                                ? "secondary"
+                                : r.status === "queued" || r.status === "running"
+                                  ? "outline"
+                                  : "destructive"
+                            }
+                          >
                             {r.status}
                           </Badge>
+                          {(r.status === "queued" || r.status === "running") && (
+                            <div className="text-[11px] text-muted-foreground mt-1">
+                              {sweepProgressText(r)}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">{r.drivers_scanned}</TableCell>
                         <TableCell className="text-right">{r.events_found}</TableCell>
