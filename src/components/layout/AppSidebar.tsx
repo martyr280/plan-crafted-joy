@@ -38,6 +38,7 @@ const groups = [
       { title: "Logistics", url: "/logistics", icon: Truck },
       { title: "Truck Capacity", url: "/truck-capacity", icon: Truck },
       { title: "Damage Tracker", url: "/damage", icon: AlertTriangle },
+      { title: "RMA Report", url: "/rma-report", icon: Undo2 },
       { title: "RMA Analytics", url: "/rma-analytics", icon: Undo2 },
       { title: "Driver Time", url: "/driver-time", icon: Timer },
       { title: "Dispatch", url: "/dispatch", icon: RouteIcon, roles: ["admin", "ops_logistics", "ops_logistics_admin"] },

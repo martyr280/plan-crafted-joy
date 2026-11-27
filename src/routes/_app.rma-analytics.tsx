@@ -113,9 +113,14 @@ function RmaAnalyticsPage() {
         title="RMA Analytics"
         description="Where returns on our own trucks actually come from — driver, route, puller, or dealer."
         actions={
-          <Button asChild variant="outline" size="sm">
-            <Link to="/damage">Damage Tracker</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link to="/rma-report">RMA Report</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/damage">Damage Tracker</Link>
+            </Button>
+          </div>
         }
       />
 

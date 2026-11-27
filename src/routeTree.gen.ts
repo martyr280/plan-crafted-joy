@@ -23,6 +23,7 @@ import { Route as AppSpiffRouteImport } from './routes/_app.spiff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesReportsRouteImport } from './routes/_app.sales-reports'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
+import { Route as AppRmaReportRouteImport } from './routes/_app.rma-report'
 import { Route as AppRmaAnalyticsRouteImport } from './routes/_app.rma-analytics'
 import { Route as AppQuotesRouteImport } from './routes/_app.quotes'
 import { Route as AppPricingRouteImport } from './routes/_app.pricing'
@@ -122,6 +123,11 @@ const AppSalesReportsRoute = AppSalesReportsRouteImport.update({
 const AppSalesRoute = AppSalesRouteImport.update({
   id: '/sales',
   path: '/sales',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRmaReportRoute = AppRmaReportRouteImport.update({
+  id: '/rma-report',
+  path: '/rma-report',
   getParentRoute: () => AppRoute,
 } as any)
 const AppRmaAnalyticsRoute = AppRmaAnalyticsRouteImport.update({
@@ -310,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof AppPricingRoute
   '/quotes': typeof AppQuotesRoute
   '/rma-analytics': typeof AppRmaAnalyticsRoute
+  '/rma-report': typeof AppRmaReportRoute
   '/sales': typeof AppSalesRoute
   '/sales-reports': typeof AppSalesReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -355,6 +362,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof AppPricingRoute
   '/quotes': typeof AppQuotesRoute
   '/rma-analytics': typeof AppRmaAnalyticsRoute
+  '/rma-report': typeof AppRmaReportRoute
   '/sales': typeof AppSalesRoute
   '/sales-reports': typeof AppSalesReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -403,6 +411,7 @@ export interface FileRoutesById {
   '/_app/pricing': typeof AppPricingRoute
   '/_app/quotes': typeof AppQuotesRoute
   '/_app/rma-analytics': typeof AppRmaAnalyticsRoute
+  '/_app/rma-report': typeof AppRmaReportRoute
   '/_app/sales': typeof AppSalesRoute
   '/_app/sales-reports': typeof AppSalesReportsRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -452,6 +461,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/quotes'
     | '/rma-analytics'
+    | '/rma-report'
     | '/sales'
     | '/sales-reports'
     | '/settings'
@@ -497,6 +507,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/quotes'
     | '/rma-analytics'
+    | '/rma-report'
     | '/sales'
     | '/sales-reports'
     | '/settings'
@@ -544,6 +555,7 @@ export interface FileRouteTypes {
     | '/_app/pricing'
     | '/_app/quotes'
     | '/_app/rma-analytics'
+    | '/_app/rma-report'
     | '/_app/sales'
     | '/_app/sales-reports'
     | '/_app/settings'
@@ -681,6 +693,13 @@ declare module '@tanstack/react-router' {
       path: '/sales'
       fullPath: '/sales'
       preLoaderRoute: typeof AppSalesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/rma-report': {
+      id: '/_app/rma-report'
+      path: '/rma-report'
+      fullPath: '/rma-report'
+      preLoaderRoute: typeof AppRmaReportRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/rma-analytics': {
@@ -923,6 +942,7 @@ interface AppRouteChildren {
   AppPricingRoute: typeof AppPricingRoute
   AppQuotesRoute: typeof AppQuotesRoute
   AppRmaAnalyticsRoute: typeof AppRmaAnalyticsRoute
+  AppRmaReportRoute: typeof AppRmaReportRoute
   AppSalesRoute: typeof AppSalesRoute
   AppSalesReportsRoute: typeof AppSalesReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -957,6 +977,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPricingRoute: AppPricingRoute,
   AppQuotesRoute: AppQuotesRoute,
   AppRmaAnalyticsRoute: AppRmaAnalyticsRoute,
+  AppRmaReportRoute: AppRmaReportRoute,
   AppSalesRoute: AppSalesRoute,
   AppSalesReportsRoute: AppSalesReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
